@@ -61,10 +61,10 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { key: "campaigns", label: "Kampagnen", href: "/campaigns", icon: Megaphone },
-  { key: "media", label: "Mediathek", href: "/media", icon: Library },
+  { key: "campaigns", label: "Kampagnen", href: "/kampagnen", icon: Megaphone },
+  { key: "media", label: "Mediathek", href: "/mediathek", icon: Library },
   { key: "landingpages", label: "Landingpages", href: "/landingpages", icon: LayoutTemplate },
-  { key: "settings", label: "Einstellungen", href: "/settings", icon: Settings },
+  { key: "settings", label: "Einstellungen", href: "/einstellungen", icon: Settings },
 ];
 
 function NavList({
@@ -131,13 +131,13 @@ function UserMenu({ user }: { user: AppShellUser }) {
         <DropdownMenuLabel>Mein Konto</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/settings">
+          <Link href="/einstellungen">
             <UserIcon className="size-4 text-ink-muted" />
             Profil
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/settings">
+          <Link href="/einstellungen">
             <Settings className="size-4 text-ink-muted" />
             Einstellungen
           </Link>
