@@ -209,6 +209,57 @@ export async function composePip(input: ComposePipInput): Promise<void> {
   ]);
 }
 
+export interface ImageSeqToMp4Input {
+  /** Directory containing frame-NNNN.jpg files (zero-padded to 4 digits). */
+  framesDir: string;
+  /** Filename pattern, defaults to `frame-%04d.jpg`. */
+  pattern?: string;
+  outputPath: string;
+  fps?: number;
+  crf?: number;
+  preset?: string;
+}
+
+/**
+ * Encodes a zero-padded image sequence into an H.264 MP4 sized 1280x720.
+ *
+ *   ffmpeg -framerate 30 -i 'frames/frame-%04d.jpg' \
+ *     -c:v libx264 -pix_fmt yuv420p -preset veryfast -crf 26 \
+ *     -movflags +faststart out.mp4
+ *
+ * Used to turn the scroll-recorder frames into the "base" track that gets the
+ * PiP webcam overlaid on top.
+ */
+export async function imageSeqToMp4(input: ImageSeqToMp4Input): Promise<void> {
+  const fps = input.fps ?? 30;
+  const crf = input.crf ?? 26;
+  const preset = input.preset ?? "veryfast";
+  const pattern = input.pattern ?? "frame-%04d.jpg";
+  const inputPattern = `${input.framesDir.replace(/\/$/, "")}/${pattern}`;
+  await runFfmpeg([
+    "-y",
+    "-framerate",
+    String(fps),
+    "-i",
+    inputPattern,
+    "-c:v",
+    "libx264",
+    "-preset",
+    preset,
+    "-pix_fmt",
+    "yuv420p",
+    "-crf",
+    String(crf),
+    "-r",
+    String(fps),
+    "-vf",
+    "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
+    "-movflags",
+    "+faststart",
+    input.outputPath,
+  ]);
+}
+
 /**
  * Generates a black silent video clip of the requested duration. Used as a
  * placeholder when the base video stream is not yet implemented (v1

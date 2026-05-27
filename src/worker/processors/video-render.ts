@@ -1,15 +1,20 @@
 /**
  * Stage 1: Video render.
  *
- * v1 strategy:
- *  - If the campaign is `webcam-only` we DO NOT render anything via
- *    Puppeteer; the lead's video IS the campaign's webcam clip (which
- *    already lives in the mediathek and can simply be downloaded).
- *  - If the campaign is `with-presentation` we render a base track that
- *    Puppeteer captures (scroll-capture, slides, etc.) and overlay the
- *    webcam clip as PiP. The Puppeteer side is stubbed in v1: we currently
- *    emit a black 30-second clip as the base track and compose the webcam
- *    PiP on top.
+ * Two render modes:
+ *  - `webcam-only`         → the lead's video IS the campaign webcam clip
+ *                            (downloaded from Bunny + re-compressed in place).
+ *  - `with-presentation`   → Puppeteer scroll-captures the lead's website
+ *                            into a 30 fps JPG sequence, ffmpeg encodes it
+ *                            into a base MP4, and the webcam clip is overlaid
+ *                            as PiP on top.
+ *
+ * Fallbacks for `with-presentation`:
+ *  1. Website value empty / not parseable → render a "Website nicht erreichbar"
+ *     placeholder page and use that as the base track.
+ *  2. Puppeteer scroll-capture throws (DNS/404/timeout/hang) → same fallback
+ *     placeholder. If the fallback ALSO throws (e.g. browser pool dead), we
+ *     fall all the way back to a black clip so the lead still completes.
  *
  * Both flows return a single MP4 + the measured duration.
  */
@@ -21,10 +26,15 @@ import {
   composePip,
   compressVideo,
   generateBlackClip,
+  imageSeqToMp4,
   type PipPosition,
   type PipShape,
 } from "../lib/ffmpeg";
-import { getContext } from "../lib/browser-pool";
+import {
+  normaliseWebsiteUrl,
+  recordFallbackPage,
+  recordScroll,
+} from "../lib/scroll-recorder";
 
 export interface VideoRenderInput {
   outDir: string;
@@ -76,47 +86,91 @@ async function fetchToFile(url: string, outPath: string): Promise<void> {
 }
 
 /**
- * v1 placeholder for the Puppeteer scroll-capture. Spawns a context, opens
- * the lead's website to validate connectivity, then closes it. The actual
- * video bytes are produced as a black clip by ffmpeg — full scroll-capture
- * is a TODO for v2.
+ * Drives the Puppeteer scroll-capture and ffmpeg encode that produces the
+ * "base" presentation track. Returns the absolute path to a 1280x720 MP4.
+ *
+ * Failure handling is layered:
+ *   1. URL not usable → placeholder page MP4.
+ *   2. Scroll-capture throws → placeholder page MP4.
+ *   3. Placeholder page ALSO throws → black clip (so the pipeline never gets
+ *      stuck on a bad website + a missing browser).
  */
 async function renderPresentationBase(opts: {
   website: string | null | undefined;
-  outPath: string;
+  outDir: string;
+  basePath: string;
   durationSec: number;
 }): Promise<void> {
-  // Open the page once just so we surface DNS / 404 errors early in the
-  // pipeline (so we fail the right lead, not the upload stage).
-  if (opts.website) {
-    const ctx = await getContext();
+  const durationMs = Math.max(1, opts.durationSec * 1000);
+  const url = normaliseWebsiteUrl(opts.website);
+
+  // Helper: take a frames-dir result and encode it to opts.basePath.
+  const encode = async (framesDir: string, fps: number) => {
+    await imageSeqToMp4({
+      framesDir,
+      outputPath: opts.basePath,
+      fps,
+    });
+  };
+
+  const fallbackToPlaceholder = async (reason: string) => {
+    // eslint-disable-next-line no-console
+    console.warn(`[render] scroll-capture fallback → placeholder: ${reason}`);
     try {
-      const page = await ctx.context.newPage();
-      try {
-        await page.goto(opts.website, { waitUntil: "domcontentloaded", timeout: 30_000 });
-        // TODO(v2): actual scroll-capture via CDP screencast +
-        // ffmpeg encoder. For now we just verify the page loads.
-      } finally {
-        await page.close().catch(() => undefined);
-      }
-    } finally {
-      await ctx.close();
+      const fb = await recordFallbackPage({
+        outputDir: opts.outDir,
+        durationMs,
+        websiteLabel: opts.website?.toString() ?? "(keine Website angegeben)",
+      });
+      await encode(fb.framesDir, fb.fps);
+      return true;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn(`[render] placeholder page failed: ${(e as Error).message}`);
+      return false;
     }
+  };
+
+  const fallbackToBlackClip = async () => {
+    // eslint-disable-next-line no-console
+    console.warn(`[render] falling back to black clip`);
+    await generateBlackClip({
+      outputPath: opts.basePath,
+      durationSec: opts.durationSec,
+    });
+  };
+
+  if (!url) {
+    if (await fallbackToPlaceholder("invalid or empty website value")) return;
+    await fallbackToBlackClip();
+    return;
   }
 
-  await generateBlackClip({
-    outputPath: opts.outPath,
-    durationSec: opts.durationSec,
-  });
+  // Stage A: scroll-capture (browser open + page goto + N screenshots).
+  let framesResult;
+  try {
+    framesResult = await recordScroll({
+      url,
+      outputDir: opts.outDir,
+      durationMs,
+    });
+  } catch (e) {
+    if (await fallbackToPlaceholder((e as Error).message)) return;
+    await fallbackToBlackClip();
+    return;
+  }
+
+  // Stage B: encode frames → MP4.
+  try {
+    await encode(framesResult.framesDir, framesResult.fps);
+  } catch (e) {
+    if (await fallbackToPlaceholder(`encode failed: ${(e as Error).message}`)) return;
+    await fallbackToBlackClip();
+  }
 }
 
 /**
  * Produces a final MP4 in `outDir` and returns its path and duration.
- *
- * v1 simplifications (clearly marked):
- *  - Webcam-only mode: just downloads the source and re-compresses.
- *  - With-presentation mode: stub base track is a black clip; webcam is
- *    composed on top via the PiP filter.
  */
 export async function runVideoRender(
   input: VideoRenderInput,
@@ -148,7 +202,8 @@ export async function runVideoRender(
   const basePath = join(input.outDir, "base.mp4");
   await renderPresentationBase({
     website: input.website ?? null,
-    outPath: basePath,
+    outDir: input.outDir,
+    basePath,
     durationSec: duration,
   });
 

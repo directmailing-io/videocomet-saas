@@ -18,7 +18,10 @@ import puppeteer, {
 let browserPromise: Promise<Browser> | null = null;
 
 function chromiumPath(): string {
-  return process.env.CHROMIUM_PATH ?? "/usr/bin/chromium-browser";
+  // The worker Dockerfile installs `chromium` (not `chromium-browser`) and
+  // sets CHROMIUM_PATH=/usr/bin/chromium. Keep `/usr/bin/chromium` as the
+  // default so local dev on Debian / Ubuntu container shells matches.
+  return process.env.CHROMIUM_PATH ?? "/usr/bin/chromium";
 }
 
 async function launchBrowser(): Promise<Browser> {
@@ -26,14 +29,17 @@ async function launchBrowser(): Promise<Browser> {
     executablePath: chromiumPath(),
     headless: true,
     args: [
+      // Hardening + Docker compatibility. NOTE: we intentionally omit
+      // `--single-process` / `--no-zygote` from the previous flag-set —
+      // they regress stability on long-running worker processes and break
+      // some scroll animations on heavy pages.
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--disable-gpu",
-      "--no-zygote",
-      "--single-process",
-      "--hide-scrollbars",
       "--disable-extensions",
+      "--hide-scrollbars",
+      "--disable-features=TranslateUI",
     ],
     // Default viewport; can be overridden per-page.
     defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
