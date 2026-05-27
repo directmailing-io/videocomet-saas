@@ -1,0 +1,49 @@
+# VIDEOCOMET Render Worker
+# Debian base because we need a working Chromium + LibreOffice + FFmpeg + Ghostscript.
+FROM node:22-bookworm-slim AS deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 make g++ ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --include=optional
+
+FROM node:22-bookworm-slim AS runner
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# System tools required by the worker pipeline.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl tini fonts-liberation fonts-noto-core fonts-noto-extra fonts-dejavu-core \
+      ffmpeg ghostscript imagemagick poppler-utils \
+      libreoffice-core libreoffice-writer libreoffice-common \
+      chromium chromium-sandbox \
+      libnss3 libatk-bridge2.0-0 libcups2 libgbm1 libasound2 libpangocairo-1.0-0 \
+      libxss1 libxcomposite1 libxrandr2 libxdamage1 libxshmfence1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Bring deps from the deps stage; build is not needed because we run tsx directly.
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json* tsconfig.json drizzle.config.ts ./
+COPY src ./src
+COPY scripts ./scripts
+COPY public ./public
+
+# Run as a non-root user but allow Chromium sandboxing.
+RUN groupadd --system --gid 1001 nodejs \
+ && useradd --system --uid 1001 --gid nodejs nextjs \
+ && chown -R nextjs:nodejs /app
+
+USER nextjs
+
+ENV CHROMIUM_PATH=/usr/bin/chromium
+ENV FFMPEG_PATH=/usr/bin/ffmpeg
+ENV LIBREOFFICE_PATH=/usr/bin/libreoffice
+ENV GHOSTSCRIPT_PATH=/usr/bin/gs
+
+# tini handles SIGTERM correctly for graceful shutdown.
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["npm", "run", "worker:start"]
