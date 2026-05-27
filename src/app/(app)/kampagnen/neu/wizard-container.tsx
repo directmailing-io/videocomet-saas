@@ -1,0 +1,273 @@
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+import { WizardStep1Webcam } from "./wizard-step1-webcam";
+import { WizardStep2Modus } from "./wizard-step2-modus";
+import { WizardStep3Editor } from "./wizard-step3-editor";
+import { WizardStep4Landingpage } from "./wizard-step4-landingpage";
+import { WizardStep5Pdf } from "./wizard-step5-pdf";
+import { WizardStep6Summary } from "./wizard-step6-summary";
+
+export interface WizardWebcam {
+  id: string;
+  name: string;
+  publicUrl: string;
+  durationSec: number | null;
+}
+
+export interface WizardTemplate {
+  id: string;
+  name: string;
+  themeId: string;
+}
+
+export interface WizardSegment {
+  id: string;
+  type: "website" | "image" | "video" | "googledocs" | "textslide";
+  label: string;
+}
+
+export interface WizardState {
+  name: string;
+  webcamMediaId: string | null;
+  mode: "webcam-only" | "with-presentation";
+  segments: WizardSegment[];
+  pipPosition: "bottom-left" | "bottom-right";
+  pipShape: "square" | "rounded" | "circle";
+  landingPageTemplateId: string | null;
+  pdfEnabled: boolean;
+  pdfGoogleDocsUrl: string;
+  pdfQrEnabled: boolean;
+  pdfThumbnailEnabled: boolean;
+  pdfThumbnailFrameMs: number | null;
+}
+
+export interface NewCampaignWizardProps {
+  initialData: {
+    webcams: WizardWebcam[];
+    templates: WizardTemplate[];
+  };
+}
+
+const STEPS = [
+  "Webcam",
+  "Modus",
+  "Editor",
+  "Landingpage",
+  "PDF-Brief",
+  "Zusammenfassung",
+];
+
+export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
+  const router = useRouter();
+  const [step, setStep] = React.useState(0);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [state, setState] = React.useState<WizardState>({
+    name: "",
+    webcamMediaId: null,
+    mode: "webcam-only",
+    segments: [],
+    pipPosition: "bottom-left",
+    pipShape: "rounded",
+    landingPageTemplateId: null,
+    pdfEnabled: false,
+    pdfGoogleDocsUrl: "",
+    pdfQrEnabled: false,
+    pdfThumbnailEnabled: false,
+    pdfThumbnailFrameMs: null,
+  });
+
+  const update = React.useCallback((patch: Partial<WizardState>) => {
+    setState((s) => ({ ...s, ...patch }));
+  }, []);
+
+  // Skip editor step if mode is webcam-only
+  const totalSteps = STEPS.length;
+  const skipEditor = state.mode === "webcam-only";
+
+  function next() {
+    let nextStep = step + 1;
+    if (nextStep === 2 && skipEditor) nextStep = 3;
+    setStep(Math.min(nextStep, totalSteps - 1));
+  }
+
+  function back() {
+    let prevStep = step - 1;
+    if (prevStep === 2 && skipEditor) prevStep = 1;
+    setStep(Math.max(prevStep, 0));
+  }
+
+  async function handleSave() {
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: state.name || "Neue Kampagne",
+          webcamMediaId: state.webcamMediaId,
+          mode: state.mode,
+          segments: state.segments,
+          pipPosition: state.pipPosition,
+          pipShape: state.pipShape,
+          landingPageTemplateId: state.landingPageTemplateId,
+          pdfEnabled: state.pdfEnabled,
+          pdfGoogleDocsUrl: state.pdfGoogleDocsUrl || null,
+          pdfQrEnabled: state.pdfQrEnabled,
+          pdfThumbnailEnabled: state.pdfThumbnailEnabled,
+          pdfThumbnailFrameMs: state.pdfThumbnailFrameMs,
+        }),
+      });
+      if (!res.ok) {
+        // TODO API endpoint may not exist yet
+        console.log("TODO API endpoint /api/campaigns POST", res.status);
+      }
+      router.push("/kampagnen");
+    } catch (err) {
+      console.log("TODO API endpoint /api/campaigns POST", err);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // Validation per step (basic)
+  const canProceed = (() => {
+    if (step === 0) return Boolean(state.webcamMediaId);
+    if (step === 1) return Boolean(state.mode);
+    if (step === 2) return true;
+    if (step === 3) return Boolean(state.landingPageTemplateId);
+    if (step === 4) {
+      if (!state.pdfEnabled) return true;
+      return state.pdfGoogleDocsUrl.trim().length > 0;
+    }
+    if (step === 5) return state.name.trim().length > 0;
+    return true;
+  })();
+
+  return (
+    <>
+      <PageHeader
+        title="Neue Kampagne"
+        subtitle={`Schritt ${step + 1} von ${totalSteps}: ${STEPS[step]}`}
+      />
+
+      <ol className="flex items-center gap-2 mb-8 overflow-x-auto pb-2">
+        {STEPS.map((label, idx) => {
+          const isActive = idx === step;
+          const isDone = idx < step;
+          return (
+            <li key={label} className="flex items-center gap-2 shrink-0">
+              <span
+                className={cn(
+                  "flex size-7 items-center justify-center rounded-full text-xs font-semibold border transition-colors",
+                  isActive && "bg-brand text-white border-brand",
+                  isDone && "bg-brand-soft text-brand-deep border-brand-soft",
+                  !isActive && !isDone && "bg-surface text-ink-muted border-line",
+                )}
+              >
+                {isDone ? <Check className="size-3.5" /> : idx + 1}
+              </span>
+              <span
+                className={cn(
+                  "text-xs font-medium",
+                  isActive ? "text-ink" : "text-ink-muted",
+                )}
+              >
+                {label}
+              </span>
+              {idx < STEPS.length - 1 && (
+                <span className="w-6 h-px bg-line ml-1" />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="min-h-[320px]">
+        {step === 0 && (
+          <WizardStep1Webcam
+            webcams={initialData.webcams}
+            value={state.webcamMediaId}
+            onChange={(id) => update({ webcamMediaId: id })}
+          />
+        )}
+        {step === 1 && (
+          <WizardStep2Modus
+            value={state.mode}
+            onChange={(mode) => update({ mode })}
+          />
+        )}
+        {step === 2 && !skipEditor && (
+          <WizardStep3Editor
+            segments={state.segments}
+            pipPosition={state.pipPosition}
+            pipShape={state.pipShape}
+            onSegmentsChange={(segments) => update({ segments })}
+            onPipPositionChange={(pipPosition) => update({ pipPosition })}
+            onPipShapeChange={(pipShape) => update({ pipShape })}
+          />
+        )}
+        {step === 3 && (
+          <WizardStep4Landingpage
+            templates={initialData.templates}
+            value={state.landingPageTemplateId}
+            onChange={(id) => update({ landingPageTemplateId: id })}
+          />
+        )}
+        {step === 4 && (
+          <WizardStep5Pdf
+            enabled={state.pdfEnabled}
+            googleDocsUrl={state.pdfGoogleDocsUrl}
+            qrEnabled={state.pdfQrEnabled}
+            thumbnailEnabled={state.pdfThumbnailEnabled}
+            frameMs={state.pdfThumbnailFrameMs}
+            onChange={(patch) => update(patch)}
+          />
+        )}
+        {step === 5 && (
+          <WizardStep6Summary
+            state={state}
+            webcams={initialData.webcams}
+            templates={initialData.templates}
+            onNameChange={(name) => update({ name })}
+          />
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mt-8 pt-6 border-t border-line">
+        <Button
+          variant="ghost"
+          onClick={back}
+          disabled={step === 0}
+          iconLeft={<ArrowLeft className="size-4" />}
+        >
+          Zurueck
+        </Button>
+        {step < totalSteps - 1 ? (
+          <Button
+            onClick={next}
+            disabled={!canProceed}
+            iconRight={<ArrowRight className="size-4" />}
+          >
+            Weiter
+          </Button>
+        ) : (
+          <Button
+            onClick={handleSave}
+            disabled={!canProceed || submitting}
+            loading={submitting}
+            iconRight={<Check className="size-4" />}
+          >
+            Kampagne speichern
+          </Button>
+        )}
+      </div>
+    </>
+  );
+}
