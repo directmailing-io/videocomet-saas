@@ -19,7 +19,10 @@ export interface WebcamRecorderProps {
   onConfirm: (file: File) => void | Promise<void>;
   /** Optional cancel handler (used by callers that show this in a Dialog). */
   onCancel?: () => void;
-  /** Max recording duration in seconds. Default: 120s. */
+  /**
+   * Optional max recording duration in seconds. If omitted, there is no
+   * auto-stop and no countdown — the user records as long as they want.
+   */
   maxDurationSec?: number;
   /** Optional className for the outer wrapper. */
   className?: string;
@@ -53,9 +56,10 @@ function formatTime(seconds: number): string {
 export function WebcamRecorder({
   onConfirm,
   onCancel,
-  maxDurationSec = 120,
+  maxDurationSec,
   className,
 }: WebcamRecorderProps) {
+  const hasLimit = typeof maxDurationSec === "number" && maxDurationSec > 0;
   const liveVideoRef = React.useRef<HTMLVideoElement | null>(null);
   const reviewVideoRef = React.useRef<HTMLVideoElement | null>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
@@ -204,13 +208,15 @@ export function WebcamRecorder({
       setElapsed((e) => e + 1);
     }, 1000);
 
-    autoStopRef.current = setTimeout(() => {
-      const r = recorderRef.current;
-      if (r && r.state !== "inactive") {
-        try { r.requestData(); } catch { /* ignore */ }
-        try { r.stop(); } catch { /* ignore */ }
-      }
-    }, maxDurationSec * 1000);
+    if (hasLimit) {
+      autoStopRef.current = setTimeout(() => {
+        const r = recorderRef.current;
+        if (r && r.state !== "inactive") {
+          try { r.requestData(); } catch { /* ignore */ }
+          try { r.stop(); } catch { /* ignore */ }
+        }
+      }, (maxDurationSec as number) * 1000);
+    }
   }
 
   function stopRecording() {
@@ -267,8 +273,35 @@ export function WebcamRecorder({
     onCancel?.();
   }
 
-  const remaining = Math.max(0, maxDurationSec - elapsed);
-  const overTime = elapsed >= maxDurationSec;
+  const remaining = hasLimit
+    ? Math.max(0, (maxDurationSec as number) - elapsed)
+    : 0;
+  const overTime = hasLimit && elapsed >= (maxDurationSec as number);
+
+  // WebM blobs produced by MediaRecorder typically have no `duration` field
+  // in the header, which causes <video> to show a black first frame and
+  // refuse to seek. This callback applies the well-known seek-to-end +
+  // seek-back-to-zero hack to force the browser to compute the duration
+  // from the actual stream bytes.
+  const fixWebmDuration = React.useCallback(
+    (e: React.SyntheticEvent<HTMLVideoElement>) => {
+      const v = e.currentTarget;
+      if (!v) return;
+      if (!Number.isFinite(v.duration) || v.duration === Infinity || v.duration === 0) {
+        const onTimeUpdate = () => {
+          v.removeEventListener("timeupdate", onTimeUpdate);
+          v.currentTime = 0;
+        };
+        v.addEventListener("timeupdate", onTimeUpdate);
+        try {
+          v.currentTime = Number.MAX_SAFE_INTEGER;
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    [],
+  );
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -313,15 +346,23 @@ export function WebcamRecorder({
               <div className="h-6 w-px bg-line" aria-hidden />
               <div className="flex items-baseline gap-2 font-mono tabular-nums">
                 <span className="text-2xl font-bold text-ink">{formatTime(elapsed)}</span>
-                <span className="text-sm text-ink-muted">/ {formatTime(maxDurationSec)}</span>
+                {hasLimit && (
+                  <span className="text-sm text-ink-muted">
+                    / {formatTime(maxDurationSec as number)}
+                  </span>
+                )}
               </div>
-              <div className="h-6 w-px bg-line" aria-hidden />
-              <span className={cn(
-                "text-xs font-semibold tabular-nums",
-                remaining <= 10 ? "text-danger" : "text-ink-muted",
-              )}>
-                {overTime ? "Maximum erreicht" : `noch ${formatTime(remaining)}`}
-              </span>
+              {hasLimit && (
+                <>
+                  <div className="h-6 w-px bg-line" aria-hidden />
+                  <span className={cn(
+                    "text-xs font-semibold tabular-nums",
+                    remaining <= 10 ? "text-danger" : "text-ink-muted",
+                  )}>
+                    {overTime ? "Maximum erreicht" : `noch ${formatTime(remaining)}`}
+                  </span>
+                </>
+              )}
             </div>
           )}
 
@@ -331,7 +372,10 @@ export function WebcamRecorder({
                 ref={reviewVideoRef}
                 src={reviewUrl}
                 controls
-                className="h-full w-full object-cover"
+                preload="auto"
+                playsInline
+                onLoadedMetadata={fixWebmDuration}
+                className="h-full w-full object-contain bg-ink"
               />
             ) : (
               <video

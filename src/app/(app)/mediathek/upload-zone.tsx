@@ -442,7 +442,6 @@ export function UploadZone({ onClose }: UploadZoneProps) {
               onCancel={() => {
                 if (!recorderUploading) setRecordOpen(false);
               }}
-              maxDurationSec={120}
             />
           )}
         </DialogContent>

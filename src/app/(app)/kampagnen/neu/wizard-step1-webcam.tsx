@@ -402,7 +402,6 @@ export function WizardStep1Webcam({
               onCancel={() => {
                 if (!uploading) setRecordOpen(false);
               }}
-              maxDurationSec={120}
             />
           )}
         </DialogContent>
