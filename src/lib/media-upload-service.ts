@@ -80,26 +80,27 @@ export async function uploadMediaFile(
     `[media-upload] start user=${userId} kind=${kind} filename=${filename} mime=${mime} bytes=${bytes}`,
   );
 
-  if (kind === "webcam" || kind === "video") {
-    // Write to a tmp file because Bunny Stream client reads from disk.
+  // Webcam recordings are PIPELINE SOURCES: the render worker needs to
+  // download them as raw MP4. Bunny Stream is great for player embedding
+  // (HLS) but cannot serve direct MP4 from edge without signed URLs, so we
+  // store webcam sources in Edge Storage where direct .mp4 GET works.
+  //
+  // The final per-lead personalised videos still go to Bunny Stream (done
+  // in the worker's video-upload processor), where the player embed is
+  // exactly what we want.
+  if (kind === "video") {
+    // Generic "video" media (e.g. a clip the user wants embedded) -> Stream.
     const tmpDir = join(tmpdir(), "videocomet-uploads");
     await mkdir(tmpDir, { recursive: true });
     const tmpPath = join(tmpDir, `${randomUUID()}-${slugify(filename, false) || "upload"}`);
 
     try {
       await writeFile(tmpPath, buffer);
-
-      const result = await uploadVideo({
-        filePath: tmpPath,
-        title: filename,
-      });
-
+      const result = await uploadVideo({ filePath: tmpPath, title: filename });
       const durationSec = await pollStreamDuration(result.videoId);
-
       console.log(
         `[media-upload] stream-upload ok videoId=${result.videoId} duration=${durationSec ?? "n/a"}`,
       );
-
       return {
         publicUrl: result.hlsUrl,
         durationSec,
@@ -107,18 +108,14 @@ export async function uploadMediaFile(
         bunnyVideoId: result.videoId,
       };
     } finally {
-      // Best-effort cleanup of the tmp file
-      try {
-        await unlink(tmpPath);
-      } catch {
-        // ignore
-      }
+      try { await unlink(tmpPath); } catch { /* ignore */ }
     }
   }
 
-  // image / logo -> Bunny Edge Storage
+  // webcam / image / logo -> Bunny Edge Storage (direct mp4/png GET works).
   const safeName = slugify(filename, false) || "file";
-  const remotePath = `users/${userId}/media/${randomUUID()}-${safeName}`;
+  const folder = kind === "webcam" ? "webcam" : "media";
+  const remotePath = `users/${userId}/${folder}/${randomUUID()}-${safeName}`;
   const result = await uploadFile({
     buffer,
     remotePath,
