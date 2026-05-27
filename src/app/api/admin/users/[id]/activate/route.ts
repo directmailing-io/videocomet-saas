@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth-guard";
 import { activateUser } from "@/lib/db/queries/users";

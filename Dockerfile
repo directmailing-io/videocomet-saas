@@ -7,9 +7,15 @@ RUN npm ci
 
 FROM node:22-alpine AS builder
 WORKDIR /app
+RUN apk add --no-cache libc6-compat
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# Build-time stub env so Next.js page-data collection passes;
+# real values are injected at runtime.
+ENV DATABASE_URL=postgres://stub:stub@localhost:5432/stub
+ENV REDIS_URL=redis://localhost:6379
+ENV COOKIE_SECRET=build_time_stub_secret_32chars_long
 RUN npm run build
 
 FROM node:22-alpine AS runner
