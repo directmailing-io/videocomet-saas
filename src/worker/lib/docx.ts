@@ -15,22 +15,61 @@
  *  2. Replace embedded images that match a known SHA-256 hash with new
  *     image bytes. This is how we swap the QR-Code and thumbnail markers
  *     in the source template for the per-lead rendered images.
+ *
+ * The primary API is PizZip-based (load once, mutate, save once) which is
+ * MUCH more efficient than the previous buffer-in / buffer-out style. The
+ * old signatures are kept as thin shims for any callers that still hold a
+ * Buffer.
  */
 
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import PizZip from "pizzip";
 
+const DOCUMENT_XML_PATH = "word/document.xml";
+
 export interface LoadedDocx {
-  buffer: Buffer;
+  zip: PizZip;
 }
 
 /**
- * Reads a DOCX file from disk into a Buffer.
+ * Loads a DOCX archive from a Buffer.
  */
-export async function loadDocx(path: string): Promise<LoadedDocx> {
-  const buffer = await readFile(path);
-  return { buffer };
+export function loadDocx(buffer: Buffer): LoadedDocx {
+  return { zip: new PizZip(buffer) };
+}
+
+/**
+ * Convenience: read a DOCX from disk and return a parsed PizZip handle.
+ */
+export async function loadDocxFromPath(path: string): Promise<LoadedDocx> {
+  const buf = await readFile(path);
+  return loadDocx(buf);
+}
+
+/**
+ * Serialises the (mutated) archive back into a Buffer.
+ */
+export function saveDocx(zip: PizZip): Buffer {
+  return zip.generate({ type: "nodebuffer" }) as Buffer;
+}
+
+/**
+ * Reads the `word/document.xml` text content of a DOCX archive.
+ */
+export function getDocumentXml(zip: PizZip): string {
+  const file = zip.file(DOCUMENT_XML_PATH);
+  if (!file) {
+    throw new Error(`[docx] ${DOCUMENT_XML_PATH} not found in archive`);
+  }
+  return file.asText();
+}
+
+/**
+ * Writes new XML into the archive's `word/document.xml`.
+ */
+export function setDocumentXml(zip: PizZip, xml: string): void {
+  zip.file(DOCUMENT_XML_PATH, xml);
 }
 
 function xmlEscape(value: string): string {
@@ -53,7 +92,6 @@ function xmlEscape(value: string): string {
  */
 function joinSplitPlaceholders(xml: string): string {
   return xml.replace(/\{\{([\s\S]*?)\}\}/g, (_, inner: string) => {
-    // Drop everything inside the placeholder that is XML markup.
     const cleaned = inner.replace(/<[^>]+>/g, "");
     return `{{${cleaned}}}`;
   });
@@ -64,18 +102,28 @@ function joinSplitPlaceholders(xml: string): string {
  * `vars`. Unknown placeholders are LEFT IN PLACE (so the template author
  * can audit visually what was missed). All replacement values are
  * XML-escaped.
+ *
+ * Accepts either a `PizZip` (preferred) or a `Buffer`. With Buffer-input,
+ * a new Buffer is returned; with Zip-input, the zip is mutated in place
+ * and `undefined` is returned (the same zip can be passed to subsequent
+ * mutators / `saveDocx`).
  */
+export function replacePlaceholders(
+  zip: PizZip,
+  vars: Record<string, string>,
+): void;
 export function replacePlaceholders(
   buffer: Buffer,
   vars: Record<string, string>,
-): Buffer {
-  const zip = new PizZip(buffer);
-  const docFile = zip.file("word/document.xml");
-  if (!docFile) {
-    throw new Error("[docx] word/document.xml not found in archive");
-  }
+): Buffer;
+export function replacePlaceholders(
+  input: PizZip | Buffer,
+  vars: Record<string, string>,
+): Buffer | void {
+  const isBuffer = Buffer.isBuffer(input);
+  const zip = isBuffer ? new PizZip(input as Buffer) : (input as PizZip);
 
-  let xml = docFile.asText();
+  let xml = getDocumentXml(zip);
   xml = joinSplitPlaceholders(xml);
   xml = xml.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (match, key: string) => {
     const trimmed = key.trim();
@@ -83,27 +131,40 @@ export function replacePlaceholders(
     if (value === undefined || value === null) return match;
     return xmlEscape(String(value));
   });
+  setDocumentXml(zip, xml);
 
-  zip.file("word/document.xml", xml);
-  return zip.generate({ type: "nodebuffer" }) as Buffer;
+  if (isBuffer) return saveDocx(zip);
 }
 
 export interface ReplaceImageInput {
   targetSha256: string;
   newImageBuffer: Buffer;
+  /**
+   * Optional override for the stored content-type. Not currently persisted
+   * anywhere (Word reads the image from the file extension stored in
+   * `word/_rels/document.xml.rels`) but accepted for forward-compat.
+   */
+  contentType?: string;
 }
 
 /**
  * Scans `word/media/*` for an image whose SHA-256 matches `targetSha256`
- * and replaces its content with `newImageBuffer`. Returns the modified
- * archive buffer. If no match is found the archive is returned unchanged
- * (callers usually log a warning).
+ * and replaces its content with `newImageBuffer`.
+ *
+ * - With `PizZip` input: mutates the zip and returns `true` iff a media
+ *   file was matched and replaced.
+ * - With `Buffer` input: returns the new archive buffer (kept for
+ *   backward compatibility).
  */
+export function replaceImageByHash(zip: PizZip, opts: ReplaceImageInput): boolean;
+export function replaceImageByHash(buffer: Buffer, opts: ReplaceImageInput): Buffer;
 export function replaceImageByHash(
-  buffer: Buffer,
+  input: PizZip | Buffer,
   opts: ReplaceImageInput,
-): Buffer {
-  const zip = new PizZip(buffer);
+): boolean | Buffer {
+  const isBuffer = Buffer.isBuffer(input);
+  const zip = isBuffer ? new PizZip(input as Buffer) : (input as PizZip);
+
   const files = zip.file(/^word\/media\//);
   let replaced = false;
 
@@ -124,5 +185,6 @@ export function replaceImageByHash(
     );
   }
 
-  return zip.generate({ type: "nodebuffer" }) as Buffer;
+  if (isBuffer) return saveDocx(zip);
+  return replaced;
 }

@@ -87,6 +87,59 @@ function buildPrettyName(data: Record<string, string>): string {
 }
 
 /**
+ * Picks the first non-empty value from `data` for any of the given keys
+ * (case-insensitive). Returns "" when no candidate is set.
+ */
+function pickField(
+  data: Record<string, string>,
+  candidates: readonly string[],
+): string {
+  for (const key of candidates) {
+    const value = data[key];
+    if (value && value.trim()) return value.trim();
+  }
+  // Case-insensitive fallback.
+  const lower = new Map<string, string>();
+  for (const [k, v] of Object.entries(data)) lower.set(k.toLowerCase(), v);
+  for (const key of candidates) {
+    const v = lower.get(key.toLowerCase());
+    if (v && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+/**
+ * Builds the `vars` map fed into `runDocxModify`. Starts from `lead.data`
+ * (raw column-mapping output) and adds auto-derived fields so the template
+ * author can use `{{landingpageUrl}}`, `{{firstName}}`, `{{lastName}}`
+ * directly even if those columns aren't in the source spreadsheet.
+ */
+function buildDocxVars(
+  leadData: Record<string, string>,
+  landingpageUrl: string,
+): Record<string, string> {
+  const firstName = pickField(leadData, [
+    "firstName",
+    "Vorname",
+    "first_name",
+    "vorname",
+  ]);
+  const lastName = pickField(leadData, [
+    "lastName",
+    "Nachname",
+    "last_name",
+    "nachname",
+  ]);
+  return {
+    ...leadData,
+    landingpageUrl,
+    landingpage_url: landingpageUrl,
+    firstName,
+    lastName,
+  };
+}
+
+/**
  * Main entrypoint passed to `pipelineWorker(processor)`. Runs all stages
  * for one lead and returns a lightweight summary.
  */
@@ -172,7 +225,7 @@ export async function pipelineProcessor(
       const docx = await runDocxModify({
         outDir: workDir,
         googleDocsUrl: campaign.pdfGoogleDocsUrl,
-        vars: lead.data ?? {},
+        vars: buildDocxVars(lead.data ?? {}, lp.pageUrl),
         qrPngPath: qr.qrPngPath,
         thumbJpgPath: thumb.thumbFilePath,
       });
