@@ -54,9 +54,22 @@ async function fetchToFile(url: string, outPath: string): Promise<void> {
   if (url.startsWith("file://")) {
     return; // Already on local disk; caller handles this branch.
   }
-  const res = await fetch(url);
+  // For HLS playlists from Bunny Stream, switch to the MP4 fallback URL so
+  // ffmpeg can read a single seekable file. The Library has MP4 fallback
+  // enabled, so {guid}/play_720p.mp4 always exists.
+  let downloadUrl = url;
+  const hlsMatch = url.match(/^(https?:\/\/[^/]+)\/([0-9a-f-]{36})\/playlist\.m3u8$/i);
+  if (hlsMatch) {
+    downloadUrl = `${hlsMatch[1]}/${hlsMatch[2]}/play_720p.mp4`;
+  }
+  // Bunny CDN blocks none-referrer requests by default. Provide an APP_URL
+  // referrer so the hot-link protection lets us through.
+  const referer = process.env.APP_URL ?? "https://app.videocomet.de";
+  const res = await fetch(downloadUrl, {
+    headers: { Referer: referer, "User-Agent": "videocomet-worker/1.0" },
+  });
   if (!res.ok) {
-    throw new Error(`[render] webcam fetch failed: ${res.status} ${url}`);
+    throw new Error(`[render] webcam fetch failed: ${res.status} ${downloadUrl}`);
   }
   const buf = Buffer.from(await res.arrayBuffer());
   await writeFile(outPath, buf);
