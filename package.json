@@ -11,7 +11,10 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "markers:generate": "tsx scripts/generate-markers.ts"
+    "markers:generate": "tsx scripts/generate-markers.ts",
+    "worker:dev": "tsx watch src/worker/index.ts",
+    "worker:start": "tsx scripts/start-worker.ts",
+    "cleanup:pdfs": "tsx scripts/cleanup-pdfs.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -45,6 +48,7 @@
     "pg": "^8.21.0",
     "pizzip": "^3.2.0",
     "postgres": "^3.4.9",
+    "puppeteer-core": "^24.43.1",
     "qrcode": "^1.5.4",
     "react": "^18",
     "react-dom": "^18",
