@@ -1,10 +1,11 @@
 # Multi-stage build for Next.js standalone output
 FROM node:22-alpine AS deps
-# Build tools for native modules (argon2, sharp)
-RUN apk add --no-cache libc6-compat python3 make g++ vips-dev
+# Build tools for native modules (argon2 needs to compile from source on alpine/musl;
+# sharp uses prebuilt linux-musl wheel so no vips-dev needed).
+RUN apk add --no-cache libc6-compat python3 make g++
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm ci --include=optional
 
 FROM node:22-alpine AS builder
 WORKDIR /app
