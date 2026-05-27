@@ -55,6 +55,54 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const Comp = asChild ? Slot : "button";
 
+    // When using asChild, Radix Slot requires a single child. We compose
+    // iconLeft / children / iconRight into one fragment-style wrapper by
+    // cloning the single child and injecting the helpers into its children.
+    const inner = (
+      <>
+        {loading ? (
+          <span className="inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        ) : (
+          iconLeft && <span className="inline-flex shrink-0">{iconLeft}</span>
+        )}
+        {children}
+        {iconRight && !loading && (
+          <span className="inline-flex shrink-0">{iconRight}</span>
+        )}
+      </>
+    );
+
+    if (asChild && React.isValidElement(children)) {
+      const childElement = children as React.ReactElement<{ children?: React.ReactNode }>;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const slotProps: any = {
+        ref,
+        className: cn(base, variantClasses[variant], sizeClasses[size], className),
+        ...props,
+      };
+      return (
+        <Slot {...slotProps}>
+          {React.cloneElement(childElement, {
+            children: (
+              <>
+                {loading ? (
+                  <span className="inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : (
+                  iconLeft && (
+                    <span className="inline-flex shrink-0">{iconLeft}</span>
+                  )
+                )}
+                {childElement.props.children}
+                {iconRight && !loading && (
+                  <span className="inline-flex shrink-0">{iconRight}</span>
+                )}
+              </>
+            ),
+          })}
+        </Slot>
+      );
+    }
+
     return (
       <Comp
         ref={ref}
@@ -67,15 +115,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         {...props}
       >
-        {loading ? (
-          <span className="inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-        ) : (
-          iconLeft && <span className="inline-flex shrink-0">{iconLeft}</span>
-        )}
-        {children}
-        {iconRight && !loading && (
-          <span className="inline-flex shrink-0">{iconRight}</span>
-        )}
+        {inner}
       </Comp>
     );
   }
