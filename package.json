@@ -44,7 +44,7 @@
     "framer-motion": "^12.40.0",
     "ioredis": "^5.11.0",
     "lucia": "^3.2.2",
-    "lucide-react": "^1.16.0",
+    "lucide-react": "0.515.0",
     "mime-types": "^3.0.2",
     "next": "14.2.35",
     "papaparse": "^5.5.3",
