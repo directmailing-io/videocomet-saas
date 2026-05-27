@@ -115,21 +115,12 @@ export default async function KampagnenPage() {
                             Bearbeiten
                           </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={(e) => {
-                            e.preventDefault();
-                          }}
-                        >
+                        <DropdownMenuItem disabled>
                           <Copy className="size-4 text-ink-muted" />
                           Duplizieren
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          danger
-                          onSelect={(e) => {
-                            e.preventDefault();
-                          }}
-                        >
+                        <DropdownMenuItem disabled danger>
                           <Trash2 className="size-4" />
                           Löschen
                         </DropdownMenuItem>
