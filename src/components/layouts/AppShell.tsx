@@ -13,7 +13,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
-import { Avatar, AvatarFallback, getInitials } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +28,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 
 export type AppNavKey =
   | "dashboard"
