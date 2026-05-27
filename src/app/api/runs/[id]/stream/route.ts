@@ -67,7 +67,7 @@ export async function GET(
           .where(and(eq(runs.id, runId), eq(runs.userId, userId)))
           .limit(1);
         if (!runRow) {
-          send("error", { message: "Run wurde geloescht." });
+          send("error", { message: "Run wurde gelöscht." });
           break;
         }
 

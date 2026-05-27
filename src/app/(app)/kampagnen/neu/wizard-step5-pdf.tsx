@@ -68,7 +68,7 @@ export function WizardStep5Pdf({
               }
             />
             <p className="text-xs text-ink-muted mt-1.5">
-              Das Dokument muss oeffentlich freigegeben sein (mindestens
+              Das Dokument muss öffentlich freigegeben sein (mindestens
               "Jeder mit dem Link kann ansehen").
             </p>
           </div>
@@ -79,7 +79,7 @@ export function WizardStep5Pdf({
                 QR-Code einbetten
               </p>
               <p className="text-xs text-ink-muted mt-0.5">
-                QR fuer die personalisierte Landingpage.
+                QR für die personalisierte Landingpage.
               </p>
             </div>
             <Switch

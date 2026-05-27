@@ -58,7 +58,7 @@ export async function POST(
   }
   if (run.status === "generating") {
     return NextResponse.json(
-      { error: "Runde laeuft bereits." },
+      { error: "Runde läuft bereits." },
       { status: 409 },
     );
   }
@@ -137,7 +137,7 @@ export async function POST(
       {
         ok: false,
         error:
-          "Leads angelegt, aber die Job-Queue ist nicht erreichbar. Bitte Worker pruefen.",
+          "Leads angelegt, aber die Job-Queue ist nicht erreichbar. Bitte Worker prüfen.",
         totalLeads: inserted,
       },
       { status: 503 },

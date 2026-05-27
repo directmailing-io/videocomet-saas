@@ -199,7 +199,7 @@ export function AdminShell({
               <button
                 type="button"
                 className="md:hidden inline-flex size-9 items-center justify-center rounded-full hover:bg-line-soft transition-colors"
-                aria-label="Menue oeffnen"
+                aria-label="Menue öffnen"
               >
                 <Menu className="size-5 text-ink" />
               </button>

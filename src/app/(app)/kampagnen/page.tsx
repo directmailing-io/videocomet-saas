@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 function modeLabel(mode: string): string {
-  if (mode === "with-presentation") return "Mit Praesentation";
+  if (mode === "with-presentation") return "Mit Präsentation";
   return "Nur Webcam";
 }
 
@@ -131,7 +131,7 @@ export default async function KampagnenPage() {
                           }}
                         >
                           <Trash2 className="size-4" />
-                          Loeschen
+                          Löschen
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -141,7 +141,7 @@ export default async function KampagnenPage() {
                   <Link
                     href={`/kampagnen/${c.id}`}
                     className="absolute inset-0 z-0 rounded-squircle-md"
-                    aria-label={`${c.name} oeffnen`}
+                    aria-label={`${c.name} öffnen`}
                   />
                   <div className="relative z-10 flex items-center gap-2 flex-wrap pointer-events-none">
                     <Badge variant="brand">{modeLabel(c.mode)}</Badge>

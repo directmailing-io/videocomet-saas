@@ -25,7 +25,7 @@ export function googleSheetsToCsvUrl(url: string): string {
   const trimmed = url.trim();
   const match = trimmed.match(SHEET_ID_RE);
   if (!match) {
-    throw new Error("Keine gueltige Google-Sheets-URL.");
+    throw new Error("Keine gültige Google-Sheets-URL.");
   }
   const sheetId = match[1];
   const gid = extractGid(trimmed);
@@ -51,14 +51,14 @@ export async function fetchGoogleSheetCsv(url: string): Promise<Buffer> {
   });
   if (!res.ok) {
     throw new Error(
-      `Sheet konnte nicht geladen werden (HTTP ${res.status}). Bitte stelle sicher, dass die Datei oeffentlich ist.`,
+      `Sheet konnte nicht geladen werden (HTTP ${res.status}). Bitte stelle sicher, dass die Datei öffentlich ist.`,
     );
   }
   const contentType = res.headers.get("content-type") ?? "";
   if (contentType.includes("text/html")) {
     // Google's login page comes back as HTML.
     throw new Error(
-      "Sheet ist nicht oeffentlich. Bitte Teilen-Einstellung auf 'Jeder mit Link' setzen.",
+      "Sheet ist nicht öffentlich. Bitte Teilen-Einstellung auf 'Jeder mit Link' setzen.",
     );
   }
   const arr = await res.arrayBuffer();

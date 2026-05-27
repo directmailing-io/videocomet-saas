@@ -98,7 +98,7 @@ function MediaGrid({ items }: { items: MediaItem[] }) {
                   </DropdownMenuItem>
                   <DropdownMenuItem danger>
                     <Trash2 className="size-4" />
-                    Loeschen
+                    Löschen
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

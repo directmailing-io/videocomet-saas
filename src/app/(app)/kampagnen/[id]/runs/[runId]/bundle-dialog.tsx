@@ -51,7 +51,7 @@ export function BundleDialog({ runId }: BundleDialogProps) {
         <DialogHeader>
           <DialogTitle>PDF-Bundle herunterladen</DialogTitle>
           <DialogDescription>
-            Waehle, wie viele PDFs in der ZIP-Datei zusammengefasst werden sollen.
+            Wähle, wie viele PDFs in der ZIP-Datei zusammengefasst werden sollen.
             Mit dem Offset kannst du Folge-Pakete laden.
           </DialogDescription>
         </DialogHeader>

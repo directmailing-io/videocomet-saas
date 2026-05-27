@@ -52,7 +52,7 @@ export async function PATCH(req: Request) {
   try {
     body = (await req.json()) as Record<string, unknown>;
   } catch {
-    return NextResponse.json({ error: "Ungueltiges JSON." }, { status: 400 });
+    return NextResponse.json({ error: "Ungültiges JSON." }, { status: 400 });
   }
 
   const patch: Partial<Record<AllowedField, string | null>> = {};

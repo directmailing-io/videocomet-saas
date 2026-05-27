@@ -71,7 +71,7 @@ function runStatusLabel(status: string): string {
 }
 
 function modeLabel(mode: string): string {
-  if (mode === "with-presentation") return "Mit Praesentation";
+  if (mode === "with-presentation") return "Mit Präsentation";
   return "Nur Webcam";
 }
 
@@ -114,20 +114,20 @@ export default async function CampaignDetailPage({
               Bearbeiten
             </Button>
             <Button variant="danger" iconLeft={<Trash2 className="size-4" />}>
-              Loeschen
+              Löschen
             </Button>
           </>
         }
       />
 
-      <Tabs defaultValue="uebersicht">
+      <Tabs defaultValue="übersicht">
         <TabsList>
-          <TabsTrigger value="uebersicht">Uebersicht</TabsTrigger>
+          <TabsTrigger value="übersicht">Übersicht</TabsTrigger>
           <TabsTrigger value="runden">Runden</TabsTrigger>
           <TabsTrigger value="einstellungen">Einstellungen</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="uebersicht">
+        <TabsContent value="übersicht">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             <Card>
               <CardHeader>
@@ -138,7 +138,7 @@ export default async function CampaignDetailPage({
                   {runs.reduce((s, r) => s + (r.totalLeads ?? 0), 0)}
                 </div>
                 <p className="text-xs text-ink-muted mt-1">
-                  Ueber alle Runden dieser Kampagne
+                  Über alle Runden dieser Kampagne
                 </p>
               </CardContent>
             </Card>
@@ -274,7 +274,7 @@ export default async function CampaignDetailPage({
                         href={`/landingpages/${campaign.landingPageTemplateId}`}
                         className="text-brand-deep hover:underline"
                       >
-                        Vorlage oeffnen
+                        Vorlage öffnen
                       </Link>
                     ) : (
                       <span className="text-ink-muted">Keine</span>

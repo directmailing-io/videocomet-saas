@@ -72,7 +72,7 @@ export async function addRemoteFileToZip(
     const res = await fetch(url);
     if (!res.ok || !res.body) {
       archive.append(
-        `Fetch fehlgeschlagen: HTTP ${res.status} fuer ${url}\n`,
+        `Fetch fehlgeschlagen: HTTP ${res.status} für ${url}\n`,
         { name: `${name}.error.txt` },
       );
       return;

@@ -389,7 +389,7 @@ export function LpEditor({ template }: { template: LpEditorTemplate }) {
                   ref={headlineRef}
                   value={content.headline ?? ""}
                   onChange={(e) => setContentField("headline", e.target.value)}
-                  placeholder="Hey {{firstName}}, das hier ist fuer dich!"
+                  placeholder="Hey {{firstName}}, das hier ist für dich!"
                 />
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {PLACEHOLDERS.map((p) => (
@@ -522,7 +522,7 @@ export function LpEditor({ template }: { template: LpEditorTemplate }) {
                   iconLeft={<RotateCcw className="size-3.5" />}
                   className="w-full"
                 >
-                  Auf Theme-Default zuruecksetzen
+                  Auf Theme-Default zurücksetzen
                 </Button>
               </CardContent>
             )}
@@ -614,7 +614,7 @@ function ColorRow({
               value={current}
               onChange={(e) => onChange(e.target.value)}
               className="absolute inset-0 size-10 opacity-0 cursor-pointer"
-              aria-label={`${label} Farbe waehlen`}
+              aria-label={`${label} Farbe wählen`}
             />
             <span
               className="size-10 rounded-squircle-sm border border-line shadow-card pointer-events-none"

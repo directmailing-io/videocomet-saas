@@ -284,7 +284,7 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
                 >
                   <Globe className="size-5 text-brand-deep" />
                   <span className="text-sm font-semibold text-ink">Google Sheets</span>
-                  <span className="text-xs text-ink-muted">URL einfuegen (oeffentlich)</span>
+                  <span className="text-xs text-ink-muted">URL einfuegen (öffentlich)</span>
                 </button>
               </div>
             </div>
@@ -389,7 +389,7 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
                       }
                     >
                       <SelectTrigger id={`map-${ph.key}`}>
-                        <SelectValue placeholder="Spalte waehlen" />
+                        <SelectValue placeholder="Spalte wählen" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">— keine —</SelectItem>
@@ -416,7 +416,7 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
           <CardContent className="space-y-4">
             <p className="text-sm text-ink-muted">
               Du startest <strong className="text-ink">{preview.totalRows}</strong>{" "}
-              Lead{preview.totalRows === 1 ? "" : "s"} fuer die Kampagne{" "}
+              Lead{preview.totalRows === 1 ? "" : "s"} für die Kampagne{" "}
               <strong className="text-ink">{campaignName}</strong>.
             </p>
             <div className="flex flex-wrap gap-2">
@@ -441,7 +441,7 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
           disabled={step === 0 || submitting || creating}
           iconLeft={<ArrowLeft className="size-4" />}
         >
-          Zurueck
+          Zurück
         </Button>
         {step < STEPS.length - 1 ? (
           <Button

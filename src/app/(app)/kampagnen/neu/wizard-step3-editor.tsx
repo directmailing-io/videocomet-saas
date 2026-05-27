@@ -92,7 +92,7 @@ export function WizardStep3Editor({
         {segments.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center text-sm text-ink-muted">
-              Noch keine Segmente. Fuege oben dein erstes Segment hinzu.
+              Noch keine Segmente. Füge oben dein erstes Segment hinzu.
             </CardContent>
           </Card>
         ) : (

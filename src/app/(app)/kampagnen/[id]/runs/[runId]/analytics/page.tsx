@@ -70,14 +70,14 @@ export default async function RunAnalyticsPage({
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink transition-colors"
           >
             <ArrowLeft className="size-3.5" />
-            Zurueck zu {campaign.name}
+            Zurück zu {campaign.name}
           </Link>
         }
         title={`Analytics: ${run.name}`}
         subtitle={`Auswertung der Runde mit ${analytics.totalLeads} Leads.`}
         actions={
           <Button asChild variant="ghost">
-            <Link href={`/kampagnen/${campaign.id}`}>Zur Runden-Uebersicht</Link>
+            <Link href={`/kampagnen/${campaign.id}`}>Zur Runden-Übersicht</Link>
           </Button>
         }
       />

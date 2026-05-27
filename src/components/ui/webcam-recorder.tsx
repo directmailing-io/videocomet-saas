@@ -112,7 +112,7 @@ export function WebcamRecorder({
       if (name === "NotAllowedError" || name === "SecurityError") {
         msg = "Zugriff auf Kamera und Mikrofon wurde verweigert. Bitte erlaube den Zugriff in den Browser-Einstellungen.";
       } else if (name === "NotFoundError" || name === "OverconstrainedError") {
-        msg = "Keine Kamera oder kein Mikrofon gefunden. Bitte schliesse ein Geraet an und versuche es erneut.";
+        msg = "Keine Kamera oder kein Mikrofon gefunden. Bitte schliesse ein Gerät an und versuche es erneut.";
       } else if (name === "NotReadableError") {
         msg = "Kamera oder Mikrofon werden bereits von einer anderen Anwendung verwendet.";
       }
@@ -153,7 +153,7 @@ export function WebcamRecorder({
       rec = new MediaRecorder(streamRef.current, { mimeType });
     } catch (err) {
       console.error("[webcam-recorder] MediaRecorder init failed:", err);
-      setRecordError("Aufnahme nicht moeglich. Bitte aktualisiere den Browser.");
+      setRecordError("Aufnahme nicht möglich. Bitte aktualisiere den Browser.");
       return;
     }
 
@@ -308,7 +308,7 @@ export function WebcamRecorder({
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-60"></span>
                   <span className="relative inline-flex size-3 rounded-full bg-danger"></span>
                 </span>
-                Aufnahme laeuft
+                Aufnahme läuft
               </span>
               <div className="h-6 w-px bg-line" aria-hidden />
               <div className="flex items-baseline gap-2 font-mono tabular-nums">

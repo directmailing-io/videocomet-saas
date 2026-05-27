@@ -155,10 +155,10 @@ export function WizardStep1Webcam({
   return (
     <div>
       <h2 className="text-lg font-semibold text-ink mb-1">
-        Webcam-Video waehlen
+        Webcam-Video wählen
       </h2>
       <p className="text-sm text-ink-muted mb-6">
-        Waehle eine vorhandene Aufnahme aus deiner Mediathek oder nimm jetzt
+        Wähle eine vorhandene Aufnahme aus deiner Mediathek oder nimm jetzt
         eine neue auf.
       </p>
 
@@ -167,7 +167,7 @@ export function WizardStep1Webcam({
           <div className="flex items-center gap-2 mb-3">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand-deep">
               <Check className="size-3.5" />
-              Ausgewaehlt
+              Ausgewählt
             </span>
             <span className="text-sm font-semibold text-ink truncate">
               {selected.name}
@@ -189,7 +189,7 @@ export function WizardStep1Webcam({
               onClick={openPicker}
               iconLeft={<RotateCcw className="size-4" />}
             >
-              Andere waehlen
+              Andere wählen
             </Button>
             <Button
               size="sm"
@@ -210,7 +210,7 @@ export function WizardStep1Webcam({
             <div className="text-sm text-ink-muted">
               {webcams.length === 0
                 ? "Du hast noch keine Webcam-Aufnahme."
-                : "Waehle eine Webcam aus deiner Mediathek."}
+                : "Wähle eine Webcam aus deiner Mediathek."}
             </div>
             <div className="flex flex-wrap gap-2">
               {webcams.length > 0 && (
@@ -220,7 +220,7 @@ export function WizardStep1Webcam({
                   onClick={openPicker}
                   iconLeft={<Upload className="size-4" />}
                 >
-                  Aus Mediathek waehlen
+                  Aus Mediathek wählen
                 </Button>
               )}
               <Button
@@ -240,7 +240,7 @@ export function WizardStep1Webcam({
             <EmptyState
               icon={<Video />}
               title="Keine Webcam-Aufnahmen"
-              subtitle="Nimm jetzt deine erste Webcam-Aufnahme auf, um sie hier auswaehlen zu koennen."
+              subtitle="Nimm jetzt deine erste Webcam-Aufnahme auf, um sie hier auswaehlen zu können."
             />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -288,9 +288,9 @@ export function WizardStep1Webcam({
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
         <DialogContent size="xl">
           <DialogHeader>
-            <DialogTitle>Aus Mediathek waehlen</DialogTitle>
+            <DialogTitle>Aus Mediathek wählen</DialogTitle>
             <DialogDescription>
-              Klicke eine Webcam-Aufnahme an, um sie fuer diese Kampagne zu
+              Klicke eine Webcam-Aufnahme an, um sie für diese Kampagne zu
               verwenden.
             </DialogDescription>
           </DialogHeader>
@@ -393,7 +393,7 @@ export function WizardStep1Webcam({
           {uploading && (
             <div className="rounded-squircle-md border border-line bg-surface-soft px-4 py-3 text-sm text-ink-muted flex items-center gap-2">
               <span className="inline-block size-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
-              Upload laeuft ...
+              Upload läuft ...
             </div>
           )}
           {recordOpen && (

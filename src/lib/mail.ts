@@ -85,7 +85,7 @@ export interface SendPasswordResetMailInput {
 }
 
 export async function sendPasswordResetMail(input: SendPasswordResetMailInput): Promise<void> {
-  const link = `${appUrl()}/passwort-zuruecksetzen?token=${encodeURIComponent(input.token)}`;
+  const link = `${appUrl()}/passwort-zurücksetzen?token=${encodeURIComponent(input.token)}`;
   const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
 
   const body = `

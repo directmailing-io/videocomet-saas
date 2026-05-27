@@ -18,7 +18,7 @@ export default async function LandingpagesPage() {
     <>
       <PageHeader
         title="Landingpage-Vorlagen"
-        subtitle="Erstelle Themes fuer deine personalisierten Landingpages."
+        subtitle="Erstelle Themes für deine personalisierten Landingpages."
         actions={
           <Button asChild iconLeft={<Plus className="size-4" />}>
             <Link href="/landingpages/neu">Neue Vorlage</Link>

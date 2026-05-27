@@ -21,7 +21,7 @@ const OPTIONS: {
     value: "webcam-only",
     title: "Nur Webcam",
     description:
-      "Dein Webcam-Video wird unveraendert als Outreach-Video an alle Empfaenger gesendet.",
+      "Dein Webcam-Video wird unverändert als Outreach-Video an alle Empfänger gesendet.",
     icon: Video,
   },
   {
@@ -36,7 +36,7 @@ const OPTIONS: {
 export function WizardStep2Modus({ value, onChange }: WizardStep2Props) {
   return (
     <div>
-      <h2 className="text-lg font-semibold text-ink mb-1">Modus waehlen</h2>
+      <h2 className="text-lg font-semibold text-ink mb-1">Modus wählen</h2>
       <p className="text-sm text-ink-muted mb-6">
         Bestimme, wie deine Kampagne aufgebaut ist.
       </p>

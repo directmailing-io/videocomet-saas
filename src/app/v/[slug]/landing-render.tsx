@@ -149,7 +149,7 @@ export function LandingRender({
 
   const headline =
     fill(content.headline, leadData) ||
-    `${(leadData.firstName ?? "").trim() || "Hallo"}, dieses Video ist fuer dich`;
+    `${(leadData.firstName ?? "").trim() || "Hallo"}, dieses Video ist für dich`;
   const subheadline = fill(content.subheadline, leadData);
   const body = fill(content.bodyText, leadData);
   const primaryText = fill(content.primaryButtonText, leadData) || "Termin buchen";

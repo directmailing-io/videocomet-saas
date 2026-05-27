@@ -104,7 +104,7 @@ export function LpList({ items }: { items: LpListItem[] }) {
 
   async function onDelete(item: LpListItem) {
     const confirmed = window.confirm(
-      `Vorlage "${item.name}" wirklich loeschen?`,
+      `Vorlage "${item.name}" wirklich löschen?`,
     );
     if (!confirmed) return;
     setPendingId(item.id);
@@ -115,21 +115,21 @@ export function LpList({ items }: { items: LpListItem[] }) {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast({
-          title: "Loeschen fehlgeschlagen",
+          title: "Löschen fehlgeschlagen",
           description: data.error ?? "Bitte erneut versuchen.",
           variant: "danger",
         });
         return;
       }
       toast({
-        title: "Vorlage geloescht",
+        title: "Vorlage gelöscht",
         description: `${item.name} wurde entfernt.`,
         variant: "success",
       });
       router.refresh();
     } catch {
       toast({
-        title: "Loeschen fehlgeschlagen",
+        title: "Löschen fehlgeschlagen",
         description: "Verbindung zum Server fehlgeschlagen.",
         variant: "danger",
       });
@@ -219,7 +219,7 @@ export function LpList({ items }: { items: LpListItem[] }) {
                     }}
                   >
                     <Trash2 className="size-4" />
-                    Loeschen
+                    Löschen
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

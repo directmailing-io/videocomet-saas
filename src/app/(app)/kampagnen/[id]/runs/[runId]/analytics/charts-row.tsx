@@ -75,8 +75,8 @@ export function ChartsRow({
 }: ChartsRowProps) {
   const total = opened + notOpened;
   const pieData = [
-    { name: "Geoeffnet", value: opened, fill: BRAND },
-    { name: "Nicht geoeffnet", value: notOpened, fill: BRAND_SOFT },
+    { name: "Geöffnet", value: opened, fill: BRAND },
+    { name: "Nicht geöffnet", value: notOpened, fill: BRAND_SOFT },
   ];
 
   const progressData = progressDistribution.map((p) => ({
@@ -128,8 +128,8 @@ export function ChartsRow({
           </div>
           <Legend
             items={[
-              { name: "Geoeffnet", color: BRAND, value: opened },
-              { name: "Nicht geoeffnet", color: BRAND_SOFT, value: notOpened },
+              { name: "Geöffnet", color: BRAND, value: opened },
+              { name: "Nicht geöffnet", color: BRAND_SOFT, value: notOpened },
             ]}
           />
         </CardContent>

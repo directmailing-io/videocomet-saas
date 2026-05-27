@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
   if (typeParam) {
     if (!MEDIA_TYPES.includes(typeParam as MediaType)) {
       return NextResponse.json(
-        { error: "Ungueltiger type-Parameter." },
+        { error: "Ungültiger type-Parameter." },
         { status: 400 },
       );
     }
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     return NextResponse.json(
       {
-        error: "Ungueltiger multipart-Body.",
+        error: "Ungültiger multipart-Body.",
         details: err instanceof Error ? err.message : null,
       },
       { status: 400 },
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
 
   if (typeof kindRaw !== "string" || !isMediaKind(kindRaw)) {
     return NextResponse.json(
-      { error: "Feld 'kind' fehlt oder ist ungueltig." },
+      { error: "Feld 'kind' fehlt oder ist ungültig." },
       { status: 400 },
     );
   }

@@ -61,7 +61,7 @@ interface ApiResponse {
 
 const STATUS_TABS: Array<{ key: StatusFilter; label: string }> = [
   { key: "all", label: "Alle" },
-  { key: "opened", label: "Geoeffnet" },
+  { key: "opened", label: "Geöffnet" },
   { key: "started", label: "Video gestartet" },
   { key: "completed", label: "Fertig" },
   { key: "failed", label: "Fehlerhaft" },
@@ -210,7 +210,7 @@ export function LeadsTable({ runId }: { runId: string }) {
           title="Keine Leads gefunden"
           subtitle={
             debouncedQ
-              ? "Suche zurueck setzen oder Filter wechseln."
+              ? "Suche zurück setzen oder Filter wechseln."
               : "Sobald Leads tracken, erscheinen sie hier."
           }
         />
@@ -300,7 +300,7 @@ export function LeadsTable({ runId }: { runId: string }) {
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               iconLeft={<ChevronLeft className="size-4" />}
             >
-              Zurueck
+              Zurück
             </Button>
             <Button
               variant="ghost"
@@ -370,7 +370,7 @@ function RowActions({ lead }: { lead: LeadRow }) {
           <DropdownMenuItem asChild>
             <a href={lead.pageUrl} target="_blank" rel="noreferrer">
               <ExternalLink className="size-4 text-ink-muted" />
-              Landingpage oeffnen
+              Landingpage öffnen
             </a>
           </DropdownMenuItem>
         ) : (

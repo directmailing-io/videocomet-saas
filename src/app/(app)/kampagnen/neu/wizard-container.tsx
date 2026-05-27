@@ -247,7 +247,7 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
           disabled={step === 0}
           iconLeft={<ArrowLeft className="size-4" />}
         >
-          Zurueck
+          Zurück
         </Button>
         {step < totalSteps - 1 ? (
           <Button

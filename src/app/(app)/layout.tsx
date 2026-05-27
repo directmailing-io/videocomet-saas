@@ -2,6 +2,7 @@ import * as React from "react";
 import { headers } from "next/headers";
 import { requireUser } from "@/lib/auth-guard";
 import { AppShell, type AppNavKey } from "@/components/layouts/AppShell";
+import { Toaster } from "@/components/ui/toaster";
 
 function navKeyFromPathname(pathname: string | null): AppNavKey {
   if (!pathname) return "dashboard";
@@ -28,15 +29,17 @@ export default async function AppLayout({
   const currentNav = navKeyFromPathname(pathname);
 
   return (
-    <AppShell
-      user={{
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-      }}
-      currentNav={currentNav}
-    >
-      {children}
-    </AppShell>
+    <Toaster>
+      <AppShell
+        user={{
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+        }}
+        currentNav={currentNav}
+      >
+        {children}
+      </AppShell>
+    </Toaster>
   );
 }

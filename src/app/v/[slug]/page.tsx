@@ -150,8 +150,8 @@ function PendingState({ leadId }: { leadId: string }) {
         Dein personalisiertes Video wird gerade vorbereitet. Bitte lade die
         Seite in wenigen Minuten erneut.
       </p>
-      {/* Pixel-Tracking laeuft auch im Pending-State, damit wir wissen,
-          wann Empfaenger zum ersten Mal geklickt haben. */}
+      {/* Pixel-Tracking läuft auch im Pending-State, damit wir wissen,
+          wann Empfänger zum ersten Mal geklickt haben. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`/api/track/page-view?leadId=${encodeURIComponent(leadId)}`}

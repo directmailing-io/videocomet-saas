@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     body = createSchema.parse(await req.json());
   } catch (err) {
     return NextResponse.json(
-      { error: "Ungueltige Eingabe.", details: err instanceof Error ? err.message : null },
+      { error: "Ungültige Eingabe.", details: err instanceof Error ? err.message : null },
       { status: 400 },
     );
   }

@@ -25,7 +25,7 @@ export function PasswordForm() {
     }
     if (next !== confirm) {
       setError(true);
-      setMessage("Die Passwoerter stimmen nicht ueberein.");
+      setMessage("Die Passwörter stimmen nicht überein.");
       return;
     }
 

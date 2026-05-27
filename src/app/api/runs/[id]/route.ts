@@ -58,7 +58,7 @@ export async function PATCH(
   } catch (err) {
     return NextResponse.json(
       {
-        error: "Ungueltige Eingabe.",
+        error: "Ungültige Eingabe.",
         details: err instanceof Error ? err.message : null,
       },
       { status: 400 },

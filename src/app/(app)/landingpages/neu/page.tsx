@@ -21,9 +21,9 @@ export default async function NewLandingpagePage() {
     name: "Neue Vorlage",
     themeId: "clean",
     content: {
-      headline: "Hey {{firstName}}, das hier ist fuer dich!",
+      headline: "Hey {{firstName}}, das hier ist für dich!",
       bodyText:
-        "Ich habe dieses Video speziell fuer dich aufgenommen. Schau es dir an und melde dich bei Fragen.",
+        "Ich habe dieses Video speziell für dich aufgenommen. Schau es dir an und melde dich bei Fragen.",
       primaryButtonText: "Termin buchen",
       primaryButtonUrl: "https://calendly.com",
       secondaryButtonText: "Mehr erfahren",

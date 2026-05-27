@@ -19,7 +19,7 @@ export interface WizardStep6Props {
 }
 
 function modeLabel(mode: string): string {
-  if (mode === "with-presentation") return "Mit Praesentation";
+  if (mode === "with-presentation") return "Mit Präsentation";
   return "Nur Webcam";
 }
 
@@ -47,14 +47,14 @@ export function WizardStep6Summary({
     <div>
       <h2 className="text-lg font-semibold text-ink mb-1">Zusammenfassung</h2>
       <p className="text-sm text-ink-muted mb-6">
-        Pruefe deine Einstellungen und gib der Kampagne einen Namen.
+        Prüfe deine Einstellungen und gib der Kampagne einen Namen.
       </p>
 
       <div className="mb-6">
         <Label htmlFor="campaign-name">Kampagnen-Name</Label>
         <Input
           id="campaign-name"
-          placeholder="z.B. Outreach Q2 - Anwaelte Hamburg"
+          placeholder="z.B. Outreach Q2 - Anwälte Hamburg"
           value={state.name}
           onChange={(e) => onNameChange(e.target.value)}
           required

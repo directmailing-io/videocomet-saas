@@ -276,7 +276,7 @@ export function LiveTable({
                         className="inline-flex items-center gap-1 text-brand-deep hover:underline text-xs"
                       >
                         <ExternalLink className="size-3.5" />
-                        oeffnen
+                        öffnen
                       </a>
                     ) : (
                       <span className="text-ink-muted text-xs">—</span>

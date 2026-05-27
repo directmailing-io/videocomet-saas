@@ -33,10 +33,10 @@ export function WizardStep4Landingpage({
   return (
     <div>
       <h2 className="text-lg font-semibold text-ink mb-1">
-        Landingpage-Vorlage waehlen
+        Landingpage-Vorlage wählen
       </h2>
       <p className="text-sm text-ink-muted mb-6">
-        Diese Vorlage wird als personalisierte Landingpage fuer jeden Lead
+        Diese Vorlage wird als personalisierte Landingpage für jeden Lead
         verwendet.
       </p>
 

@@ -433,7 +433,7 @@ export function UploadZone({ onClose }: UploadZoneProps) {
           {recorderUploading && (
             <div className="rounded-squircle-md border border-line bg-surface-soft px-4 py-3 text-sm text-ink-muted flex items-center gap-2">
               <span className="inline-block size-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
-              Upload laeuft ...
+              Upload läuft ...
             </div>
           )}
           {recordOpen && (

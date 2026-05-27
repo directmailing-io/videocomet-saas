@@ -167,7 +167,7 @@ export function LpPreview({
   const accent = accentOverride || baseTheme.accent;
 
   const headline = fill(asString(c.headline), sampleLeadData) ||
-    "Hey, das hier ist fuer dich";
+    "Hey, das hier ist für dich";
   const body = fill(asString(c.bodyText), sampleLeadData);
   const primaryText =
     fill(asString(c.primaryButtonText), sampleLeadData) || "Termin buchen";
