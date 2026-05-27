@@ -60,19 +60,5 @@ export const AvatarFallback = React.forwardRef<
 ));
 AvatarFallback.displayName = "AvatarFallback";
 
-export function getInitials(
-  firstName?: string | null,
-  lastName?: string | null,
-  fallback?: string | null
-): string {
-  const f = (firstName ?? "").trim();
-  const l = (lastName ?? "").trim();
-  if (f || l) {
-    return `${f.charAt(0)}${l.charAt(0)}`.toUpperCase() || "?";
-  }
-  const fb = (fallback ?? "").trim();
-  if (fb) {
-    return fb.charAt(0).toUpperCase();
-  }
-  return "?";
-}
+// getInitials moved to @/lib/utils so server components can import it safely.
+export { getInitials } from "@/lib/utils";
