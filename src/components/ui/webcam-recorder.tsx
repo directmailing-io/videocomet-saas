@@ -395,6 +395,27 @@ export function WebcamRecorder({
                 <span className="font-mono tabular-nums">{formatTime(elapsed)}</span>
               </div>
             )}
+
+            {/*
+              Composition guide: a subtle vertically-tight circle, centered on
+              the frame. Visible during preview + recording (not in review).
+              Helps the user frame themselves so that when the final clip is
+              displayed as a circular PiP overlay, nothing important gets
+              cropped off the top or bottom.
+              - aspect-square + h-full → diameter equals frame height
+              - centered horizontally via inset-y-0 + mx-auto
+              - dezent: 1px weisse Linie mit 35% Alpha + sehr leichter Schatten
+            */}
+            {(state === "preview" || state === "recording") && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 aspect-square h-full rounded-full border border-white/35"
+                style={{
+                  boxShadow:
+                    "0 0 0 1px rgba(0,0,0,0.08), inset 0 0 0 1px rgba(0,0,0,0.06)",
+                }}
+              />
+            )}
           </div>
 
           {recordError && (
