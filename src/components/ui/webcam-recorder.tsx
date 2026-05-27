@@ -25,29 +25,27 @@ export interface WebcamRecorderProps {
   className?: string;
 }
 
-/**
- * Best-effort MIME-type pick: vp9+opus is highest quality but not all browsers
- * support it (Safari, older Firefox). Falls back to plain video/webm, which is
- * universally supported by browsers exposing MediaRecorder.
- */
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "video/webm";
   const candidates = [
     "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
     "video/webm",
+    "video/mp4",
   ];
   for (const m of candidates) {
-    if (MediaRecorder.isTypeSupported(m)) return m;
+    try {
+      if (MediaRecorder.isTypeSupported(m)) return m;
+    } catch {
+      /* ignore */
+    }
   }
   return "video/webm";
 }
 
 function formatTime(seconds: number): string {
   const safe = Math.max(0, Math.floor(seconds));
-  const mm = Math.floor(safe / 60)
-    .toString()
-    .padStart(2, "0");
+  const mm = Math.floor(safe / 60).toString().padStart(2, "0");
   const ss = (safe % 60).toString().padStart(2, "0");
   return `${mm}:${ss}`;
 }
@@ -63,12 +61,14 @@ export function WebcamRecorder({
   const streamRef = React.useRef<MediaStream | null>(null);
   const recorderRef = React.useRef<MediaRecorder | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
+  const mimeRef = React.useRef<string>("video/webm");
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const autoStopRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [state, setState] = React.useState<RecorderState>("preview");
   const [elapsed, setElapsed] = React.useState(0);
   const [permError, setPermError] = React.useState<string | null>(null);
+  const [recordError, setRecordError] = React.useState<string | null>(null);
   const [recordedBlob, setRecordedBlob] = React.useState<Blob | null>(null);
   const [reviewUrl, setReviewUrl] = React.useState<string | null>(null);
   const [confirming, setConfirming] = React.useState(false);
@@ -91,9 +91,9 @@ export function WebcamRecorder({
     }
   }, []);
 
-  // Initialise camera on mount (and on retry).
   const initCamera = React.useCallback(async () => {
     setPermError(null);
+    setRecordError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720, facingMode: "user" },
@@ -103,49 +103,36 @@ export function WebcamRecorder({
       setHasStream(true);
       if (liveVideoRef.current) {
         liveVideoRef.current.srcObject = stream;
-        // play() can reject on autoplay policy; ignore.
-        liveVideoRef.current.play().catch(() => {
-          /* ignore */
-        });
+        liveVideoRef.current.play().catch(() => {});
       }
     } catch (err) {
       console.error("[webcam-recorder] getUserMedia failed:", err);
-      const name =
-        err instanceof Error && "name" in err ? (err as Error).name : "Error";
+      const name = err instanceof Error && "name" in err ? (err as Error).name : "Error";
       let msg = "Mikrofon/Kamera-Zugriff erforderlich.";
       if (name === "NotAllowedError" || name === "SecurityError") {
-        msg =
-          "Zugriff auf Kamera und Mikrofon wurde verweigert. Bitte erlaube den Zugriff in den Browser-Einstellungen.";
+        msg = "Zugriff auf Kamera und Mikrofon wurde verweigert. Bitte erlaube den Zugriff in den Browser-Einstellungen.";
       } else if (name === "NotFoundError" || name === "OverconstrainedError") {
-        msg =
-          "Keine Kamera oder kein Mikrofon gefunden. Bitte schliesse ein Geraet an und versuche es erneut.";
+        msg = "Keine Kamera oder kein Mikrofon gefunden. Bitte schliesse ein Geraet an und versuche es erneut.";
       } else if (name === "NotReadableError") {
-        msg =
-          "Kamera oder Mikrofon werden bereits von einer anderen Anwendung verwendet.";
+        msg = "Kamera oder Mikrofon werden bereits von einer anderen Anwendung verwendet.";
       }
       setPermError(msg);
     }
   }, []);
 
-  // Initialise on mount; cleanup on unmount.
   React.useEffect(() => {
     void initCamera();
     return () => {
       clearTimers();
       stopStream();
       if (recorderRef.current && recorderRef.current.state !== "inactive") {
-        try {
-          recorderRef.current.stop();
-        } catch {
-          /* ignore */
-        }
+        try { recorderRef.current.stop(); } catch { /* ignore */ }
       }
       recorderRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Revoke object URL when review changes / unmounts.
   React.useEffect(() => {
     return () => {
       if (reviewUrl) URL.revokeObjectURL(reviewUrl);
@@ -156,51 +143,92 @@ export function WebcamRecorder({
     if (!streamRef.current) return;
     chunksRef.current = [];
     setElapsed(0);
+    setRecordError(null);
 
     const mimeType = pickMimeType();
+    mimeRef.current = mimeType;
+
     let rec: MediaRecorder;
     try {
       rec = new MediaRecorder(streamRef.current, { mimeType });
     } catch (err) {
       console.error("[webcam-recorder] MediaRecorder init failed:", err);
-      setPermError("Aufnahme nicht moeglich. Bitte aktualisiere den Browser.");
+      setRecordError("Aufnahme nicht moeglich. Bitte aktualisiere den Browser.");
       return;
     }
 
     rec.ondataavailable = (e) => {
+      console.log("[webcam-recorder] dataavailable: size=" + (e.data?.size ?? 0));
       if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+    };
+    rec.onerror = (e) => {
+      console.error("[webcam-recorder] recorder error:", e);
+      setRecordError("Aufnahmefehler. Bitte erneut versuchen.");
     };
     rec.onstop = () => {
       clearTimers();
-      const blob = new Blob(chunksRef.current, { type: mimeType });
+      console.log(
+        "[webcam-recorder] onstop: chunks=" +
+          chunksRef.current.length +
+          " totalBytes=" +
+          chunksRef.current.reduce((s, c) => s + c.size, 0),
+      );
+      const blob = new Blob(chunksRef.current, { type: mimeRef.current });
+      if (blob.size === 0) {
+        setRecordError(
+          "Aufnahme war leer. Bitte erneut versuchen (mindestens 1 Sekunde aufnehmen).",
+        );
+        // Stay in recording state allowing user to retry by going back to preview.
+        setState("preview");
+        return;
+      }
       setRecordedBlob(blob);
       const url = URL.createObjectURL(blob);
       setReviewUrl(url);
       setState("review");
-      // Stop camera stream once we have the recording.
       stopStream();
     };
 
-    rec.start();
+    // 1 second timeslice → reliable dataavailable events even on Chromium edge cases.
+    try {
+      rec.start(1000);
+    } catch (err) {
+      console.error("[webcam-recorder] start failed:", err);
+      setRecordError("Aufnahme konnte nicht gestartet werden.");
+      return;
+    }
     recorderRef.current = rec;
     setState("recording");
 
-    // Tick-based timer for display.
     timerRef.current = setInterval(() => {
       setElapsed((e) => e + 1);
     }, 1000);
 
-    // Auto-stop at max duration.
     autoStopRef.current = setTimeout(() => {
-      if (recorderRef.current && recorderRef.current.state !== "inactive") {
-        recorderRef.current.stop();
+      const r = recorderRef.current;
+      if (r && r.state !== "inactive") {
+        try { r.requestData(); } catch { /* ignore */ }
+        try { r.stop(); } catch { /* ignore */ }
       }
     }, maxDurationSec * 1000);
   }
 
   function stopRecording() {
-    if (recorderRef.current && recorderRef.current.state !== "inactive") {
-      recorderRef.current.stop();
+    console.log("[webcam-recorder] stopRecording clicked");
+    const r = recorderRef.current;
+    if (!r) {
+      console.warn("[webcam-recorder] no recorder ref");
+      return;
+    }
+    if (r.state === "inactive") {
+      console.warn("[webcam-recorder] recorder already inactive");
+      return;
+    }
+    // Flush any buffered data before stopping → guarantees ondataavailable fires.
+    try { r.requestData(); } catch { /* ignore */ }
+    try { r.stop(); } catch (err) {
+      console.error("[webcam-recorder] stop failed:", err);
+      setRecordError("Beenden fehlgeschlagen.");
     }
   }
 
@@ -211,6 +239,7 @@ export function WebcamRecorder({
     }
     setRecordedBlob(null);
     setElapsed(0);
+    setRecordError(null);
     setState("preview");
     await initCamera();
   }
@@ -232,15 +261,14 @@ export function WebcamRecorder({
   function handleCancel() {
     clearTimers();
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
-      try {
-        recorderRef.current.stop();
-      } catch {
-        /* ignore */
-      }
+      try { recorderRef.current.stop(); } catch { /* ignore */ }
     }
     stopStream();
     onCancel?.();
   }
+
+  const remaining = Math.max(0, maxDurationSec - elapsed);
+  const overTime = elapsed >= maxDurationSec;
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -254,11 +282,12 @@ export function WebcamRecorder({
             {permError}
           </p>
           <div className="flex flex-wrap justify-center gap-2">
-            <Button size="sm" onClick={initCamera}>
+            <Button type="button" size="sm" onClick={initCamera}>
               Erneut versuchen
             </Button>
             {onCancel && (
               <Button
+                type="button"
                 size="sm"
                 variant="ghost"
                 onClick={handleCancel}
@@ -271,6 +300,31 @@ export function WebcamRecorder({
         </div>
       ) : (
         <>
+          {/* Prominent timer banner — visible above the video while recording. */}
+          {state === "recording" && (
+            <div className="flex items-center justify-center gap-4 rounded-squircle-md border border-danger/20 bg-danger/5 px-5 py-4">
+              <span className="inline-flex items-center gap-2 text-sm font-semibold text-danger">
+                <span className="relative flex size-3">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-60"></span>
+                  <span className="relative inline-flex size-3 rounded-full bg-danger"></span>
+                </span>
+                Aufnahme laeuft
+              </span>
+              <div className="h-6 w-px bg-line" aria-hidden />
+              <div className="flex items-baseline gap-2 font-mono tabular-nums">
+                <span className="text-2xl font-bold text-ink">{formatTime(elapsed)}</span>
+                <span className="text-sm text-ink-muted">/ {formatTime(maxDurationSec)}</span>
+              </div>
+              <div className="h-6 w-px bg-line" aria-hidden />
+              <span className={cn(
+                "text-xs font-semibold tabular-nums",
+                remaining <= 10 ? "text-danger" : "text-ink-muted",
+              )}>
+                {overTime ? "Maximum erreicht" : `noch ${formatTime(remaining)}`}
+              </span>
+            </div>
+          )}
+
           <div className="relative aspect-video w-full overflow-hidden rounded-squircle-md bg-ink">
             {state === "review" && reviewUrl ? (
               <video
@@ -289,24 +343,27 @@ export function WebcamRecorder({
               />
             )}
 
+            {/* Compact timer overlay on the video itself (also still visible). */}
             {state === "recording" && (
               <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
                 <span className="inline-block size-2 animate-pulse rounded-full bg-danger" />
                 REC
-                <span className="font-mono tabular-nums">
-                  {formatTime(elapsed)}
-                </span>
-                <span className="text-white/60">
-                  / {formatTime(maxDurationSec)}
-                </span>
+                <span className="font-mono tabular-nums">{formatTime(elapsed)}</span>
               </div>
             )}
           </div>
+
+          {recordError && (
+            <div className="rounded-squircle-md border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
+              {recordError}
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-center gap-2">
             {state === "preview" && (
               <>
                 <Button
+                  type="button"
                   onClick={startRecording}
                   iconLeft={<Circle className="size-4 fill-current" />}
                   disabled={!hasStream}
@@ -314,7 +371,7 @@ export function WebcamRecorder({
                   Aufnahme starten
                 </Button>
                 {onCancel && (
-                  <Button variant="ghost" onClick={handleCancel}>
+                  <Button type="button" variant="ghost" onClick={handleCancel}>
                     Abbrechen
                   </Button>
                 )}
@@ -323,17 +380,19 @@ export function WebcamRecorder({
 
             {state === "recording" && (
               <Button
+                type="button"
                 variant="danger"
                 onClick={stopRecording}
                 iconLeft={<Square className="size-4 fill-current" />}
               >
-                Stopp
+                Aufnahme beenden
               </Button>
             )}
 
             {state === "review" && (
               <>
                 <Button
+                  type="button"
                   onClick={handleConfirm}
                   loading={confirming}
                   iconLeft={<Check className="size-4" />}
@@ -341,6 +400,7 @@ export function WebcamRecorder({
                   Verwenden
                 </Button>
                 <Button
+                  type="button"
                   variant="ghost"
                   onClick={reRecord}
                   disabled={confirming}
@@ -350,6 +410,7 @@ export function WebcamRecorder({
                 </Button>
                 {onCancel && (
                   <Button
+                    type="button"
                     variant="ghost"
                     onClick={handleCancel}
                     disabled={confirming}
@@ -361,7 +422,7 @@ export function WebcamRecorder({
             )}
           </div>
 
-          {state === "preview" && !hasStream && (
+          {state === "preview" && !hasStream && !permError && (
             <p className="text-center text-xs text-ink-muted">
               Initialisiere Kamera ...
             </p>
