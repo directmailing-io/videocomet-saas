@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Ebene_2" data-name="Ebene 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 179.13 41.94">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #1d1d1b;
+        font-family: Outfit-Medium, Outfit;
+        font-size: 19px;
+        font-variation-settings: 'wght' 500;
+        font-weight: 500;
+      }
+
+      .cls-2 {
+        fill: #010101;
+      }
+
+      .cls-3 {
+        letter-spacing: -.02em;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1" data-name="Layer 1">
+    <g>
+      <polygon class="cls-2" points="8.49 13.86 15.78 18.17 8.49 22.49 8.49 13.86"/>
+      <rect class="cls-2" x="16.28" y="-.64" width="1.99" height="16.06" transform="translate(6.28 -7.84) rotate(31.01)"/>
+      <rect class="cls-2" x="12.81" y="5.22" width="1.99" height="5.15" transform="translate(5.93 -5.96) rotate(30.75)"/>
+      <rect class="cls-2" x="18.52" y="4.74" width="1.99" height="8.8" transform="translate(7.41 -8.68) rotate(30.71)"/>
+      <path class="cls-2" d="m19.21,15.04l-1.65,1.39c.15.56.23,1.14.23,1.74,0,3.82-3.11,6.93-6.93,6.93s-6.93-3.11-6.93-6.93c0-3.27,2.28-6.01,5.33-6.73l.42-2.1c-4.36.58-7.74,4.32-7.74,8.83,0,4.92,4,8.92,8.92,8.92s8.92-4,8.92-8.92c0-1.1-.21-2.15-.58-3.13Z"/>
+    </g>
+    <text class="cls-1" transform="translate(26.88 23.29)"><tspan x="0" y="0">VIDEOCOME</tspan><tspan class="cls-3" x="113.92" y="0">T</tspan></text>
+  </g>
+</svg>

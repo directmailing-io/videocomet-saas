@@ -2,26 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html, body {
+    @apply bg-surface-soft text-ink antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  }
+  *:focus-visible {
+    @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-surface;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* Squircle-Card — AirBNB-Style */
+  .card {
+    @apply bg-surface border border-line rounded-squircle-md shadow-card;
+  }
+  .card-hover {
+    @apply transition-all duration-200 ease-spring hover:shadow-card-hover hover:-translate-y-0.5;
+  }
+
+  /* Brand button — voll rund (pill) */
+  .btn-brand {
+    @apply inline-flex items-center justify-center gap-2 bg-brand text-white font-semibold text-sm px-6 py-3 rounded-full shadow-brand transition-all duration-150 ease-spring hover:bg-brand-deep hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 bg-surface border border-line text-ink font-medium text-sm px-6 py-3 rounded-full transition-colors duration-150 hover:bg-surface-muted;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 bg-danger text-white font-semibold text-sm px-6 py-3 rounded-full transition-all duration-150 ease-spring hover:opacity-90 hover:-translate-y-0.5 disabled:opacity-50;
+  }
+
+  /* Input bleibt squircle, nicht pill (besser für Text) */
+  .input {
+    @apply w-full bg-surface border border-line rounded-squircle-sm px-4 py-3 text-sm text-ink placeholder:text-ink-muted transition-colors duration-150 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none;
+  }
+  .label {
+    @apply block text-xs font-semibold uppercase tracking-wider text-ink-muted mb-1.5;
+  }
 }
 
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+  .text-balance { text-wrap: balance; }
 }
