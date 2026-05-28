@@ -81,10 +81,17 @@ export interface TimelineSegmentBlockProps {
   onMoveRight: (id: string) => void;
   /** ms pro Pixel - benötigt für Drag-Berechnung. */
   msPerPx: number;
+  /**
+   * Maximale erlaubte Dauer für dieses Segment (in ms). Berechnet sich aus
+   * `webcamDurationMs - sum(other.durationMs)`. Wenn undefined, kein Limit.
+   */
+  maxDurationMs?: number;
 }
 
 const MIN_DURATION_MS = 200;
 const SNAP_MS = 100;
+/** Snap-Distanz zum Maximum: ab dieser Entfernung rastet die Trim-Geste ans Limit. */
+const SNAP_TO_MAX_MS = 50;
 
 export function TimelineSegmentBlock({
   segment,
@@ -99,12 +106,51 @@ export function TimelineSegmentBlock({
   onMoveLeft,
   onMoveRight,
   msPerPx,
+  maxDurationMs,
 }: TimelineSegmentBlockProps) {
   const style = KIND_STYLES[segment.kind];
   const Icon = style.icon;
 
   // Drag-State: speichert die Start-Mauspos und Start-Dauer beim PointerDown.
   const dragRef = React.useRef<{ startX: number; startDuration: number } | null>(null);
+
+  // Visuelles Limit-Feedback: flasht kurz auf, wenn beim Trim das Maximum
+  // erreicht wird.
+  const [atLimit, setAtLimit] = React.useState(false);
+  const limitTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (limitTimerRef.current) clearTimeout(limitTimerRef.current);
+    };
+  }, []);
+
+  const hasMax =
+    typeof maxDurationMs === "number" && Number.isFinite(maxDurationMs);
+
+  function clampWithSnap(raw: number): { value: number; capped: boolean } {
+    const snappedRaw = Math.round(raw / SNAP_MS) * SNAP_MS;
+    let value = Math.max(MIN_DURATION_MS, snappedRaw);
+    let capped = false;
+    if (hasMax) {
+      const max = maxDurationMs as number;
+      // Snap-to-limit: wenn nur knapp unter dem Limit, ans Limit rasten.
+      if (raw > max - SNAP_TO_MAX_MS) {
+        value = Math.max(MIN_DURATION_MS, max);
+        capped = true;
+      } else if (value > max) {
+        value = Math.max(MIN_DURATION_MS, max);
+        capped = true;
+      }
+    }
+    return { value, capped };
+  }
+
+  function flashLimit() {
+    setAtLimit(true);
+    if (limitTimerRef.current) clearTimeout(limitTimerRef.current);
+    limitTimerRef.current = setTimeout(() => setAtLimit(false), 700);
+  }
 
   function handleTrimPointerDown(event: React.PointerEvent<HTMLDivElement>) {
     event.stopPropagation();
@@ -122,10 +168,10 @@ export function TimelineSegmentBlock({
     const deltaPx = event.clientX - drag.startX;
     const deltaMs = deltaPx * msPerPx;
     const raw = drag.startDuration + deltaMs;
-    const snapped = Math.round(raw / SNAP_MS) * SNAP_MS;
-    const clamped = Math.max(MIN_DURATION_MS, snapped);
-    if (clamped !== segment.durationMs) {
-      onTrimPreview(segment.id, clamped);
+    const { value, capped } = clampWithSnap(raw);
+    if (capped) flashLimit();
+    if (value !== segment.durationMs) {
+      onTrimPreview(segment.id, value);
     }
   }
 
@@ -140,10 +186,10 @@ export function TimelineSegmentBlock({
     const deltaPx = event.clientX - drag.startX;
     const deltaMs = deltaPx * msPerPx;
     const raw = drag.startDuration + deltaMs;
-    const snapped = Math.round(raw / SNAP_MS) * SNAP_MS;
-    const clamped = Math.max(MIN_DURATION_MS, snapped);
+    const { value, capped } = clampWithSnap(raw);
+    if (capped) flashLimit();
     dragRef.current = null;
-    onTrimCommit(segment.id, clamped);
+    onTrimCommit(segment.id, value);
   }
 
   function handleBlockClick(event: React.MouseEvent<HTMLDivElement>) {
@@ -175,7 +221,10 @@ export function TimelineSegmentBlock({
         "absolute top-0 bottom-0 flex items-center gap-1.5 px-2 cursor-pointer select-none transition-shadow",
         "rounded-squircle-sm border-2",
         style.bg,
-        selected ? "ring-2 ring-brand ring-offset-1 ring-offset-surface-soft border-brand/40 z-10" : `${style.border} hover:brightness-105`,
+        selected
+          ? "ring-2 ring-brand ring-offset-1 ring-offset-surface-soft border-brand/40 z-10"
+          : `${style.border} hover:brightness-105`,
+        atLimit && "ring-2 ring-warn/70 ring-offset-1 ring-offset-surface-soft animate-pulse",
       )}
       style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
     >
@@ -256,7 +305,12 @@ export function TimelineSegmentBlock({
         onPointerMove={handleTrimPointerMove}
         onPointerUp={handleTrimPointerUp}
         onPointerCancel={handleTrimPointerUp}
-        className="absolute inset-y-1 right-0 w-1.5 rounded-full cursor-ew-resize hover:bg-brand/40 active:bg-brand touch-none"
+        className={cn(
+          "absolute inset-y-1 right-0 w-1.5 rounded-full cursor-ew-resize touch-none",
+          atLimit
+            ? "bg-warn shadow-[0_0_0_2px_rgba(0,0,0,0.05)]"
+            : "hover:bg-brand/40 active:bg-brand",
+        )}
       />
     </div>
   );

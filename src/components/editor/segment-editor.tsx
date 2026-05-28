@@ -39,8 +39,13 @@ export interface SegmentEditorProps {
   onChange: (segment: Segment) => void;
   onDelete: () => void;
   mediaItems: SegmentEditorMediaItem[];
-  /** Optional: ist die Webcam-Dauer als Limit-Hinweis */
+  /** Optional: die Webcam-Dauer als hartes Gesamt-Limit. */
   webcamDurationMs?: number | null;
+  /**
+   * Summe der Dauern aller ANDEREN Segmente. Wird genutzt, um das harte
+   * Maximum für dieses Segment zu berechnen: webcam - other = maxForThis.
+   */
+  otherSegmentsDurationMs?: number;
 }
 
 const KIND_META: Record<SegmentKind, { label: string; Icon: React.ComponentType<{ className?: string }> }> = {
@@ -57,13 +62,20 @@ export function SegmentEditor({
   onDelete,
   mediaItems,
   webcamDurationMs,
+  otherSegmentsDurationMs,
 }: SegmentEditorProps) {
   const meta = KIND_META[segment.kind];
   const Icon = meta.Icon;
 
+  // Hartes Maximum: Webcam-Dauer minus Summe der anderen Segmente.
+  // Wenn die Caller-Komponente otherSegmentsDurationMs nicht setzt, fallen
+  // wir defensiv auf das volle Webcam-Limit zurück.
   const maxMs =
-    webcamDurationMs !== null && webcamDurationMs !== undefined
-      ? webcamDurationMs
+    webcamDurationMs != null
+      ? Math.max(
+          200,
+          webcamDurationMs - (otherSegmentsDurationMs ?? 0),
+        )
       : undefined;
 
   return (

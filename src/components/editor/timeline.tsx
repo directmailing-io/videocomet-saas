@@ -13,6 +13,11 @@ export interface TimelineProps {
   currentTimeMs: number;
   /** Optional: Skaliere auf diese Gesamtdauer (z. B. Webcam-Länge). */
   totalDurationMs?: number;
+  /**
+   * Hartes Limit: Summe aller Segmente darf diesen Wert nicht überschreiten.
+   * Typischerweise == webcamDurationMs. Wenn undefined, kein Limit.
+   */
+  webcamDurationMs?: number | null;
   selectedSegmentId: string | null;
   onSelectSegment: (id: string | null) => void;
   onSegmentsChange: (segments: Segment[]) => void;
@@ -31,6 +36,7 @@ export function Timeline({
   segments,
   currentTimeMs,
   totalDurationMs,
+  webcamDurationMs,
   selectedSegmentId,
   onSelectSegment,
   onSegmentsChange,
@@ -163,6 +169,19 @@ export function Timeline({
     window.addEventListener("pointerup", onUp);
   }
 
+  // Pro Segment das Maximum berechnen: webcamDurationMs minus Summe der
+  // anderen Segmente. Damit kann der Block den User beim Trim hart begrenzen.
+  const maxPerSegmentMs = React.useMemo(() => {
+    const map = new Map<string, number>();
+    if (webcamDurationMs == null) return map;
+    const totalAll = sumDuration(segments);
+    for (const seg of segments) {
+      const otherSum = totalAll - seg.durationMs;
+      map.set(seg.id, Math.max(200, webcamDurationMs - otherSum));
+    }
+    return map;
+  }, [segments, webcamDurationMs]);
+
   // Block-Positionen kumulativ aus Display-Dauern berechnen.
   const blocks = React.useMemo(() => {
     let offsetMs = 0;
@@ -228,6 +247,7 @@ export function Timeline({
                 onMoveLeft={(id) => moveSegment(id, -1)}
                 onMoveRight={(id) => moveSegment(id, 1)}
                 msPerPx={msPerPx}
+                maxDurationMs={maxPerSegmentMs.get(seg.id)}
               />
             ))}
           </div>

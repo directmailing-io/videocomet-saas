@@ -8,6 +8,9 @@ import {
   FileText,
   Type,
   Plus,
+  Sparkles,
+  Info,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -16,10 +19,11 @@ import { cn } from "@/lib/utils";
 import {
   type Segment,
   type SegmentKind,
-  isImageSegment,
-  isVideoSegment,
 } from "@/lib/segments/types";
-import { createSegment, SEGMENT_KIND_LABELS } from "@/lib/segments/defaults";
+import {
+  createSegment,
+  DEFAULT_SEGMENT_DURATION_MS,
+} from "@/lib/segments/defaults";
 import {
   totalDurationMs,
   formatDuration,
@@ -48,13 +52,48 @@ export interface WizardStep3Props {
   onPipShapeChange: (shape: "square" | "rounded" | "circle") => void;
 }
 
-const ADD_BUTTONS: { kind: SegmentKind; icon: React.ComponentType<{ className?: string }> }[] = [
-  { kind: "website", icon: Globe },
-  { kind: "image", icon: ImageIcon },
-  { kind: "video", icon: VideoIcon },
-  { kind: "gdocs", icon: FileText },
-  { kind: "text", icon: Type },
+interface AddCard {
+  kind: SegmentKind;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+}
+
+const ADD_CARDS: AddCard[] = [
+  {
+    kind: "website",
+    icon: Globe,
+    title: "Website",
+    description: "Personalisierte URL pro Empfänger als Vollbild rendern.",
+  },
+  {
+    kind: "image",
+    icon: ImageIcon,
+    title: "Bild",
+    description: "Aus deiner Medien-Bibliothek einsetzen, mit Hintergrund.",
+  },
+  {
+    kind: "video",
+    icon: VideoIcon,
+    title: "Video",
+    description: "Clip einbinden, optional als Browser-Frame stylen.",
+  },
+  {
+    kind: "gdocs",
+    icon: FileText,
+    title: "Google Docs",
+    description: "Öffentliches Doc scrollen oder als Standbild zeigen.",
+  },
+  {
+    kind: "text",
+    icon: Type,
+    title: "Text",
+    description: "Schlanke Textfolie mit Farbe, Größe und Variablen.",
+  },
 ];
+
+/** Mindest-Rest, damit das Add-Segment noch sinnvoll passt. */
+const MIN_REMAINING_FOR_ADD_MS = 200;
 
 export function WizardStep3Editor({
   segments,
@@ -70,12 +109,14 @@ export function WizardStep3Editor({
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [currentTimeMs, setCurrentTimeMs] = React.useState(0);
 
-  // We may not get webcamDurationSec from initial props (e.g. for older media
-  // items where durationSec wasn't probed at upload). In that case we sniff
-  // it client-side from a hidden <video> tag.
+  // Wir bekommen webcamDurationSec evtl. nicht aus den Props (ältere Media-
+  // Items wurden ohne durationSec hochgeladen). In dem Fall sniffen wir die
+  // Dauer client-seitig aus einem versteckten <video>-Tag.
   const [probedDurationSec, setProbedDurationSec] = React.useState<number | null>(null);
   const effectiveWebcamSec = webcamDurationSec ?? probedDurationSec;
-  const webcamDurationMs = effectiveWebcamSec ? Math.round(effectiveWebcamSec * 1000) : null;
+  const webcamDurationMs = effectiveWebcamSec
+    ? Math.round(effectiveWebcamSec * 1000)
+    : null;
 
   React.useEffect(() => {
     if (!webcamUrl || webcamDurationSec) return;
@@ -96,16 +137,43 @@ export function WizardStep3Editor({
   }, [webcamUrl, webcamDurationSec]);
 
   const total = totalDurationMs(segments);
-  const diff = webcamDurationMs ? total - webcamDurationMs : 0;
+  const remainingMs =
+    webcamDurationMs != null
+      ? Math.max(0, webcamDurationMs - total)
+      : Number.POSITIVE_INFINITY;
+  const canAdd =
+    webcamDurationMs == null
+      ? false
+      : remainingMs >= MIN_REMAINING_FOR_ADD_MS;
+
+  // Webcam ist kürzer als bisherige Segmente: zeigt Warnbanner.
+  const webcamShorterThanSegments =
+    webcamDurationMs != null && total > webcamDurationMs;
 
   function addSegment(kind: SegmentKind) {
-    const seg = createSegment(kind);
+    if (webcamDurationMs == null) return;
+    if (!canAdd) return;
+    // Smart-Add: nimm den verbleibenden Rest, wenn weniger als Default frei.
+    const durationMs = Math.min(DEFAULT_SEGMENT_DURATION_MS, remainingMs);
+    const seg = createSegment(kind, { durationMs });
     onSegmentsChange([...segments, seg]);
     setSelectedId(seg.id);
   }
 
   function updateSegment(updated: Segment) {
-    onSegmentsChange(segments.map((s) => (s.id === updated.id ? updated : s)));
+    // Defensive: Falls trotz UI-Caps ein zu großer Wert reinkommt, hier
+    // hart auf das Maximum begrenzen.
+    let next = updated;
+    if (webcamDurationMs != null) {
+      const otherSum = segments
+        .filter((s) => s.id !== updated.id)
+        .reduce((acc, s) => acc + s.durationMs, 0);
+      const maxForThis = Math.max(200, webcamDurationMs - otherSum);
+      if (updated.durationMs > maxForThis) {
+        next = { ...updated, durationMs: maxForThis };
+      }
+    }
+    onSegmentsChange(segments.map((s) => (s.id === next.id ? next : s)));
   }
 
   function deleteSegment(id: string) {
@@ -121,76 +189,162 @@ export function WizardStep3Editor({
 
   const selectedSegment = segments.find((s) => s.id === selectedId) ?? null;
 
+  // Wenn keine Webcam-Dauer bekannt: Großer Hinweis und kein Editor.
+  if (webcamDurationMs == null) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold text-ink mb-1">Editor</h2>
+          <p className="text-sm text-ink-muted">
+            Baue deine Videopräsentation aus einzelnen Segmenten auf.
+          </p>
+        </div>
+        <Card className="p-10 text-center">
+          <span className="inline-flex size-12 items-center justify-center rounded-full bg-brand-soft text-brand-deep mb-4">
+            <VideoIcon className="size-6" />
+          </span>
+          <h3 className="text-base font-semibold text-ink mb-2">
+            Wähle erst ein Webcam-Video
+          </h3>
+          <p className="text-sm text-ink-muted max-w-md mx-auto">
+            Die Dauer der Webcam-Aufnahme bestimmt die maximale Gesamtlänge
+            deiner Segmente. Geh zurück zu Schritt 2 und wähle ein Video.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
+  // Status-Pill-Farbcoding
+  const pillTone: "ok" | "neutral" | "warn" =
+    Math.abs(remainingMs) < 100
+      ? "ok"
+      : webcamShorterThanSegments
+      ? "warn"
+      : "neutral";
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-ink mb-1">Editor</h2>
-        <p className="text-sm text-ink-muted">
-          Baue deine Videopräsentation auf. Reihenfolge, Dauer (ms-präzise),
-          PiP-Position und Form lassen sich anpassen.
-        </p>
+    <div className="space-y-8">
+      {/* Header mit Status-Pill */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-ink mb-1">Editor</h2>
+          <p className="text-sm text-ink-muted max-w-xl">
+            Baue deine Videopräsentation. Reihenfolge, Dauer auf
+            Millisekunde, PiP-Position und Form lassen sich frei anpassen.
+          </p>
+        </div>
+        <DurationPill
+          totalMs={total}
+          webcamMs={webcamDurationMs}
+          remainingMs={remainingMs}
+          tone={pillTone}
+        />
       </div>
 
-      {/* Add-segment buttons */}
-      <div className="flex flex-wrap items-center gap-2">
-        {ADD_BUTTONS.map(({ kind, icon: Icon }) => (
-          <Button
-            key={kind}
-            variant="ghost"
-            size="sm"
-            onClick={() => addSegment(kind)}
-            iconLeft={<Icon className="size-4" />}
-          >
-            + {SEGMENT_KIND_LABELS[kind]}
-          </Button>
-        ))}
-      </div>
-
-      {/* Duration banner */}
-      {webcamDurationMs && (
-        <div
-          className={cn(
-            "flex flex-wrap items-center justify-between gap-3 rounded-squircle-md px-4 py-3 border",
-            Math.abs(diff) < 100
-              ? "border-ok/30 bg-ok/5"
-              : diff > 0
-              ? "border-warn/30 bg-warn/5"
-              : "border-brand/30 bg-brand-soft",
-          )}
-        >
-          <div className="flex flex-wrap items-baseline gap-4 text-sm">
-            <span className="text-ink-muted">Segmente gesamt:</span>
-            <span className="font-mono font-bold text-ink tabular-nums">
-              {formatDuration(total)}
+      {/* Warn-Banner: Webcam ist kürzer als Segmente. */}
+      {webcamShorterThanSegments && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-squircle-md border border-warn/40 bg-warn/5 px-4 py-3">
+          <div className="flex items-center gap-2.5 text-sm">
+            <AlertTriangle className="size-4 text-warn shrink-0" />
+            <span className="text-ink">
+              Webcam-Dauer ist jetzt kürzer als deine Segmente — bitte
+              anpassen, sonst wird das Audio abgeschnitten.
             </span>
-            <span className="text-ink-muted">Webcam-Dauer:</span>
-            <span className="font-mono font-bold text-ink tabular-nums">
-              {formatDuration(webcamDurationMs)}
-            </span>
-            {Math.abs(diff) >= 100 && (
-              <span
-                className={cn(
-                  "font-semibold",
-                  diff > 0 ? "text-warn" : "text-brand-deep",
-                )}
-              >
-                {diff > 0
-                  ? `${formatDuration(diff)} zu viel`
-                  : `${formatDuration(-diff)} zu wenig`}
-              </span>
-            )}
           </div>
-          {Math.abs(diff) >= 100 && segments.length > 0 && (
-            <Button size="sm" variant="subtle" onClick={autoFit}>
-              Auto-Anpassen
-            </Button>
-          )}
+          <Button size="sm" variant="subtle" onClick={autoFit}>
+            Segmente automatisch anpassen
+          </Button>
         </div>
       )}
 
-      {/* Preview + side controls */}
+      {/* Info-Banner unter Limit oder perfekt. */}
+      {!webcamShorterThanSegments && segments.length > 0 && (
+        <div
+          className={cn(
+            "flex items-center gap-2.5 rounded-squircle-md border px-4 py-2.5 text-sm",
+            remainingMs < 100
+              ? "border-ok/30 bg-ok/5 text-ink"
+              : "border-line bg-surface-soft text-ink-muted",
+          )}
+        >
+          {remainingMs < 100 ? (
+            <Sparkles className="size-4 text-ok shrink-0" />
+          ) : (
+            <Info className="size-4 text-ink-muted shrink-0" />
+          )}
+          <span>
+            {remainingMs < 100
+              ? "Perfekt — Segmente passen genau zur Webcam-Aufnahme."
+              : `Du hast noch ${formatDuration(
+                  remainingMs,
+                )} freie Zeit am Ende.`}
+          </span>
+        </div>
+      )}
+
+      {/* Add-Segment Cards */}
+      <section aria-labelledby="add-segment-heading" className="space-y-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h3
+            id="add-segment-heading"
+            className="text-sm font-semibold text-ink"
+          >
+            Segment hinzufügen
+          </h3>
+          {!canAdd && (
+            <span className="text-xs text-ink-muted">
+              Webcam-Dauer voll ausgenutzt — Segmente kürzen, um Platz zu
+              schaffen.
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {ADD_CARDS.map((card) => {
+            const Icon = card.icon;
+            const disabled = !canAdd;
+            return (
+              <button
+                key={card.kind}
+                type="button"
+                onClick={() => addSegment(card.kind)}
+                disabled={disabled}
+                title={
+                  disabled
+                    ? "Webcam-Dauer voll ausgenutzt — bestehende Segmente zuerst kürzen"
+                    : `${card.title} hinzufügen`
+                }
+                className={cn(
+                  "group flex flex-col items-start gap-2 text-left rounded-squircle-md border p-4 transition-all",
+                  disabled
+                    ? "border-line bg-surface-soft opacity-60 cursor-not-allowed"
+                    : "border-line bg-surface hover:border-brand hover:shadow-card hover:-translate-y-0.5 active:translate-y-0",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex size-8 items-center justify-center rounded-full transition-colors",
+                    disabled
+                      ? "bg-ink/5 text-ink-muted"
+                      : "bg-brand-soft text-brand-deep group-hover:bg-brand group-hover:text-white",
+                  )}
+                >
+                  <Icon className="size-4" />
+                </span>
+                <span className="text-sm font-semibold text-ink leading-tight">
+                  {card.title}
+                </span>
+                <span className="text-[11px] leading-snug text-ink-muted">
+                  {card.description}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Preview + PiP-Settings */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Preview takes 2/3 on desktop */}
         <div className="lg:col-span-2">
           <PreviewPlayer
             segments={segments}
@@ -206,7 +360,6 @@ export function WizardStep3Editor({
           />
         </div>
 
-        {/* PiP-Settings 1/3 */}
         <div className="space-y-5">
           <div>
             <Label>PiP-Position</Label>
@@ -269,18 +422,20 @@ export function WizardStep3Editor({
         </div>
       </div>
 
-      {/* Timeline */}
+      {/* Timeline - Skala ist immer die Webcam-Dauer, damit kein Overflow
+          visuell entstehen kann. */}
       <Timeline
         segments={segments}
         currentTimeMs={currentTimeMs}
-        totalDurationMs={Math.max(total, webcamDurationMs ?? 0)}
+        totalDurationMs={webcamDurationMs}
+        webcamDurationMs={webcamDurationMs}
         selectedSegmentId={selectedId}
         onSelectSegment={setSelectedId}
         onSegmentsChange={onSegmentsChange}
         onSeek={setCurrentTimeMs}
       />
 
-      {/* Active segment editor */}
+      {/* Aktiver Segment-Editor */}
       {selectedSegment ? (
         <SegmentEditor
           segment={selectedSegment}
@@ -288,6 +443,7 @@ export function WizardStep3Editor({
           onDelete={() => deleteSegment(selectedSegment.id)}
           mediaItems={mediaItems}
           webcamDurationMs={webcamDurationMs}
+          otherSegmentsDurationMs={total - selectedSegment.durationMs}
         />
       ) : segments.length > 0 ? (
         <Card className="p-6 text-center text-sm text-ink-muted">
@@ -301,6 +457,68 @@ export function WizardStep3Editor({
           </p>
         </Card>
       )}
+    </div>
+  );
+}
+
+/**
+ * Kompakter Dauer-Status-Pill oben rechts im Header.
+ * Zeigt: Summe / Webcam-Dauer / freie Restzeit. Farbcoding:
+ * - ok (grün): Restzeit < 100ms → praktisch perfekt befüllt.
+ * - neutral (grau): es gibt noch Platz.
+ * - warn (rot): Segmente sind länger als Webcam (sollte nicht passieren,
+ *   aber als Sicherheitsnetz).
+ */
+function DurationPill({
+  totalMs,
+  webcamMs,
+  remainingMs,
+  tone,
+}: {
+  totalMs: number;
+  webcamMs: number;
+  remainingMs: number;
+  tone: "ok" | "neutral" | "warn";
+}) {
+  const toneClass: Record<typeof tone, string> = {
+    ok: "border-ok/40 bg-ok/5 text-ink",
+    neutral: "border-line bg-surface-soft text-ink",
+    warn: "border-warn/50 bg-warn/5 text-ink",
+  };
+  const dotClass: Record<typeof tone, string> = {
+    ok: "bg-ok",
+    neutral: "bg-ink-muted",
+    warn: "bg-warn",
+  };
+  const remainingLabel =
+    remainingMs <= 0
+      ? "voll ausgenutzt"
+      : remainingMs < 100
+      ? "voll ausgenutzt"
+      : `${formatDuration(remainingMs)} frei`;
+
+  return (
+    <div
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium",
+        toneClass[tone],
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn("inline-block size-1.5 rounded-full", dotClass[tone])}
+      />
+      <span className="font-mono tabular-nums">
+        Σ {formatDuration(totalMs)}
+      </span>
+      <span className="text-ink-muted">von</span>
+      <span className="font-mono tabular-nums">
+        {formatDuration(webcamMs)}
+      </span>
+      <span className="text-ink-muted">·</span>
+      <span className={tone === "ok" ? "text-ok" : "text-ink-muted"}>
+        {remainingLabel}
+      </span>
     </div>
   );
 }
