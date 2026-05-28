@@ -6,9 +6,11 @@ import { NewCampaignWizard } from "./wizard-container";
 export default async function NeuePage() {
   const { user } = await requireUser();
 
-  const [webcams, templates] = await Promise.all([
+  const [webcams, templates, allMedia] = await Promise.all([
     listUserMedia(user.id, "webcam"),
     listUserTpls(user.id),
+    // Editor needs images + videos for image / video segments
+    listUserMedia(user.id),
   ]);
 
   return (
@@ -25,6 +27,14 @@ export default async function NeuePage() {
           name: t.name,
           themeId: t.themeId,
         })),
+        media: allMedia
+          .filter((m) => m.type === "image" || m.type === "video")
+          .map((m) => ({
+            id: m.id,
+            name: m.name,
+            publicUrl: m.publicUrl,
+            type: m.type,
+          })),
       }}
     />
   );

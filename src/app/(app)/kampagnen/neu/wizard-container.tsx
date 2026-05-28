@@ -27,6 +27,9 @@ export interface WizardTemplate {
   themeId: string;
 }
 
+import type { Segment } from "@/lib/segments/types";
+
+/** @deprecated kept for back-compat with older callsites — use Segment. */
 export interface WizardSegment {
   id: string;
   type: "website" | "image" | "video" | "googledocs" | "textslide";
@@ -37,7 +40,7 @@ export interface WizardState {
   name: string;
   webcamMediaId: string | null;
   mode: "webcam-only" | "with-presentation";
-  segments: WizardSegment[];
+  segments: Segment[];
   pipPosition: "bottom-left" | "bottom-right";
   pipShape: "square" | "rounded" | "circle";
   landingPageTemplateId: string | null;
@@ -48,10 +51,19 @@ export interface WizardState {
   pdfThumbnailFrameMs: number | null;
 }
 
+export interface MediathekItem {
+  id: string;
+  name: string;
+  publicUrl: string;
+  type: string;
+}
+
 export interface NewCampaignWizardProps {
   initialData: {
     webcams: WizardWebcam[];
     templates: WizardTemplate[];
+    /** Optional — image/video media items the editor can pick from. */
+    media?: MediathekItem[];
   };
 }
 
@@ -209,16 +221,22 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
             onChange={(mode) => update({ mode })}
           />
         )}
-        {step === 2 && !skipEditor && (
-          <WizardStep3Editor
-            segments={state.segments}
-            pipPosition={state.pipPosition}
-            pipShape={state.pipShape}
-            onSegmentsChange={(segments) => update({ segments })}
-            onPipPositionChange={(pipPosition) => update({ pipPosition })}
-            onPipShapeChange={(pipShape) => update({ pipShape })}
-          />
-        )}
+        {step === 2 && !skipEditor && (() => {
+          const wc = webcams.find((w) => w.id === state.webcamMediaId);
+          return (
+            <WizardStep3Editor
+              segments={state.segments}
+              pipPosition={state.pipPosition}
+              pipShape={state.pipShape}
+              webcamUrl={wc?.publicUrl ?? null}
+              webcamDurationSec={wc?.durationSec ?? null}
+              mediaItems={initialData.media ?? []}
+              onSegmentsChange={(segments) => update({ segments })}
+              onPipPositionChange={(pipPosition) => update({ pipPosition })}
+              onPipShapeChange={(pipShape) => update({ pipShape })}
+            />
+          );
+        })()}
         {step === 3 && (
           <WizardStep4Landingpage
             templates={initialData.templates}
