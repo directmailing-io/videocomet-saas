@@ -189,9 +189,12 @@ export async function composePip(input: ComposePipInput): Promise<void> {
       `if(lt(hypot(max(0,X-(${overlayW}-${r})),max(0,Y-(${overlayH}-${r}))),${r}),255,0)))))'`;
   }
 
+  // We name the final overlay stream [vout] so we can map it explicitly,
+  // and we map ONLY the webcam audio (1:a) — the base track contains
+  // anullsrc silence and would otherwise be picked by ffmpeg's auto-map.
   const filterComplex =
     `[1:v]${scaleChain}${maskChain}[pip];` +
-    `[0:v][pip]overlay=${x}:${y}:format=auto,format=yuv420p`;
+    `[0:v][pip]overlay=${x}:${y}:format=auto,format=yuv420p[vout]`;
 
   await runFfmpeg([
     "-y",
@@ -201,6 +204,12 @@ export async function composePip(input: ComposePipInput): Promise<void> {
     input.webcamPath,
     "-filter_complex",
     filterComplex,
+    "-map",
+    "[vout]",
+    // Webcam audio takes priority. The `?` makes it optional so silent
+    // webcams don't fail the encode.
+    "-map",
+    "1:a?",
     "-c:v",
     "libx264",
     "-preset",
