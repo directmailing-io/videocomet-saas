@@ -4,6 +4,7 @@ import * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { PlaceholderHelper } from "@/components/editor/placeholder-helper";
 
 export interface WizardStep5PdfPatch {
   pdfEnabled?: boolean;
@@ -71,6 +72,33 @@ export function WizardStep5Pdf({
               Das Dokument muss öffentlich freigegeben sein (mindestens
               "Jeder mit dem Link kann ansehen").
             </p>
+          </div>
+
+          <div className="pt-3 border-t border-line space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-ink">
+                Platzhalter & Vorlagen
+              </p>
+              <p className="text-xs text-ink-muted mt-1 leading-relaxed">
+                Im PDF-Brief werden Platzhalter wie{" "}
+                <code className="font-mono text-brand-deep">
+                  {"{{firstName}}"}
+                </code>{" "}
+                oder{" "}
+                <code className="font-mono text-brand-deep">
+                  {"{{firma}}"}
+                </code>{" "}
+                automatisch durch die Daten des jeweiligen Leads ersetzt. Den
+                QR-Code und das Video-Thumbnail kannst du als
+                Bild-Platzhalter in dein Google Docs einfügen — der Worker
+                tauscht sie beim Rendern gegen das echte Lead-spezifische
+                Bild aus.
+              </p>
+            </div>
+            <PlaceholderHelper
+              googleDocsUrl={googleDocsUrl}
+              csvColumns={[]}
+            />
           </div>
 
           <div className="flex items-center justify-between pt-3 border-t border-line">

@@ -280,9 +280,15 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
       })
       .catch(() => undefined);
 
-    // Determine scroll distance.
+    // Determine scroll distance. Measure from both roots — some sites move
+    // the scrolling overflow up to <html>, others keep it on <body>.
     const pageHeight: number = await page
-      .evaluate(() => document.body.scrollHeight)
+      .evaluate(() =>
+        Math.max(
+          document.documentElement.scrollHeight,
+          document.body.scrollHeight,
+        ),
+      )
       .catch(() => viewport.height);
     const maxScroll = Math.max(0, pageHeight - viewport.height);
 
@@ -318,6 +324,10 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
 
     // scroll-recorded mit Frames: interpoliere Y-Position pro Output-Frame
     // aus der vom Nutzer aufgezeichneten Sample-Liste und shoote.
+    // eslint-disable-next-line no-console
+    console.log(
+      `[scroll-recorder] playing back N=${opts.scrollFrames!.length} frames, maxScroll=${maxScroll}, totalFrames=${totalFrames}`,
+    );
     const plan = buildScrollPlanFromFrames(
       opts.scrollFrames as ScrollSample[],
       totalFrames,

@@ -82,6 +82,46 @@ function xmlEscape(value: string): string {
 }
 
 /**
+ * Minimal HTML-escape (no apostrophe entity — `&apos;` is XML-only).
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Replaces `{{name}}` placeholders inside an HTML string with values from
+ * `vars`. Designed for HTML exported from Google Docs, where a placeholder
+ * like `{{firstName}}` can be split across inline `<span>` tags due to
+ * font / formatting metadata (e.g. `{{<span style="font-weight:700">firstName</span>}}`).
+ *
+ * Strategy (single pass): match the smallest `{{ ... }}` run with
+ *   /\{\{([^{}]*?)\}\}/g
+ * and for each candidate strip ALL inline tags with `/<[^>]+>/g`, trim, then
+ * look the result up in `vars`. If it's known, replace the entire match
+ * (tags included) with the HTML-escaped value. Unknown keys are left as-is
+ * so the template author can audit them visually.
+ *
+ * Whitespace inside the braces (e.g. `{{ firstName }}`) is tolerated.
+ */
+export function replacePlaceholdersInHtml(
+  html: string,
+  vars: Record<string, string>,
+): string {
+  return html.replace(/\{\{([^{}]*?)\}\}/g, (match, inner: string) => {
+    const cleaned = inner.replace(/<[^>]+>/g, "").trim();
+    if (!/^[a-zA-Z0-9_]+$/.test(cleaned)) return match;
+    const value = vars[cleaned];
+    if (value === undefined || value === null) return match;
+    return escapeHtml(String(value));
+  });
+}
+
+/**
  * Detects placeholders split across multiple runs and merges them.
  *
  * Strategy: scan for `{{` and `}}` markers and, between each matching pair,

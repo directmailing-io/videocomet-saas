@@ -19,6 +19,7 @@ import type {
   ScrollFrame,
 } from "@/lib/segments/types";
 import { ScrollRecorderModal } from "./scroll-recorder-modal";
+import { PlaceholderHelper } from "./placeholder-helper";
 
 interface SegmentEditorGDocsProps {
   segment: GDocsSegment;
@@ -168,6 +169,8 @@ export function SegmentEditorGDocs({
           spielt der Worker deine Scroll-Bewegungen 1:1 nach.
         </p>
       </div>
+
+      <PlaceholderHelper googleDocsUrl={segment.docsUrl} compact />
 
       {recorderOpen && (
         <ScrollRecorderModal

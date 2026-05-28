@@ -21,9 +21,15 @@ interface CacheEntry {
   fetchedAt: number;
 }
 
+interface HtmlCacheEntry {
+  html: string;
+  fetchedAt: number;
+}
+
 // Module-level cache. The worker is a long-running process, so this survives
 // across BullMQ jobs.
 const docxCache = new Map<string, CacheEntry>();
+const htmlCache = new Map<string, HtmlCacheEntry>();
 
 const ALLOWED_CONTENT_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -119,7 +125,70 @@ export async function fetchGoogleDocAsDocx(url: string): Promise<Buffer> {
   return buffer;
 }
 
+/**
+ * Converts any share/edit URL to the public HTML export URL.
+ */
+export function googleDocsToHtmlUrl(url: string): string {
+  const id = extractGoogleDocId(url);
+  return `https://docs.google.com/document/d/${id}/export?format=html`;
+}
+
+/**
+ * Fetches a Google-Doc as an HTML string. Cached for 5 minutes under a
+ * distinct cache key (`html:<docId>`) so it never collides with the DOCX
+ * cache.
+ *
+ * Used by the personalized-gdocs video pipeline: the worker substitutes
+ * `{{placeholders}}` directly in the exported HTML and renders the
+ * personalized result in Puppeteer.
+ *
+ * Throws the same "doc is private" friendly error as `fetchGoogleDocAsDocx`
+ * on 403/404.
+ */
+export async function fetchGoogleDocAsHtml(url: string): Promise<string> {
+  const docId = extractGoogleDocId(url);
+  const cacheKey = `html:${docId}`;
+  const exportUrl = `https://docs.google.com/document/d/${docId}/export?format=html`;
+
+  const cached = htmlCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.html;
+  }
+
+  const res = await fetch(exportUrl, { redirect: "follow" });
+  if (res.status === 404 || res.status === 403) {
+    throw new Error(
+      "Google Doc nicht öffentlich oder nicht gefunden. " +
+        "Bitte stelle in Google Docs auf 'Jeder mit dem Link' (Leser) " +
+        "und versuche es erneut.",
+    );
+  }
+  if (!res.ok) {
+    throw new Error(
+      `[google-docs] html download failed: ${res.status} ${res.statusText} (${exportUrl})`,
+    );
+  }
+
+  const contentType = stripContentTypeParams(res.headers.get("content-type"));
+  // The export endpoint serves text/html; if Google redirected us to a login
+  // page it's still text/html but the body will be the sign-in form. We
+  // don't try to detect that here — the downstream Puppeteer render will
+  // simply show what was returned. (For private docs the 403/404 branch
+  // above catches the common case.)
+  if (contentType && !contentType.startsWith("text/html")) {
+    throw new Error(
+      `Google Doc nicht öffentlich oder nicht gefunden (content-type=${contentType}). ` +
+        "Bitte freigeben für 'Jeder mit dem Link'.",
+    );
+  }
+
+  const html = await res.text();
+  htmlCache.set(cacheKey, { html, fetchedAt: Date.now() });
+  return html;
+}
+
 /** Test helper: drop all cached DOCX entries. */
 export function _clearGoogleDocsCache(): void {
   docxCache.clear();
+  htmlCache.clear();
 }

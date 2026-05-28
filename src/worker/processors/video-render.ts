@@ -38,6 +38,7 @@ import {
   recordFallbackPage,
   recordScroll,
 } from "../lib/scroll-recorder";
+import { renderPersonalizedGDocs } from "../lib/personalized-gdocs";
 import type { Segment } from "@/lib/segments/types";
 
 export interface VideoRenderInput {
@@ -59,6 +60,16 @@ export interface VideoRenderInput {
   segments?: Segment[];
   /** Lead data for placeholder substitution in text segments. */
   leadData?: Record<string, string>;
+  /**
+   * Per-lead public landing-page URL. Threaded through so the gdocs
+   * personalisation can substitute `{{landingpageUrl}}` placeholders. When
+   * unset, the placeholder substitution falls back to empty string.
+   *
+   * NOTE: in the current pipeline the landing page is created AFTER the
+   * video render, so this is typically undefined here. The field is kept
+   * so the upstream caller can pre-compute / re-order in a future change.
+   */
+  landingpageUrl?: string;
 }
 
 /** Replace {{key}} placeholders in any string with values from leadData. */
@@ -67,6 +78,66 @@ function applyPlaceholders(s: string, data: Record<string, string> | undefined):
   return s.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (_, key: string) => {
     return data[key] ?? "";
   });
+}
+
+/**
+ * Picks the first non-empty value from `data` for any candidate column,
+ * case-insensitively. Mirrors the behaviour of `pickField` in
+ * `pipeline.ts` so gdocs placeholder substitution sees the same auto-derived
+ * `firstName` / `lastName` keys as the PDF flow.
+ */
+function pickFieldCI(
+  data: Record<string, string>,
+  candidates: readonly string[],
+): string {
+  for (const key of candidates) {
+    const value = data[key];
+    if (value && value.trim()) return value.trim();
+  }
+  const lower = new Map<string, string>();
+  for (const [k, v] of Object.entries(data)) lower.set(k.toLowerCase(), v);
+  for (const key of candidates) {
+    const v = lower.get(key.toLowerCase());
+    if (v && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+/**
+ * Builds the placeholder vars passed into `renderPersonalizedGDocs`.
+ *
+ * Mirrors `buildDocxVars` from `pipeline.ts` so the template author can use
+ * the SAME placeholder names in the Google Doc as in the PDF DOCX template:
+ *
+ *   - any raw CSV column (`{{Firma}}`, `{{email}}`, …)
+ *   - `{{landingpageUrl}}` / `{{landingpage_url}}`
+ *   - `{{firstName}}` / `{{lastName}}` (case-insensitively derived from
+ *     common column names like "Vorname", "first_name", …)
+ */
+function buildGDocsVars(
+  leadData: Record<string, string>,
+  landingpageUrl: string | undefined,
+): Record<string, string> {
+  const lpUrl = landingpageUrl ?? "";
+  const firstName = pickFieldCI(leadData, [
+    "firstName",
+    "Vorname",
+    "first_name",
+    "vorname",
+  ]);
+  const lastName = pickFieldCI(leadData, [
+    "lastName",
+    "Nachname",
+    "last_name",
+    "nachname",
+  ]);
+  return {
+    ...leadData,
+    landingpageUrl: lpUrl,
+    landingpage_url: lpUrl,
+    firstName,
+    lastName,
+  };
 }
 
 export interface VideoRenderOutput {
@@ -222,6 +293,7 @@ export async function runVideoRender(
     await renderSegmentsBase({
       segments: input.segments,
       leadData: input.leadData,
+      landingpageUrl: input.landingpageUrl,
       outDir: input.outDir,
       basePath,
       fallbackWebsite: input.website ?? null,
@@ -259,6 +331,7 @@ export async function runVideoRender(
 async function renderSegmentsBase(opts: {
   segments: Segment[];
   leadData?: Record<string, string>;
+  landingpageUrl?: string;
   outDir: string;
   basePath: string;
   fallbackWebsite: string | null;
@@ -309,26 +382,51 @@ async function renderSegmentsBase(opts: {
           });
         }
       } else if (seg.kind === "gdocs") {
-        // Google-Docs-Segment: URL kommt direkt aus seg.docsUrl, NICHT aus Lead-Daten.
-        const url = normaliseWebsiteUrl(seg.docsUrl);
-        if (!url) {
+        // Google-Docs-Segment: NICHT die Live-URL capturen — sonst zeigt das
+        // Video die Google-Chrome UI, Cookie-Banner und (entscheidend) die
+        // `{{placeholders}}` im Dokument bleiben unersetzt. Stattdessen: Doc
+        // als HTML exportieren, Placeholder substituieren, in Puppeteer per
+        // `file://` rendern und capturen.
+        if (!seg.docsUrl || !seg.docsUrl.trim()) {
           await generateBlackClip({
             outputPath: partPath,
             durationSec: durationMs / 1000,
           });
         } else {
-          const fr = await recordCapture({
-            url,
-            outputDir: join(opts.outDir, `gdocs-${i}`),
-            durationMs,
-            mode: seg.captureMode ?? "static-hero",
-            scrollFrames: seg.scrollFrames,
-          });
-          await imageSeqToMp4({
-            framesDir: fr.framesDir,
-            outputPath: partPath,
-            fps: fr.fps,
-          });
+          const vars = buildGDocsVars(opts.leadData ?? {}, opts.landingpageUrl);
+          const gdocsOutDir = join(opts.outDir, `gdocs-${i}`);
+          try {
+            const fr = await renderPersonalizedGDocs({
+              docsUrl: seg.docsUrl,
+              vars,
+              outputDir: gdocsOutDir,
+              durationMs,
+              mode: seg.captureMode ?? "static-hero",
+              scrollFrames: seg.scrollFrames,
+            });
+            await imageSeqToMp4({
+              framesDir: fr.framesDir,
+              outputPath: partPath,
+              fps: fr.fps,
+            });
+          } catch (e) {
+            // Same defensive fallback as the website branch: render a
+            // labelled placeholder so the lead still completes.
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[render] gdocs personalised capture failed → placeholder: ${(e as Error).message}`,
+            );
+            const fb = await recordFallbackPage({
+              outputDir: gdocsOutDir,
+              durationMs,
+              websiteLabel: seg.docsUrl,
+            });
+            await imageSeqToMp4({
+              framesDir: fb.framesDir,
+              outputPath: partPath,
+              fps: fb.fps,
+            });
+          }
         }
       } else {
         // image / video not yet rendered in v1 — black clip placeholder.
