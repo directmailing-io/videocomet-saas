@@ -23,7 +23,16 @@ import type {
   VideoSegment,
   WebsiteSegment,
   GDocsSegment,
+  WebCaptureMode,
 } from "@/lib/segments/types";
+
+/** Lesbare deutsche Labels für die Aufnahme-Modi (Preview-Badge). */
+const CAPTURE_MODE_LABELS: Record<WebCaptureMode, string> = {
+  "static-hero": "Statisches Bild",
+  "smooth-scroll": "Sanftes Scrollen",
+  "slow-scroll-pauses": "Langsam mit Pausen",
+  "quick-scroll": "Schnelles Scrollen",
+};
 
 /* ------------------------------------------------------------------ */
 /* Active-segment + duration helpers                                  */
@@ -269,7 +278,7 @@ function RenderWebsite({ segment }: { segment: WebsiteSegment }) {
         <div className="mb-3 flex items-center gap-2 text-brand-deep">
           <Globe className="size-5" />
           <span className="text-xs font-semibold uppercase tracking-wide">
-            Website ({segment.captureMode === "scroll" ? "Scroll" : "Screenshot"})
+            Website ({CAPTURE_MODE_LABELS[segment.captureMode]})
           </span>
         </div>
         <p className="mb-3 break-all text-sm font-medium text-ink">
@@ -292,7 +301,7 @@ function RenderGDocs({ segment }: { segment: GDocsSegment }) {
         <div className="mb-3 flex items-center gap-2 text-brand-deep">
           <FileText className="size-5" />
           <span className="text-xs font-semibold uppercase tracking-wide">
-            Google Doc ({segment.captureMode === "scroll" ? "Scroll" : "Screenshot"})
+            Google Doc ({CAPTURE_MODE_LABELS[segment.captureMode]})
           </span>
         </div>
         <p className="mb-3 break-all text-sm font-medium text-ink">

@@ -1,22 +1,51 @@
 "use client";
 
 import * as React from "react";
-import { Info } from "lucide-react";
+import { Info, Image as ImageIcon, MoveVertical, Pause, FastForward } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import type { GDocsSegment, WebCaptureMode } from "@/lib/segments/types";
 
 interface SegmentEditorGDocsProps {
   segment: GDocsSegment;
   onChange: (segment: GDocsSegment) => void;
 }
+
+interface CaptureModeOption {
+  value: WebCaptureMode;
+  title: string;
+  description: string;
+  Icon: React.ComponentType<{ className?: string }>;
+}
+
+/** Vier Aufnahme-Modi (identisch zur Website-Editor-Variante). */
+const CAPTURE_MODES: CaptureModeOption[] = [
+  {
+    value: "static-hero",
+    title: "Statisches Bild (Hero)",
+    description: "Zeigt nur den oberen Bereich des Dokuments, ohne Scrollen.",
+    Icon: ImageIcon,
+  },
+  {
+    value: "smooth-scroll",
+    title: "Sanftes Scrollen",
+    description: "Scrollt gleichmaessig von oben nach unten ueber die ganze Segment-Dauer.",
+    Icon: MoveVertical,
+  },
+  {
+    value: "slow-scroll-pauses",
+    title: "Langsam mit Pausen",
+    description: "Scrollt langsam mit kurzen Pausen, gut fuer Lese-Pausen.",
+    Icon: Pause,
+  },
+  {
+    value: "quick-scroll",
+    title: "Schnelles Scrollen",
+    description: "Schnell oben nach unten, danach Standbild.",
+    Icon: FastForward,
+  },
+];
 
 function isValidDocsUrl(url: string): boolean {
   if (!url) return true; // empty allowed (no error yet)
@@ -56,20 +85,18 @@ export function SegmentEditorGDocs({
 
       <div>
         <Label>Aufnahme-Modus</Label>
-        <Select
-          value={segment.captureMode}
-          onValueChange={(v) =>
-            onChange({ ...segment, captureMode: v as WebCaptureMode })
-          }
-        >
-          <SelectTrigger className="w-64">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="screenshot">Screenshot (statisch)</SelectItem>
-            <SelectItem value="scroll">Smooth-Scroll (animiert)</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {CAPTURE_MODES.map((opt) => (
+            <CaptureModeCard
+              key={opt.value}
+              option={opt}
+              selected={segment.captureMode === opt.value}
+              onSelect={() =>
+                onChange({ ...segment, captureMode: opt.value })
+              }
+            />
+          ))}
+        </div>
       </div>
 
       <div className="flex gap-3 rounded-squircle-sm border border-brand-200 bg-brand-soft p-4 text-sm text-brand-deep">
@@ -80,5 +107,52 @@ export function SegmentEditorGDocs({
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Apple/AirBNB-style Auswahl-Karte fuer einen Capture-Modus.
+ * Click setzt onSelect; selected zeigt einen ring-2 ring-brand Marker.
+ */
+function CaptureModeCard({
+  option,
+  selected,
+  onSelect,
+}: {
+  option: CaptureModeOption;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const { Icon, title, description } = option;
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={cn(
+        "group flex w-full items-start gap-3 rounded-squircle-md border bg-surface p-4 text-left transition",
+        "hover:border-brand-200 hover:bg-brand-soft/40",
+        selected
+          ? "border-brand-200 bg-brand-soft/60 ring-2 ring-brand"
+          : "border-line",
+      )}
+    >
+      <span
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center rounded-squircle-sm",
+          selected ? "bg-brand text-white" : "bg-surface-soft text-ink",
+        )}
+      >
+        <Icon className="size-4" />
+      </span>
+      <span className="flex flex-col gap-1">
+        <span className="text-sm font-semibold leading-tight text-ink">
+          {title}
+        </span>
+        <span className="text-xs leading-snug text-ink-muted">
+          {description}
+        </span>
+      </span>
+    </button>
   );
 }

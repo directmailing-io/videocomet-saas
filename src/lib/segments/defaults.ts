@@ -115,7 +115,7 @@ export function createWebsiteSegment(
     kind: "website",
     urlColumn: "website",
     fallbackUrl: "https://example.com",
-    captureMode: "scroll",
+    captureMode: "smooth-scroll",
   };
 }
 
@@ -124,7 +124,7 @@ export function createGDocsSegment(opts?: CreateSegmentOptions): GDocsSegment {
     ...baseFields("gdocs", opts),
     kind: "gdocs",
     docsUrl: "",
-    captureMode: "scroll",
+    captureMode: "smooth-scroll",
   };
 }
 

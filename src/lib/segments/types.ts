@@ -15,7 +15,19 @@ export type TextAlign = "left" | "center" | "right";
 export type FontWeight = "400" | "600" | "700";
 export type ImageDisplayMode = "fullscreen" | "slide";
 export type CropRatio = "16:9" | "4:3" | "1:1" | "9:16";
-export type WebCaptureMode = "screenshot" | "scroll";
+/**
+ * Aufnahme-Modi für Website- und Google-Docs-Segmente.
+ *
+ * - `static-hero`        Standbild des oberen Bereichs (nach Cookie-Dismiss).
+ * - `smooth-scroll`      Lineares Scrollen von oben nach unten über die Dauer.
+ * - `slow-scroll-pauses` Langsam scrollen mit kurzen Pausen bei 25/50/75 %.
+ * - `quick-scroll`       Erste Hälfte schnell scrollen, zweite Hälfte halten.
+ */
+export type WebCaptureMode =
+  | "static-hero"
+  | "smooth-scroll"
+  | "slow-scroll-pauses"
+  | "quick-scroll";
 
 /** Keyframe für Scroll-Animation (Website/GDocs). */
 export interface ScrollKeyframe {

@@ -34,6 +34,7 @@ import {
 } from "../lib/ffmpeg";
 import {
   normaliseWebsiteUrl,
+  recordCapture,
   recordFallbackPage,
   recordScroll,
 } from "../lib/scroll-recorder";
@@ -283,7 +284,7 @@ async function renderSegmentsBase(opts: {
           outputPath: partPath,
         });
       } else if (seg.kind === "website") {
-        // For website segments we still do scroll-capture per segment.
+        // Website-Segment: nimm die Lead-URL (primary), fallback auf seg.fallbackUrl.
         const url =
           normaliseWebsiteUrl(opts.fallbackWebsite) ??
           normaliseWebsiteUrl(seg.fallbackUrl) ??
@@ -294,10 +295,32 @@ async function renderSegmentsBase(opts: {
             durationSec: durationMs / 1000,
           });
         } else {
-          const fr = await recordScroll({
+          const fr = await recordCapture({
             url,
             outputDir: join(opts.outDir, `scroll-${i}`),
             durationMs,
+            mode: seg.captureMode,
+          });
+          await imageSeqToMp4({
+            framesDir: fr.framesDir,
+            outputPath: partPath,
+            fps: fr.fps,
+          });
+        }
+      } else if (seg.kind === "gdocs") {
+        // Google-Docs-Segment: URL kommt direkt aus seg.docsUrl, NICHT aus Lead-Daten.
+        const url = normaliseWebsiteUrl(seg.docsUrl);
+        if (!url) {
+          await generateBlackClip({
+            outputPath: partPath,
+            durationSec: durationMs / 1000,
+          });
+        } else {
+          const fr = await recordCapture({
+            url,
+            outputDir: join(opts.outDir, `gdocs-${i}`),
+            durationMs,
+            mode: seg.captureMode,
           });
           await imageSeqToMp4({
             framesDir: fr.framesDir,
@@ -306,7 +329,7 @@ async function renderSegmentsBase(opts: {
           });
         }
       } else {
-        // image / video / gdocs not yet rendered in v1 — black clip placeholder.
+        // image / video not yet rendered in v1 — black clip placeholder.
         console.warn(
           `[render] segment kind=${seg.kind} not yet supported in v1 — using placeholder`,
         );
