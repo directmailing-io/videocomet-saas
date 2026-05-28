@@ -10,8 +10,22 @@ import {
   X,
 } from "lucide-react";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore - no upstream types
-import fixWebmDuration from "fix-webm-duration";
+// @ts-ignore - CJS module, importing both ways for robustness
+import * as fixWebmDurationModule from "fix-webm-duration";
+
+/** Resolve fix-webm-duration export robustly across CJS/ESM interop. */
+function getFixFn(): (
+  blob: Blob,
+  durationMs: number,
+  options?: { logger?: false | ((m: string) => void) },
+) => Promise<Blob> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const m: any = fixWebmDurationModule as any;
+  if (typeof m === "function") return m;
+  if (typeof m.default === "function") return m.default;
+  // Final fallback: no-op patch
+  return async (blob: Blob) => blob;
+}
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -181,6 +195,9 @@ export function WebcamRecorder({
         `[webcam-recorder] onstop: chunks=${chunksRef.current.length} totalBytes=${totalBytes} recordedMs=${recordedMs}`,
       );
       let blob = new Blob(chunksRef.current, { type: mimeRef.current });
+      console.log(
+        `[webcam-recorder] raw blob: type=${blob.type} size=${blob.size}`,
+      );
       if (blob.size === 0) {
         setRecordError(
           "Aufnahme war leer. Bitte erneut versuchen (mindestens 1 Sekunde aufnehmen).",
@@ -192,25 +209,36 @@ export function WebcamRecorder({
       // which makes <video> show a black frame and refuse to seek. Patch the
       // header so the browser knows the actual duration.
       if (mimeRef.current.includes("webm") && recordedMs > 0) {
+        console.log("[webcam-recorder] attempting webm duration patch …");
+        const fixFn = getFixFn();
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const fixed = await (fixWebmDuration as any)(blob, recordedMs, {
-            logger: false,
-          });
+          const patchPromise = fixFn(blob, recordedMs, { logger: false });
+          // Add a hard timeout — if the lib hangs, fall back to the raw blob.
+          const fixed = await Promise.race([
+            patchPromise,
+            new Promise<Blob>((_resolve, reject) =>
+              setTimeout(() => reject(new Error("patch-timeout")), 3000),
+            ),
+          ]);
           if (fixed instanceof Blob && fixed.size > 0) {
             blob = fixed;
             console.log(
-              `[webcam-recorder] webm duration patched: ${recordedMs}ms`,
+              `[webcam-recorder] webm duration patched: ${recordedMs}ms newSize=${blob.size}`,
             );
+          } else {
+            console.warn("[webcam-recorder] patch returned non-Blob:", fixed);
           }
         } catch (e) {
           console.warn("[webcam-recorder] webm duration fix failed:", e);
-          // fall through with the unpatched blob — review will still work
-          // even if scrubbing is jumpy
         }
+      } else {
+        console.log(
+          `[webcam-recorder] skipping webm patch (mime=${mimeRef.current}, recordedMs=${recordedMs})`,
+        );
       }
       setRecordedBlob(blob);
       const url = URL.createObjectURL(blob);
+      console.log(`[webcam-recorder] setting review url=${url}`);
       setReviewUrl(url);
       setState("review");
       stopStream();
@@ -302,27 +330,50 @@ export function WebcamRecorder({
     : 0;
   const overTime = hasLimit && elapsed >= (maxDurationSec as number);
 
-  // WebM blobs produced by MediaRecorder typically have no `duration` field
-  // in the header, which causes <video> to show a black first frame and
-  // refuse to seek. This callback applies the well-known seek-to-end +
-  // seek-back-to-zero hack to force the browser to compute the duration
-  // from the actual stream bytes.
-  const fixWebmDuration = React.useCallback(
+  // Force the browser to compute duration + decode the first frame for blobs
+  // that lack a finite duration in their container header. Tries autoplay so
+  // the user immediately sees the recording move; the controls=true lets them
+  // pause/scrub. Muted so autoplay isn't blocked by browser policy.
+  const onReviewLoadedMetadata = React.useCallback(
     (e: React.SyntheticEvent<HTMLVideoElement>) => {
       const v = e.currentTarget;
-      if (!v) return;
-      if (!Number.isFinite(v.duration) || v.duration === Infinity || v.duration === 0) {
-        const onTimeUpdate = () => {
-          v.removeEventListener("timeupdate", onTimeUpdate);
-          v.currentTime = 0;
+      console.log(
+        `[webcam-recorder] review onLoadedMetadata: duration=${v.duration} readyState=${v.readyState}`,
+      );
+      if (!Number.isFinite(v.duration) || v.duration === 0) {
+        const onUpdate = () => {
+          v.removeEventListener("timeupdate", onUpdate);
+          console.log(
+            `[webcam-recorder] review duration after seek: ${v.duration}`,
+          );
+          try {
+            v.currentTime = 0.05;
+          } catch { /* ignore */ }
         };
-        v.addEventListener("timeupdate", onTimeUpdate);
+        v.addEventListener("timeupdate", onUpdate);
         try {
           v.currentTime = Number.MAX_SAFE_INTEGER;
-        } catch {
-          /* ignore */
-        }
+        } catch { /* ignore */ }
+      } else {
+        // Nudge currentTime off zero so the decoder draws a non-black frame
+        try {
+          v.currentTime = 0.05;
+        } catch { /* ignore */ }
       }
+    },
+    [],
+  );
+
+  const onReviewLoadedData = React.useCallback(
+    (e: React.SyntheticEvent<HTMLVideoElement>) => {
+      const v = e.currentTarget;
+      console.log(
+        `[webcam-recorder] review onLoadedData: width=${v.videoWidth} height=${v.videoHeight}`,
+      );
+      // Try to play right away — muted, so browser policy allows it.
+      v.play().catch((err) => {
+        console.warn("[webcam-recorder] review autoplay rejected:", err);
+      });
     },
     [],
   );
@@ -398,7 +449,16 @@ export function WebcamRecorder({
                 controls
                 preload="auto"
                 playsInline
-                onLoadedMetadata={fixWebmDuration}
+                autoPlay
+                muted
+                onLoadedMetadata={onReviewLoadedMetadata}
+                onLoadedData={onReviewLoadedData}
+                onError={(e) => {
+                  console.error(
+                    "[webcam-recorder] review video error:",
+                    e.currentTarget.error,
+                  );
+                }}
                 className="h-full w-full object-contain bg-ink"
               />
             ) : (
