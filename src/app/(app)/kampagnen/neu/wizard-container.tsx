@@ -68,6 +68,11 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
   const router = useRouter();
   const [step, setStep] = React.useState(0);
   const [submitting, setSubmitting] = React.useState(false);
+  // Webcam list lives in wizard state so newly recorded webcams that step 1
+  // adds are still visible in the step 6 summary.
+  const [webcams, setWebcams] = React.useState<WizardWebcam[]>(
+    initialData.webcams,
+  );
   const [state, setState] = React.useState<WizardState>({
     name: "",
     webcamMediaId: null,
@@ -192,9 +197,10 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
       <div className="min-h-[320px]">
         {step === 0 && (
           <WizardStep1Webcam
-            webcams={initialData.webcams}
+            webcams={webcams}
             value={state.webcamMediaId}
             onChange={(id) => update({ webcamMediaId: id })}
+            onWebcamsChange={setWebcams}
           />
         )}
         {step === 1 && (
@@ -233,7 +239,7 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
         {step === 5 && (
           <WizardStep6Summary
             state={state}
-            webcams={initialData.webcams}
+            webcams={webcams}
             templates={initialData.templates}
             onNameChange={(name) => update({ name })}
           />

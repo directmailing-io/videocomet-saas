@@ -29,6 +29,9 @@ export interface WizardStep1Props {
   webcams: Webcam[];
   value: string | null;
   onChange: (id: string) => void;
+  /** Called when a new webcam recording is added so the parent can keep its
+   *  webcam list in sync (e.g. for the summary step). Optional for back-compat. */
+  onWebcamsChange?: (webcams: Webcam[]) => void;
 }
 
 interface MediaApiItem {
@@ -50,10 +53,21 @@ export function WizardStep1Webcam({
   webcams: initialWebcams,
   value,
   onChange,
+  onWebcamsChange,
 }: WizardStep1Props) {
   const [recordOpen, setRecordOpen] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
-  const [webcams, setWebcams] = React.useState<Webcam[]>(initialWebcams);
+  const [webcams, setWebcamsLocal] = React.useState<Webcam[]>(initialWebcams);
+  const setWebcams = React.useCallback(
+    (next: Webcam[] | ((prev: Webcam[]) => Webcam[])) => {
+      setWebcamsLocal((prev) => {
+        const v = typeof next === "function" ? (next as (p: Webcam[]) => Webcam[])(prev) : next;
+        onWebcamsChange?.(v);
+        return v;
+      });
+    },
+    [onWebcamsChange],
+  );
   const [uploading, setUploading] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [pickerLoading, setPickerLoading] = React.useState(false);
