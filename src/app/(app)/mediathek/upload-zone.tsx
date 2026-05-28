@@ -22,7 +22,10 @@ import {
   DialogHeader,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { WebcamRecorder } from "@/components/ui/webcam-recorder";
+import {
+  WebcamRecorder,
+  type RecordedMedia,
+} from "@/components/ui/webcam-recorder";
 import {
   validateUpload,
   getMimeFromFilename,
@@ -229,40 +232,11 @@ export function UploadZone({ onClose }: UploadZoneProps) {
     if (anySucceeded) router.refresh();
   }
 
-  async function handleRecorderConfirm(file: File) {
+  // The recorder uploads the media itself and gives us back the saved record.
+  function handleRecorderConfirm(_media: RecordedMedia) {
+    setRecordOpen(false);
     setRecorderError(null);
-    setRecorderUploading(true);
-    try {
-      const validation = validateUpload({
-        sizeBytes: file.size,
-        mime: file.type || "video/webm",
-        kind: "webcam",
-      });
-      if (!validation.ok) {
-        setRecorderError(validation.error);
-        return;
-      }
-      const res = await uploadWithProgress(file, "webcam", () => {
-        /* recorder dialog shows generic spinner, no per-byte progress bar */
-      });
-      if (!res.ok) {
-        const errorMsg =
-          (res.body && typeof res.body === "object" && "error" in res.body
-            ? String((res.body as { error: unknown }).error)
-            : null) ?? `HTTP ${res.status}`;
-        setRecorderError(errorMsg);
-        return;
-      }
-      setRecordOpen(false);
-      router.refresh();
-    } catch (err) {
-      console.error("[upload-zone] recorder upload failed:", err);
-      setRecorderError(
-        err instanceof Error ? err.message : "Upload fehlgeschlagen.",
-      );
-    } finally {
-      setRecorderUploading(false);
-    }
+    router.refresh();
   }
 
   return (

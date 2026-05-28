@@ -1,5 +1,29 @@
 "use client";
 
+/**
+ * WebcamRecorder — getUserMedia + MediaRecorder + immediate server upload.
+ *
+ * Why we upload to the server right after stop, instead of showing a blob: URL
+ * preview in the browser:
+ *   MediaRecorder produces WebM containers without a Duration tag in the EBML
+ *   header. Chrome/Firefox then play these blob: URLs with `videoWidth=2` and
+ *   `duration=Infinity`, which makes the preview black and unscrubbable. Every
+ *   "fix-webm-duration" workaround we tried failed at chunk/codec edge cases.
+ *
+ *   Bunny Edge Storage, on the other hand, serves the same bytes back over
+ *   HTTPS with Range support, and every browser plays the file correctly.
+ *   So: record → upload → preview from CDN URL. Robust by construction.
+ *
+ * Flow:
+ *   preview   → user clicks "Aufnahme starten"
+ *   recording → user clicks "Aufnahme beenden"
+ *   uploading → blob is POSTed to /api/media (kind=webcam)
+ *   review    → <video src={mediaItem.publicUrl}> plays the file
+ *               "Verwenden" → onConfirm(media)
+ *               "Neu aufnehmen" → DELETE media + back to preview
+ *   error     → permission denied / network error etc.
+ */
+
 import * as React from "react";
 import {
   Circle,
@@ -9,31 +33,21 @@ import {
   AlertCircle,
   X,
 } from "lucide-react";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore - CJS module, importing both ways for robustness
-import * as fixWebmDurationModule from "fix-webm-duration";
-
-/** Resolve fix-webm-duration export robustly across CJS/ESM interop. */
-function getFixFn(): (
-  blob: Blob,
-  durationMs: number,
-  options?: { logger?: false | ((m: string) => void) },
-) => Promise<Blob> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const m: any = fixWebmDurationModule as any;
-  if (typeof m === "function") return m;
-  if (typeof m.default === "function") return m.default;
-  // Final fallback: no-op patch
-  return async (blob: Blob) => blob;
-}
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type RecorderState = "preview" | "recording" | "review";
+export interface RecordedMedia {
+  id: string;
+  name: string;
+  publicUrl: string;
+  durationSec: number | null;
+}
+
+type RecorderState = "preview" | "recording" | "uploading" | "review";
 
 export interface WebcamRecorderProps {
-  /** Called with the recorded blob wrapped as a File. */
-  onConfirm: (file: File) => void | Promise<void>;
+  /** Called when the user clicks "Verwenden" — receives the already-uploaded media. */
+  onConfirm: (media: RecordedMedia) => void | Promise<void>;
   /** Optional cancel handler (used by callers that show this in a Dialog). */
   onCancel?: () => void;
   /**
@@ -45,17 +59,16 @@ export interface WebcamRecorderProps {
   className?: string;
 }
 
+/**
+ * vp8+opus has the most robust intrinsic-dimensions handling across browsers.
+ * vp9 produces webm blobs that some Chrome builds decode with width=2 height=2.
+ */
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "video/webm";
-  // Order matters. vp8+opus produces a webm whose intrinsic videoWidth /
-  // videoHeight is correctly populated by the <video> decoder in Chrome and
-  // Firefox; vp9 frequently reports width=2 height=2 = unplayable preview.
-  // mp4 last for Safari.
   const candidates = [
     "video/webm;codecs=vp8,opus",
     "video/webm;codecs=vp8",
     "video/webm",
-    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
     "video/mp4",
   ];
   for (const m of candidates) {
@@ -82,12 +95,12 @@ export function WebcamRecorder({
   className,
 }: WebcamRecorderProps) {
   const hasLimit = typeof maxDurationSec === "number" && maxDurationSec > 0;
+
   const liveVideoRef = React.useRef<HTMLVideoElement | null>(null);
   const reviewVideoRef = React.useRef<HTMLVideoElement | null>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
   const recorderRef = React.useRef<MediaRecorder | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
-  const recordingStartMsRef = React.useRef<number | null>(null);
   const mimeRef = React.useRef<string>("video/webm");
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const autoStopRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -96,8 +109,8 @@ export function WebcamRecorder({
   const [elapsed, setElapsed] = React.useState(0);
   const [permError, setPermError] = React.useState<string | null>(null);
   const [recordError, setRecordError] = React.useState<string | null>(null);
-  const [recordedBlob, setRecordedBlob] = React.useState<Blob | null>(null);
-  const [reviewUrl, setReviewUrl] = React.useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = React.useState(0);
+  const [reviewMedia, setReviewMedia] = React.useState<RecordedMedia | null>(null);
   const [confirming, setConfirming] = React.useState(false);
   const [hasStream, setHasStream] = React.useState(false);
 
@@ -134,7 +147,6 @@ export function WebcamRecorder({
       });
       streamRef.current = stream;
       setHasStream(true);
-      // Log actual track settings so we know what resolution we got.
       const vt = stream.getVideoTracks()[0];
       if (vt) {
         const s = vt.getSettings();
@@ -153,7 +165,7 @@ export function WebcamRecorder({
       if (name === "NotAllowedError" || name === "SecurityError") {
         msg = "Zugriff auf Kamera und Mikrofon wurde verweigert. Bitte erlaube den Zugriff in den Browser-Einstellungen.";
       } else if (name === "NotFoundError" || name === "OverconstrainedError") {
-        msg = "Keine Kamera oder kein Mikrofon gefunden. Bitte schliesse ein Gerät an und versuche es erneut.";
+        msg = "Keine Kamera oder kein Mikrofon gefunden. Bitte schließe ein Gerät an und versuche es erneut.";
       } else if (name === "NotReadableError") {
         msg = "Kamera oder Mikrofon werden bereits von einer anderen Anwendung verwendet.";
       }
@@ -174,11 +186,91 @@ export function WebcamRecorder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  React.useEffect(() => {
-    return () => {
-      if (reviewUrl) URL.revokeObjectURL(reviewUrl);
-    };
-  }, [reviewUrl]);
+  /** Upload the blob to /api/media (kind=webcam) with XHR for progress. */
+  function uploadBlob(blob: Blob): Promise<RecordedMedia> {
+    return new Promise((resolve, reject) => {
+      const ext = blob.type.includes("mp4") ? "mp4" : "webm";
+      const filename = `videocomet-webcam-${Date.now()}.${ext}`;
+      const file = new File([blob], filename, { type: blob.type });
+
+      const form = new FormData();
+      form.append("file", file);
+      form.append("kind", "webcam");
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/media");
+      xhr.withCredentials = true;
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          setUploadProgress(pct);
+        }
+      };
+      xhr.onerror = () => reject(new Error("Netzwerkfehler beim Upload."));
+      xhr.onload = () => {
+        if (xhr.status < 200 || xhr.status >= 300) {
+          let msg = `HTTP ${xhr.status}`;
+          try {
+            const j = JSON.parse(xhr.responseText) as { error?: string };
+            if (j.error) msg = j.error;
+          } catch { /* ignore */ }
+          return reject(new Error(msg));
+        }
+        try {
+          const j = JSON.parse(xhr.responseText) as {
+            media: {
+              id: string;
+              name: string;
+              publicUrl: string;
+              durationSec: number | null;
+            };
+          };
+          resolve({
+            id: j.media.id,
+            name: j.media.name,
+            publicUrl: j.media.publicUrl,
+            durationSec: j.media.durationSec ?? null,
+          });
+        } catch (e) {
+          reject(e instanceof Error ? e : new Error("Antwort konnte nicht gelesen werden."));
+        }
+      };
+      xhr.send(form);
+    });
+  }
+
+  async function handleStopComplete() {
+    const totalBytes = chunksRef.current.reduce((s, c) => s + c.size, 0);
+    console.log(
+      `[webcam-recorder] onstop: chunks=${chunksRef.current.length} totalBytes=${totalBytes} mime=${mimeRef.current}`,
+    );
+    const blob = new Blob(chunksRef.current, { type: mimeRef.current });
+    if (blob.size === 0) {
+      setRecordError(
+        "Aufnahme war leer. Bitte erneut versuchen (mindestens 1 Sekunde aufnehmen).",
+      );
+      setState("preview");
+      return;
+    }
+
+    setState("uploading");
+    setUploadProgress(0);
+    stopStream();
+
+    try {
+      const media = await uploadBlob(blob);
+      console.log(`[webcam-recorder] uploaded media id=${media.id} url=${media.publicUrl}`);
+      setReviewMedia(media);
+      setState("review");
+    } catch (e) {
+      console.error("[webcam-recorder] upload failed:", e);
+      setRecordError(
+        e instanceof Error ? `Upload fehlgeschlagen: ${e.message}` : "Upload fehlgeschlagen.",
+      );
+      setState("preview");
+      await initCamera();
+    }
+  }
 
   function startRecording() {
     if (!streamRef.current) return;
@@ -199,7 +291,6 @@ export function WebcamRecorder({
     }
 
     rec.ondataavailable = (e) => {
-      console.log("[webcam-recorder] dataavailable: size=" + (e.data?.size ?? 0));
       if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
     };
     rec.onerror = (e) => {
@@ -208,31 +299,12 @@ export function WebcamRecorder({
     };
     rec.onstop = () => {
       clearTimers();
-      const totalBytes = chunksRef.current.reduce((s, c) => s + c.size, 0);
-      const recordedMs = Date.now() - (recordingStartMsRef.current ?? Date.now());
-      console.log(
-        `[webcam-recorder] onstop: chunks=${chunksRef.current.length} totalBytes=${totalBytes} recordedMs=${recordedMs} mime=${mimeRef.current}`,
-      );
-      const blob = new Blob(chunksRef.current, { type: mimeRef.current });
-      if (blob.size === 0) {
-        setRecordError(
-          "Aufnahme war leer. Bitte erneut versuchen (mindestens 1 Sekunde aufnehmen).",
-        );
-        setState("preview");
-        return;
-      }
-      setRecordedBlob(blob);
-      const url = URL.createObjectURL(blob);
-      console.log(`[webcam-recorder] setting review url=${url}`);
-      setReviewUrl(url);
-      setState("review");
-      stopStream();
+      // Defer the async upload work to a separate function to keep onstop sync.
+      void handleStopComplete();
     };
 
-    // 1 second timeslice → reliable dataavailable events even on Chromium edge cases.
     try {
       rec.start(1000);
-      recordingStartMsRef.current = Date.now();
     } catch (err) {
       console.error("[webcam-recorder] start failed:", err);
       setRecordError("Aufnahme konnte nicht gestartet werden.");
@@ -257,17 +329,8 @@ export function WebcamRecorder({
   }
 
   function stopRecording() {
-    console.log("[webcam-recorder] stopRecording clicked");
     const r = recorderRef.current;
-    if (!r) {
-      console.warn("[webcam-recorder] no recorder ref");
-      return;
-    }
-    if (r.state === "inactive") {
-      console.warn("[webcam-recorder] recorder already inactive");
-      return;
-    }
-    // Flush any buffered data before stopping → guarantees ondataavailable fires.
+    if (!r || r.state === "inactive") return;
     try { r.requestData(); } catch { /* ignore */ }
     try { r.stop(); } catch (err) {
       console.error("[webcam-recorder] stop failed:", err);
@@ -275,12 +338,23 @@ export function WebcamRecorder({
     }
   }
 
-  async function reRecord() {
-    if (reviewUrl) {
-      URL.revokeObjectURL(reviewUrl);
-      setReviewUrl(null);
+  async function deleteReviewMedia() {
+    const m = reviewMedia;
+    if (!m) return;
+    try {
+      await fetch(`/api/media/${m.id}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+    } catch (e) {
+      console.warn("[webcam-recorder] could not delete review media:", e);
     }
-    setRecordedBlob(null);
+  }
+
+  async function reRecord() {
+    // Drop the uploaded preview media; the user is starting over.
+    await deleteReviewMedia();
+    setReviewMedia(null);
     setElapsed(0);
     setRecordError(null);
     setState("preview");
@@ -288,25 +362,23 @@ export function WebcamRecorder({
   }
 
   async function handleConfirm() {
-    if (!recordedBlob) return;
+    if (!reviewMedia) return;
     setConfirming(true);
     try {
-      const filename = `videocomet-webcam-${Date.now()}.webm`;
-      const file = new File([recordedBlob], filename, {
-        type: recordedBlob.type || "video/webm",
-      });
-      await onConfirm(file);
+      await onConfirm(reviewMedia);
     } finally {
       setConfirming(false);
     }
   }
 
-  function handleCancel() {
+  async function handleCancel() {
     clearTimers();
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
       try { recorderRef.current.stop(); } catch { /* ignore */ }
     }
     stopStream();
+    // If user cancels after an upload happened but before confirming, clean up.
+    if (state === "review") await deleteReviewMedia();
     onCancel?.();
   }
 
@@ -314,54 +386,6 @@ export function WebcamRecorder({
     ? Math.max(0, (maxDurationSec as number) - elapsed)
     : 0;
   const overTime = hasLimit && elapsed >= (maxDurationSec as number);
-
-  // Force the browser to compute duration + decode the first frame for blobs
-  // that lack a finite duration in their container header. Tries autoplay so
-  // the user immediately sees the recording move; the controls=true lets them
-  // pause/scrub. Muted so autoplay isn't blocked by browser policy.
-  const onReviewLoadedMetadata = React.useCallback(
-    (e: React.SyntheticEvent<HTMLVideoElement>) => {
-      const v = e.currentTarget;
-      console.log(
-        `[webcam-recorder] review onLoadedMetadata: duration=${v.duration} readyState=${v.readyState}`,
-      );
-      if (!Number.isFinite(v.duration) || v.duration === 0) {
-        const onUpdate = () => {
-          v.removeEventListener("timeupdate", onUpdate);
-          console.log(
-            `[webcam-recorder] review duration after seek: ${v.duration}`,
-          );
-          try {
-            v.currentTime = 0.05;
-          } catch { /* ignore */ }
-        };
-        v.addEventListener("timeupdate", onUpdate);
-        try {
-          v.currentTime = Number.MAX_SAFE_INTEGER;
-        } catch { /* ignore */ }
-      } else {
-        // Nudge currentTime off zero so the decoder draws a non-black frame
-        try {
-          v.currentTime = 0.05;
-        } catch { /* ignore */ }
-      }
-    },
-    [],
-  );
-
-  const onReviewLoadedData = React.useCallback(
-    (e: React.SyntheticEvent<HTMLVideoElement>) => {
-      const v = e.currentTarget;
-      console.log(
-        `[webcam-recorder] review onLoadedData: width=${v.videoWidth} height=${v.videoHeight}`,
-      );
-      // Try to play right away — muted, so browser policy allows it.
-      v.play().catch((err) => {
-        console.warn("[webcam-recorder] review autoplay rejected:", err);
-      });
-    },
-    [],
-  );
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -393,7 +417,6 @@ export function WebcamRecorder({
         </div>
       ) : (
         <>
-          {/* Prominent timer banner — visible above the video while recording. */}
           {state === "recording" && (
             <div className="flex items-center justify-center gap-4 rounded-squircle-md border border-danger/20 bg-danger/5 px-5 py-4">
               <span className="inline-flex items-center gap-2 text-sm font-semibold text-danger">
@@ -427,25 +450,30 @@ export function WebcamRecorder({
           )}
 
           <div className="relative aspect-video w-full overflow-hidden rounded-squircle-md bg-ink">
-            {state === "review" && reviewUrl ? (
+            {state === "review" && reviewMedia ? (
               <video
                 ref={reviewVideoRef}
-                src={reviewUrl}
+                src={reviewMedia.publicUrl}
                 controls
                 preload="auto"
                 playsInline
                 autoPlay
                 muted
-                onLoadedMetadata={onReviewLoadedMetadata}
-                onLoadedData={onReviewLoadedData}
-                onError={(e) => {
-                  console.error(
-                    "[webcam-recorder] review video error:",
-                    e.currentTarget.error,
-                  );
-                }}
                 className="h-full w-full object-contain bg-ink"
               />
+            ) : state === "uploading" ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
+                <span className="inline-block size-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span className="text-sm font-semibold">
+                  Aufnahme wird verarbeitet … {uploadProgress}%
+                </span>
+                <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-brand transition-all"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </div>
             ) : (
               <video
                 ref={liveVideoRef}
@@ -456,7 +484,6 @@ export function WebcamRecorder({
               />
             )}
 
-            {/* Compact timer overlay on the video itself (also still visible). */}
             {state === "recording" && (
               <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
                 <span className="inline-block size-2 animate-pulse rounded-full bg-danger" />
@@ -465,16 +492,7 @@ export function WebcamRecorder({
               </div>
             )}
 
-            {/*
-              Composition guide: a subtle vertically-tight circle, centered on
-              the frame. Visible during preview + recording (not in review).
-              Helps the user frame themselves so that when the final clip is
-              displayed as a circular PiP overlay, nothing important gets
-              cropped off the top or bottom.
-              - aspect-square + h-full → diameter equals frame height
-              - centered horizontally via inset-y-0 + mx-auto
-              - dezent: 1px weisse Linie mit 35% Alpha + sehr leichter Schatten
-            */}
+            {/* Composition guide: dezenter Kreis als Rahmen-Hilfe */}
             {(state === "preview" || state === "recording") && (
               <div
                 aria-hidden
@@ -523,6 +541,12 @@ export function WebcamRecorder({
               </Button>
             )}
 
+            {state === "uploading" && (
+              <Button type="button" variant="ghost" disabled>
+                Aufnahme wird hochgeladen …
+              </Button>
+            )}
+
             {state === "review" && (
               <>
                 <Button
@@ -558,7 +582,7 @@ export function WebcamRecorder({
 
           {state === "preview" && !hasStream && !permError && (
             <p className="text-center text-xs text-ink-muted">
-              Initialisiere Kamera ...
+              Initialisiere Kamera …
             </p>
           )}
         </>

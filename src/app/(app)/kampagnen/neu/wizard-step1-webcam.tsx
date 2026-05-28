@@ -12,7 +12,10 @@ import {
   DialogDescription,
   DialogHeader,
 } from "@/components/ui/dialog";
-import { WebcamRecorder } from "@/components/ui/webcam-recorder";
+import {
+  WebcamRecorder,
+  type RecordedMedia,
+} from "@/components/ui/webcam-recorder";
 import { cn } from "@/lib/utils";
 
 interface Webcam {
@@ -99,57 +102,19 @@ export function WizardStep1Webcam({
     void loadPickerItems();
   }
 
-  async function handleRecorderConfirm(file: File) {
-    setUploading(true);
+  // The WebcamRecorder uploads the media itself and gives us back the saved
+  // record. We just stitch it into the local list and select it.
+  function handleRecorderConfirm(media: RecordedMedia) {
+    const newItem: Webcam = {
+      id: media.id,
+      name: media.name,
+      publicUrl: media.publicUrl,
+      durationSec: media.durationSec ?? null,
+    };
+    setWebcams((prev) => [newItem, ...prev.filter((w) => w.id !== newItem.id)]);
+    onChange(newItem.id);
+    setRecordOpen(false);
     setUploadError(null);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("kind", "webcam");
-
-      const res = await fetch("/api/media", {
-        method: "POST",
-        body: form,
-        credentials: "same-origin",
-      });
-
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-          const json = (await res.json()) as { error?: string };
-          if (json.error) detail = json.error;
-        } catch {
-          /* ignore */
-        }
-        throw new Error(detail);
-      }
-
-      const json = (await res.json()) as {
-        media: {
-          id: string;
-          name: string;
-          publicUrl: string;
-          durationSec: number | null;
-        };
-      };
-
-      const newItem: Webcam = {
-        id: json.media.id,
-        name: json.media.name,
-        publicUrl: json.media.publicUrl,
-        durationSec: json.media.durationSec ?? null,
-      };
-      setWebcams((prev) => [newItem, ...prev]);
-      onChange(newItem.id);
-      setRecordOpen(false);
-    } catch (err) {
-      console.error("[wizard-step1] upload failed:", err);
-      setUploadError(
-        err instanceof Error ? err.message : "Upload fehlgeschlagen.",
-      );
-    } finally {
-      setUploading(false);
-    }
   }
 
   return (
