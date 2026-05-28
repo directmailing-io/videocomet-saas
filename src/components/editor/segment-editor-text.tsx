@@ -52,7 +52,7 @@ export function SegmentEditorText({ segment, onChange }: SegmentEditorTextProps)
           value={segment.text}
           onChange={(e) => onChange({ ...segment, text: e.target.value })}
           rows={4}
-          placeholder="Hallo {{firstName}}, ich habe etwas Spannendes fuer Sie ..."
+          placeholder="Hallo {{firstName}}, ich habe etwas Spannendes für Sie ..."
         />
         <div className="mt-2 flex flex-wrap gap-2">
           {PLACEHOLDERS.map((p) => (
@@ -78,7 +78,7 @@ export function SegmentEditorText({ segment, onChange }: SegmentEditorTextProps)
               value={segment.bgColor}
               onChange={(e) => onChange({ ...segment, bgColor: e.target.value })}
               className="h-10 w-12 cursor-pointer rounded-squircle-sm border border-line bg-surface"
-              aria-label="Hintergrundfarbe waehlen"
+              aria-label="Hintergrundfarbe wählen"
             />
             <span className="font-mono text-sm text-ink-soft">{segment.bgColor}</span>
           </div>
@@ -91,7 +91,7 @@ export function SegmentEditorText({ segment, onChange }: SegmentEditorTextProps)
               value={segment.textColor}
               onChange={(e) => onChange({ ...segment, textColor: e.target.value })}
               className="h-10 w-12 cursor-pointer rounded-squircle-sm border border-line bg-surface"
-              aria-label="Textfarbe waehlen"
+              aria-label="Textfarbe wählen"
             />
             <span className="font-mono text-sm text-ink-soft">{segment.textColor}</span>
           </div>

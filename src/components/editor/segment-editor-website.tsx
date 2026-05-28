@@ -30,13 +30,13 @@ const CAPTURE_MODES: CaptureModeOption[] = [
   {
     value: "smooth-scroll",
     title: "Sanftes Scrollen",
-    description: "Scrollt gleichmaessig von oben nach unten ueber die ganze Segment-Dauer.",
+    description: "Scrollt gleichmäßig von oben nach unten über die ganze Segment-Dauer.",
     Icon: MoveVertical,
   },
   {
     value: "slow-scroll-pauses",
     title: "Langsam mit Pausen",
-    description: "Scrollt langsam mit kurzen Pausen, gut fuer Lese-Pausen.",
+    description: "Scrollt langsam mit kurzen Pausen, gut für Lese-Pausen.",
     Icon: Pause,
   },
   {
@@ -76,7 +76,7 @@ export function SegmentEditorWebsite({
           placeholder="https://www.beispiel.de"
         />
         <p className="mt-1 text-xs text-ink-muted">
-          Wird in der Vorschau und fuer Leads ohne Wert verwendet.
+          Wird in der Vorschau und für Leads ohne Wert verwendet.
         </p>
       </div>
 
@@ -108,7 +108,7 @@ export function SegmentEditorWebsite({
 }
 
 /**
- * Apple/AirBNB-style Auswahl-Karte fuer einen Capture-Modus.
+ * Apple/AirBNB-style Auswahl-Karte für einen Capture-Modus.
  * Click setzt onSelect; selected zeigt einen ring-2 ring-brand Marker.
  */
 function CaptureModeCard({

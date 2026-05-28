@@ -145,7 +145,7 @@ export function DurationInput({
     setEditing(false);
   };
 
-  // Buttons disablen, wenn der Sprung das Limit ueberschreitet.
+  // Buttons disablen, wenn der Sprung das Limit überschreitet.
   const plusStepDisabled = hasMax && valueMs + stepMs > (maxMs as number);
   const plusSecDisabled = hasMax && valueMs + 1000 > (maxMs as number);
   const plusStepReallyDisabled = atMax || plusStepDisabled;

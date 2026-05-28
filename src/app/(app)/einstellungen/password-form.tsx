@@ -39,7 +39,7 @@ export function PasswordForm() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setError(true);
-        setMessage(data?.error ?? "Passwort konnte nicht geaendert werden.");
+        setMessage(data?.error ?? "Passwort konnte nicht geändert werden.");
       } else {
         setMessage("Passwort aktualisiert.");
         setCurrent("");

@@ -30,13 +30,13 @@ const CAPTURE_MODES: CaptureModeOption[] = [
   {
     value: "smooth-scroll",
     title: "Sanftes Scrollen",
-    description: "Scrollt gleichmaessig von oben nach unten ueber die ganze Segment-Dauer.",
+    description: "Scrollt gleichmäßig von oben nach unten über die ganze Segment-Dauer.",
     Icon: MoveVertical,
   },
   {
     value: "slow-scroll-pauses",
     title: "Langsam mit Pausen",
-    description: "Scrollt langsam mit kurzen Pausen, gut fuer Lese-Pausen.",
+    description: "Scrollt langsam mit kurzen Pausen, gut für Lese-Pausen.",
     Icon: Pause,
   },
   {
@@ -78,7 +78,7 @@ export function SegmentEditorGDocs({
         />
         {!urlValid && (
           <p className="mt-1 text-xs text-danger">
-            Bitte eine gueltige docs.google.com URL angeben.
+            Bitte eine gültige docs.google.com URL angeben.
           </p>
         )}
       </div>
@@ -102,8 +102,10 @@ export function SegmentEditorGDocs({
       <div className="flex gap-3 rounded-squircle-sm border border-brand-200 bg-brand-soft p-4 text-sm text-brand-deep">
         <Info className="size-4 shrink-0 mt-0.5" />
         <p>
-          Das Dokument muss oeffentlich (mit Link freigegeben) sein, damit es waehrend
-          des Renderns geladen werden kann.
+          Das Dokument muss öffentlich (mit Link freigegeben) sein, damit es während
+          des Renderns geladen werden kann. Die Vorschau hier ist nur ein Platzhalter —
+          beim Generieren öffnet der Worker das Doc, schließt Cookie-Banner und nimmt den
+          gewählten Scroll-Modus auf.
         </p>
       </div>
     </div>
@@ -111,7 +113,7 @@ export function SegmentEditorGDocs({
 }
 
 /**
- * Apple/AirBNB-style Auswahl-Karte fuer einen Capture-Modus.
+ * Apple/AirBNB-style Auswahl-Karte für einen Capture-Modus.
  * Click setzt onSelect; selected zeigt einen ring-2 ring-brand Marker.
  */
 function CaptureModeCard({

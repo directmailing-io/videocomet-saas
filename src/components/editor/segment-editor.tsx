@@ -103,9 +103,9 @@ export function SegmentEditor({
             onClick={onDelete}
             iconLeft={<Trash2 className="size-3.5" />}
             className="text-danger hover:bg-danger/10 hover:border-danger/40"
-            aria-label="Segment loeschen"
+            aria-label="Segment löschen"
           >
-            Loeschen
+            Löschen
           </Button>
         </div>
       </div>

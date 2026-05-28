@@ -44,7 +44,7 @@ export function SegmentEditorImage({
         {imageItems.length === 0 ? (
           <div className="rounded-squircle-sm border border-dashed border-line p-6 text-center text-sm text-ink-muted">
             <ImageIcon className="mx-auto mb-2 size-6 opacity-50" />
-            Noch keine Bilder hochgeladen. Bilder koennen in der Mediathek hinzugefuegt werden.
+            Noch keine Bilder hochgeladen. Bilder können in der Mediathek hinzugefuegt werden.
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
