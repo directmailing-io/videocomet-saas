@@ -120,18 +120,27 @@ export function WizardStep3Editor({
 
   React.useEffect(() => {
     if (!webcamUrl || webcamDurationSec) return;
+    // Kein crossOrigin Mode: Bunny Edge Storage liefert keinen CORS-Header,
+    // und für `loadedmetadata` brauchen wir das nicht (nur duration lesen).
     const v = document.createElement("video");
     v.preload = "metadata";
-    v.crossOrigin = "anonymous";
     v.src = webcamUrl;
     const handler = () => {
       if (Number.isFinite(v.duration) && v.duration > 0) {
+        console.log(`[wizard-step3] probed webcam duration: ${v.duration}s`);
         setProbedDurationSec(v.duration);
+      } else {
+        console.warn(`[wizard-step3] probed webcam: invalid duration=${v.duration}`);
       }
     };
+    const errHandler = () => {
+      console.error(`[wizard-step3] probe failed for ${webcamUrl}`, v.error);
+    };
     v.addEventListener("loadedmetadata", handler);
+    v.addEventListener("error", errHandler);
     return () => {
       v.removeEventListener("loadedmetadata", handler);
+      v.removeEventListener("error", errHandler);
       v.src = "";
     };
   }, [webcamUrl, webcamDurationSec]);

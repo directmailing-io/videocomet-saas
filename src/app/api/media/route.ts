@@ -71,6 +71,14 @@ export async function POST(req: NextRequest) {
 
   const kindRaw = form.get("kind");
   const file = form.get("file");
+  const durationSecRaw = form.get("durationSec");
+  let clientDurationSec: number | null = null;
+  if (typeof durationSecRaw === "string" && durationSecRaw.length > 0) {
+    const parsed = Number(durationSecRaw);
+    if (Number.isFinite(parsed) && parsed > 0 && parsed < 7200) {
+      clientDurationSec = Math.round(parsed);
+    }
+  }
 
   if (typeof kindRaw !== "string" || !isMediaKind(kindRaw)) {
     return NextResponse.json(
@@ -116,7 +124,7 @@ export async function POST(req: NextRequest) {
       name: filename,
       filename,
       publicUrl: uploaded.publicUrl,
-      durationSec: uploaded.durationSec,
+      durationSec: uploaded.durationSec ?? clientDurationSec,
       bytes: uploaded.bytes,
     });
 

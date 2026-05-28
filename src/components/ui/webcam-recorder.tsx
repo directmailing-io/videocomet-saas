@@ -187,7 +187,7 @@ export function WebcamRecorder({
   }, []);
 
   /** Upload the blob to /api/media (kind=webcam) with XHR for progress. */
-  function uploadBlob(blob: Blob): Promise<RecordedMedia> {
+  function uploadBlob(blob: Blob, recordedSeconds: number): Promise<RecordedMedia> {
     return new Promise((resolve, reject) => {
       const ext = blob.type.includes("mp4") ? "mp4" : "webm";
       const filename = `videocomet-webcam-${Date.now()}.${ext}`;
@@ -196,6 +196,9 @@ export function WebcamRecorder({
       const form = new FormData();
       form.append("file", file);
       form.append("kind", "webcam");
+      if (recordedSeconds > 0) {
+        form.append("durationSec", String(Math.round(recordedSeconds)));
+      }
 
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/api/media");
@@ -258,8 +261,8 @@ export function WebcamRecorder({
     stopStream();
 
     try {
-      const media = await uploadBlob(blob);
-      console.log(`[webcam-recorder] uploaded media id=${media.id} url=${media.publicUrl}`);
+      const media = await uploadBlob(blob, elapsed);
+      console.log(`[webcam-recorder] uploaded media id=${media.id} url=${media.publicUrl} duration=${media.durationSec ?? "n/a"}`);
       setReviewMedia(media);
       setState("review");
     } catch (e) {
