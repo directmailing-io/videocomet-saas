@@ -120,27 +120,51 @@ export function WizardStep3Editor({
 
   React.useEffect(() => {
     if (!webcamUrl || webcamDurationSec) return;
-    // Kein crossOrigin Mode: Bunny Edge Storage liefert keinen CORS-Header,
-    // und für `loadedmetadata` brauchen wir das nicht (nur duration lesen).
+    // Chrome's MediaRecorder schreibt keine Duration in den WebM-Container.
+    // Workaround: erst loadedmetadata abwarten, dann currentTime auf einen
+    // sehr hohen Wert setzen, was den Browser zwingt, bis zum letzten Frame
+    // zu seeken — danach ist v.duration korrekt.
     const v = document.createElement("video");
     v.preload = "metadata";
+    v.muted = true;
     v.src = webcamUrl;
-    const handler = () => {
-      if (Number.isFinite(v.duration) && v.duration > 0) {
-        console.log(`[wizard-step3] probed webcam duration: ${v.duration}s`);
-        setProbedDurationSec(v.duration);
+    let resolved = false;
+    const finish = (d: number, reason: string) => {
+      if (resolved) return;
+      if (Number.isFinite(d) && d > 0 && d < 7200) {
+        console.log(`[wizard-step3] probed webcam duration=${d}s via=${reason}`);
+        setProbedDurationSec(d);
+        resolved = true;
       } else {
-        console.warn(`[wizard-step3] probed webcam: invalid duration=${v.duration}`);
+        console.warn(`[wizard-step3] probe got invalid duration=${d} via=${reason}`);
       }
     };
-    const errHandler = () => {
+    const onMeta = () => {
+      if (Number.isFinite(v.duration) && v.duration > 0) {
+        finish(v.duration, "loadedmetadata");
+      } else {
+        // Infinity -> use seek trick
+        v.currentTime = 1e10;
+      }
+    };
+    const onTimeUpdate = () => {
+      if (!resolved && Number.isFinite(v.duration) && v.duration > 0) {
+        finish(v.duration, "seek-trick");
+        v.currentTime = 0;
+      }
+    };
+    const onErr = () => {
       console.error(`[wizard-step3] probe failed for ${webcamUrl}`, v.error);
     };
-    v.addEventListener("loadedmetadata", handler);
-    v.addEventListener("error", errHandler);
+    v.addEventListener("loadedmetadata", onMeta);
+    v.addEventListener("timeupdate", onTimeUpdate);
+    v.addEventListener("durationchange", onTimeUpdate);
+    v.addEventListener("error", onErr);
     return () => {
-      v.removeEventListener("loadedmetadata", handler);
-      v.removeEventListener("error", errHandler);
+      v.removeEventListener("loadedmetadata", onMeta);
+      v.removeEventListener("timeupdate", onTimeUpdate);
+      v.removeEventListener("durationchange", onTimeUpdate);
+      v.removeEventListener("error", onErr);
       v.src = "";
     };
   }, [webcamUrl, webcamDurationSec]);
