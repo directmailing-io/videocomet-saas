@@ -182,15 +182,21 @@ export default async function CampaignDetailPage({
 
         <TabsContent value="runden">
           <div className="flex justify-end mb-4">
-            <Button iconLeft={<Plus className="size-4" />}>Neue Runde</Button>
+            <Button asChild iconLeft={<Plus className="size-4" />}>
+              <Link href={`/kampagnen/${campaign.id}/runs/neu`}>
+                Neue Runde
+              </Link>
+            </Button>
           </div>
           {runs.length === 0 ? (
             <EmptyState
               title="Noch keine Runden"
               subtitle="Starte eine Runde, um diese Kampagne an deine Lead-Liste zu schicken."
               action={
-                <Button iconLeft={<Plus className="size-4" />}>
-                  Neue Runde
+                <Button asChild iconLeft={<Plus className="size-4" />}>
+                  <Link href={`/kampagnen/${campaign.id}/runs/neu`}>
+                    Neue Runde
+                  </Link>
                 </Button>
               }
             />
@@ -211,23 +217,48 @@ export default async function CampaignDetailPage({
                       ? Math.round((r.completedLeads / r.totalLeads) * 100)
                       : 0;
                   return (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-medium">{r.name}</TableCell>
-                      <TableCell>
-                        <Badge variant={runStatusBadgeVariant(r.status)} dot>
-                          {runStatusLabel(r.status)}
-                        </Badge>
+                    <TableRow
+                      key={r.id}
+                      className="cursor-pointer hover:bg-surface-muted"
+                    >
+                      <TableCell className="font-medium">
+                        <Link
+                          href={`/kampagnen/${campaign.id}/runs/${r.id}`}
+                          className="block"
+                        >
+                          {r.name}
+                        </Link>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-3 min-w-[200px]">
-                          <Progress value={pct} className="flex-1" />
-                          <span className="text-xs text-ink-muted w-12 text-right">
-                            {pct}%
-                          </span>
-                        </div>
+                        <Link
+                          href={`/kampagnen/${campaign.id}/runs/${r.id}`}
+                          className="block"
+                        >
+                          <Badge variant={runStatusBadgeVariant(r.status)} dot>
+                            {runStatusLabel(r.status)}
+                          </Badge>
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Link
+                          href={`/kampagnen/${campaign.id}/runs/${r.id}`}
+                          className="block"
+                        >
+                          <div className="flex items-center gap-3 min-w-[200px]">
+                            <Progress value={pct} className="flex-1" />
+                            <span className="text-xs text-ink-muted w-12 text-right">
+                              {pct}%
+                            </span>
+                          </div>
+                        </Link>
                       </TableCell>
                       <TableCell className="text-right text-ink-muted">
-                        {formatDate(r.createdAt)}
+                        <Link
+                          href={`/kampagnen/${campaign.id}/runs/${r.id}`}
+                          className="block"
+                        >
+                          {formatDate(r.createdAt)}
+                        </Link>
                       </TableCell>
                     </TableRow>
                   );

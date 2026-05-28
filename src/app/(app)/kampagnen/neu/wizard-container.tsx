@@ -142,12 +142,21 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
         }),
       });
       if (!res.ok) {
-        // TODO API endpoint may not exist yet
-        console.log("TODO API endpoint /api/campaigns POST", res.status);
+        const body = await res.text();
+        console.error(`[campaign-wizard] save failed: ${res.status} ${body}`);
+        router.push("/kampagnen");
+        return;
       }
-      router.push("/kampagnen");
+      const data = (await res.json()) as { campaign?: { id: string } };
+      if (data.campaign?.id) {
+        // Jump straight to the campaign so the user can create a first run.
+        router.push(`/kampagnen/${data.campaign.id}`);
+      } else {
+        router.push("/kampagnen");
+      }
     } catch (err) {
-      console.log("TODO API endpoint /api/campaigns POST", err);
+      console.error("[campaign-wizard] save error:", err);
+      router.push("/kampagnen");
     } finally {
       setSubmitting(false);
     }
