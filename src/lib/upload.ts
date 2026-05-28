@@ -69,7 +69,9 @@ export function validateUpload(
   }
 
   const allowed = ALLOWED_MIMES[kind];
-  const normalizedMime = mime.toLowerCase().trim();
+  // Strip codec parameters: browsers send `video/webm;codecs=vp8,opus` from
+  // MediaRecorder, but the allow-list only contains the base type.
+  const normalizedMime = mime.toLowerCase().trim().split(";")[0].trim();
   if (!allowed.includes(normalizedMime)) {
     return {
       ok: false,
