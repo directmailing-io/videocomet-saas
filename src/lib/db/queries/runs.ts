@@ -1,6 +1,6 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { runs } from "@/lib/db/schema";
+import { leads, runs } from "@/lib/db/schema";
 
 export type Run = typeof runs.$inferSelect;
 export type NewRun = typeof runs.$inferInsert;
@@ -59,4 +59,66 @@ export async function listCampaignRuns(
     .from(runs)
     .where(and(eq(runs.campaignId, campaignId), eq(runs.userId, userId)))
     .orderBy(desc(runs.createdAt));
+}
+
+/**
+ * Returns runs joined with live per-status counts from the `leads` table.
+ * We compute completed/failed via correlated subqueries because the cached
+ * counters on `runs` (completed_leads, failed_leads) lag behind worker
+ * updates in practice and would render a 0% bar even when leads are done.
+ */
+export interface RunWithCounts {
+  id: string;
+  campaignId: string;
+  name: string;
+  status: Run["status"];
+  totalLeads: number;
+  completedLeads: number;
+  failedLeads: number;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  createdAt: Date;
+}
+
+export async function listCampaignRunsWithCounts(
+  campaignId: string,
+  userId: string,
+): Promise<RunWithCounts[]> {
+  const rows = await db
+    .select({
+      id: runs.id,
+      campaignId: runs.campaignId,
+      name: runs.name,
+      status: runs.status,
+      totalLeads: runs.totalLeads,
+      startedAt: runs.startedAt,
+      completedAt: runs.completedAt,
+      createdAt: runs.createdAt,
+      liveCompleted: sql<number>`(
+        SELECT COUNT(*)::int FROM ${leads}
+        WHERE ${leads.runId} = ${runs.id} AND ${leads.status} = 'completed'
+      )`,
+      liveFailed: sql<number>`(
+        SELECT COUNT(*)::int FROM ${leads}
+        WHERE ${leads.runId} = ${runs.id} AND ${leads.status} = 'failed'
+      )`,
+    })
+    .from(runs)
+    .where(and(eq(runs.campaignId, campaignId), eq(runs.userId, userId)))
+    .orderBy(desc(runs.createdAt));
+
+  return rows.map((r) => ({
+    id: r.id,
+    campaignId: r.campaignId,
+    name: r.name,
+    status: r.status,
+    totalLeads: r.totalLeads,
+    // Live counts are authoritative; the cached counters on `runs` are a
+    // denormalization that the workers update best-effort.
+    completedLeads: r.liveCompleted ?? 0,
+    failedLeads: r.liveFailed ?? 0,
+    startedAt: r.startedAt,
+    completedAt: r.completedAt,
+    createdAt: r.createdAt,
+  }));
 }

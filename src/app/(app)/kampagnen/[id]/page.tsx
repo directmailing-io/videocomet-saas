@@ -1,24 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, Trash2, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { requireUser } from "@/lib/auth-guard";
 import { getCampaign } from "@/lib/db/queries/campaigns";
-import { listCampaignRuns } from "@/lib/db/queries/runs";
+import { listCampaignRunsWithCounts } from "@/lib/db/queries/runs";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
-import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/ui/empty-state";
+import { RunsTable, type RunRow } from "./runs-table";
+import { CampaignActions } from "./campaign-actions";
 
 function formatDate(d: Date | null): string {
   if (!d) return "";
@@ -30,43 +23,6 @@ function formatDate(d: Date | null): string {
     }).format(new Date(d));
   } catch {
     return "";
-  }
-}
-
-function runStatusBadgeVariant(
-  status: string,
-): "brand" | "success" | "warn" | "danger" | "neutral" {
-  switch (status) {
-    case "completed":
-      return "success";
-    case "generating":
-    case "mapping":
-      return "brand";
-    case "failed":
-      return "danger";
-    case "cancelled":
-      return "warn";
-    default:
-      return "neutral";
-  }
-}
-
-function runStatusLabel(status: string): string {
-  switch (status) {
-    case "draft":
-      return "Entwurf";
-    case "mapping":
-      return "Mapping";
-    case "generating":
-      return "Generierung";
-    case "completed":
-      return "Fertig";
-    case "failed":
-      return "Fehler";
-    case "cancelled":
-      return "Abgebrochen";
-    default:
-      return status;
   }
 }
 
@@ -101,7 +57,18 @@ export default async function CampaignDetailPage({
     notFound();
   }
 
-  const runs = await listCampaignRuns(campaign.id, user.id);
+  const runsWithCounts = await listCampaignRunsWithCounts(campaign.id, user.id);
+  const initialRuns: RunRow[] = runsWithCounts.map((r) => ({
+    id: r.id,
+    name: r.name,
+    status: r.status,
+    totalLeads: r.totalLeads,
+    completedLeads: r.completedLeads,
+    failedLeads: r.failedLeads,
+    createdAt: r.createdAt ? r.createdAt.toISOString() : null,
+    startedAt: r.startedAt ? r.startedAt.toISOString() : null,
+    completedAt: r.completedAt ? r.completedAt.toISOString() : null,
+  }));
 
   return (
     <>
@@ -109,14 +76,10 @@ export default async function CampaignDetailPage({
         title={campaign.name}
         subtitle={`Modus: ${modeLabel(campaign.mode)} . Erstellt am ${formatDate(campaign.createdAt)}`}
         actions={
-          <>
-            <Button variant="ghost" iconLeft={<Pencil className="size-4" />}>
-              Bearbeiten
-            </Button>
-            <Button variant="danger" iconLeft={<Trash2 className="size-4" />}>
-              Löschen
-            </Button>
-          </>
+          <CampaignActions
+            campaignId={campaign.id}
+            campaignName={campaign.name}
+          />
         }
       />
 
@@ -135,7 +98,7 @@ export default async function CampaignDetailPage({
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-ink">
-                  {runs.reduce((s, r) => s + (r.totalLeads ?? 0), 0)}
+                  {initialRuns.reduce((s, r) => s + (r.totalLeads ?? 0), 0)}
                 </div>
                 <p className="text-xs text-ink-muted mt-1">
                   Über alle Runden dieser Kampagne
@@ -188,7 +151,7 @@ export default async function CampaignDetailPage({
               </Link>
             </Button>
           </div>
-          {runs.length === 0 ? (
+          {initialRuns.length === 0 ? (
             <EmptyState
               title="Noch keine Runden"
               subtitle="Starte eine Runde, um diese Kampagne an deine Lead-Liste zu schicken."
@@ -201,70 +164,7 @@ export default async function CampaignDetailPage({
               }
             />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Fortschritt</TableHead>
-                  <TableHead className="text-right">Erstellt</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {runs.map((r) => {
-                  const pct =
-                    r.totalLeads > 0
-                      ? Math.round((r.completedLeads / r.totalLeads) * 100)
-                      : 0;
-                  return (
-                    <TableRow
-                      key={r.id}
-                      className="cursor-pointer hover:bg-surface-muted"
-                    >
-                      <TableCell className="font-medium">
-                        <Link
-                          href={`/kampagnen/${campaign.id}/runs/${r.id}`}
-                          className="block"
-                        >
-                          {r.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          href={`/kampagnen/${campaign.id}/runs/${r.id}`}
-                          className="block"
-                        >
-                          <Badge variant={runStatusBadgeVariant(r.status)} dot>
-                            {runStatusLabel(r.status)}
-                          </Badge>
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          href={`/kampagnen/${campaign.id}/runs/${r.id}`}
-                          className="block"
-                        >
-                          <div className="flex items-center gap-3 min-w-[200px]">
-                            <Progress value={pct} className="flex-1" />
-                            <span className="text-xs text-ink-muted w-12 text-right">
-                              {pct}%
-                            </span>
-                          </div>
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-right text-ink-muted">
-                        <Link
-                          href={`/kampagnen/${campaign.id}/runs/${r.id}`}
-                          className="block"
-                        >
-                          {formatDate(r.createdAt)}
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <RunsTable campaignId={campaign.id} initialRuns={initialRuns} />
           )}
         </TabsContent>
 
