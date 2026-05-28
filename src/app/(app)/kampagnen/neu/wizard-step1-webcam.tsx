@@ -381,8 +381,7 @@ export function WizardStep1Webcam({
           <DialogHeader>
             <DialogTitle>Webcam-Aufnahme</DialogTitle>
             <DialogDescription>
-              Achte auf gute Beleuchtung und ein neutrales Setup. Maximal 2
-              Minuten.
+              Achte auf gute Beleuchtung und ein neutrales Setup.
             </DialogDescription>
           </DialogHeader>
           {uploadError && (

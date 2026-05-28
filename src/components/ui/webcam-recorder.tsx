@@ -9,6 +9,9 @@ import {
   AlertCircle,
   X,
 } from "lucide-react";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - no upstream types
+import fixWebmDuration from "fix-webm-duration";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +68,7 @@ export function WebcamRecorder({
   const streamRef = React.useRef<MediaStream | null>(null);
   const recorderRef = React.useRef<MediaRecorder | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
+  const recordingStartMsRef = React.useRef<number | null>(null);
   const mimeRef = React.useRef<string>("video/webm");
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const autoStopRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -169,22 +173,41 @@ export function WebcamRecorder({
       console.error("[webcam-recorder] recorder error:", e);
       setRecordError("Aufnahmefehler. Bitte erneut versuchen.");
     };
-    rec.onstop = () => {
+    rec.onstop = async () => {
       clearTimers();
+      const totalBytes = chunksRef.current.reduce((s, c) => s + c.size, 0);
+      const recordedMs = Date.now() - (recordingStartMsRef.current ?? Date.now());
       console.log(
-        "[webcam-recorder] onstop: chunks=" +
-          chunksRef.current.length +
-          " totalBytes=" +
-          chunksRef.current.reduce((s, c) => s + c.size, 0),
+        `[webcam-recorder] onstop: chunks=${chunksRef.current.length} totalBytes=${totalBytes} recordedMs=${recordedMs}`,
       );
-      const blob = new Blob(chunksRef.current, { type: mimeRef.current });
+      let blob = new Blob(chunksRef.current, { type: mimeRef.current });
       if (blob.size === 0) {
         setRecordError(
           "Aufnahme war leer. Bitte erneut versuchen (mindestens 1 Sekunde aufnehmen).",
         );
-        // Stay in recording state allowing user to retry by going back to preview.
         setState("preview");
         return;
+      }
+      // MediaRecorder produces webm without a Duration field in the EBML header,
+      // which makes <video> show a black frame and refuse to seek. Patch the
+      // header so the browser knows the actual duration.
+      if (mimeRef.current.includes("webm") && recordedMs > 0) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const fixed = await (fixWebmDuration as any)(blob, recordedMs, {
+            logger: false,
+          });
+          if (fixed instanceof Blob && fixed.size > 0) {
+            blob = fixed;
+            console.log(
+              `[webcam-recorder] webm duration patched: ${recordedMs}ms`,
+            );
+          }
+        } catch (e) {
+          console.warn("[webcam-recorder] webm duration fix failed:", e);
+          // fall through with the unpatched blob — review will still work
+          // even if scrubbing is jumpy
+        }
       }
       setRecordedBlob(blob);
       const url = URL.createObjectURL(blob);
@@ -196,6 +219,7 @@ export function WebcamRecorder({
     // 1 second timeslice → reliable dataavailable events even on Chromium edge cases.
     try {
       rec.start(1000);
+      recordingStartMsRef.current = Date.now();
     } catch (err) {
       console.error("[webcam-recorder] start failed:", err);
       setRecordError("Aufnahme konnte nicht gestartet werden.");
