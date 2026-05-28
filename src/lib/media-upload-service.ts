@@ -113,7 +113,15 @@ export async function uploadMediaFile(
   }
 
   // webcam / image / logo -> Bunny Edge Storage (direct mp4/png GET works).
-  const safeName = slugify(filename, false) || "file";
+  // WICHTIG: Bunny Storage liefert den content-type basierend auf der
+  // Datei-Endung. Daher muss die Extension (.webm / .mp4 / .png / ...) im
+  // remotePath erhalten bleiben — slugify würde den Punkt durch "-" ersetzen.
+  const dotIdx = filename.lastIndexOf(".");
+  const rawBase = dotIdx > 0 ? filename.slice(0, dotIdx) : filename;
+  const rawExt = dotIdx > 0 ? filename.slice(dotIdx + 1) : "";
+  const safeBase = slugify(rawBase, false) || "file";
+  const safeExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const safeName = safeExt ? `${safeBase}.${safeExt}` : safeBase;
   const folder = kind === "webcam" ? "webcam" : "media";
   const remotePath = `users/${userId}/${folder}/${randomUUID()}-${safeName}`;
   const result = await uploadFile({
