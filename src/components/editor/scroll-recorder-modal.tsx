@@ -127,8 +127,18 @@ export function ScrollRecorderModal({
     }
     let cancelled = false;
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    const pollStartTime = Date.now();
+    const POLL_TIMEOUT_MS = 60_000;
 
     const poll = async (id: string) => {
+      if (Date.now() - pollStartTime > POLL_TIMEOUT_MS) {
+        setPhase({
+          kind: "failed",
+          message:
+            "Vorschau-Erzeugung dauerte zu lange. Der Worker antwortet nicht.",
+        });
+        return;
+      }
       try {
         const res = await fetch(`/api/screenshot/${id}`, {
           method: "GET",

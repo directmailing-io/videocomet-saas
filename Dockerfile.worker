@@ -33,9 +33,11 @@ COPY scripts ./scripts
 COPY public ./public
 
 # Run as a non-root user but allow Chromium sandboxing.
+# Wichtig: Chromium's Crashpad-Handler braucht ein schreibbares HOME-Verzeichnis,
+# sonst scheitert der Browser-Launch mit "chrome_crashpad_handler: --database is required".
 RUN groupadd --system --gid 1001 nodejs \
- && useradd --system --uid 1001 --gid nodejs nextjs \
- && chown -R nextjs:nodejs /app
+ && useradd --system --uid 1001 --gid nodejs --create-home --home-dir /home/nextjs nextjs \
+ && chown -R nextjs:nodejs /app /home/nextjs
 
 USER nextjs
 
