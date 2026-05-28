@@ -176,6 +176,9 @@ export async function pipelineProcessor(
         : "webcam-only") as "webcam-only" | "with-presentation",
       webcamSourceUrl: webcam.publicUrl,
       website: lead.data?.website ?? null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      segments: (campaign.segments as any) ?? [],
+      leadData: (lead.data ?? {}) as Record<string, string>,
       pip: {
         position: campaign.pipPosition?.includes("right") ? "right" : "left",
         shape:

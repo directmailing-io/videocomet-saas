@@ -25,8 +25,10 @@ import { join } from "node:path";
 import {
   composePip,
   compressVideo,
+  concatClips,
   generateBlackClip,
   imageSeqToMp4,
+  renderTextSegment,
   type PipPosition,
   type PipShape,
 } from "../lib/ffmpeg";
@@ -35,6 +37,7 @@ import {
   recordFallbackPage,
   recordScroll,
 } from "../lib/scroll-recorder";
+import type { Segment } from "@/lib/segments/types";
 
 export interface VideoRenderInput {
   outDir: string;
@@ -51,6 +54,18 @@ export interface VideoRenderInput {
   };
   /** Defaults to 30 if we cannot probe the source. */
   defaultDurationSec?: number;
+  /** Optional ordered segments for the presentation track. */
+  segments?: Segment[];
+  /** Lead data for placeholder substitution in text segments. */
+  leadData?: Record<string, string>;
+}
+
+/** Replace {{key}} placeholders in any string with values from leadData. */
+function applyPlaceholders(s: string, data: Record<string, string> | undefined): string {
+  if (!data) return s;
+  return s.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (_, key: string) => {
+    return data[key] ?? "";
+  });
 }
 
 export interface VideoRenderOutput {
@@ -198,14 +213,27 @@ export async function runVideoRender(
     return { videoFilePath: webcamLocal, durationSec: duration };
   }
 
-  // with-presentation: build a base track + overlay.
+  // with-presentation: build a base track. If the campaign has segments,
+  // render each one and concat them; otherwise fall back to the legacy
+  // scroll-capture / placeholder flow.
   const basePath = join(input.outDir, "base.mp4");
-  await renderPresentationBase({
-    website: input.website ?? null,
-    outDir: input.outDir,
-    basePath,
-    durationSec: duration,
-  });
+  if (input.segments && input.segments.length > 0) {
+    await renderSegmentsBase({
+      segments: input.segments,
+      leadData: input.leadData,
+      outDir: input.outDir,
+      basePath,
+      fallbackWebsite: input.website ?? null,
+      totalDurationSec: duration,
+    });
+  } else {
+    await renderPresentationBase({
+      website: input.website ?? null,
+      outDir: input.outDir,
+      basePath,
+      durationSec: duration,
+    });
+  }
 
   await composePip({
     basePath,
@@ -217,4 +245,107 @@ export async function runVideoRender(
   });
 
   return { videoFilePath: finalPath, durationSec: duration };
+}
+
+/**
+ * Renders each segment to its own MP4, then concatenates them into a single
+ * `basePath`. Currently supports text segments fully; other types fall back
+ * to a labeled black clip so the lead still completes.
+ *
+ * v2 TODOs: image (image overlay), video (re-encode + trim), website (scroll
+ * capture for the per-segment duration), gdocs (live doc fetch + capture).
+ */
+async function renderSegmentsBase(opts: {
+  segments: Segment[];
+  leadData?: Record<string, string>;
+  outDir: string;
+  basePath: string;
+  fallbackWebsite: string | null;
+  totalDurationSec: number;
+}): Promise<void> {
+  const parts: string[] = [];
+  for (let i = 0; i < opts.segments.length; i++) {
+    const seg = opts.segments[i];
+    const partPath = join(opts.outDir, `seg-${i}.mp4`);
+    const durationMs = Math.max(200, seg.durationMs);
+
+    try {
+      if (seg.kind === "text") {
+        await renderTextSegment({
+          text: applyPlaceholders(seg.text, opts.leadData),
+          bgColor: seg.bgColor,
+          textColor: seg.textColor,
+          fontSize: seg.fontSize,
+          textAlign: seg.textAlign,
+          fontWeight: seg.fontWeight,
+          italic: seg.italic,
+          durationMs,
+          outputPath: partPath,
+        });
+      } else if (seg.kind === "website") {
+        // For website segments we still do scroll-capture per segment.
+        const url =
+          normaliseWebsiteUrl(opts.fallbackWebsite) ??
+          normaliseWebsiteUrl(seg.fallbackUrl) ??
+          null;
+        if (!url) {
+          await generateBlackClip({
+            outputPath: partPath,
+            durationSec: durationMs / 1000,
+          });
+        } else {
+          const fr = await recordScroll({
+            url,
+            outputDir: join(opts.outDir, `scroll-${i}`),
+            durationMs,
+          });
+          await imageSeqToMp4({
+            framesDir: fr.framesDir,
+            outputPath: partPath,
+            fps: fr.fps,
+          });
+        }
+      } else {
+        // image / video / gdocs not yet rendered in v1 — black clip placeholder.
+        console.warn(
+          `[render] segment kind=${seg.kind} not yet supported in v1 — using placeholder`,
+        );
+        await generateBlackClip({
+          outputPath: partPath,
+          durationSec: durationMs / 1000,
+        });
+      }
+      parts.push(partPath);
+    } catch (e) {
+      console.error(
+        `[render] segment ${i} (${seg.kind}) failed; using black clip:`,
+        e instanceof Error ? e.message : e,
+      );
+      await generateBlackClip({
+        outputPath: partPath,
+        durationSec: durationMs / 1000,
+      });
+      parts.push(partPath);
+    }
+  }
+
+  if (parts.length === 0) {
+    await generateBlackClip({
+      outputPath: opts.basePath,
+      durationSec: opts.totalDurationSec,
+    });
+    return;
+  }
+
+  if (parts.length === 1) {
+    // Single segment: just rename / copy.
+    await (await import("node:fs/promises")).copyFile(parts[0], opts.basePath);
+    return;
+  }
+
+  await concatClips({
+    inputPaths: parts,
+    outputPath: opts.basePath,
+    workDir: opts.outDir,
+  });
 }

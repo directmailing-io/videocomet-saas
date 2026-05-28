@@ -153,18 +153,28 @@ export interface ComposePipInput {
  */
 export async function composePip(input: ComposePipInput): Promise<void> {
   const margin = 24;
-  // Webcam scaled to 25% of base width (320x240 area).
-  const overlayW = 320;
-  const overlayH = 240;
+  // Square / rounded use a 16:9 aspect to match the source webcam.
+  // Circle is forced to 1:1 (with a cover crop) so the user's face stays
+  // centered and isn't squashed.
+  const isCircle = input.shape === "circle";
+  const overlayW = isCircle ? 240 : 320;
+  const overlayH = isCircle ? 240 : 180;
+
+  // Scale: aspect-preserving. For 16:9 overlay we use `decrease` then pad —
+  // the webcam is already 16:9 so it lands edge-to-edge with no distortion.
+  // For circle we use `increase` + crop to fill the square without
+  // squashing.
+  const scaleChain = isCircle
+    ? `scale=${overlayW}:${overlayH}:force_original_aspect_ratio=increase,crop=${overlayW}:${overlayH}`
+    : `scale=${overlayW}:${overlayH}:force_original_aspect_ratio=decrease,pad=${overlayW}:${overlayH}:(ow-iw)/2:(oh-ih)/2:black`;
 
   // Position expression.
   const x = input.position === "left" ? `${margin}` : `main_w-overlay_w-${margin}`;
   const y = `main_h-overlay_h-${margin}`;
 
-  // Shape mask: square -> no mask; rounded -> rounded rect; circle -> circle.
-  // For simplicity in v1, we use a separate "format=rgba" + geq mask chain.
+  // Shape mask: square → no mask; rounded → rounded rect; circle → circle.
   let maskChain = "";
-  if (input.shape === "circle") {
+  if (isCircle) {
     maskChain =
       `,format=rgba,geq='r=r(X,Y):g=g(X,Y):b=b(X,Y):a=if(lt(hypot(X-${overlayW / 2},Y-${overlayH / 2}),${Math.min(overlayW, overlayH) / 2}),255,0)'`;
   } else if (input.shape === "rounded") {
@@ -180,7 +190,7 @@ export async function composePip(input: ComposePipInput): Promise<void> {
   }
 
   const filterComplex =
-    `[1:v]scale=${overlayW}:${overlayH}${maskChain}[pip];` +
+    `[1:v]${scaleChain}${maskChain}[pip];` +
     `[0:v][pip]overlay=${x}:${y}:format=auto,format=yuv420p`;
 
   await runFfmpeg([
@@ -301,5 +311,145 @@ export async function generateBlackClip(opts: {
     "-movflags",
     "+faststart",
     opts.outputPath,
+  ]);
+}
+
+// ─── Segment rendering helpers ────────────────────────────────────────────
+
+export interface RenderTextSegmentInput {
+  text: string;
+  bgColor: string;       // #RRGGBB
+  textColor: string;     // #RRGGBB
+  fontSize: number;
+  textAlign: "left" | "center" | "right";
+  fontWeight: "400" | "600" | "700";
+  italic: boolean;
+  durationMs: number;
+  outputPath: string;
+  /** Width / height of the output. Default 1280x720. */
+  width?: number;
+  height?: number;
+}
+
+/**
+ * Render a single text-slide segment to an MP4 file. Uses ffmpeg's drawtext
+ * filter on a solid color background. Multi-line text is split on `\n` and
+ * each line is drawn with vertical spacing.
+ *
+ * Color values are #RRGGBB. The filter syntax requires 0xRRGGBB, so we
+ * convert. Special chars in the text need to be escaped for drawtext.
+ */
+export async function renderTextSegment(input: RenderTextSegmentInput): Promise<void> {
+  const w = input.width ?? 1280;
+  const h = input.height ?? 720;
+  const durationSec = Math.max(0.2, input.durationMs / 1000);
+  const fps = 30;
+  const bg = input.bgColor.replace("#", "0x");
+  const fg = input.textColor.replace("#", "0x");
+
+  // Resolve a font file that exists on the worker image (Debian Bookworm).
+  const fontFile =
+    input.fontWeight === "700"
+      ? "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+      : input.italic
+        ? "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf"
+        : "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+
+  // Split into lines + escape drawtext special characters.
+  const escape = (s: string) =>
+    s
+      .replace(/\\/g, "\\\\")
+      .replace(/:/g, "\\:")
+      .replace(/'/g, "\\'")
+      .replace(/%/g, "\\%");
+
+  const lines = input.text.split(/\r?\n/);
+  const lineHeight = Math.round(input.fontSize * 1.4);
+  const totalTextHeight = lines.length * lineHeight;
+  const startY = `(h - ${totalTextHeight}) / 2`;
+
+  const drawtextFilters = lines
+    .map((line, i) => {
+      const escaped = escape(line);
+      const xExpr =
+        input.textAlign === "left"
+          ? "80"
+          : input.textAlign === "right"
+            ? "(w - text_w - 80)"
+            : "(w - text_w) / 2";
+      const yExpr = `${startY} + ${i * lineHeight}`;
+      return [
+        `drawtext=fontfile=${fontFile}`,
+        `text='${escaped}'`,
+        `fontcolor=${fg}`,
+        `fontsize=${input.fontSize}`,
+        `x=${xExpr}`,
+        `y=${yExpr}`,
+      ].join(":");
+    })
+    .join(",");
+
+  const vfilter = drawtextFilters || "null";
+
+  await runFfmpeg([
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    `color=c=${bg}:s=${w}x${h}:r=${fps}:d=${durationSec}`,
+    "-f",
+    "lavfi",
+    "-i",
+    `anullsrc=channel_layout=stereo:sample_rate=44100`,
+    "-shortest",
+    "-vf",
+    vfilter,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "26",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    "-movflags",
+    "+faststart",
+    input.outputPath,
+  ]);
+}
+
+export interface ConcatClipsInput {
+  /** Ordered list of MP4 paths to concat. All must share codec params. */
+  inputPaths: string[];
+  outputPath: string;
+  /** Working dir for the temporary concat list. */
+  workDir: string;
+}
+
+/**
+ * Concat several MP4 files into one. Uses the demuxer concat method, which
+ * is fast (no re-encode) and works when all inputs share codec parameters.
+ * Since every segment is produced by renderTextSegment / renderBlackClip
+ * with identical libx264/aac settings, this is safe.
+ */
+export async function concatClips(input: ConcatClipsInput): Promise<void> {
+  const listPath = `${input.workDir.replace(/\/$/, "")}/concat-list.txt`;
+  const lines = input.inputPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n");
+  await (await import("node:fs/promises")).writeFile(listPath, lines, "utf-8");
+  await runFfmpeg([
+    "-y",
+    "-f",
+    "concat",
+    "-safe",
+    "0",
+    "-i",
+    listPath,
+    "-c",
+    "copy",
+    input.outputPath,
   ]);
 }
