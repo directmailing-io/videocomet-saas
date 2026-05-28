@@ -1,15 +1,14 @@
 /**
  * Puppeteer capture-recorder.
  *
- * Drives a headless Chromium page through one of four capture modes and
+ * Drives a headless Chromium page through one of two capture modes and
  * writes JPEG frames (≈30 fps) into a temp dir. The caller is responsible
  * for turning those frames into an MP4 (see `imageSeqToMp4` in ffmpeg.ts).
  *
  * Capture modes:
- *   - `static-hero`        Standbild des oberen Bereichs für die gesamte Dauer.
- *   - `smooth-scroll`      Linear top → bottom über die ganze Segment-Dauer.
- *   - `slow-scroll-pauses` Langsam scrollen mit Pausen bei 25/50/75 %.
- *   - `quick-scroll`       Erste Hälfte schnell scrollen, zweite Hälfte halten.
+ *   - `static-hero`     Standbild des oberen Bereichs für die gesamte Dauer.
+ *   - `scroll-recorded` Wiedergabe einer vom Nutzer im Frontend aufgezeichneten
+ *                       Scroll-Sequenz (Liste von { t, y }-Samples).
  *
  * Why per-frame `page.screenshot()` instead of CDP screencast:
  *   The shared worker browser pool (browser-pool.ts) keeps Chromium running
@@ -30,12 +29,16 @@ import type { Page } from "puppeteer-core";
 import { getContext } from "./browser-pool";
 import { dismissCookieBanners } from "./cookie-dismiss";
 
-/** Vier unterstützte Capture-Modi (siehe Modul-Doc oben). */
-export type CaptureMode =
-  | "static-hero"
-  | "smooth-scroll"
-  | "slow-scroll-pauses"
-  | "quick-scroll";
+/** Zwei unterstützte Capture-Modi (siehe Modul-Doc oben). */
+export type CaptureMode = "static-hero" | "scroll-recorded";
+
+/** Ein Scroll-Sample (kompatibel zu `ScrollFrame` aus segments/types). */
+export interface ScrollSample {
+  /** ms since recording start */
+  t: number;
+  /** vertical ratio of the captured image, 0..1 */
+  y: number;
+}
 
 export interface RecordOpts {
   url: string;
@@ -46,6 +49,14 @@ export interface RecordOpts {
   viewport?: { width: number; height: number };
   /** Frames per second. Default 30. */
   fps?: number;
+  /**
+   * Optionale, vom Nutzer im Frontend aufgezeichnete Scroll-Sequenz.
+   * Pflicht (sonst Fallback auf `static-hero`) wenn `mode = "scroll-recorded"`.
+   * `t` ist ms relativ zum Recording-Start, `y` ist ein Ratio in [0, 1] des
+   * captured Documents (NICHT in Pixeln — der Recorder kennt die Pixelhöhe
+   * der Server-fullPage-Capture nicht).
+   */
+  scrollFrames?: ScrollSample[];
 }
 
 export interface RecordResult {
@@ -151,75 +162,63 @@ async function shootFrame(
 }
 
 /**
- * Berechnet für `mode` eine Scroll-Position-pro-Frame-Tabelle (Länge = totalFrames).
- * Werte sind in Pixeln zwischen 0 und maxScroll.
+ * Berechnet eine Scroll-Position-pro-Frame-Tabelle (Länge = totalFrames) aus
+ * einer vom Nutzer aufgezeichneten Sample-Liste. Werte sind in Pixeln zwischen
+ * 0 und maxScroll.
+ *
+ * Algorithmus: für jeden Output-Frame i wird der Zeitpunkt
+ *   t_frame = (i / fps) * 1000 (ms)
+ * berechnet, anschliessend werden die zwei Sample-Punkte gesucht, die
+ * t_frame umklammern, und linear interpoliert.
+ *
+ * Sortiert die Samples nach `t` defensiv, falls der Client sie ungeordnet
+ * schickt. Werte ausserhalb von [0, 1] werden geklemmt.
  */
-function buildScrollPlan(
-  mode: CaptureMode,
+function buildScrollPlanFromFrames(
+  scrollFrames: ScrollSample[],
   totalFrames: number,
   maxScroll: number,
   fps: number,
 ): number[] {
   if (totalFrames <= 0) return [];
-  if (maxScroll <= 0 || mode === "static-hero") {
+  if (maxScroll <= 0 || scrollFrames.length === 0) {
     return new Array(totalFrames).fill(0);
   }
 
+  const sorted = [...scrollFrames].sort((a, b) => a.t - b.t);
   const plan = new Array<number>(totalFrames);
+  const frameIntervalMs = 1000 / fps;
+  const clampRatio = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-  if (mode === "smooth-scroll") {
-    for (let i = 0; i < totalFrames; i++) {
-      const t = totalFrames <= 1 ? 1 : i / (totalFrames - 1);
-      plan[i] = Math.round(t * maxScroll);
-    }
-    return plan;
-  }
+  let cursor = 0; // index of the lower bracket sample
+  for (let i = 0; i < totalFrames; i++) {
+    const tFrame = i * frameIntervalMs;
 
-  if (mode === "quick-scroll") {
-    // Erste Hälfte: linear top → bottom. Zweite Hälfte: bei bottom halten.
-    const halfPoint = Math.max(1, Math.floor(totalFrames / 2));
-    for (let i = 0; i < totalFrames; i++) {
-      if (i >= halfPoint) {
-        plan[i] = maxScroll;
-      } else {
-        const t = halfPoint <= 1 ? 1 : i / (halfPoint - 1);
-        plan[i] = Math.round(t * maxScroll);
-      }
+    // Before the first sample → hold the first y.
+    if (tFrame <= sorted[0].t) {
+      plan[i] = Math.round(clampRatio(sorted[0].y) * maxScroll);
+      continue;
     }
-    return plan;
-  }
+    // After the last sample → hold the last y.
+    const last = sorted[sorted.length - 1];
+    if (tFrame >= last.t) {
+      plan[i] = Math.round(clampRatio(last.y) * maxScroll);
+      continue;
+    }
 
-  // "slow-scroll-pauses": Vier Pausen bei 25 / 50 / 75 / 100 %.
-  // Jede Pause dauert ~1s; die verbleibende Zeit wird gleichmässig auf die
-  // drei Scroll-Phasen (0→25, 25→50, 50→75, 75→100) verteilt.
-  const pauseFrames = Math.min(
-    Math.round(fps), // ≈1s
-    Math.floor(totalFrames / 8), // niemals mehr als ~12 % pro Pause
-  );
-  const safePause = Math.max(1, pauseFrames);
-  const stops = [0.25, 0.5, 0.75, 1.0];
-  const pauseTotal = safePause * stops.length;
-  const moveTotal = Math.max(0, totalFrames - pauseTotal);
-  const moveFramesPerPhase = Math.floor(moveTotal / stops.length);
-
-  let frameIdx = 0;
-  let lastY = 0;
-  for (let s = 0; s < stops.length; s++) {
-    const targetY = Math.round(stops[s] * maxScroll);
-    // Move-Phase: interpoliere von lastY → targetY über moveFramesPerPhase Frames.
-    for (let m = 0; m < moveFramesPerPhase && frameIdx < totalFrames; m++) {
-      const t = moveFramesPerPhase <= 1 ? 1 : m / (moveFramesPerPhase - 1);
-      plan[frameIdx++] = Math.round(lastY + (targetY - lastY) * t);
+    // Advance the cursor until sorted[cursor+1].t > tFrame.
+    while (
+      cursor < sorted.length - 2 &&
+      sorted[cursor + 1].t <= tFrame
+    ) {
+      cursor++;
     }
-    // Pause-Phase: halte targetY für safePause Frames.
-    for (let p = 0; p < safePause && frameIdx < totalFrames; p++) {
-      plan[frameIdx++] = targetY;
-    }
-    lastY = targetY;
-  }
-  // Falls aufgrund Rundungs-Rest noch Frames übrig: am Ende halten.
-  while (frameIdx < totalFrames) {
-    plan[frameIdx++] = maxScroll;
+    const a = sorted[cursor];
+    const b = sorted[cursor + 1];
+    const span = b.t - a.t;
+    const ratio = span <= 0 ? 0 : (tFrame - a.t) / span;
+    const y = clampRatio(a.y + (b.y - a.y) * ratio);
+    plan[i] = Math.round(y * maxScroll);
   }
   return plan;
 }
@@ -290,8 +289,14 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
     const frameIntervalMs = 1000 / fps;
     const totalFrames = Math.max(1, Math.ceil(opts.durationMs / frameIntervalMs));
 
-    // Static-Hero kann optimiert werden: einmal screenshotten, N-mal speichern.
-    if (opts.mode === "static-hero" || maxScroll === 0) {
+    // Static-Hero (oder fehlende Scroll-Frames bei scroll-recorded) kann
+    // optimiert werden: einmal screenshotten, N-mal speichern.
+    const hasFrames =
+      opts.mode === "scroll-recorded" &&
+      Array.isArray(opts.scrollFrames) &&
+      opts.scrollFrames.length > 0;
+
+    if (opts.mode === "static-hero" || maxScroll === 0 || !hasFrames) {
       await scrollPageTo(page, 0);
       const buf = (await page.screenshot({
         type: "jpeg",
@@ -311,7 +316,14 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
       };
     }
 
-    const plan = buildScrollPlan(opts.mode, totalFrames, maxScroll, fps);
+    // scroll-recorded mit Frames: interpoliere Y-Position pro Output-Frame
+    // aus der vom Nutzer aufgezeichneten Sample-Liste und shoote.
+    const plan = buildScrollPlanFromFrames(
+      opts.scrollFrames as ScrollSample[],
+      totalFrames,
+      maxScroll,
+      fps,
+    );
 
     for (let i = 0; i < totalFrames; i++) {
       await scrollPageTo(page, plan[i] ?? 0);
@@ -337,10 +349,14 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
 }
 
 /**
- * @deprecated Use `recordCapture({ mode: 'smooth-scroll', ... })` instead.
+ * @deprecated Use `recordCapture({ mode: 'scroll-recorded', scrollFrames, ... })`
+ * instead.
  *
- * Backwards-compatibility alias: führt einen `smooth-scroll`-Capture mit
- * derselben Signatur wie früher aus.
+ * Backwards-compatibility alias: simuliert das alte `smooth-scroll`-Verhalten
+ * über die neue `scroll-recorded`-Pipeline durch eine synthetisierte
+ * `scrollFrames`-Liste von [{t:0,y:0},{t:durationMs,y:1}], so dass alte
+ * Aufrufer (z.B. der Lead-Fallback in video-render.ts) ohne Änderung
+ * weiterlaufen.
  */
 export async function recordScroll(
   opts: RecordScrollInput,
@@ -349,9 +365,13 @@ export async function recordScroll(
     url: opts.url,
     outputDir: opts.outputDir,
     durationMs: opts.durationMs,
-    mode: "smooth-scroll",
+    mode: "scroll-recorded",
     viewport: opts.viewport,
     fps: opts.fps,
+    scrollFrames: [
+      { t: 0, y: 0 },
+      { t: opts.durationMs, y: 1 },
+    ],
   });
 }
 

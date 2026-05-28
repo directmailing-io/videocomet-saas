@@ -18,23 +18,24 @@ export type CropRatio = "16:9" | "4:3" | "1:1" | "9:16";
 /**
  * Aufnahme-Modi für Website- und Google-Docs-Segmente.
  *
- * - `static-hero`        Standbild des oberen Bereichs (nach Cookie-Dismiss).
- * - `smooth-scroll`      Lineares Scrollen von oben nach unten über die Dauer.
- * - `slow-scroll-pauses` Langsam scrollen mit kurzen Pausen bei 25/50/75 %.
- * - `quick-scroll`       Erste Hälfte schnell scrollen, zweite Hälfte halten.
+ * - `static-hero`     Standbild des oberen Bereichs (nach Cookie-Dismiss).
+ * - `scroll-recorded` Wiedergabe der vom Nutzer interaktiv aufgezeichneten
+ *                     Scroll-Bewegung über einer fullPage-Vorschau.
  */
-export type WebCaptureMode =
-  | "static-hero"
-  | "smooth-scroll"
-  | "slow-scroll-pauses"
-  | "quick-scroll";
+export type WebCaptureMode = "static-hero" | "scroll-recorded";
 
-/** Keyframe für Scroll-Animation (Website/GDocs). */
-export interface ScrollKeyframe {
-  /** Zeitpunkt in Millisekunden, relativ zum Segment-Start. */
-  time: number;
-  /** Vertikale Scroll-Position in Pixeln. */
-  scrollY: number;
+/**
+ * Ein einzelner Scroll-Frame aus dem interaktiven Recorder.
+ *
+ * Der Frontend-Recorder zeichnet die vertikale Scroll-Position eines
+ * fullPage-Screenshots als zeitgestempelte Sample-Liste auf. Der Worker
+ * spielt diese Sequenz beim Render frame-by-frame ab.
+ */
+export interface ScrollFrame {
+  /** ms since recording start */
+  t: number;
+  /** vertical ratio of the captured image, 0..1 */
+  y: number;
 }
 
 /** Basis-Felder, die jedes Segment besitzt. */
@@ -105,8 +106,8 @@ export interface WebsiteSegment extends SegmentBase {
   /** Fallback-URL, falls Lead keinen Wert in urlColumn hat. */
   fallbackUrl: string;
   captureMode: WebCaptureMode;
-  /** Optional, nur relevant bei captureMode = "scroll". */
-  scrollKeyframes?: ScrollKeyframe[];
+  /** Optional, nur relevant bei captureMode = "scroll-recorded". */
+  scrollFrames?: ScrollFrame[];
 }
 
 export interface GDocsSegment extends SegmentBase {
@@ -114,8 +115,8 @@ export interface GDocsSegment extends SegmentBase {
   /** Public Google-Docs-URL. */
   docsUrl: string;
   captureMode: WebCaptureMode;
-  /** Optional, nur relevant bei captureMode = "scroll". */
-  scrollKeyframes?: ScrollKeyframe[];
+  /** Optional, nur relevant bei captureMode = "scroll-recorded". */
+  scrollFrames?: ScrollFrame[];
 }
 
 /** Diskriminierte Union aller Segment-Varianten. */

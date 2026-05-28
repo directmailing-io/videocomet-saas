@@ -17,7 +17,9 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { pipelineWorker } from "./queue";
+import { screenshotWorker, type ScreenshotJobData } from "./screenshot-queue";
 import { pipelineProcessor } from "./processors/pipeline";
+import { screenshotProcessor } from "./processors/screenshot";
 import { closeBrowserPool } from "./lib/browser-pool";
 import {
   startHeartbeat,
@@ -63,6 +65,35 @@ async function main(): Promise<void> {
     log("error", "worker error:", err.message);
   });
 
+  // Screenshot worker — runs in the same process so it shares the same
+  // browser pool. Concurrency is controlled separately via
+  // SCREENSHOT_WORKER_CONCURRENCY (default 2).
+  const screenshotW = screenshotWorker(async (job: Job<ScreenshotJobData>) => {
+    incrementInFlight();
+    try {
+      log("info", `screenshot start job=${job.id} screenshotJob=${job.data.jobId}`);
+      const result = await screenshotProcessor(job);
+      log("info", `screenshot done  job=${job.id} screenshotJob=${job.data.jobId}`);
+      return result;
+    } catch (err) {
+      log(
+        "error",
+        `screenshot fail  job=${job?.id} screenshotJob=${job?.data?.jobId}`,
+        err,
+      );
+      throw err;
+    } finally {
+      decrementInFlight();
+    }
+  });
+
+  screenshotW.on("failed", (job, err) => {
+    log("error", `screenshot job ${job?.id} failed:`, err?.message);
+  });
+  screenshotW.on("error", (err) => {
+    log("error", "screenshot worker error:", err.message);
+  });
+
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {
     if (shuttingDown) return;
@@ -72,6 +103,11 @@ async function main(): Promise<void> {
       await worker.close(); // waits for in-flight jobs
     } catch (err) {
       log("error", "worker close failed:", err);
+    }
+    try {
+      await screenshotW.close();
+    } catch (err) {
+      log("error", "screenshot worker close failed:", err);
     }
     try {
       await closeBrowserPool();

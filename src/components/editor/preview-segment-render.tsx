@@ -28,10 +28,8 @@ import type {
 
 /** Lesbare deutsche Labels für die Aufnahme-Modi (Preview-Badge). */
 const CAPTURE_MODE_LABELS: Record<WebCaptureMode, string> = {
-  "static-hero": "Statisches Bild",
-  "smooth-scroll": "Sanftes Scrollen",
-  "slow-scroll-pauses": "Langsam mit Pausen",
-  "quick-scroll": "Schnelles Scrollen",
+  "static-hero": "Statisch",
+  "scroll-recorded": "Scroll-Aufnahme",
 };
 
 /* ------------------------------------------------------------------ */

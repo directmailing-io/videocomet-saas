@@ -299,7 +299,8 @@ async function renderSegmentsBase(opts: {
             url,
             outputDir: join(opts.outDir, `scroll-${i}`),
             durationMs,
-            mode: seg.captureMode,
+            mode: seg.captureMode ?? "static-hero",
+            scrollFrames: seg.scrollFrames,
           });
           await imageSeqToMp4({
             framesDir: fr.framesDir,
@@ -320,7 +321,8 @@ async function renderSegmentsBase(opts: {
             url,
             outputDir: join(opts.outDir, `gdocs-${i}`),
             durationMs,
-            mode: seg.captureMode,
+            mode: seg.captureMode ?? "static-hero",
+            scrollFrames: seg.scrollFrames,
           });
           await imageSeqToMp4({
             framesDir: fr.framesDir,

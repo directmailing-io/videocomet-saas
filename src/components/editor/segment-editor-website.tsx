@@ -1,11 +1,24 @@
 "use client";
 
 import * as React from "react";
-import { Info, Image as ImageIcon, MoveVertical, Pause, FastForward } from "lucide-react";
+import {
+  Info,
+  Image as ImageIcon,
+  MoveVertical,
+  Camera,
+  CheckCircle2,
+  AlertTriangle,
+} from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { WebCaptureMode, WebsiteSegment } from "@/lib/segments/types";
+import type {
+  WebCaptureMode,
+  WebsiteSegment,
+  ScrollFrame,
+} from "@/lib/segments/types";
+import { ScrollRecorderModal } from "./scroll-recorder-modal";
 
 interface SegmentEditorWebsiteProps {
   segment: WebsiteSegment;
@@ -19,38 +32,47 @@ interface CaptureModeOption {
   Icon: React.ComponentType<{ className?: string }>;
 }
 
-/** Vier Aufnahme-Modi mit knapper, deutscher Microcopy. */
 const CAPTURE_MODES: CaptureModeOption[] = [
   {
     value: "static-hero",
-    title: "Statisches Bild (Hero)",
+    title: "Statisches Bild",
     description: "Zeigt nur den oberen Bereich der Webseite, ohne Scrollen.",
     Icon: ImageIcon,
   },
   {
-    value: "smooth-scroll",
-    title: "Sanftes Scrollen",
-    description: "Scrollt gleichmäßig von oben nach unten über die ganze Segment-Dauer.",
+    value: "scroll-recorded",
+    title: "Scroll-Aufnahme",
+    description: "Du scrollst selbst durch das Dokument, der Worker spielt es 1:1 nach.",
     Icon: MoveVertical,
   },
-  {
-    value: "slow-scroll-pauses",
-    title: "Langsam mit Pausen",
-    description: "Scrollt langsam mit kurzen Pausen, gut für Lese-Pausen.",
-    Icon: Pause,
-  },
-  {
-    value: "quick-scroll",
-    title: "Schnelles Scrollen",
-    description: "Schnell oben nach unten, danach Standbild.",
-    Icon: FastForward,
-  },
 ];
+
+function isValidUrl(url: string): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function formatMs(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 100) / 10);
+  return `${s.toFixed(1)}s`;
+}
 
 export function SegmentEditorWebsite({
   segment,
   onChange,
 }: SegmentEditorWebsiteProps) {
+  const [recorderOpen, setRecorderOpen] = React.useState(false);
+  const previewUrl = segment.fallbackUrl.trim();
+  const previewUrlValid = isValidUrl(previewUrl);
+  const frames = segment.scrollFrames ?? [];
+  const hasFrames = frames.length > 0;
+  const lastT = hasFrames ? frames[frames.length - 1].t : 0;
+
   return (
     <div className="space-y-5">
       <div>
@@ -96,21 +118,83 @@ export function SegmentEditorWebsite({
         </div>
       </div>
 
+      {segment.captureMode === "scroll-recorded" && (
+        <div className="rounded-squircle-md border border-line bg-surface p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span
+                className={cn(
+                  "flex size-9 shrink-0 items-center justify-center rounded-squircle-sm",
+                  hasFrames
+                    ? "bg-brand-soft text-brand-deep"
+                    : "bg-surface-soft text-ink-muted",
+                )}
+              >
+                {hasFrames ? (
+                  <CheckCircle2 className="size-4" />
+                ) : (
+                  <Camera className="size-4" />
+                )}
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-ink">
+                  Scroll-Aufnahme
+                </p>
+                <p className="text-xs text-ink-muted">
+                  {hasFrames
+                    ? `${frames.length} Frames, ${formatMs(lastT)} aufgezeichnet.`
+                    : "Noch keine Aufnahme."}
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant={hasFrames ? "subtle" : "brand"}
+              size="sm"
+              onClick={() => setRecorderOpen(true)}
+              disabled={!previewUrlValid}
+              iconLeft={<Camera className="size-3.5" />}
+            >
+              {hasFrames ? "Erneut aufzeichnen" : "Aufnahme aufzeichnen"}
+            </Button>
+          </div>
+          {!previewUrlValid && (
+            <div className="mt-3 flex gap-2 rounded-squircle-sm bg-warning/10 p-3 text-xs text-warning">
+              <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+              <span>
+                Bitte zuerst eine gültige Fallback-URL eintragen, damit eine
+                Vorschau geladen werden kann.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex gap-3 rounded-squircle-sm border border-brand-200 bg-brand-soft p-4 text-sm text-brand-deep">
         <Info className="size-4 shrink-0 mt-0.5" />
         <p>
-          Beim Generieren wird die echte URL des Leads aufgenommen. Die Fallback-URL
-          erscheint nur in der Vorschau bzw. wenn die Spalte leer ist.
+          Beim Generieren wird die echte URL des Leads aufgenommen. Im Modus
+          „Scroll-Aufnahme" spielt der Worker deine Scroll-Bewegungen 1:1
+          über das Lead-Dokument nach.
         </p>
       </div>
+
+      {recorderOpen && (
+        <ScrollRecorderModal
+          open={recorderOpen}
+          onClose={() => setRecorderOpen(false)}
+          targetUrl={previewUrl}
+          segmentDurationMs={segment.durationMs}
+          initialFrames={segment.scrollFrames}
+          onSave={(scrollFrames: ScrollFrame[]) =>
+            onChange({ ...segment, scrollFrames })
+          }
+        />
+      )}
     </div>
   );
 }
 
-/**
- * Apple/AirBNB-style Auswahl-Karte für einen Capture-Modus.
- * Click setzt onSelect; selected zeigt einen ring-2 ring-brand Marker.
- */
 function CaptureModeCard({
   option,
   selected,
