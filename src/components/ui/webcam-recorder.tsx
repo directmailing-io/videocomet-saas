@@ -47,10 +47,15 @@ export interface WebcamRecorderProps {
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "video/webm";
+  // Order matters. vp8+opus produces a webm whose intrinsic videoWidth /
+  // videoHeight is correctly populated by the <video> decoder in Chrome and
+  // Firefox; vp9 frequently reports width=2 height=2 = unplayable preview.
+  // mp4 last for Safari.
   const candidates = [
-    "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
+    "video/webm;codecs=vp8",
     "video/webm",
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
     "video/mp4",
   ];
   for (const m of candidates) {
@@ -118,11 +123,25 @@ export function WebcamRecorder({
     setRecordError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720, facingMode: "user" },
+        video: {
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, max: 60 },
+          aspectRatio: { ideal: 16 / 9 },
+          facingMode: { ideal: "user" },
+        },
         audio: true,
       });
       streamRef.current = stream;
       setHasStream(true);
+      // Log actual track settings so we know what resolution we got.
+      const vt = stream.getVideoTracks()[0];
+      if (vt) {
+        const s = vt.getSettings();
+        console.log(
+          `[webcam-recorder] video track: ${s.width}x${s.height} @${s.frameRate}fps`,
+        );
+      }
       if (liveVideoRef.current) {
         liveVideoRef.current.srcObject = stream;
         liveVideoRef.current.play().catch(() => {});
@@ -187,54 +206,20 @@ export function WebcamRecorder({
       console.error("[webcam-recorder] recorder error:", e);
       setRecordError("Aufnahmefehler. Bitte erneut versuchen.");
     };
-    rec.onstop = async () => {
+    rec.onstop = () => {
       clearTimers();
       const totalBytes = chunksRef.current.reduce((s, c) => s + c.size, 0);
       const recordedMs = Date.now() - (recordingStartMsRef.current ?? Date.now());
       console.log(
-        `[webcam-recorder] onstop: chunks=${chunksRef.current.length} totalBytes=${totalBytes} recordedMs=${recordedMs}`,
+        `[webcam-recorder] onstop: chunks=${chunksRef.current.length} totalBytes=${totalBytes} recordedMs=${recordedMs} mime=${mimeRef.current}`,
       );
-      let blob = new Blob(chunksRef.current, { type: mimeRef.current });
-      console.log(
-        `[webcam-recorder] raw blob: type=${blob.type} size=${blob.size}`,
-      );
+      const blob = new Blob(chunksRef.current, { type: mimeRef.current });
       if (blob.size === 0) {
         setRecordError(
           "Aufnahme war leer. Bitte erneut versuchen (mindestens 1 Sekunde aufnehmen).",
         );
         setState("preview");
         return;
-      }
-      // MediaRecorder produces webm without a Duration field in the EBML header,
-      // which makes <video> show a black frame and refuse to seek. Patch the
-      // header so the browser knows the actual duration.
-      if (mimeRef.current.includes("webm") && recordedMs > 0) {
-        console.log("[webcam-recorder] attempting webm duration patch …");
-        const fixFn = getFixFn();
-        try {
-          const patchPromise = fixFn(blob, recordedMs, { logger: false });
-          // Add a hard timeout — if the lib hangs, fall back to the raw blob.
-          const fixed = await Promise.race([
-            patchPromise,
-            new Promise<Blob>((_resolve, reject) =>
-              setTimeout(() => reject(new Error("patch-timeout")), 3000),
-            ),
-          ]);
-          if (fixed instanceof Blob && fixed.size > 0) {
-            blob = fixed;
-            console.log(
-              `[webcam-recorder] webm duration patched: ${recordedMs}ms newSize=${blob.size}`,
-            );
-          } else {
-            console.warn("[webcam-recorder] patch returned non-Blob:", fixed);
-          }
-        } catch (e) {
-          console.warn("[webcam-recorder] webm duration fix failed:", e);
-        }
-      } else {
-        console.log(
-          `[webcam-recorder] skipping webm patch (mime=${mimeRef.current}, recordedMs=${recordedMs})`,
-        );
       }
       setRecordedBlob(blob);
       const url = URL.createObjectURL(blob);
