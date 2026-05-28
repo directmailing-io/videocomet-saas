@@ -1,46 +1,14 @@
 import Link from "next/link";
-import { Megaphone, Plus, MoreHorizontal, Pencil, Copy, Trash2 } from "lucide-react";
+import { Megaphone, Plus } from "lucide-react";
 import { requireUser } from "@/lib/auth-guard";
 import { listUserCampaigns } from "@/lib/db/queries/campaigns";
 import { db } from "@/lib/db";
 import { runs } from "@/lib/db/schema";
-import { eq, sql, inArray } from "drizzle-orm";
+import { sql, inArray } from "drizzle-orm";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-
-function modeLabel(mode: string): string {
-  if (mode === "with-presentation") return "Mit Präsentation";
-  return "Nur Webcam";
-}
-
-function formatDate(d: Date | null): string {
-  if (!d) return "";
-  try {
-    return new Intl.DateTimeFormat("de-DE", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }).format(new Date(d));
-  } catch {
-    return "";
-  }
-}
+import { KampagnenList, type KampagnenListItem } from "./kampagnen-list";
 
 export default async function KampagnenPage() {
   const { user } = await requireUser();
@@ -61,6 +29,14 @@ export default async function KampagnenPage() {
     runsByCampaign = new Map(rows.map((r) => [r.campaignId, r.count ?? 0]));
   }
 
+  const listItems: KampagnenListItem[] = items.map((c) => ({
+    id: c.id,
+    name: c.name,
+    mode: c.mode,
+    createdAt: c.createdAt,
+    runCount: runsByCampaign.get(c.id) ?? 0,
+  }));
+
   return (
     <>
       <PageHeader
@@ -73,7 +49,7 @@ export default async function KampagnenPage() {
         }
       />
 
-      {items.length === 0 ? (
+      {listItems.length === 0 ? (
         <EmptyState
           icon={<Megaphone />}
           title="Noch keine Kampagnen"
@@ -85,66 +61,7 @@ export default async function KampagnenPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {items.map((c) => {
-            const runCount = runsByCampaign.get(c.id) ?? 0;
-            return (
-              <Card key={c.id} hover className="relative overflow-visible">
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <CardTitle className="truncate">{c.name}</CardTitle>
-                      <CardDescription className="mt-1">
-                        Erstellt am {formatDate(c.createdAt)}
-                      </CardDescription>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          className="inline-flex size-8 items-center justify-center rounded-full hover:bg-line-soft transition-colors"
-                          aria-label="Kampagnen-Aktionen"
-                        >
-                          <MoreHorizontal className="size-4 text-ink-muted" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/kampagnen/${c.id}`}>
-                            <Pencil className="size-4 text-ink-muted" />
-                            Bearbeiten
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem disabled>
-                          <Copy className="size-4 text-ink-muted" />
-                          Duplizieren
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem disabled danger>
-                          <Trash2 className="size-4" />
-                          Löschen
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <Link
-                    href={`/kampagnen/${c.id}`}
-                    className="absolute inset-0 z-0 rounded-squircle-md"
-                    aria-label={`${c.name} öffnen`}
-                  />
-                  <div className="relative z-10 flex items-center gap-2 flex-wrap pointer-events-none">
-                    <Badge variant="brand">{modeLabel(c.mode)}</Badge>
-                    <Badge variant="neutral">
-                      {runCount} {runCount === 1 ? "Runde" : "Runden"}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+        <KampagnenList items={listItems} />
       )}
     </>
   );
