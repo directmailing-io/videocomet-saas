@@ -26,10 +26,16 @@ interface HtmlCacheEntry {
   fetchedAt: number;
 }
 
+interface TitleCacheEntry {
+  title: string;
+  fetchedAt: number;
+}
+
 // Module-level cache. The worker is a long-running process, so this survives
 // across BullMQ jobs.
 const docxCache = new Map<string, CacheEntry>();
 const htmlCache = new Map<string, HtmlCacheEntry>();
+const titleCache = new Map<string, TitleCacheEntry>();
 
 const ALLOWED_CONTENT_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -187,8 +193,53 @@ export async function fetchGoogleDocAsHtml(url: string): Promise<string> {
   return html;
 }
 
+/**
+ * Holt den echten Doc-Namen von der öffentlichen `/preview` Seite.
+ * Google liefert im `<title>` Tag "DOCNAME - Google Docs" (oder
+ * "DOCNAME - Google Drive" für nicht-Docs-Files).
+ *
+ * Liefert leeren String wenn nichts gefunden — Caller entscheidet
+ * über Fallback. Cache 5 Minuten.
+ */
+export async function fetchGoogleDocTitle(url: string): Promise<string> {
+  const docId = extractGoogleDocId(url);
+  const cached = titleCache.get(docId);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.title;
+  }
+
+  const previewUrl = `https://docs.google.com/document/d/${docId}/preview`;
+  let title = "";
+  try {
+    const res = await fetch(previewUrl, { redirect: "follow" });
+    if (res.ok) {
+      const html = await res.text();
+      const m = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
+      if (m) {
+        let raw = m[1]
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/&apos;/g, "'")
+          .trim();
+        // Strip Google's " - Google Docs" / " - Google Drive" Suffix.
+        raw = raw.replace(/\s*[-–]\s*Google\s+(Docs|Drive)\s*$/i, "");
+        title = raw;
+      }
+    }
+  } catch {
+    // Netzwerk/Parse-Fehler -> empty fallback.
+  }
+
+  titleCache.set(docId, { title, fetchedAt: Date.now() });
+  return title;
+}
+
 /** Test helper: drop all cached DOCX entries. */
 export function _clearGoogleDocsCache(): void {
   docxCache.clear();
   htmlCache.clear();
+  titleCache.clear();
 }

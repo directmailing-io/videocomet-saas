@@ -15,7 +15,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # System tools required by the worker pipeline.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl tini fonts-liberation fonts-noto-core fonts-noto-extra fonts-dejavu-core \
+      ca-certificates curl tini fonts-liberation fonts-noto-core fonts-noto-extra fonts-dejavu-core fonts-roboto \
       ffmpeg ghostscript imagemagick poppler-utils \
       libreoffice-core libreoffice-writer libreoffice-common \
       chromium chromium-sandbox \

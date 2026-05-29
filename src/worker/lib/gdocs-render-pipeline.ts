@@ -30,6 +30,7 @@ import { open as openFile } from "node:fs/promises";
 import {
   fetchGoogleDocAsDocx,
   extractGoogleDocId,
+  fetchGoogleDocTitle,
 } from "./google-docs";
 import { loadDocx, replacePlaceholders, saveDocx, getDocxTitle } from "./docx";
 import { convertDocxToPdf } from "./libreoffice";
@@ -103,11 +104,16 @@ async function composePdfToPages(opts: {
   const docxBuffer = await fetchGoogleDocAsDocx(opts.docsUrl);
 
   // 2. Optional placeholder substitution + Title-Extraktion.
-  // Wir laden den DOCX immer (auch ohne vars), um den Doc-Titel aus
-  // docProps/core.xml zu holen — der wandert in die Toolbar.
+  // Google's DOCX-Export schreibt keine docProps/core.xml — daher
+  // ist getDocxTitle() typischerweise leer. Wir holen den echten Doc-
+  // Namen stattdessen von der /preview-Seite (siehe fetchGoogleDocTitle).
   let processedDocx = docxBuffer;
   const loaded = loadDocx(docxBuffer);
-  const docTitle = getDocxTitle(loaded.zip);
+  const docxTitle = getDocxTitle(loaded.zip);
+  const googleTitle = docxTitle
+    ? ""
+    : await fetchGoogleDocTitle(opts.docsUrl).catch(() => "");
+  const docTitle = docxTitle || googleTitle || "Dokument";
   if (opts.vars && Object.keys(opts.vars).length > 0) {
     replacePlaceholders(loaded.zip, opts.vars);
     processedDocx = saveDocx(loaded.zip);
