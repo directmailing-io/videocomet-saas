@@ -16,6 +16,7 @@ import type { Job } from "bullmq";
 import { db } from "@/lib/db";
 import { campaigns, leads, mediaItems, runs } from "@/lib/db/schema";
 import { updateLeadStatus } from "@/lib/db/queries/leads";
+import { finalizeRunIfAllLeadsDone } from "@/lib/db/queries/runs";
 import type { LeadJobData } from "../types";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
 import { runVideoRender } from "./video-render";
@@ -256,6 +257,16 @@ export async function pipelineProcessor(
       completedAt: new Date(),
     });
 
+    // Run-Finalizer: wenn dies der letzte ausstehende Lead war, Run als
+    // completed markieren. Idempotent — mehrere Lead-Jobs koennen den Check
+    // gleichzeitig anstossen, nur der erste UPDATE faengt.
+    await finalizeRunIfAllLeadsDone(data.runId).catch((err) => {
+      console.warn(
+        `[pipeline] finalizeRunIfAllLeadsDone failed for run=${data.runId}:`,
+        err instanceof Error ? err.message : err,
+      );
+    });
+
     return {
       ok: true,
       bunnyVideoId: upload.bunnyVideoId,
@@ -268,6 +279,9 @@ export async function pipelineProcessor(
       status: "failed",
       errorMessage: message.slice(0, 1000),
     });
+    // Auch im Fehlerfall den Run-Status checken — sonst haengt der Run
+    // wenn der letzte Lead failt.
+    await finalizeRunIfAllLeadsDone(data.runId).catch(() => undefined);
     throw err;
   } finally {
     await cleanupTempDir(workDir);

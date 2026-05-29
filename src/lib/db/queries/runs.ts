@@ -32,6 +32,46 @@ export async function updateRun(
   return row;
 }
 
+/**
+ * Setzt den Run-Status auf "completed", wenn ALLE Leads einen terminalen
+ * Status haben (completed oder failed) und der Run noch nicht abgeschlossen
+ * ist. Idempotent: mehrere Calls sind sicher (UPDATE-WHERE-Filter blockt
+ * Doppel-Schreibungen).
+ *
+ * Wird vom Worker am Ende jedes Lead-Jobs aufgerufen, weil es im aktuellen
+ * Pipeline-Setup keinen separaten "Run-Finalizer"-Job gibt.
+ */
+export async function finalizeRunIfAllLeadsDone(runId: string): Promise<{
+  finalized: boolean;
+  total: number;
+  done: number;
+}> {
+  const rows = (await db.execute(sql`
+    SELECT
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE ${leads.status} IN ('completed', 'failed'))::int AS done
+    FROM ${leads}
+    WHERE ${leads.runId} = ${runId}
+  `)) as unknown as Array<{ total: number; done: number }>;
+  const r = Array.isArray(rows) ? rows[0] : (rows as { rows?: Array<{ total: number; done: number }> }).rows?.[0];
+  const total = Number(r?.total ?? 0);
+  const done = Number(r?.done ?? 0);
+  if (total === 0 || done < total) {
+    return { finalized: false, total, done };
+  }
+  const result = await db
+    .update(runs)
+    .set({ status: "completed", completedAt: new Date() })
+    .where(
+      and(
+        eq(runs.id, runId),
+        sql`${runs.status} NOT IN ('completed', 'failed', 'cancelled')`,
+      ),
+    )
+    .returning({ id: runs.id });
+  return { finalized: result.length > 0, total, done };
+}
+
 export async function deleteRun(id: string, userId: string): Promise<void> {
   const result = await db
     .delete(runs)
