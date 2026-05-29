@@ -276,16 +276,57 @@ export async function renderPersonalizedGDocs(
     })) as Buffer;
 
     // 2) Snapshot des Doc-Bereichs OHNE Toolbar. Wir entfernen die
-    //    fixed Toolbar + das Body-Padding, so dass der fullPage-
-    //    Screenshot pixelgenau den scrollbaren Bereich liefert.
-    await page.evaluate(() => {
-      const bar = document.querySelector(".gd-toolbar") as HTMLElement | null;
-      if (bar) bar.style.display = "none";
-      document.body.style.paddingTop = "0";
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-      window.scrollTo(0, 0);
-    });
+    //    fixed Toolbar VOLLSTÄNDIG aus dem DOM (nicht display:none — das
+    //    hatte in der Praxis Race-Conditions mit dem fullPage-Reflow, so
+    //    dass die Toolbar im docPngBuf landete und im Video als zweite,
+    //    scrollende Toolbar sichtbar wurde) und neutralisieren alle
+    //    Layout-Reservierungen (Body-Padding, min-height, doc-stack
+    //    margin-top), damit der fullPage-Screenshot pixelgenau bei y=0
+    //    mit der ersten Doc-Page beginnt.
+    await page.evaluate(
+      (toolbarHeight: number) => {
+        const bar = document.querySelector(".gd-toolbar");
+        if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
+
+        // Body-Layout neutralisieren. Wir setzen Inline-Styles mit
+        // setProperty(..., "important"), damit kein Cascade-Regel das
+        // wieder zurückdreht.
+        const body = document.body;
+        body.style.setProperty("padding-top", "0", "important");
+        body.style.setProperty("padding-bottom", "0", "important");
+        body.style.setProperty("margin", "0", "important");
+        body.style.setProperty("min-height", "0", "important");
+
+        // doc-stack margin-top auf 0 — sonst hat der docPngBuf oben 24px
+        // grauen Bereich, der beim Cropping als "leerer Vorlauf" auftaucht.
+        const stack = document.querySelector(".gd-doc-stack") as
+          | HTMLElement
+          | null;
+        if (stack) {
+          stack.style.setProperty("margin-top", "0", "important");
+          stack.style.setProperty("margin-bottom", "0", "important");
+        }
+        // Avoid using the toolbar height — we removed the toolbar entirely.
+        void toolbarHeight;
+
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+        window.scrollTo(0, 0);
+      },
+      GDOCS_TOOLBAR_HEIGHT_PX,
+    );
+
+    // Zwei rAFs warten — der erste schickt unseren Style-Reset durch den
+    // Layout-Cycle, der zweite stellt sicher, dass die Compositor-Pass
+    // abgeschlossen ist, bevor Puppeteer den fullPage-Snapshot triggert
+    // (was intern den Viewport auf scrollHeight resized — wenn scrollHeight
+    // hier noch den alten Wert liefert, klebt die Toolbar im PNG).
+    await page.evaluate(
+      () =>
+        new Promise<void>((r) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => r())),
+        ),
+    );
 
     const docPngBuf = (await page.screenshot({
       type: "png",

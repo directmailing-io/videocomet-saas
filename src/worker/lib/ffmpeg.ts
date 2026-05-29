@@ -14,9 +14,37 @@
  */
 
 import { spawn } from "node:child_process";
+import { dirname, join } from "node:path";
+import sharp from "sharp";
 
 function ffmpegPath(): string {
   return process.env.FFMPEG_PATH ?? "/usr/bin/ffmpeg";
+}
+
+/**
+ * Render a rounded-rectangle alpha mask to `outPath`. The PNG is RGBA: pixels
+ * inside the rounded rect are white+opaque (a=255), pixels outside the corners
+ * are transparent (a=0). Designed to be consumed by ffmpeg's `alphamerge`
+ * filter, which takes the alpha channel of input #2 and merges it into input
+ * #1. The radius defaults to ~14% of the smaller dimension — that's the
+ * "Apple-icon squircle" feel that designers usually mean when they say
+ * "abgerundet".
+ */
+async function writeRoundedRectMaskPng(opts: {
+  width: number;
+  height: number;
+  radius?: number;
+  outPath: string;
+}): Promise<void> {
+  const { width, height } = opts;
+  const radius = opts.radius ?? Math.round(Math.min(width, height) * 0.14);
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect x="0" y="0" width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="#ffffff"/>
+</svg>`;
+  await sharp(Buffer.from(svg, "utf-8"))
+    .png()
+    .toFile(opts.outPath);
 }
 
 /**
@@ -172,29 +200,51 @@ export async function composePip(input: ComposePipInput): Promise<void> {
   const x = input.position === "left" ? `${margin}` : `main_w-overlay_w-${margin}`;
   const y = `main_h-overlay_h-${margin}`;
 
-  // Shape mask: square → no mask; rounded → rounded rect; circle → circle.
+  // Shape mask:
+  //   square  → no mask, plain overlay.
+  //   rounded → sharp-rendered RGBA PNG mask (rounded rectangle, alpha=255
+  //             inside, 0 outside) merged via `alphamerge`. ffmpeg's `geq`
+  //             cannot reliably produce the squircle look at this scale, so
+  //             we pre-bake the mask with sharp/SVG.
+  //   circle  → in-filter `geq` mask (kept as-is from v1; the circular
+  //             cover-cropped scale already gives a clean circle).
   let maskChain = "";
   if (isCircle) {
     maskChain =
       `,format=rgba,geq='r=r(X,Y):g=g(X,Y):b=b(X,Y):a=if(lt(hypot(X-${overlayW / 2},Y-${overlayH / 2}),${Math.min(overlayW, overlayH) / 2}),255,0)'`;
-  } else if (input.shape === "rounded") {
-    // Soft rounded corners via a simple geq mask (24px radius).
-    const r = 24;
-    maskChain =
-      `,format=rgba,geq='r=r(X,Y):g=g(X,Y):b=b(X,Y):a=if(` +
-      `gt(min(min(X,${overlayW}-X),min(Y,${overlayH}-Y)),${r}),255,` +
-      `if(lt(hypot(max(0,${r}-X),max(0,${r}-Y)),${r}),255,` +
-      `if(lt(hypot(max(0,X-(${overlayW}-${r})),max(0,${r}-Y)),${r}),255,` +
-      `if(lt(hypot(max(0,${r}-X),max(0,Y-(${overlayH}-${r}))),${r}),255,` +
-      `if(lt(hypot(max(0,X-(${overlayW}-${r})),max(0,Y-(${overlayH}-${r}))),${r}),255,0)))))'`;
   }
 
-  // We name the final overlay stream [vout] so we can map it explicitly,
-  // and we map ONLY the webcam audio (1:a) — the base track contains
-  // anullsrc silence and would otherwise be picked by ffmpeg's auto-map.
-  const filterComplex =
-    `[1:v]${scaleChain}${maskChain}[pip];` +
-    `[0:v][pip]overlay=${x}:${y}:format=auto,format=yuv420p[vout]`;
+  // Rounded path: generate a one-off mask PNG that sits next to the output
+  // file. Cheap (a few ms, ~kilobytes) and avoids any persistent state on
+  // the worker — every render produces and consumes its own mask.
+  let extraInputs: string[] = [];
+  let filterComplex: string;
+  if (input.shape === "rounded") {
+    const maskPath = join(dirname(input.outputPath), "pip-rounded-mask.png");
+    await writeRoundedRectMaskPng({
+      width: overlayW,
+      height: overlayH,
+      outPath: maskPath,
+    });
+    // `-loop 1` turns the single-frame PNG into an endless video stream so
+    // alphamerge has a frame for every webcam frame. The trailing `-t`
+    // (further down the args list) bounds the overall output duration.
+    extraInputs = ["-loop", "1", "-i", maskPath];
+    // [1:v] = webcam, [2:v] = mask. Scale webcam, take alpha channel from
+    // the mask, then overlay the masked PiP onto the base.
+    filterComplex =
+      `[1:v]${scaleChain},format=yuva420p[w];` +
+      `[2:v]format=rgba[m];` +
+      `[w][m]alphamerge[pip];` +
+      `[0:v][pip]overlay=${x}:${y}:format=auto,format=yuv420p[vout]`;
+  } else {
+    // We name the final overlay stream [vout] so we can map it explicitly,
+    // and we map ONLY the webcam audio (1:a) — the base track contains
+    // anullsrc silence and would otherwise be picked by ffmpeg's auto-map.
+    filterComplex =
+      `[1:v]${scaleChain}${maskChain}[pip];` +
+      `[0:v][pip]overlay=${x}:${y}:format=auto,format=yuv420p[vout]`;
+  }
 
   await runFfmpeg([
     "-y",
@@ -202,6 +252,7 @@ export async function composePip(input: ComposePipInput): Promise<void> {
     input.basePath,
     "-i",
     input.webcamPath,
+    ...extraInputs,
     "-filter_complex",
     filterComplex,
     "-map",
