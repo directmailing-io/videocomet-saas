@@ -106,20 +106,30 @@ const ICON_SHOW_MENUS =
  * Logo mark for the Docs icon — small rounded blue tile with a stylised
  * white "D". Inline SVG so it survives offline embedding.
  */
-// Authentischeres Google-Docs Logo: blauer Hintergrund + weißes Dokument
-// mit gefaltetem oberen-rechten Eck und 4 hellblauen Textlinien.
+// Offizielles Google-Docs Logo (vereinfacht aus der Sketch-Vorlage von
+// commons.wikimedia.org/wiki/File:Google_Docs_logo_(2014-2020).svg).
+// Original-viewBox 47x65, alle Sub-Pfade auf einen einzigen clipPath
+// reduziert. Farben + Geometrie exakt wie im Original.
 const DOCS_LOGO = `
-<svg viewBox="0 0 40 40" width="32" height="32" aria-hidden="true">
-  <!-- Hauptbody: weißes Dokument mit Falt-Eck -->
-  <path d="M9 4 h17 l8 8 v24 a2 2 0 0 1 -2 2 H9 a2 2 0 0 1 -2 -2 V6 a2 2 0 0 1 2 -2 z" fill="#4285F4"/>
-  <path d="M11 7 h13 l6 6 v20 H11 z" fill="#FFFFFF"/>
-  <!-- Falt-Eck rechts oben: hellerer blauer Ton -->
-  <path d="M26 4 v6 a2 2 0 0 0 2 2 h6 z" fill="#A1C2FA"/>
-  <!-- 4 Textlinien -->
-  <rect x="14" y="17" width="13" height="1.5" rx="0.5" fill="#4285F4"/>
-  <rect x="14" y="21" width="13" height="1.5" rx="0.5" fill="#4285F4"/>
-  <rect x="14" y="25" width="13" height="1.5" rx="0.5" fill="#4285F4"/>
-  <rect x="14" y="29" width="9" height="1.5" rx="0.5" fill="#4285F4"/>
+<svg viewBox="0 0 47 65" width="24" height="33" aria-hidden="true">
+  <defs>
+    <linearGradient id="gdocs-fold-grad" x1="50%" y1="8.6%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#1A237E" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#1A237E" stop-opacity="0.02"/>
+    </linearGradient>
+    <clipPath id="gdocs-clip">
+      <path d="M29.375,0 L4.40625,0 C1.9828125,0 0,1.9943 0,4.4318 L0,60.5682 C0,63.0057 1.9828125,65 4.40625,65 L42.59375,65 C45.0171875,65 47,63.0057 47,60.5682 L47,17.7273 L29.375,0 Z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#gdocs-clip)">
+    <rect width="47" height="65" fill="#4285F4"/>
+    <polygon points="30.66 16.43 47 32.86 47 17.73" fill="url(#gdocs-fold-grad)"/>
+    <path d="M29.375,0 L29.375,13.295 C29.375,15.744 31.347,17.727 33.781,17.727 L47,17.727 L29.375,0 Z" fill="#A1C2FA"/>
+    <rect x="11.75" y="32.5" width="23.5" height="2.955" fill="#F1F1F1"/>
+    <rect x="11.75" y="38.41" width="23.5" height="2.955" fill="#F1F1F1"/>
+    <rect x="11.75" y="44.32" width="23.5" height="2.955" fill="#F1F1F1"/>
+    <rect x="11.75" y="50.23" width="17.625" height="2.955" fill="#F1F1F1"/>
+  </g>
 </svg>`;
 
 /* -------------------------------------------------------------------------- */
