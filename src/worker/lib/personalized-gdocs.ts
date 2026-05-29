@@ -50,7 +50,7 @@ export interface RenderGDocsResult {
   fps: number;
 }
 
-const HARD_TIMEOUT_MS = 90_000;
+const HARD_TIMEOUT_MS = 180_000;
 
 /**
  * Wraps a promise with a hard wall-clock timeout.
@@ -205,6 +205,20 @@ export async function renderPersonalizedGDocs(
       deviceScaleFactor: 1,
     });
 
+    // Google's HTML-Export referenziert googleusercontent.com / fonts.gstatic.com.
+    // Wir laden das HTML aus einer file:// URL — externe Resourcen sind reine
+    // Wartezeit (oft >2s pro Bild) und blockieren den Per-Frame-Screenshot.
+    // Lasse nur file:// + data: durch.
+    await page.setRequestInterception(true);
+    page.on("request", (req) => {
+      const u = req.url();
+      if (u.startsWith("file:") || u.startsWith("data:")) {
+        req.continue().catch(() => undefined);
+      } else {
+        req.abort().catch(() => undefined);
+      }
+    });
+
     await page.goto(`file://${tempPath}`, {
       waitUntil: "domcontentloaded",
       timeout: 15_000,
@@ -279,9 +293,10 @@ export async function renderPersonalizedGDocs(
       };
     }
 
+    const captureStart = Date.now();
     // eslint-disable-next-line no-console
     console.log(
-      `[personalized-gdocs] playing back N=${opts.scrollFrames!.length} frames, maxScroll=${maxScroll}, totalFrames=${totalFrames}`,
+      `[personalized-gdocs] playing back N=${opts.scrollFrames!.length} frames, maxScroll=${maxScroll}, totalFrames=${totalFrames}, pageHeight=${pageHeight}`,
     );
 
     const plan = buildScrollPlanFromFrames(
@@ -295,6 +310,11 @@ export async function renderPersonalizedGDocs(
       await scrollPageTo(page, plan[i] ?? 0);
       await shootFrame(page, framesDir, i, viewport);
     }
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `[personalized-gdocs] capture done in ${Date.now() - captureStart}ms (${totalFrames} frames)`,
+    );
 
     return {
       durationSec: opts.durationMs / 1000,
