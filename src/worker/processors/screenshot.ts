@@ -1,25 +1,29 @@
 /**
  * Screenshot processor.
  *
- * Drives a headless Chromium page to capture a fullPage JPEG of an arbitrary
- * URL (typically Google Docs or a website hero) and uploads the result to
- * Bunny Storage under `screenshots/<jobId>.jpg`.
+ * Two flows, branched by URL host:
  *
- * The Next.js API enqueues `ScreenshotJobData` jobs on the `screenshot`
- * BullMQ queue; this processor handles them. Status + result are stashed in
- * Redis under the key `screenshot:<jobId>` (hash) with a 30-minute TTL so
- * stale records don't pile up.
+ *   1) Google-Docs URLs (`docs.google.com`)
+ *      The DOCX is fetched, converted to PDF via LibreOffice, rasterised to
+ *      page PNGs via Poppler, and all artefacts (page-N.png + preview.html
+ *      that wraps them in a pixel-perfect Google-Docs chrome) are uploaded
+ *      to Bunny under `screenshots/<jobId>/`. The Modal can then load the
+ *      preview.html in an iframe and scroll it 1:1 like the final video
+ *      render does. We never run puppeteer for the gdocs path.
+ *      The result is written to Redis as:
+ *        previewUrl, pageImageUrls (JSON array), docWidth, docHeight,
+ *        pageCount.
  *
- * Special handling:
- *   - Google Docs URLs (`docs.google.com`) are rewritten to `/preview` so
- *     the editor chrome is hidden; we also wait briefly for the `.kix-page`
- *     content selector before measuring/shooting.
- *   - Cookie banners are dismissed (best effort) so the captured hero is
- *     clean.
+ *   2) Website URLs
+ *      A headless Chromium page captures a fullPage JPEG and uploads it to
+ *      `screenshots/<jobId>.jpg`. Cookie banners are dismissed best-effort.
+ *      Result written to Redis as: imageUrl, width, height.
  *
- * Failure modes:
+ * Status hash is `screenshot:<jobId>` with a 30-minute TTL.
+ *
+ * Failure modes (both flows):
  *   - URL invalid / unreachable     → status = "failed", error = message
- *   - page.goto timeout             → status = "failed"
+ *   - page.goto / pipeline timeout  → status = "failed"
  *   - Upload to Bunny fails         → status = "failed"
  *   - Anything else thrown          → status = "failed"
  */
@@ -29,10 +33,7 @@ import type { Page } from "puppeteer-core";
 import { uploadFile } from "@/lib/bunny/storage";
 import { getContext } from "../lib/browser-pool";
 import { dismissCookieBanners } from "../lib/cookie-dismiss";
-import {
-  renderGDocsToHtml,
-  cleanupRenderedGDocs,
-} from "../lib/gdocs-render-pipeline";
+import { renderGDocsToBunnyHostedHtml } from "../lib/gdocs-render-pipeline";
 import {
   getScreenshotJobRedisKey,
   SCREENSHOT_REDIS_TTL_SECONDS,
@@ -46,53 +47,12 @@ const GOTO_TIMEOUT_MS = 30_000;
 const VIEWPORT = { width: 1280, height: 800 };
 
 /**
- * Detects Google-Docs URLs and rewrites them to the public `/preview` view
- * which has no editor toolbars or sidebars — perfect for a clean capture.
- *
- * Handles common shapes:
- *   - …/document/d/<id>/edit?…   → …/document/d/<id>/preview
- *   - …/document/d/<id>/edit     → …/document/d/<id>/preview
- *   - …/document/d/<id>          → …/document/d/<id>/preview
- *   - …/document/d/<id>/view…    → …/document/d/<id>/preview
- *
- * Returns the original URL unchanged for any non-docs.google.com host.
- */
-function rewriteGoogleDocsUrl(input: string): string {
-  let parsed: URL;
-  try {
-    parsed = new URL(input);
-  } catch {
-    return input;
-  }
-  if (parsed.hostname !== "docs.google.com") return input;
-
-  // Strip trailing slash for predictable matching.
-  let path = parsed.pathname.replace(/\/+$/, "");
-  // Replace whatever sits after /d/<id> with /preview.
-  path = path.replace(
-    /(\/document\/d\/[^/]+)(?:\/(?:edit|view|preview)(?:[/?#].*)?)?$/i,
-    "$1/preview",
-  );
-  parsed.pathname = path;
-  // Preview view does not need any query params.
-  parsed.search = "";
-  parsed.hash = "";
-  return parsed.toString();
-}
-
-/** Best-effort: wait for the Google-Docs `.kix-page` selector. */
-async function waitForKixPages(page: Page): Promise<void> {
-  try {
-    await page.waitForSelector(".kix-page, .kix-page-content-wrap", {
-      timeout: 5_000,
-    });
-  } catch {
-    // Fall through — we'll still take whatever rendered.
-  }
-}
-
-/**
  * Stores the job's result back in Redis under `screenshot:<jobId>`.
+ *
+ * Two flavours of result:
+ *   - Website screenshot:  imageUrl + width + height (legacy JPG path).
+ *   - Google-Docs HTML:    previewUrl + pageImageUrls + docWidth/docHeight
+ *                          + pageCount (Bunny-hosted iframe-ready bundle).
  */
 async function writeJobResult(
   jobId: string,
@@ -102,6 +62,11 @@ async function writeJobResult(
     width?: number;
     height?: number;
     error?: string;
+    previewUrl?: string;
+    pageImageUrls?: string;
+    docWidth?: number;
+    docHeight?: number;
+    pageCount?: number;
   },
 ): Promise<void> {
   const redis = getRedisConnection();
@@ -111,6 +76,14 @@ async function writeJobResult(
   if (fields.width !== undefined) payload.width = String(fields.width);
   if (fields.height !== undefined) payload.height = String(fields.height);
   if (fields.error !== undefined) payload.error = fields.error;
+  if (fields.previewUrl !== undefined) payload.previewUrl = fields.previewUrl;
+  if (fields.pageImageUrls !== undefined)
+    payload.pageImageUrls = fields.pageImageUrls;
+  if (fields.docWidth !== undefined) payload.docWidth = String(fields.docWidth);
+  if (fields.docHeight !== undefined)
+    payload.docHeight = String(fields.docHeight);
+  if (fields.pageCount !== undefined)
+    payload.pageCount = String(fields.pageCount);
   await redis.hset(key, payload);
   await redis.expire(key, SCREENSHOT_REDIS_TTL_SECONDS);
 }
@@ -119,6 +92,12 @@ async function writeJobResult(
  * Processes a single screenshot job. Always writes a terminal Redis state
  * (`done` or `failed`) before returning / throwing so the GET endpoint
  * never hangs in `running`.
+ *
+ * Branches by source:
+ *   - Google-Docs URL → DOCX→PDF→PNGs uploaded to Bunny + HTML wrapper
+ *     hosted on Bunny so the Modal can load it via iframe. No puppeteer
+ *     involved; the doc dimensions come from the PNG headers.
+ *   - Anything else  → live page capture via puppeteer, JPG to Bunny.
  */
 export async function screenshotProcessor(
   job: Job<ScreenshotJobData>,
@@ -127,9 +106,57 @@ export async function screenshotProcessor(
 
   await writeJobResult(jobId, { status: "running" });
 
+  const isGoogleDocs = (() => {
+    try {
+      return new URL(url).hostname === "docs.google.com";
+    } catch {
+      return false;
+    }
+  })();
+
+  // ---------------------------------------------------------------------
+  // Google-Docs path: render to Bunny-hosted HTML + page PNGs.
+  // ---------------------------------------------------------------------
+  if (isGoogleDocs) {
+    try {
+      const result = await renderGDocsToBunnyHostedHtml({
+        docsUrl: url,
+        storagePrefix: `screenshots/${jobId}`,
+        dpi: 150,
+      });
+
+      await writeJobResult(jobId, {
+        status: "done",
+        previewUrl: result.htmlUrl,
+        pageImageUrls: JSON.stringify(result.pageUrls),
+        docWidth: result.docWidth,
+        docHeight: result.docHeight,
+        pageCount: result.pageCount,
+      });
+
+      // The legacy return shape expects an imageUrl/width/height triple —
+      // we surface the HTML preview URL and the computed doc dims so any
+      // existing caller that introspects the return value gets a usable
+      // (if non-image) hint.
+      return {
+        imageUrl: result.htmlUrl,
+        width: result.docWidth,
+        height: result.docHeight,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await writeJobResult(jobId, { status: "failed", error: message }).catch(
+        () => undefined,
+      );
+      throw err instanceof Error ? err : new Error(message);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Website path (unchanged): puppeteer fullPage JPG.
+  // ---------------------------------------------------------------------
   const ctx = await getContext();
   const pageHolder: { current: Page | null } = { current: null };
-  let gdocsWorkDir: string | null = null;
 
   try {
     const page = await ctx.context.newPage();
@@ -140,47 +167,23 @@ export async function screenshotProcessor(
       deviceScaleFactor: 1,
     });
 
-    const isGoogleDocs = (() => {
-      try {
-        return new URL(url).hostname === "docs.google.com";
-      } catch {
-        return false;
-      }
-    })();
-
-    // Google-Docs-URLs durchlaufen die same pipeline wie der Worker-Render:
-    // DOCX -> Platzhalter (none) -> LibreOffice/PDF -> Poppler/PNG -> HTML-Stack.
-    // Damit hat die Modal-Vorschau das identische Layout wie das fertige
-    // Lead-Video — Scroll-Aufnahmen mappen 1:1.
-    if (isGoogleDocs) {
-      const rendered = await renderGDocsToHtml({ docsUrl: url, dpi: 150 });
-      gdocsWorkDir = rendered.workDir;
-      await page.goto(`file://${rendered.htmlPath}`, {
-        waitUntil: "domcontentloaded",
-        timeout: 15_000,
+    try {
+      await page.goto(url, {
+        waitUntil: "networkidle2",
+        timeout: GOTO_TIMEOUT_MS,
       });
-      // Layout settle (font swap, image decode).
-      await new Promise((r) => setTimeout(r, 600));
-    } else {
-      // Live-URL-Pfad (Website-Segmente) unverändert.
+    } catch (e) {
       try {
         await page.goto(url, {
-          waitUntil: "networkidle2",
-          timeout: GOTO_TIMEOUT_MS,
+          waitUntil: "domcontentloaded",
+          timeout: 10_000,
         });
-      } catch (e) {
-        try {
-          await page.goto(url, {
-            waitUntil: "domcontentloaded",
-            timeout: 10_000,
-          });
-        } catch {
-          throw e instanceof Error ? e : new Error(String(e));
-        }
+      } catch {
+        throw e instanceof Error ? e : new Error(String(e));
       }
-      await new Promise((r) => setTimeout(r, 1_000));
-      await dismissCookieBanners(page, 3_000).catch(() => false);
     }
+    await new Promise((r) => setTimeout(r, 1_000));
+    await dismissCookieBanners(page, 3_000).catch(() => false);
 
     // Force overflow auto so we can measure the real document height.
     await page
@@ -231,8 +234,5 @@ export async function screenshotProcessor(
       await pageHolder.current.close().catch(() => undefined);
     }
     await ctx.close();
-    if (gdocsWorkDir) {
-      await cleanupRenderedGDocs(gdocsWorkDir);
-    }
   }
 }
