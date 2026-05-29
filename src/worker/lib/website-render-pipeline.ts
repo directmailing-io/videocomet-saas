@@ -204,6 +204,118 @@ interface ScreencastFrame {
   offsetMs: number;
 }
 
+/**
+ * Notfall-Fallback: wenn CDP-Screencast 0 Frames produzierte (z.B. wegen
+ * gevulkanisierter Chromium-Headless-Builds, GPU-Compositor-Issues, oder
+ * Site die Render verweigert), öffnen wir die Page nochmal kurz, machen
+ * EINEN fullPage-Screenshot und replay-en das per sharp-Crop. Animationen
+ * gehen verloren, aber dafuer gibt's kein schwarzes Video.
+ */
+async function fallbackScreenshotPath(
+  opts: RenderWebsiteOpts,
+  ctx: { context: { newPage(): Promise<Page> }; close(): Promise<void> },
+  viewport: { width: number; height: number },
+  fps: number,
+  framesDir: string,
+): Promise<RenderWebsiteResult> {
+  // Eigene fresh page, der bisherige Context wird vom Caller geschlossen
+  const fbPage = await ctx.context.newPage();
+  try {
+    await fbPage.setViewport({
+      width: viewport.width,
+      height: viewport.height,
+      deviceScaleFactor: 1,
+    });
+    await fbPage
+      .goto(opts.url, {
+        waitUntil: "networkidle2",
+        timeout: GOTO_TIMEOUT_MS,
+      })
+      .catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 1_000));
+    await dismissCookieBanners(fbPage, 3_000).catch(() => false);
+    await fbPage
+      .evaluate(() => {
+        const css = document.createElement("style");
+        css.textContent = `html,body{scrollbar-width:none!important}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none!important}`;
+        document.head.appendChild(css);
+        window.scrollTo(0, 0);
+      })
+      .catch(() => undefined);
+
+    const docPng = (await fbPage.screenshot({
+      type: "png",
+      fullPage: true,
+    })) as Buffer;
+    const meta = await sharp(docPng).metadata();
+    const docW = meta.width ?? viewport.width;
+    const docH = meta.height ?? viewport.height;
+    const docVisibleH = Math.max(1, viewport.height - CHROME_HEIGHT_PX);
+    const maxScroll = Math.max(0, docH - docVisibleH);
+
+    // Chrome PNG (für composite) neu rendern
+    await fbPage.setViewport({
+      width: viewport.width,
+      height: CHROME_HEIGHT_PX,
+      deviceScaleFactor: 1,
+    });
+    await fbPage.setContent(
+      buildBrowserChromeHtml(opts.url, viewport.width),
+      { waitUntil: "domcontentloaded" },
+    );
+    await new Promise((r) => setTimeout(r, 80));
+    const chromePng = (await fbPage.screenshot({
+      type: "png",
+      clip: { x: 0, y: 0, width: viewport.width, height: CHROME_HEIGHT_PX },
+    })) as Buffer;
+    await fbPage.close().catch(() => undefined);
+
+    const frameIntervalMs = 1000 / fps;
+    const totalFrames = Math.max(
+      1,
+      Math.ceil(opts.durationMs / frameIntervalMs),
+    );
+    const plan =
+      opts.scrollFrames && opts.scrollFrames.length > 0
+        ? buildScrollPlanFromFrames(opts.scrollFrames, totalFrames, maxScroll, fps)
+        : new Array<number>(totalFrames).fill(0);
+
+    for (let i = 0; i < totalFrames; i++) {
+      const y = Math.max(0, Math.min(maxScroll, plan[i] ?? 0));
+      const cropH = Math.min(docVisibleH, docH - y);
+      const docCrop = await sharp(docPng)
+        .extract({ left: 0, top: y, width: docW, height: cropH })
+        .toBuffer();
+      const composite = await sharp({
+        create: {
+          width: viewport.width,
+          height: viewport.height,
+          channels: 3,
+          background: { r: 255, g: 255, b: 255 },
+        },
+      })
+        .composite([
+          { input: chromePng, top: 0, left: 0 },
+          { input: docCrop, top: CHROME_HEIGHT_PX, left: 0 },
+        ])
+        .jpeg({ quality: 82 })
+        .toBuffer();
+      await writeFile(
+        join(framesDir, `frame-${String(i).padStart(4, "0")}.jpg`),
+        composite,
+      );
+    }
+    return {
+      durationSec: opts.durationMs / 1000,
+      framesDir,
+      frameCount: totalFrames,
+      fps,
+    };
+  } finally {
+    await fbPage.close().catch(() => undefined);
+  }
+}
+
 export async function renderWebsiteCapture(
   opts: RenderWebsiteOpts,
 ): Promise<RenderWebsiteResult> {
@@ -354,20 +466,37 @@ export async function renderWebsiteCapture(
     const client = await page.createCDPSession();
     clientHolder.current = client;
 
+    // Some Chromium builds need Page.enable before screencast events fire.
+    await client.send("Page.enable").catch(() => undefined);
+
+    // Stelle sicher dass DIE Page focused ist — CDP screencast captures
+    // den active tab; ohne bringToFront kann es passieren, dass Background-
+    // Tabs gar nicht oder schwarz aufgezeichnet werden.
+    await page.bringToFront().catch(() => undefined);
+
     const captured: ScreencastFrame[] = [];
     let screencastStart = 0;
+    let firstFrameLogged = false;
 
     client.on(
       "Page.screencastFrame",
-      async (event: {
-        data: string;
-        sessionId: number;
-      }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (event: any) => {
         const offsetMs = Date.now() - screencastStart;
-        captured.push({
-          buf: Buffer.from(event.data, "base64"),
-          offsetMs,
-        });
+        const buf = Buffer.from(event.data, "base64");
+        captured.push({ buf, offsetMs });
+        if (!firstFrameLogged) {
+          firstFrameLogged = true;
+          try {
+            const meta = await sharp(buf).metadata();
+            // eslint-disable-next-line no-console
+            console.log(
+              `[website-render] first frame dims=${meta.width}x${meta.height} bytes=${buf.length}`,
+            );
+          } catch {
+            /* ignore */
+          }
+        }
         await client
           .send("Page.screencastFrameAck", { sessionId: event.sessionId })
           .catch(() => undefined);
@@ -378,6 +507,8 @@ export async function renderWebsiteCapture(
       format: "jpeg",
       quality: 80,
       everyNthFrame: 1,
+      maxWidth: viewport.width,
+      maxHeight: viewport.height,
     });
     screencastStart = Date.now();
 
@@ -418,7 +549,14 @@ export async function renderWebsiteCapture(
     );
 
     if (captured.length === 0) {
-      throw new Error("[website-render] CDP screencast produced zero frames");
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[website-render] CDP screencast 0 frames — falling back to fullPage-Screenshot Replay",
+      );
+      // Notfall-Fallback: nochmals page öffnen, fullPage screenshot,
+      // sharp-crop pro Frame (das ist der ALTE sharp-Pfad). Besser als
+      // schwarzer Screen.
+      return await fallbackScreenshotPath(opts, ctx, viewport, fps, framesDir);
     }
 
     const pickFrame = (targetMs: number): Buffer => {
