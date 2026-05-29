@@ -25,12 +25,14 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import sharp from "sharp";
 import type { Page } from "puppeteer-core";
 import type { ScrollFrame } from "@/lib/segments/types";
 import { getContext } from "./browser-pool";
 import {
   renderGDocsToHtml,
   cleanupRenderedGDocs,
+  GDOCS_TOOLBAR_HEIGHT_PX,
 } from "./gdocs-render-pipeline";
 
 export interface RenderGDocsOpts {
@@ -258,36 +260,101 @@ export async function renderPersonalizedGDocs(
       })
       .catch(() => undefined);
 
-    // Measure the rendered document height defensively from both roots.
-    const pageHeight: number = await page
-      .evaluate(() =>
-        Math.max(
-          document.documentElement.scrollHeight,
-          document.body.scrollHeight,
-        ),
-      )
-      .catch(() => viewport.height);
-    const maxScroll = Math.max(0, pageHeight - viewport.height);
+    // 1) Snapshot der Toolbar (top, 1280 x TOOLBAR_HEIGHT). Toolbar ist
+    //    position:fixed, also bleibt sie beim fullPage Screenshot nicht
+    //    automatisch oben — wir machen sie separat.
+    await scrollPageTo(page, 0);
+    const toolbarBuf = (await page.screenshot({
+      type: "png",
+      clip: {
+        x: 0,
+        y: 0,
+        width: viewport.width,
+        height: GDOCS_TOOLBAR_HEIGHT_PX,
+      },
+      fromSurface: true,
+    })) as Buffer;
+
+    // 2) Snapshot des Doc-Bereichs OHNE Toolbar. Wir entfernen die
+    //    fixed Toolbar + das Body-Padding, so dass der fullPage-
+    //    Screenshot pixelgenau den scrollbaren Bereich liefert.
+    await page.evaluate(() => {
+      const bar = document.querySelector(".gd-toolbar") as HTMLElement | null;
+      if (bar) bar.style.display = "none";
+      document.body.style.paddingTop = "0";
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      window.scrollTo(0, 0);
+    });
+
+    const docPngBuf = (await page.screenshot({
+      type: "png",
+      fullPage: true,
+      omitBackground: false,
+    })) as Buffer;
+
+    // Echte Pixel-Dimensionen des Doc-Screenshots auslesen.
+    const docMeta = await sharp(docPngBuf).metadata();
+    const docPixelWidth = docMeta.width ?? viewport.width;
+    const docPixelHeight = docMeta.height ?? viewport.height;
+
+    // Der Modal hat im iframe einen scrollbaren Bereich
+    // (clientHeight = viewport.height - TOOLBAR), gleichgesinnt:
+    //   ratio = scrollTop / (scrollHeight - clientHeight)
+    // Hier ist scrollHeight = docPixelHeight, clientHeight = (viewport.height - TOOLBAR).
+    const docVisibleH = Math.max(1, viewport.height - GDOCS_TOOLBAR_HEIGHT_PX);
+    const maxScroll = Math.max(0, docPixelHeight - docVisibleH);
 
     const frameIntervalMs = 1000 / fps;
-    const totalFrames = Math.max(1, Math.ceil(opts.durationMs / frameIntervalMs));
+    const totalFrames = Math.max(
+      1,
+      Math.ceil(opts.durationMs / frameIntervalMs),
+    );
 
     const hasFrames =
       opts.mode === "scroll-recorded" &&
       Array.isArray(opts.scrollFrames) &&
       opts.scrollFrames.length > 0;
 
+    // Hilfs-Composer: nimmt einen Doc-Y-Offset und schreibt einen JPG-Frame.
+    const writeFrame = async (i: number, scrollY: number) => {
+      const clampedY = Math.max(0, Math.min(maxScroll, Math.round(scrollY)));
+      const cropHeight = Math.min(docVisibleH, docPixelHeight - clampedY);
+      // Wenn Doc kürzer als visible-area: weiß auffüllen darunter.
+      const docCrop = await sharp(docPngBuf)
+        .extract({
+          left: 0,
+          top: clampedY,
+          width: docPixelWidth,
+          height: cropHeight,
+        })
+        .toBuffer();
+      const frameBuf = await sharp({
+        create: {
+          width: viewport.width,
+          height: viewport.height,
+          channels: 3,
+          background: { r: 241, g: 243, b: 244 }, // gd-bg
+        },
+      })
+        .composite([
+          { input: toolbarBuf, top: 0, left: 0 },
+          { input: docCrop, top: GDOCS_TOOLBAR_HEIGHT_PX, left: 0 },
+        ])
+        .jpeg({ quality: 80 })
+        .toBuffer();
+      const frameName = `frame-${String(i).padStart(4, "0")}.jpg`;
+      await writeFile(join(framesDir, frameName), frameBuf);
+    };
+
     if (opts.mode === "static-hero" || maxScroll === 0 || !hasFrames) {
-      await scrollPageTo(page, 0);
-      const buf = (await page.screenshot({
-        type: "jpeg",
-        quality: 80,
-        clip: { x: 0, y: 0, width: viewport.width, height: viewport.height },
-        fromSurface: true,
-      })) as Buffer;
-      for (let i = 0; i < totalFrames; i++) {
+      // Static-Variante: 1 Frame komponieren, N-mal speichern.
+      await writeFrame(0, 0);
+      const firstPath = join(framesDir, "frame-0000.jpg");
+      const firstBuf = await sharp(firstPath).toBuffer();
+      for (let i = 1; i < totalFrames; i++) {
         const frameName = `frame-${String(i).padStart(4, "0")}.jpg`;
-        await writeFile(join(framesDir, frameName), buf);
+        await writeFile(join(framesDir, frameName), firstBuf);
       }
       return {
         durationSec: opts.durationMs / 1000,
@@ -300,7 +367,7 @@ export async function renderPersonalizedGDocs(
     const captureStart = Date.now();
     // eslint-disable-next-line no-console
     console.log(
-      `[personalized-gdocs] playing back N=${opts.scrollFrames!.length} frames, maxScroll=${maxScroll}, totalFrames=${totalFrames}, pageHeight=${pageHeight}`,
+      `[personalized-gdocs] sharp-render N=${opts.scrollFrames!.length} frames, maxScroll=${maxScroll}, totalFrames=${totalFrames}, docPixelHeight=${docPixelHeight}`,
     );
 
     const plan = buildScrollPlanFromFrames(
@@ -310,14 +377,21 @@ export async function renderPersonalizedGDocs(
       fps,
     );
 
-    for (let i = 0; i < totalFrames; i++) {
-      await scrollPageTo(page, plan[i] ?? 0);
-      await shootFrame(page, framesDir, i, viewport);
+    // Parallel batches damit sharp mehrere Frames gleichzeitig generieren
+    // kann. Concurrency 4 ist ein guter Trade-off — sharp ist multi-thread,
+    // aber wir wollen die Memory-Spitze begrenzen.
+    const CONCURRENCY = 4;
+    for (let start = 0; start < totalFrames; start += CONCURRENCY) {
+      const batch: Promise<void>[] = [];
+      for (let i = start; i < Math.min(totalFrames, start + CONCURRENCY); i++) {
+        batch.push(writeFrame(i, plan[i] ?? 0));
+      }
+      await Promise.all(batch);
     }
 
     // eslint-disable-next-line no-console
     console.log(
-      `[personalized-gdocs] capture done in ${Date.now() - captureStart}ms (${totalFrames} frames)`,
+      `[personalized-gdocs] sharp-render done in ${Date.now() - captureStart}ms (${totalFrames} frames)`,
     );
 
     return {

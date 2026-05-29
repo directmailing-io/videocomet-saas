@@ -19,6 +19,21 @@ function defaultBinary(): string {
   return process.env.LIBREOFFICE_PATH ?? "/usr/bin/libreoffice";
 }
 
+/**
+ * LibreOffice ist per-Prozess single-instance: parallele Aufrufe stolpern
+ * über das user-profile Lock und der zweite Aufruf failt mit Code 1. Wir
+ * serialisieren daher alle DOCX→PDF Konvertierungen via einer in-process
+ * Lock-Queue. Bei einer Lead-Pipeline mit 4 Parallel-Workern bedeutet das
+ * eine zusätzliche Wartezeit von ~10s pro Lead — immer noch viel besser
+ * als 50% Failures.
+ */
+let lockChain: Promise<unknown> = Promise.resolve();
+function withLibreOfficeLock<T>(task: () => Promise<T>): Promise<T> {
+  const next = lockChain.then(task, task);
+  lockChain = next.catch(() => undefined);
+  return next;
+}
+
 function runConvert(
   binary: string,
   inputPath: string,
@@ -76,6 +91,12 @@ export interface ConvertDocxInput {
  * PDF on success. Retries once with `soffice` if the primary binary fails.
  */
 export async function convertDocxToPdf(
+  input: ConvertDocxInput,
+): Promise<string> {
+  return withLibreOfficeLock(() => convertDocxToPdfImpl(input));
+}
+
+async function convertDocxToPdfImpl(
   input: ConvertDocxInput,
 ): Promise<string> {
   const timeout = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
