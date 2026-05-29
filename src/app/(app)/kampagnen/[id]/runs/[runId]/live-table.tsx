@@ -7,7 +7,11 @@ import {
   FileDown,
   Play,
   FileText,
+  RotateCcw,
+  Loader2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -132,6 +136,60 @@ export function LiveTable({
     failed: initialCounts.failed ?? 0,
   });
   const [leads, setLeads] = React.useState<LeadRow[]>(initialLeads);
+  const [regenerating, setRegenerating] = React.useState(false);
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const isTerminal =
+    runStatus === "completed" ||
+    runStatus === "failed" ||
+    runStatus === "cancelled";
+
+  const regenerate = React.useCallback(async () => {
+    if (!isTerminal || regenerating) return;
+    const confirmed = window.confirm(
+      "Alle Videos und PDFs dieser Runde werden neu erzeugt. Bestehende Outputs werden überschrieben. Fortfahren?",
+    );
+    if (!confirmed) return;
+    setRegenerating(true);
+    try {
+      const res = await fetch(`/api/runs/${runId}/regenerate`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+          const j = (await res.json()) as { error?: string };
+          if (j.error) msg = j.error;
+        } catch {
+          /* ignore */
+        }
+        toast({
+          title: "Neu generieren fehlgeschlagen",
+          description: msg,
+          variant: "danger",
+        });
+        return;
+      }
+      toast({
+        title: "Runde wird neu generiert",
+        description: "Die Worker arbeiten die Leads jetzt erneut ab.",
+      });
+      // Run-Status springt zurueck auf 'generating' — SSE Stream kickt sich
+      // beim naechsten Render-Pass von alleine neu an.
+      setRunStatus("generating");
+      router.refresh();
+    } catch (err) {
+      toast({
+        title: "Neu generieren fehlgeschlagen",
+        description: err instanceof Error ? err.message : "Netzwerkfehler.",
+        variant: "danger",
+      });
+    } finally {
+      setRegenerating(false);
+    }
+  }, [isTerminal, regenerating, runId, router, toast]);
 
   React.useEffect(() => {
     // Skip SSE if the run is already in a terminal state.
@@ -200,6 +258,22 @@ export function LiveTable({
               )}
             </div>
             <div className="flex items-center gap-2">
+              {isTerminal && (
+                <Button
+                  variant="ghost"
+                  onClick={regenerate}
+                  disabled={regenerating}
+                  iconLeft={
+                    regenerating ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="size-4" />
+                    )
+                  }
+                >
+                  {regenerating ? "Wird gestartet…" : "Neu generieren"}
+                </Button>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" iconLeft={<Download className="size-4" />}>
