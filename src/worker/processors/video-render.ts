@@ -39,6 +39,7 @@ import {
   recordScroll,
 } from "../lib/scroll-recorder";
 import { renderPersonalizedGDocs } from "../lib/personalized-gdocs";
+import { renderWebsiteCapture } from "../lib/website-render-pipeline";
 import type { Segment } from "@/lib/segments/types";
 
 export interface VideoRenderInput {
@@ -357,12 +358,8 @@ async function renderSegmentsBase(opts: {
           outputPath: partPath,
         });
       } else if (seg.kind === "website") {
-        // Website-Segment: nimm die Lead-URL aus der CSV-Spalte des Segments,
-        // sonst eine generische Lead-Top-Level-URL (opts.fallbackWebsite),
-        // erst danach die statische seg.fallbackUrl. So funktioniert das
-        // Personalisierungs-Versprechen: der User nimmt sein Scroll-Verhalten
-        // ueber EINE generische Vorschau-URL auf, beim Render bekommt jeder
-        // Lead seine eigene Website unter exakt dieser Bewegung.
+        // Website-Segment: Lead-URL aus der CSV-Spalte (urlColumn), sonst
+        // generische Top-Level-URL, sonst statische seg.fallbackUrl.
         const colKey = seg.urlColumn?.trim();
         const fromCsv =
           colKey && opts.leadData
@@ -379,18 +376,39 @@ async function renderSegmentsBase(opts: {
             durationSec: durationMs / 1000,
           });
         } else {
-          const fr = await recordCapture({
-            url,
-            outputDir: join(opts.outDir, `scroll-${i}`),
-            durationMs,
-            mode: seg.captureMode ?? "static-hero",
-            scrollFrames: seg.scrollFrames,
-          });
-          await imageSeqToMp4({
-            framesDir: fr.framesDir,
-            outputPath: partPath,
-            fps: fr.fps,
-          });
+          // Sharp-basierte Pipeline mit Browser-Chrome-Overlay — sieht aus
+          // wie eine echte Bildschirm-Aufnahme. Fallback auf
+          // recordFallbackPage wenn die Site z.B. nicht laedt.
+          try {
+            const fr = await renderWebsiteCapture({
+              url,
+              outputDir: join(opts.outDir, `web-${i}`),
+              durationMs,
+              mode: seg.captureMode ?? "static-hero",
+              scrollFrames: seg.scrollFrames,
+            });
+            await imageSeqToMp4({
+              framesDir: fr.framesDir,
+              outputPath: partPath,
+              fps: fr.fps,
+            });
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[render] website capture failed for ${url} → placeholder:`,
+              err instanceof Error ? err.message : err,
+            );
+            const fb = await recordFallbackPage({
+              outputDir: join(opts.outDir, `web-${i}`),
+              durationMs,
+              websiteLabel: url,
+            });
+            await imageSeqToMp4({
+              framesDir: fb.framesDir,
+              outputPath: partPath,
+              fps: fb.fps,
+            });
+          }
         }
       } else if (seg.kind === "gdocs") {
         // Google-Docs-Segment: NICHT die Live-URL capturen — sonst zeigt das
