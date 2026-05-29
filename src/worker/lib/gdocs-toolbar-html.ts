@@ -106,19 +106,20 @@ const ICON_SHOW_MENUS =
  * Logo mark for the Docs icon — small rounded blue tile with a stylised
  * white "D". Inline SVG so it survives offline embedding.
  */
+// Authentischeres Google-Docs Logo: blauer Hintergrund + weißes Dokument
+// mit gefaltetem oberen-rechten Eck und 4 hellblauen Textlinien.
 const DOCS_LOGO = `
-<svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
-  <defs>
-    <linearGradient id="gd-logo-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#4285F4"/>
-      <stop offset="100%" stop-color="#1A73E8"/>
-    </linearGradient>
-  </defs>
-  <rect x="0" y="0" width="32" height="32" rx="5" fill="url(#gd-logo-grad)"/>
-  <path d="M11 9h8a3 3 0 0 1 3 3v10H11z" fill="#FFFFFF" opacity="0.95"/>
-  <line x1="13.5" y1="13.5" x2="19.5" y2="13.5" stroke="#1A73E8" stroke-width="1.2" stroke-linecap="round"/>
-  <line x1="13.5" y1="16.5" x2="19.5" y2="16.5" stroke="#1A73E8" stroke-width="1.2" stroke-linecap="round"/>
-  <line x1="13.5" y1="19.5" x2="17.5" y2="19.5" stroke="#1A73E8" stroke-width="1.2" stroke-linecap="round"/>
+<svg viewBox="0 0 40 40" width="32" height="32" aria-hidden="true">
+  <!-- Hauptbody: weißes Dokument mit Falt-Eck -->
+  <path d="M9 4 h17 l8 8 v24 a2 2 0 0 1 -2 2 H9 a2 2 0 0 1 -2 -2 V6 a2 2 0 0 1 2 -2 z" fill="#4285F4"/>
+  <path d="M11 7 h13 l6 6 v20 H11 z" fill="#FFFFFF"/>
+  <!-- Falt-Eck rechts oben: hellerer blauer Ton -->
+  <path d="M26 4 v6 a2 2 0 0 0 2 2 h6 z" fill="#A1C2FA"/>
+  <!-- 4 Textlinien -->
+  <rect x="14" y="17" width="13" height="1.5" rx="0.5" fill="#4285F4"/>
+  <rect x="14" y="21" width="13" height="1.5" rx="0.5" fill="#4285F4"/>
+  <rect x="14" y="25" width="13" height="1.5" rx="0.5" fill="#4285F4"/>
+  <rect x="14" y="29" width="9" height="1.5" rx="0.5" fill="#4285F4"/>
 </svg>`;
 
 /* -------------------------------------------------------------------------- */
@@ -170,11 +171,6 @@ export function getGDocsToolbarHtml(opts?: ToolbarOptions): string {
         </div>
       </div>
       <div class="gd-spacer"></div>
-      <a class="gd-last-edit" href="#" tabindex="-1">Letzte Bearbeitung vor wenigen Sekunden</a>
-      <button type="button" class="gd-icon-btn gd-with-badge" title="Kommentare">
-        ${ICON_COMMENT}
-      </button>
-      ${iconBtn(ICON_VIDEO_CALL, "Videoanruf starten")}
       <button type="button" class="gd-share-pill" title="Freigeben">
         <span class="gd-share-key">${ICON_KEY}</span>
         <span class="gd-share-label">Freigeben</span>
@@ -235,25 +231,21 @@ export function getGDocsToolbarHtml(opts?: ToolbarOptions): string {
       ${iconBtn(ICON_HIGHLIGHT, "Markierungsfarbe")}
       ${divider()}
       ${iconBtn(ICON_LINK, "Link einfügen")}
-      ${iconBtn(ICON_ADD_COMMENT, "Kommentar einfügen")}
       ${iconBtn(ICON_IMAGE, "Bild einfügen")}
       ${iconBtn(ICON_CHECKLIST, "Checkliste")}
       ${divider()}
       ${iconBtn(ICON_ALIGN_LEFT, "Linksbündig")}
       ${iconBtn(ICON_ALIGN_CENTER, "Zentriert")}
       ${iconBtn(ICON_ALIGN_RIGHT, "Rechtsbündig")}
-      ${iconBtn(ICON_ALIGN_JUSTIFY, "Blocksatz")}
       ${iconBtn(ICON_LINE_SPACING, "Zeilenabstand")}
       ${iconBtn(ICON_LIST_BULLET, "Aufzählung")}
       ${iconBtn(ICON_LIST_NUMBER, "Nummerierte Liste")}
       ${iconBtn(ICON_INDENT_DEC, "Einzug verringern")}
       ${iconBtn(ICON_INDENT_INC, "Einzug erhöhen")}
-      ${iconBtn(ICON_REMOVE_FORMAT, "Formatierung löschen")}
       <div class="gd-spacer"></div>
       <button type="button" class="gd-edit-mode" title="Bearbeitungsmodus">
-        ${ICON_EDIT_MODE}<span>Editieren</span>${ICON_CHEVRON_DOWN}
+        ${ICON_EDIT_MODE}<span>Editieren</span>
       </button>
-      ${iconBtn(ICON_SHOW_MENUS, "Menüs ausblenden")}
     </div>`;
 
   // Ruler: 17 cm-style ticks evenly distributed; major ticks every 1cm,

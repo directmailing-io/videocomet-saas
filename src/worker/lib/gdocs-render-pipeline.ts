@@ -31,7 +31,7 @@ import {
   fetchGoogleDocAsDocx,
   extractGoogleDocId,
 } from "./google-docs";
-import { loadDocx, replacePlaceholders, saveDocx } from "./docx";
+import { loadDocx, replacePlaceholders, saveDocx, getDocxTitle } from "./docx";
 import { convertDocxToPdf } from "./libreoffice";
 import { pdfToPng } from "./pdf-to-image";
 import {
@@ -75,6 +75,8 @@ interface ComposeResult {
   workDir: string;
   pages: string[]; // absolute local PNG paths
   docId: string;
+  /** Doc-Titel aus docProps/core.xml; leer wenn nicht gesetzt. */
+  docTitle: string;
 }
 
 /**
@@ -100,10 +102,13 @@ async function composePdfToPages(opts: {
   // 1. Download DOCX (cached by google-docs lib).
   const docxBuffer = await fetchGoogleDocAsDocx(opts.docsUrl);
 
-  // 2. Optional placeholder substitution.
+  // 2. Optional placeholder substitution + Title-Extraktion.
+  // Wir laden den DOCX immer (auch ohne vars), um den Doc-Titel aus
+  // docProps/core.xml zu holen — der wandert in die Toolbar.
   let processedDocx = docxBuffer;
+  const loaded = loadDocx(docxBuffer);
+  const docTitle = getDocxTitle(loaded.zip);
   if (opts.vars && Object.keys(opts.vars).length > 0) {
-    const loaded = loadDocx(docxBuffer);
     replacePlaceholders(loaded.zip, opts.vars);
     processedDocx = saveDocx(loaded.zip);
   }
@@ -129,7 +134,7 @@ async function composePdfToPages(opts: {
     throw new Error("[gdocs-render-pipeline] pdftoppm produced zero pages");
   }
 
-  return { workDir, pages, docId };
+  return { workDir, pages, docId, docTitle };
 }
 
 /**
@@ -149,7 +154,9 @@ export async function renderGDocsToHtml(
 
   // Wrap the local file:// paths in the shared HTML wrapper.
   const urls = composed.pages.map((p) => `file://${p}`);
-  const html = buildGDocsHtml(urls, { docTitle: opts.docTitle });
+  const html = buildGDocsHtml(urls, {
+    docTitle: opts.docTitle || composed.docTitle,
+  });
   const htmlPath = join(composed.workDir, "render.html");
   await writeFile(htmlPath, html, "utf8");
 
@@ -264,7 +271,9 @@ export async function renderGDocsToBunnyHostedHtml(
     }
 
     // 2. Build the HTML referencing the absolute Bunny URLs.
-    const html = buildGDocsHtml(pageUrls, { docTitle: opts.docTitle });
+    const html = buildGDocsHtml(pageUrls, {
+      docTitle: opts.docTitle || composed.docTitle,
+    });
 
     // 3. Upload the HTML wrapper. Bunny storage serves the file with the
     // content-type we set here; the modal iframe will get a proper text/html

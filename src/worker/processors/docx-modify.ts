@@ -86,7 +86,8 @@ export async function runDocxModify(
   // 3. Text placeholders.
   replacePlaceholders(zip, input.vars);
 
-  // 4. QR-Marker swap.
+  // 4. QR-Marker swap. Dimensions-Fallback (400x400) faengt die Faelle ab,
+  //    in denen Google Docs das PNG beim Einfuegen re-encoded hat.
   let qrReplaced = false;
   if (input.qrPngPath) {
     const targetSha = await getQrMarkerSha();
@@ -95,10 +96,11 @@ export async function runDocxModify(
       targetSha256: targetSha,
       newImageBuffer: qrBytes,
       contentType: "image/png",
+      matchDimensions: { width: 400, height: 400 },
     });
   }
 
-  // 5. Thumb-Marker swap.
+  // 5. Thumb-Marker swap. Dimensions-Fallback (640x360).
   let thumbReplaced = false;
   if (input.thumbJpgPath) {
     const targetSha = await getThumbMarkerSha();
@@ -107,6 +109,7 @@ export async function runDocxModify(
       targetSha256: targetSha,
       newImageBuffer: thumbBytes,
       contentType: "image/jpeg",
+      matchDimensions: { width: 640, height: 360 },
     });
   }
 
