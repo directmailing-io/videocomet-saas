@@ -1,33 +1,40 @@
 /**
- * Website-Render-Pipeline (Per-Lead, mit Browser-Chrome).
+ * Website-Render-Pipeline mit ECHTEM Screencast.
  *
- * Ziel: Das fertige Video sieht aus, als würde der User die echte
- * Lead-Website im Browser geöffnet haben und live durchscrollen — inkl.
- * realistischer macOS/Chrome Browser-Toolbar mit Adressleiste, Buttons
- * und Tabs.
+ * Statt einen einzelnen fullPage-Screenshot zu nehmen (das verlor
+ * Animationen, Slider und JS-Effekte und sah wie ein Standbild aus),
+ * nutzen wir Chrome DevTools Protocol's `Page.startScreencast`. CDP
+ * emittiert Frames in echtzeit vom Compositor-Buffer — alles was live
+ * im Browser passiert (Carousel, Hover-States, Auto-Play-Videos, Lazy-
+ * Images die nachladen) wandert mit ins Video.
  *
- * Architektur (parallel zur gdocs-Pipeline):
- *   1. Puppeteer: lade Live-URL, dismisse Cookie-Banner, blende
- *      Scrollbars aus
- *   2. EINEN fullPage-Screenshot der gesamten Page (das ist das langlebige
- *      "Doc-PNG")
- *   3. Browser-Chrome als HTML → einen 80px-hohen PNG-Screenshot via
- *      Puppeteer-Page (mit der echten Lead-URL in der Adressleiste)
- *   4. Sharp pro Frame: Crop des Doc-PNG bei scrollY + Composite mit
- *      Browser-Chrome oben → JPG
+ * Architektur:
+ *   1. Puppeteer-Page öffnen, navigieren, Cookies dismissen, Scrollbars
+ *      ausblenden
+ *   2. EIN Browser-Chrome-PNG erzeugen (1280×80, macOS/Chrome-Look mit
+ *      Traffic-Lights, Tab, Adressleiste mit echter Lead-URL)
+ *   3. CDP-Session öffnen, screencastFrame-Events sammeln
+ *   4. Scroll über die Aufnahme-Dauer abspielen (30fps Tick-Loop)
+ *   5. Screencast stoppen, alle Captured-Frames sortieren
+ *   6. Für jeden Output-Frame (i = 0..N-1): den zeitlich nächstgelegenen
+ *      Capture-Frame nehmen, sharp Browser-Chrome oben drauf compositen
+ *      → JPG schreiben
  *
- * Vorteile gegenueber `recordCapture`-Pfad:
- *   - 2x Puppeteer-Calls pro Lead statt 480 → ~10s statt ~128s
- *   - Sharp ist multi-threaded und memory-efficient
- *   - Browser-Chrome macht das Capture als echte Bildschirm-Aufnahme
- *     erkennbar
- *   - ScrollFrames-Mapping ist konsistent mit der gdocs-Pipeline
+ * Vorteile gegenüber fullPage-Screenshot:
+ *   - Animationen sind sichtbar (das war der User-Bugreport)
+ *   - Slider/Carousel werden live mitgerendert
+ *   - Lazy-Bilder die beim Scroll nachladen sind drin
+ *   - Sieht aus wie ein echtes Bildschirm-Recording
+ *
+ * Performance: CDP-Screencast emittiert mit ~30-60fps direkt vom
+ * Compositor; das ist deutlich schneller als 480× page.screenshot.
+ * Pro Lead ca. 10-15s inkl. sharp-Postprocessing.
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
-import type { Page } from "puppeteer-core";
+import type { Page, CDPSession } from "puppeteer-core";
 import type { ScrollFrame } from "@/lib/segments/types";
 import { getContext } from "./browser-pool";
 import { dismissCookieBanners } from "./cookie-dismiss";
@@ -49,9 +56,8 @@ export interface RenderWebsiteResult {
   fps: number;
 }
 
-/** Höhe der nachgebauten Browser-Chrome in CSS-Pixeln. */
 const CHROME_HEIGHT_PX = 80;
-const HARD_TIMEOUT_MS = 180_000;
+const HARD_TIMEOUT_MS = 240_000;
 const GOTO_TIMEOUT_MS = 30_000;
 
 function escapeHtml(s: string): string {
@@ -63,9 +69,10 @@ function escapeHtml(s: string): string {
 }
 
 /**
- * Generiert das HTML einer minimalistischen Chrome/Safari-artigen
- * Browser-Toolbar mit Tab + Adressleiste. Inline-SVGs statt Emojis
- * (Container-Fonts sind unzuverlaessig). Höhe genau CHROME_HEIGHT_PX.
+ * Generiert das HTML einer Chrome/Safari-artigen Browser-Toolbar — wird
+ * in einer separaten Page (oder per setContent) gerendert und einmal als
+ * 1280×80 PNG gespeichert. Inline-SVG damit es ohne Font-Dependencies
+ * scharf aussieht.
  */
 function buildBrowserChromeHtml(url: string, width: number): string {
   let host = url;
@@ -97,7 +104,7 @@ html,body{background:#DEE1E6;font-family:-apple-system,BlinkMacSystemFont,'Segoe
 .tab-fav{width:14px;height:14px;border-radius:3px;background:linear-gradient(135deg,#4285F4,#0F62D6);flex-shrink:0}
 .tab-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toolbar{height:44px;background:#fff;display:flex;align-items:center;padding:0 12px;gap:6px}
-.icon-btn{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:default}
+.icon-btn{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center}
 .url-bar{flex:1;background:#F1F3F4;height:32px;border-radius:18px;display:flex;align-items:center;padding:0 14px;gap:10px;font-size:13px;color:#202124;font-weight:400}
 .url-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style></head>
@@ -192,6 +199,11 @@ async function withTimeout<T>(
   }
 }
 
+interface ScreencastFrame {
+  buf: Buffer;
+  offsetMs: number;
+}
+
 export async function renderWebsiteCapture(
   opts: RenderWebsiteOpts,
 ): Promise<RenderWebsiteResult> {
@@ -200,23 +212,43 @@ export async function renderWebsiteCapture(
   const framesDir = join(opts.outputDir, "frames");
   await mkdir(framesDir, { recursive: true });
 
-  // Doc-area Hoehe = viewport - Browser-Chrome. Damit das Content-PNG
-  // genauso skaliert ist wie es im Modal aussah.
-  const docVisibleH = Math.max(1, viewport.height - CHROME_HEIGHT_PX);
-
   const ctx = await getContext();
   const pageHolder: { current: Page | null } = { current: null };
+  const clientHolder: { current: CDPSession | null } = { current: null };
 
   const run = async (): Promise<RenderWebsiteResult> => {
+    // ── 1. Browser-Chrome PNG erzeugen (eigene Page, dann schliessen) ─
+    const chromePage = await ctx.context.newPage();
+    await chromePage.setViewport({
+      width: viewport.width,
+      height: CHROME_HEIGHT_PX,
+      deviceScaleFactor: 1,
+    });
+    await chromePage.setContent(
+      buildBrowserChromeHtml(opts.url, viewport.width),
+      { waitUntil: "domcontentloaded" },
+    );
+    await new Promise((r) => setTimeout(r, 80));
+    const chromePngBuf = (await chromePage.screenshot({
+      type: "png",
+      clip: {
+        x: 0,
+        y: 0,
+        width: viewport.width,
+        height: CHROME_HEIGHT_PX,
+      },
+    })) as Buffer;
+    await chromePage.close().catch(() => undefined);
+
+    // ── 2. Live-Page öffnen ───────────────────────────────────────────
     const page = await ctx.context.newPage();
     pageHolder.current = page;
     await page.setViewport({
       width: viewport.width,
-      height: docVisibleH,
+      height: viewport.height,
       deviceScaleFactor: 1,
     });
 
-    // 1. Lade die Live-URL.
     try {
       await page.goto(opts.url, {
         waitUntil: "networkidle2",
@@ -233,12 +265,11 @@ export async function renderWebsiteCapture(
       }
     }
 
-    // 2. Wartezeit fuer CSS / Hero-Bilder.
     await new Promise((r) => setTimeout(r, 1_200));
     await dismissCookieBanners(page, 3_000).catch(() => false);
 
-    // 3. Scrollbars + smooth-scroll abschalten — sonst sieht das Crop
-    //    unsauber aus und scrollHeight-Messung wird unzuverlaessig.
+    // Scrollbars + smooth-scroll abschalten — sonst sieht das Crop
+    // unsauber aus und scrollHeight-Messung ist unzuverlaessig.
     await page
       .evaluate(() => {
         const css = document.createElement("style");
@@ -254,42 +285,13 @@ export async function renderWebsiteCapture(
       })
       .catch(() => undefined);
 
-    // 4. Full-Page-Screenshot der Site.
-    const docPngBuf = (await page.screenshot({
-      type: "png",
-      fullPage: true,
-      captureBeyondViewport: true,
-    })) as Buffer;
-
-    const docMeta = await sharp(docPngBuf).metadata();
-    const docPixelWidth = docMeta.width ?? viewport.width;
-    const docPixelHeight = docMeta.height ?? viewport.height;
-    const maxScroll = Math.max(0, docPixelHeight - docVisibleH);
-
-    // 5. Browser-Chrome HTML → 80px PNG via gleiche Page wiederverwendet
-    //    (set content + clip-screenshot).
-    await page.setViewport({
-      width: viewport.width,
-      height: CHROME_HEIGHT_PX,
-      deviceScaleFactor: 1,
-    });
-    await page.setContent(buildBrowserChromeHtml(opts.url, viewport.width), {
-      waitUntil: "domcontentloaded",
-    });
-    await new Promise((r) => setTimeout(r, 100));
-    const chromePngBuf = (await page.screenshot({
-      type: "png",
-      clip: {
-        x: 0,
-        y: 0,
-        width: viewport.width,
-        height: CHROME_HEIGHT_PX,
-      },
-    })) as Buffer;
-
-    // Page nicht mehr noetig — schliesen frei.
-    await page.close().catch(() => undefined);
-    pageHolder.current = null;
+    const docHeight: number = await page.evaluate(() =>
+      Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+      ),
+    );
+    const maxScroll = Math.max(0, docHeight - viewport.height);
 
     const frameIntervalMs = 1000 / fps;
     const totalFrames = Math.max(
@@ -302,18 +304,20 @@ export async function renderWebsiteCapture(
       Array.isArray(opts.scrollFrames) &&
       opts.scrollFrames.length > 0;
 
-    const writeFrame = async (i: number, scrollY: number) => {
-      const clampedY = Math.max(0, Math.min(maxScroll, Math.round(scrollY)));
-      const cropHeight = Math.min(docVisibleH, docPixelHeight - clampedY);
-      const docCrop = await sharp(docPngBuf)
-        .extract({
-          left: 0,
-          top: clampedY,
-          width: docPixelWidth,
-          height: cropHeight,
-        })
-        .toBuffer();
-      const frameBuf = await sharp({
+    // ── 3. Static-Hero Shortcut: kein Screencast nötig ────────────────
+    if (opts.mode === "static-hero" || maxScroll === 0 || !hasFrames) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await new Promise((r) => setTimeout(r, 200));
+      const staticPng = (await page.screenshot({
+        type: "png",
+        clip: {
+          x: 0,
+          y: 0,
+          width: viewport.width,
+          height: viewport.height,
+        },
+      })) as Buffer;
+      const composite = await sharp({
         create: {
           width: viewport.width,
           height: viewport.height,
@@ -322,26 +326,15 @@ export async function renderWebsiteCapture(
         },
       })
         .composite([
+          { input: staticPng, top: 0, left: 0 },
           { input: chromePngBuf, top: 0, left: 0 },
-          { input: docCrop, top: CHROME_HEIGHT_PX, left: 0 },
         ])
         .jpeg({ quality: 82 })
         .toBuffer();
-      await writeFile(
-        join(framesDir, `frame-${String(i).padStart(4, "0")}.jpg`),
-        frameBuf,
-      );
-    };
-
-    if (opts.mode === "static-hero" || maxScroll === 0 || !hasFrames) {
-      await writeFrame(0, 0);
-      const firstBuf = await sharp(
-        join(framesDir, "frame-0000.jpg"),
-      ).toBuffer();
-      for (let i = 1; i < totalFrames; i++) {
+      for (let i = 0; i < totalFrames; i++) {
         await writeFile(
           join(framesDir, `frame-${String(i).padStart(4, "0")}.jpg`),
-          firstBuf,
+          composite,
         );
       }
       return {
@@ -352,12 +345,43 @@ export async function renderWebsiteCapture(
       };
     }
 
-    const captureStart = Date.now();
+    // ── 4. CDP-Screencast starten ─────────────────────────────────────
     // eslint-disable-next-line no-console
     console.log(
-      `[website-render] sharp-render url=${opts.url} N=${opts.scrollFrames!.length} maxScroll=${maxScroll} totalFrames=${totalFrames} docPixelHeight=${docPixelHeight}`,
+      `[website-render] CDP screencast url=${opts.url} docHeight=${docHeight} maxScroll=${maxScroll} totalFrames=${totalFrames}`,
     );
 
+    const client = await page.createCDPSession();
+    clientHolder.current = client;
+
+    const captured: ScreencastFrame[] = [];
+    let screencastStart = 0;
+
+    client.on(
+      "Page.screencastFrame",
+      async (event: {
+        data: string;
+        sessionId: number;
+      }) => {
+        const offsetMs = Date.now() - screencastStart;
+        captured.push({
+          buf: Buffer.from(event.data, "base64"),
+          offsetMs,
+        });
+        await client
+          .send("Page.screencastFrameAck", { sessionId: event.sessionId })
+          .catch(() => undefined);
+      },
+    );
+
+    await client.send("Page.startScreencast", {
+      format: "jpeg",
+      quality: 80,
+      everyNthFrame: 1,
+    });
+    screencastStart = Date.now();
+
+    // ── 5. Scroll-Driver (zielt 30 fps an, läuft genau durationMs) ────
     const plan = buildScrollPlanFromFrames(
       opts.scrollFrames as ScrollFrame[],
       totalFrames,
@@ -365,18 +389,75 @@ export async function renderWebsiteCapture(
       fps,
     );
 
+    for (let i = 0; i < totalFrames; i++) {
+      const targetT = i * frameIntervalMs;
+      const currentT = Date.now() - screencastStart;
+      if (currentT < targetT) {
+        await new Promise((r) => setTimeout(r, targetT - currentT));
+      }
+      await page
+        .evaluate((y) => window.scrollTo(0, y), plan[i] ?? 0)
+        .catch(() => undefined);
+    }
+
+    // kurz warten damit die letzten Frames noch ankommen
+    await new Promise((r) => setTimeout(r, 200));
+
+    await client.send("Page.stopScreencast").catch(() => undefined);
+    await client.detach().catch(() => undefined);
+    clientHolder.current = null;
+    await page.close().catch(() => undefined);
+    pageHolder.current = null;
+
+    // ── 6. Resampling auf konstante 30fps + Chrome-Composite ──────────
+    captured.sort((a, b) => a.offsetMs - b.offsetMs);
+    const captureStart = Date.now();
+    // eslint-disable-next-line no-console
+    console.log(
+      `[website-render] screencast captured ${captured.length} frames, resampling to ${totalFrames}@${fps}fps`,
+    );
+
+    if (captured.length === 0) {
+      throw new Error("[website-render] CDP screencast produced zero frames");
+    }
+
+    const pickFrame = (targetMs: number): Buffer => {
+      // Linear search; captured ist klein (paar Hundert Frames).
+      let best = captured[0];
+      for (const f of captured) {
+        if (f.offsetMs <= targetMs) best = f;
+        else break;
+      }
+      return best.buf;
+    };
+
+    const writeFrame = async (i: number) => {
+      const targetMs = i * frameIntervalMs;
+      const srcJpeg = pickFrame(targetMs);
+      // Chrome-PNG oben aufkomponieren, JPG schreiben.
+      const composite = await sharp(srcJpeg)
+        .resize(viewport.width, viewport.height, { fit: "cover" })
+        .composite([{ input: chromePngBuf, top: 0, left: 0 }])
+        .jpeg({ quality: 82 })
+        .toBuffer();
+      await writeFile(
+        join(framesDir, `frame-${String(i).padStart(4, "0")}.jpg`),
+        composite,
+      );
+    };
+
     const CONCURRENCY = 4;
     for (let start = 0; start < totalFrames; start += CONCURRENCY) {
       const batch: Promise<void>[] = [];
       for (let i = start; i < Math.min(totalFrames, start + CONCURRENCY); i++) {
-        batch.push(writeFrame(i, plan[i] ?? 0));
+        batch.push(writeFrame(i));
       }
       await Promise.all(batch);
     }
 
     // eslint-disable-next-line no-console
     console.log(
-      `[website-render] done in ${Date.now() - captureStart}ms (${totalFrames} frames)`,
+      `[website-render] composite done in ${Date.now() - captureStart}ms`,
     );
 
     return {
@@ -390,6 +471,9 @@ export async function renderWebsiteCapture(
   try {
     return await withTimeout(run(), HARD_TIMEOUT_MS, "renderWebsiteCapture");
   } finally {
+    if (clientHolder.current) {
+      await clientHolder.current.detach().catch(() => undefined);
+    }
     if (pageHolder.current) {
       await pageHolder.current.close().catch(() => undefined);
     }
