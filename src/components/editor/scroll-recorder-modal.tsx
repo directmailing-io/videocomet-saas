@@ -501,8 +501,9 @@ export function ScrollRecorderModal({
         <div>
           <DialogTitle>Scroll-Aufnahme</DialogTitle>
           <DialogDescription>
-            Scrolle frei durch das Dokument. Deine Bewegung wird 1:1
-            aufgezeichnet und beim Render abgespielt.
+            Scrolle frei durch die Vorschau. Nur deine Bewegung wird
+            aufgezeichnet — beim Generieren bekommt jeder Lead seine
+            personalisierte Seite und die Bewegung läuft 1:1 darüber.
           </DialogDescription>
           {initialHint && phase.kind === "ready" && (
             <p className="mt-2 text-xs text-ink-muted">{initialHint}</p>

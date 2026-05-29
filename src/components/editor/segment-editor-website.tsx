@@ -76,7 +76,7 @@ export function SegmentEditorWebsite({
   return (
     <div className="space-y-5">
       <div>
-        <Label htmlFor={`url-col-${segment.id}`}>CSV-Spalte mit URL</Label>
+        <Label htmlFor={`url-col-${segment.id}`}>CSV-Spalte mit Lead-URL</Label>
         <Input
           id={`url-col-${segment.id}`}
           value={segment.urlColumn}
@@ -85,10 +85,15 @@ export function SegmentEditorWebsite({
           }
           placeholder="website"
         />
+        <p className="mt-1 text-xs text-ink-muted">
+          Name der Spalte mit der Website des jeweiligen Leads.
+          Jedes Lead-Video zeigt seine eigene Website, dein Scroll-Verhalten
+          wird 1:1 darauf abgespielt.
+        </p>
       </div>
 
       <div>
-        <Label htmlFor={`fallback-${segment.id}`}>Fallback-URL</Label>
+        <Label htmlFor={`fallback-${segment.id}`}>Vorschau-URL (Fallback)</Label>
         <Input
           id={`fallback-${segment.id}`}
           value={segment.fallbackUrl}
@@ -98,7 +103,8 @@ export function SegmentEditorWebsite({
           placeholder="https://www.beispiel.de"
         />
         <p className="mt-1 text-xs text-ink-muted">
-          Wird in der Vorschau und für Leads ohne Wert verwendet.
+          Über diese URL nimmst du deine Scroll-Bewegung auf. Wird auch als
+          Fallback verwendet, wenn ein Lead in der CSV-Spalte keinen Wert hat.
         </p>
       </div>
 
@@ -172,11 +178,16 @@ export function SegmentEditorWebsite({
 
       <div className="flex gap-3 rounded-squircle-sm border border-brand-200 bg-brand-soft p-4 text-sm text-brand-deep">
         <Info className="size-4 shrink-0 mt-0.5" />
-        <p>
-          Beim Generieren wird die echte URL des Leads aufgenommen. Im Modus
-          „Scroll-Aufnahme" spielt der Worker deine Scroll-Bewegungen 1:1
-          über das Lead-Dokument nach.
-        </p>
+        <div className="space-y-1">
+          <p className="font-semibold">Personalisierte Aufnahme pro Lead</p>
+          <p>
+            Die Vorschau-URL nutzt du nur zum Aufzeichnen deiner Scroll-
+            Bewegung. Beim Generieren öffnet der Worker die jeweilige
+            Website jedes Leads (aus der CSV-Spalte) und spielt deine
+            Bewegung exakt darüber ab — so bekommt Max sein max.de, Anna
+            ihr anna.de mit identischem Scroll-Pattern.
+          </p>
+        </div>
       </div>
 
       {recorderOpen && (

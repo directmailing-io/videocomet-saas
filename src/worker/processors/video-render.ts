@@ -357,8 +357,19 @@ async function renderSegmentsBase(opts: {
           outputPath: partPath,
         });
       } else if (seg.kind === "website") {
-        // Website-Segment: nimm die Lead-URL (primary), fallback auf seg.fallbackUrl.
+        // Website-Segment: nimm die Lead-URL aus der CSV-Spalte des Segments,
+        // sonst eine generische Lead-Top-Level-URL (opts.fallbackWebsite),
+        // erst danach die statische seg.fallbackUrl. So funktioniert das
+        // Personalisierungs-Versprechen: der User nimmt sein Scroll-Verhalten
+        // ueber EINE generische Vorschau-URL auf, beim Render bekommt jeder
+        // Lead seine eigene Website unter exakt dieser Bewegung.
+        const colKey = seg.urlColumn?.trim();
+        const fromCsv =
+          colKey && opts.leadData
+            ? pickFieldCI(opts.leadData, [colKey])
+            : null;
         const url =
+          normaliseWebsiteUrl(fromCsv) ??
           normaliseWebsiteUrl(opts.fallbackWebsite) ??
           normaliseWebsiteUrl(seg.fallbackUrl) ??
           null;
