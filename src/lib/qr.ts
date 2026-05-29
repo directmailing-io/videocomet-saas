@@ -1,7 +1,8 @@
 /**
  * QR-Code generation.
  *
- * Produces a black-on-white PNG buffer using `qrcode` with error-correction
+ * Produces a PNG buffer with black modules on a white background using
+ * `qrcode` with error-correction
  * level Q. The PNG is rendered at exactly `sizePx` pixels (square).
  *
  * If `sizePx` is smaller than the QR code's minimum required size for the
@@ -32,15 +33,15 @@ export async function generateQrPng(
     throw new Error("QR-Größe zu klein");
   }
 
-  // White-on-black (white modules on black background).
+  // Black-on-white (Standard: schwarze Module auf weißem Hintergrund).
   return QRCode.toBuffer(url, {
     errorCorrectionLevel: "Q",
     type: "png",
     width: sizePx,
     margin: 4,
     color: {
-      dark: "#FFFFFFFF", // module color -> white
-      light: "#000000FF", // background -> black
+      dark: "#000000FF", // module color -> black dots
+      light: "#FFFFFFFF", // background -> white
     },
   });
 }
