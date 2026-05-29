@@ -30,6 +30,10 @@ import { uploadFile } from "@/lib/bunny/storage";
 import { getContext } from "../lib/browser-pool";
 import { dismissCookieBanners } from "../lib/cookie-dismiss";
 import {
+  renderGDocsToHtml,
+  cleanupRenderedGDocs,
+} from "../lib/gdocs-render-pipeline";
+import {
   getScreenshotJobRedisKey,
   SCREENSHOT_REDIS_TTL_SECONDS,
   type ScreenshotJobData,
@@ -125,6 +129,7 @@ export async function screenshotProcessor(
 
   const ctx = await getContext();
   const pageHolder: { current: Page | null } = { current: null };
+  let gdocsWorkDir: string | null = null;
 
   try {
     const page = await ctx.context.newPage();
@@ -135,40 +140,46 @@ export async function screenshotProcessor(
       deviceScaleFactor: 1,
     });
 
-    const targetUrl = rewriteGoogleDocsUrl(url);
     const isGoogleDocs = (() => {
       try {
-        return new URL(targetUrl).hostname === "docs.google.com";
+        return new URL(url).hostname === "docs.google.com";
       } catch {
         return false;
       }
     })();
 
-    // Navigate with progressively cheaper waitUntil signals so trackers
-    // don't kill the capture.
-    try {
-      await page.goto(targetUrl, {
-        waitUntil: "networkidle2",
-        timeout: GOTO_TIMEOUT_MS,
-      });
-    } catch (e) {
-      try {
-        await page.goto(targetUrl, {
-          waitUntil: "domcontentloaded",
-          timeout: 10_000,
-        });
-      } catch {
-        throw e instanceof Error ? e : new Error(String(e));
-      }
-    }
-
-    // Let CSS / hero-images settle.
-    await new Promise((r) => setTimeout(r, 1_000));
-
-    await dismissCookieBanners(page, 3_000).catch(() => false);
-
+    // Google-Docs-URLs durchlaufen die same pipeline wie der Worker-Render:
+    // DOCX -> Platzhalter (none) -> LibreOffice/PDF -> Poppler/PNG -> HTML-Stack.
+    // Damit hat die Modal-Vorschau das identische Layout wie das fertige
+    // Lead-Video — Scroll-Aufnahmen mappen 1:1.
     if (isGoogleDocs) {
-      await waitForKixPages(page);
+      const rendered = await renderGDocsToHtml({ docsUrl: url, dpi: 150 });
+      gdocsWorkDir = rendered.workDir;
+      await page.goto(`file://${rendered.htmlPath}`, {
+        waitUntil: "domcontentloaded",
+        timeout: 15_000,
+      });
+      // Layout settle (font swap, image decode).
+      await new Promise((r) => setTimeout(r, 600));
+    } else {
+      // Live-URL-Pfad (Website-Segmente) unverändert.
+      try {
+        await page.goto(url, {
+          waitUntil: "networkidle2",
+          timeout: GOTO_TIMEOUT_MS,
+        });
+      } catch (e) {
+        try {
+          await page.goto(url, {
+            waitUntil: "domcontentloaded",
+            timeout: 10_000,
+          });
+        } catch {
+          throw e instanceof Error ? e : new Error(String(e));
+        }
+      }
+      await new Promise((r) => setTimeout(r, 1_000));
+      await dismissCookieBanners(page, 3_000).catch(() => false);
     }
 
     // Force overflow auto so we can measure the real document height.
@@ -180,8 +191,11 @@ export async function screenshotProcessor(
       })
       .catch(() => undefined);
 
-    const docHeight: number = await page.evaluate(
-      () => document.documentElement.scrollHeight,
+    const docHeight: number = await page.evaluate(() =>
+      Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+      ),
     );
     const height = Math.max(VIEWPORT.height, Math.floor(docHeight));
 
@@ -217,5 +231,8 @@ export async function screenshotProcessor(
       await pageHolder.current.close().catch(() => undefined);
     }
     await ctx.close();
+    if (gdocsWorkDir) {
+      await cleanupRenderedGDocs(gdocsWorkDir);
+    }
   }
 }

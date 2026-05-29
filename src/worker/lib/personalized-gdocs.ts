@@ -27,9 +27,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "puppeteer-core";
 import type { ScrollFrame } from "@/lib/segments/types";
-import { fetchGoogleDocAsHtml } from "./google-docs";
-import { replacePlaceholdersInHtml } from "./docx";
 import { getContext } from "./browser-pool";
+import {
+  renderGDocsToHtml,
+  cleanupRenderedGDocs,
+} from "./gdocs-render-pipeline";
 
 export interface RenderGDocsOpts {
   docsUrl: string;
@@ -184,14 +186,16 @@ export async function renderPersonalizedGDocs(
   const framesDir = join(opts.outputDir, "frames");
   await mkdir(framesDir, { recursive: true });
 
-  // 1+2. Download + substitute.
-  const html = await fetchGoogleDocAsHtml(opts.docsUrl);
-  const personalized = replacePlaceholdersInHtml(html, opts.vars);
-
-  // 3. Write to temp file under outputDir.
+  // 1-4. DOCX -> Platzhalter -> LibreOffice/PDF -> Poppler/PNG -> HTML-Stack.
   await mkdir(opts.outputDir, { recursive: true });
-  const tempPath = join(opts.outputDir, "doc.html");
-  await writeFile(tempPath, personalized, "utf8");
+  const renderWorkDir = join(opts.outputDir, "gdocs-render");
+  const rendered = await renderGDocsToHtml({
+    docsUrl: opts.docsUrl,
+    vars: opts.vars,
+    workDir: renderWorkDir,
+    dpi: 150,
+  });
+  const tempPath = rendered.htmlPath;
 
   const ctx = await getContext();
   const pageHolder: { current: Page | null } = { current: null };
@@ -331,5 +335,9 @@ export async function renderPersonalizedGDocs(
       await pageHolder.current.close().catch(() => undefined);
     }
     await ctx.close();
+    // Best-effort: PNG-Pages + Temp-Files entfernen. Falls jemand
+    // outputDir noch braucht (frames/), behalten wir den Parent — wir
+    // putzen nur den gdocs-render-Unterordner.
+    await cleanupRenderedGDocs(rendered.workDir);
   }
 }
