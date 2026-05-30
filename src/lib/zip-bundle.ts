@@ -8,15 +8,15 @@
 
 import { PassThrough, Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-// CJS-Interop: `import archiver from "archiver"` brachte zur Laufzeit
-// "i.default is not a function" weil archiver keinen ESM-default exportiert.
-// Mit `import * as` greifen wir auf die module.exports-function via .default
-// oder direkt zu.
-import * as archiverModule from "archiver";
+import { createRequire } from "node:module";
 import type ArchiverNs from "archiver";
-const archiver: typeof ArchiverNs =
-  (archiverModule as unknown as { default?: typeof ArchiverNs }).default ??
-  (archiverModule as unknown as typeof ArchiverNs);
+
+// Direct CJS-require via createRequire umgeht Next-Webpack komplett.
+// Statisches `import archiver from "archiver"` brach mit "d is not a
+// function" auch nach serverComponentsExternalPackages-Eintrag und
+// `import * as`-Workaround. createRequire ist die saubere Eskalation.
+const requireFn = createRequire(import.meta.url);
+const archiver: typeof ArchiverNs = requireFn("archiver") as typeof ArchiverNs;
 
 export interface ZipEntry {
   name: string;
