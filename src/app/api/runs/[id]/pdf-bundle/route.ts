@@ -143,7 +143,7 @@ async function streamBundle(
   const baseName = sanitizeBaseName(baseNameInput, run.name);
   const zipFilename = `${baseName}_pdf-bundle.zip`;
 
-  const { archive, stream } = createArchive();
+  const { archive, stream } = await createArchive();
 
   // pdf-lib via dynamic import: Next-Webpack hat sonst Probleme mit
   // den ESM-Exports ("d is not a function" beim PDFDocument.create-Call,

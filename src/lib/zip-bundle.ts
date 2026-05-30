@@ -8,15 +8,22 @@
 
 import { PassThrough, Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { createRequire } from "node:module";
 import type ArchiverNs from "archiver";
 
-// Direct CJS-require via createRequire umgeht Next-Webpack komplett.
-// Statisches `import archiver from "archiver"` brach mit "d is not a
-// function" auch nach serverComponentsExternalPackages-Eintrag und
-// `import * as`-Workaround. createRequire ist die saubere Eskalation.
-const requireFn = createRequire(import.meta.url);
-const archiver: typeof ArchiverNs = requireFn("archiver") as typeof ArchiverNs;
+// archiver via dynamic import — Statisches `import archiver from "archiver"`
+// brach im Next-Webpack-Build mit "d is not a function" weil der Bundler
+// die CJS-default-Resolution selbst mit serverComponentsExternalPackages
+// mangled. Dynamic import() umgeht den Static-Analyzer und resolved es
+// nativ at runtime.
+let archiverCache: typeof ArchiverNs | null = null;
+async function getArchiver(): Promise<typeof ArchiverNs> {
+  if (archiverCache) return archiverCache;
+  const mod = (await import("archiver")) as unknown as {
+    default?: typeof ArchiverNs;
+  } & typeof ArchiverNs;
+  archiverCache = mod.default ?? (mod as unknown as typeof ArchiverNs);
+  return archiverCache;
+}
 
 export interface ZipEntry {
   name: string;
@@ -30,13 +37,14 @@ export interface ZipEntry {
  * a `Response`'s body or another sink. Any archiver error rejects the
  * resulting promise; the stream is automatically finalized.
  */
-export function createZipStream(entries: ZipEntry[]): Readable {
+export async function createZipStream(
+  entries: ZipEntry[],
+): Promise<Readable> {
+  const archiver = await getArchiver();
   const archive = archiver("zip", { zlib: { level: 6 } });
   const out = new PassThrough();
   archive.pipe(out);
 
-  // Append each entry. Streams added here are consumed by archiver as it
-  // builds the ZIP, so we don't need to await per-entry.
   for (const entry of entries) {
     if (Buffer.isBuffer(entry.source) || typeof entry.source === "string") {
       archive.append(entry.source, { name: entry.name });
@@ -45,7 +53,6 @@ export function createZipStream(entries: ZipEntry[]): Readable {
     }
   }
 
-  // Kick off finalization; errors propagate via the 'error' event below.
   archive.finalize().catch((err) => {
     out.destroy(err instanceof Error ? err : new Error(String(err)));
   });
@@ -54,8 +61,6 @@ export function createZipStream(entries: ZipEntry[]): Readable {
     out.destroy(err);
   });
   archive.on("warning", (err) => {
-    // Bad-archive warnings (e.g. unknown encoding) shouldn't kill the
-    // stream; surface anything fatal via 'error' above.
     if (err.code !== "ENOENT") {
       // eslint-disable-next-line no-console
       console.warn("[zip] warning:", err.message);
@@ -103,10 +108,11 @@ export async function addRemoteFileToZip(
  * (e.g. mixing remote URLs + manifest CSV). Returns the archiver instance
  * + output stream; caller is responsible for `archive.finalize()`.
  */
-export function createArchive(): {
+export async function createArchive(): Promise<{
   archive: ArchiverNs.Archiver;
   stream: Readable;
-} {
+}> {
+  const archiver = await getArchiver();
   const archive = archiver("zip", { zlib: { level: 6 } });
   const out = new PassThrough();
   archive.pipe(out);
