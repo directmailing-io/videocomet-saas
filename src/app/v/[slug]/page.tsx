@@ -11,6 +11,7 @@ import { getLeadBySlug } from "@/lib/db/queries/leads";
 import { Logo } from "@/components/ui/logo";
 import { VideoPlayer } from "./video-player";
 import { LandingRender } from "./landing-render";
+import { TrackerInit } from "./tracker-init";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -103,6 +104,7 @@ export default async function PublicLandingPage({ params }: PublicLandingProps) 
   const videoSlot = (
     <VideoPlayer
       leadId={lead.id}
+      slug={slug}
       bunnyEmbedUrl={bunnyEmbedUrl}
       videoSrc={lead.videoUrl}
       thumbnailUrl={lead.thumbnailUrl}
@@ -112,11 +114,15 @@ export default async function PublicLandingPage({ params }: PublicLandingProps) 
 
   return (
     <>
+      {/* Initialises the tracker module and fires the page_view event
+          from the client. Server-side cannot read referrer/language. */}
+      <TrackerInit slug={slug} />
       <LandingRender
         themeId={campaignInfo?.themeId}
         templateContent={campaignInfo?.templateContent ?? null}
         leadData={lead.data}
         leadId={lead.id}
+        slug={slug}
         videoSlot={videoSlot}
       />
       {/* Tracking pixel — fires page_view from the bare HTML even if

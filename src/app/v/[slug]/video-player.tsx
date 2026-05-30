@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { setTrackingSlug, track } from "@/lib/tracker";
 
 /**
  * Public landing-page video player.
@@ -9,27 +10,33 @@ import * as React from "react";
  * otherwise falls back to a native <video> element. Either way the player
  * is responsive (16:9) and fills its container.
  *
- * Tracking:
- *  - `video-start` is reported on the first play event of the session.
- *  - `video-progress` is reported when the user crosses 25/50/75/100%
- *    thresholds. Each milestone fires at most once per page load. We use
- *    `navigator.sendBeacon` so events survive page-unload navigations.
+ * Tracking (new unified pipeline → /api/track/event):
+ *  - `video_play` on the first play event.
+ *  - `video_progress` every 5 seconds while playing AND on pause/seek/end,
+ *    carrying `atSec`, `playedSec` (monotonic max-watched), `durationSec`.
+ *  - `video_ended` once when the media reaches the end.
+ *  - `pagehide`/`beforeunload` flushes a final `video_progress` via
+ *    sendBeacon so we don't lose the last few seconds when the recipient
+ *    closes the tab.
  *
- * When using the iframe player we cannot observe progress without the
- * postMessage handshake from Bunny — so we only attempt fine-grained
- * tracking in the native fallback. The video-start event still fires
- * (the iframe at least signals load completion via onLoad).
+ * Legacy endpoints (`/api/track/video-start`, `/api/track/video-progress`)
+ * are kept for the milestone-based tracking the worker already understands;
+ * the new pipeline runs in parallel and feeds the realtime analytics view.
  */
 
 export interface VideoPlayerProps {
   leadId: string;
+  slug?: string;
   bunnyEmbedUrl?: string | null;
   videoSrc?: string | null;
   thumbnailUrl?: string | null;
   title?: string;
 }
 
-function trackEvent(path: string, payload: Record<string, unknown>): void {
+function legacyTrackEvent(
+  path: string,
+  payload: Record<string, unknown>,
+): void {
   try {
     const body = JSON.stringify(payload);
     if (
@@ -40,7 +47,6 @@ function trackEvent(path: string, payload: Record<string, unknown>): void {
       const ok = navigator.sendBeacon(path, blob);
       if (ok) return;
     }
-    // Fallback (some Safari versions reject Blob beacons of certain types).
     fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -55,9 +61,11 @@ function trackEvent(path: string, payload: Record<string, unknown>): void {
 }
 
 const PROGRESS_MILESTONES = [25, 50, 75, 100] as const;
+const PROGRESS_TICK_MS = 5000;
 
 export function VideoPlayer({
   leadId,
+  slug,
   bunnyEmbedUrl,
   videoSrc,
   thumbnailUrl,
@@ -66,21 +74,72 @@ export function VideoPlayer({
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const startedRef = React.useRef(false);
   const reachedRef = React.useRef<Set<number>>(new Set());
+  // Monotonic high-water-mark: even if the user seeks backwards the value
+  // never decreases. Bumped on every timeupdate tick.
+  const maxPlayedSecRef = React.useRef(0);
+  const intervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Ensure the tracker module knows the slug even on direct deep-links
+  // (TrackerInit also calls this, but it is cheap and idempotent).
+  React.useEffect(() => {
+    if (slug) setTrackingSlug(slug);
+  }, [slug]);
+
+  const snapshotProgress = React.useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return null;
+    const dur = Number.isFinite(video.duration) ? video.duration : 0;
+    return {
+      atSec: Math.round(video.currentTime * 10) / 10,
+      playedSec:
+        Math.round(maxPlayedSecRef.current * 10) / 10,
+      durationSec: Math.round(dur * 10) / 10,
+    };
+  }, []);
+
+  const clearTick = React.useCallback(() => {
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  const startTick = React.useCallback(() => {
+    clearTick();
+    intervalRef.current = setInterval(() => {
+      const video = videoRef.current;
+      if (!video || video.paused || video.ended) return;
+      if (video.currentTime > maxPlayedSecRef.current) {
+        maxPlayedSecRef.current = video.currentTime;
+      }
+      const snap = snapshotProgress();
+      if (snap) track("video_progress", snap);
+    }, PROGRESS_TICK_MS);
+  }, [clearTick, snapshotProgress]);
 
   const onPlay = React.useCallback(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    trackEvent("/api/track/video-start", { leadId });
-  }, [leadId]);
+    const video = videoRef.current;
+    const atSec = video ? Math.round(video.currentTime * 10) / 10 : 0;
+    track("video_play", { atSec });
+    if (!startedRef.current) {
+      startedRef.current = true;
+      legacyTrackEvent("/api/track/video-start", { leadId });
+    }
+    startTick();
+  }, [leadId, startTick]);
 
   const onTimeUpdate = React.useCallback(() => {
     const video = videoRef.current;
-    if (!video || !video.duration || Number.isNaN(video.duration)) return;
+    if (!video) return;
+    if (video.currentTime > maxPlayedSecRef.current) {
+      maxPlayedSecRef.current = video.currentTime;
+    }
+    if (!video.duration || Number.isNaN(video.duration)) return;
     const pct = (video.currentTime / video.duration) * 100;
     for (const milestone of PROGRESS_MILESTONES) {
       if (pct >= milestone && !reachedRef.current.has(milestone)) {
         reachedRef.current.add(milestone);
-        trackEvent("/api/track/video-progress", {
+        legacyTrackEvent("/api/track/video-progress", {
           leadId,
           percent: milestone,
         });
@@ -88,12 +147,61 @@ export function VideoPlayer({
     }
   }, [leadId]);
 
+  const onPause = React.useCallback(() => {
+    clearTick();
+    const snap = snapshotProgress();
+    if (snap) track("video_progress", snap);
+  }, [clearTick, snapshotProgress]);
+
+  const onSeeked = React.useCallback(() => {
+    const snap = snapshotProgress();
+    if (snap) track("video_progress", snap);
+  }, [snapshotProgress]);
+
   const onEnded = React.useCallback(() => {
+    clearTick();
+    const video = videoRef.current;
+    const dur = video && Number.isFinite(video.duration) ? video.duration : 0;
+    if (dur > maxPlayedSecRef.current) maxPlayedSecRef.current = dur;
+    const snap = snapshotProgress() ?? {
+      atSec: dur,
+      playedSec: dur,
+      durationSec: dur,
+    };
+    track("video_progress", snap);
+    track("video_ended", {
+      atSec: snap.durationSec,
+      playedSec: snap.playedSec,
+      durationSec: snap.durationSec,
+    });
     if (!reachedRef.current.has(100)) {
       reachedRef.current.add(100);
-      trackEvent("/api/track/video-progress", { leadId, percent: 100 });
+      legacyTrackEvent("/api/track/video-progress", { leadId, percent: 100 });
     }
-  }, [leadId]);
+  }, [clearTick, leadId, snapshotProgress]);
+
+  // Flush a final progress beacon when the page is unloaded mid-play. We
+  // listen on both pagehide (modern Safari + back-forward cache) and
+  // beforeunload (other browsers) — both fire sendBeacon happily.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const flush = () => {
+      const snap = snapshotProgress();
+      if (snap) track("video_progress", snap);
+    };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, [snapshotProgress]);
+
+  // Belt-and-braces: clear the interval on unmount so we never leak a
+  // recurring timer after the component leaves the tree.
+  React.useEffect(() => {
+    return () => clearTick();
+  }, [clearTick]);
 
   // iframe path: we cannot inspect play/progress from a cross-origin
   // iframe without Bunny's player.js integration. The "video-start"
@@ -102,9 +210,10 @@ export function VideoPlayer({
   // then disappears (the click also activates the iframe controls).
   const [iframeArmed, setIframeArmed] = React.useState(true);
   const fireIframeStart = React.useCallback(() => {
+    track("video_play", { atSec: 0 });
     if (startedRef.current) return;
     startedRef.current = true;
-    trackEvent("/api/track/video-start", { leadId });
+    legacyTrackEvent("/api/track/video-start", { leadId });
     setIframeArmed(false);
   }, [leadId]);
 
@@ -144,6 +253,8 @@ export function VideoPlayer({
           className="absolute inset-0 h-full w-full object-contain"
           onPlay={onPlay}
           onTimeUpdate={onTimeUpdate}
+          onPause={onPause}
+          onSeeked={onSeeked}
           onEnded={onEnded}
         />
       </div>
@@ -162,11 +273,19 @@ export function VideoPlayer({
 /**
  * CTA button with click-tracking. Renders as an <a> so right-click /
  * middle-click / open-in-new-tab continue to work normally.
+ *
+ * The click handler fires `track("cta_click", …)` synchronously before
+ * the browser tears down the page for navigation. Because `track()` uses
+ * `navigator.sendBeacon` under the hood, the event is queued by the
+ * browser and survives the unload.
  */
+export type CtaPosition = "primary" | "secondary";
+
 export interface CtaButtonProps {
   leadId: string;
   label: string;
   href: string;
+  position?: CtaPosition;
   className?: string;
   children: React.ReactNode;
 }
@@ -175,12 +294,14 @@ export function CtaButton({
   leadId,
   label,
   href,
+  position = "primary",
   className,
   children,
 }: CtaButtonProps) {
   const handleClick = React.useCallback(() => {
-    trackEvent("/api/track/cta-click", { leadId, label, href });
-  }, [leadId, label, href]);
+    track("cta_click", { label, url: href, position });
+    legacyTrackEvent("/api/track/cta-click", { leadId, label, href });
+  }, [leadId, label, href, position]);
   return (
     <a
       href={href}

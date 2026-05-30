@@ -12,8 +12,9 @@ import {
   RotateCcw,
   Loader2,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useToast } from "@/components/ui/toaster";
+import { LeadAnalyticsDrawer } from "./lead-analytics-drawer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -46,6 +47,22 @@ interface LeadRow {
   errorMessage: string | null;
   completedAt: string | null;
   data: Record<string, string>;
+  // Tracking aggregates (denormalized on `leads`). Optional because the SSE
+  // tick payload from /api/runs/:id/stream doesn't include them — we MERGE
+  // them in from `initialLeads` instead of overwriting (see mergeLeads).
+  viewCount?: number;
+  firstViewedAt?: string | null;
+  lastViewedAt?: string | null;
+  playCount?: number;
+  watchTimeSec?: number;
+  ctaClickCount?: number;
+  lastCtaAt?: string | null;
+}
+
+type FilterKey = "all" | "opened" | "played" | "cta";
+
+function isFilterKey(value: string | null | undefined): value is FilterKey {
+  return value === "all" || value === "opened" || value === "played" || value === "cta";
 }
 
 interface Counts {
@@ -178,7 +195,42 @@ export function LiveTable({
   const logScrollRef = React.useRef<HTMLDivElement | null>(null);
 
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+
+  // Tracking-Filter (Alle / Geöffnet / Video gesehen / CTA geklickt).
+  // State sync'd to `?filter=` so a refresh / shared link reopens the same
+  // view. Client-side only — no server round-trip on switch.
+  const filterFromUrl: FilterKey = (() => {
+    const raw = searchParams?.get("filter") ?? null;
+    return isFilterKey(raw) ? raw : "all";
+  })();
+  const [filter, setFilter] = React.useState<FilterKey>(filterFromUrl);
+  React.useEffect(() => {
+    // Pull URL → state when query changes via back/forward navigation.
+    setFilter(filterFromUrl);
+  }, [filterFromUrl]);
+
+  const updateFilter = React.useCallback(
+    (next: FilterKey) => {
+      setFilter(next);
+      const params = new URLSearchParams(searchParams?.toString() ?? "");
+      if (next === "all") params.delete("filter");
+      else params.set("filter", next);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  // Drawer state for per-lead analytics.
+  const [drawerLead, setDrawerLead] = React.useState<LeadRow | null>(null);
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const openLeadDrawer = React.useCallback((lead: LeadRow) => {
+    setDrawerLead(lead);
+    setDrawerOpen(true);
+  }, []);
 
   const isTerminal =
     runStatus === "completed" ||
@@ -281,7 +333,12 @@ export function LiveTable({
           }
         }
         if (Array.isArray(payload.leads)) {
-          setLeads(payload.leads as LeadRow[]);
+          // SSE snapshot doesn't carry the denormalized tracking fields
+          // (viewCount, watchTimeSec, ...). Merge them in from the current
+          // row so a reconnect doesn't wipe the column UI.
+          setLeads((prev) =>
+            replaceLeadsPreservingTracking(prev, payload.leads as LeadRow[]),
+          );
         }
         if (Array.isArray(payload.pipelineEvents)) {
           // Snapshot replaces the log so a reconnect doesn't keep stale events
@@ -419,6 +476,33 @@ export function LiveTable({
       window.clearInterval(id);
     };
   }, [isTerminal]);
+
+  // Tracking-Filter Aggregate + gefilterte Lead-Liste. Cheap to recompute on
+  // every render — `leads` is typically <200 rows.
+  const trackingCounts = React.useMemo(() => {
+    let opened = 0,
+      played = 0,
+      clicked = 0;
+    for (const l of leads) {
+      if ((l.viewCount ?? 0) > 0) opened++;
+      if ((l.playCount ?? 0) > 0) played++;
+      if ((l.ctaClickCount ?? 0) > 0) clicked++;
+    }
+    return { opened, played, clicked };
+  }, [leads]);
+
+  const filteredLeads = React.useMemo(() => {
+    switch (filter) {
+      case "opened":
+        return leads.filter((l) => (l.viewCount ?? 0) > 0);
+      case "played":
+        return leads.filter((l) => (l.playCount ?? 0) > 0);
+      case "cta":
+        return leads.filter((l) => (l.ctaClickCount ?? 0) > 0);
+      default:
+        return leads;
+    }
+  }, [leads, filter]);
 
   const workerStatsLabel = (() => {
     if (!workerStats) return null;
@@ -649,6 +733,34 @@ export function LiveTable({
         </CardContent>
       </Card>
 
+      {/* Tracking-Filter (clientseitig, URL-sync'd) */}
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterPill
+          active={filter === "all"}
+          onClick={() => updateFilter("all")}
+        >
+          Alle <FilterPillCount>{leads.length}</FilterPillCount>
+        </FilterPill>
+        <FilterPill
+          active={filter === "opened"}
+          onClick={() => updateFilter("opened")}
+        >
+          Geöffnet <FilterPillCount>{trackingCounts.opened}</FilterPillCount>
+        </FilterPill>
+        <FilterPill
+          active={filter === "played"}
+          onClick={() => updateFilter("played")}
+        >
+          Video gesehen <FilterPillCount>{trackingCounts.played}</FilterPillCount>
+        </FilterPill>
+        <FilterPill
+          active={filter === "cta"}
+          onClick={() => updateFilter("cta")}
+        >
+          CTA geklickt <FilterPillCount>{trackingCounts.clicked}</FilterPillCount>
+        </FilterPill>
+      </div>
+
       <div className="overflow-x-auto rounded-squircle-md border border-line bg-surface">
         <Table>
           <TableHeader>
@@ -657,21 +769,30 @@ export function LiveTable({
               <TableHead>Name</TableHead>
               <TableHead>E-Mail</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Aufrufe</TableHead>
+              <TableHead>Wiedergabe</TableHead>
+              <TableHead>Klicks</TableHead>
               <TableHead>Landingpage</TableHead>
               <TableHead>Video</TableHead>
               <TableHead>PDF</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {leads.length === 0 ? (
+            {filteredLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-ink-muted py-8">
-                  Noch keine Leads.
+                <TableCell colSpan={10} className="text-center text-ink-muted py-8">
+                  {leads.length === 0
+                    ? "Noch keine Leads."
+                    : "Keine Leads im aktiven Filter."}
                 </TableCell>
               </TableRow>
             ) : (
-              leads.map((l) => (
-                <TableRow key={l.id}>
+              filteredLeads.map((l) => (
+                <TableRow
+                  key={l.id}
+                  onClick={() => openLeadDrawer(l)}
+                  className="cursor-pointer hover:bg-surface-muted/60 transition-colors"
+                >
                   <TableCell className="text-xs text-ink-muted">
                     {l.rowIndex + 1}
                   </TableCell>
@@ -688,7 +809,49 @@ export function LiveTable({
                       {statusLabel(l.status)}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-xs">
+                    {(l.viewCount ?? 0) > 0 ? (
+                      <span className="inline-flex flex-col">
+                        <span className="text-ink font-medium">
+                          <span aria-hidden>👁</span> {l.viewCount}
+                        </span>
+                        <span className="text-ink-muted text-[11px]">
+                          {formatRel(l.lastViewedAt)}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-ink-muted">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {(l.playCount ?? 0) > 0 ? (
+                      <span className="inline-flex flex-col">
+                        <span className="text-ink font-medium">
+                          <span aria-hidden>▶</span> {l.playCount}
+                        </span>
+                        <span className="text-ink-muted text-[11px] tabular-nums">
+                          {formatWatchTime(l.watchTimeSec ?? 0)}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-ink-muted">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {(l.ctaClickCount ?? 0) > 0 ? (
+                      <span className="inline-flex flex-col">
+                        <span className="text-ink font-medium">
+                          <span aria-hidden>✱</span> {l.ctaClickCount}
+                        </span>
+                        <span className="text-ink-muted text-[11px]">
+                          {formatRel(l.lastCtaAt)}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-ink-muted">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell onClick={stopRowClick}>
                     {l.slug ? (
                       <a
                         href={`/v/${l.slug}`}
@@ -703,7 +866,7 @@ export function LiveTable({
                       <span className="text-ink-muted text-xs">—</span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={stopRowClick}>
                     {l.videoUrl ? (
                       <a
                         href={l.videoUrl}
@@ -718,7 +881,7 @@ export function LiveTable({
                       <span className="text-ink-muted text-xs">—</span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={stopRowClick}>
                     {l.pdfUrl ? (
                       <a
                         href={`/api/leads/${l.id}/pdf`}
@@ -742,12 +905,87 @@ export function LiveTable({
         </Table>
       </div>
 
+      <LeadAnalyticsDrawer
+        lead={drawerLead}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+      />
+
       {/* Tree-shake guard for icons not always used above */}
       <span aria-hidden className="hidden">
         <FileText className="size-0" />
       </span>
     </div>
   );
+}
+
+function FilterPill({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+        active
+          ? "bg-brand text-white shadow-brand"
+          : "bg-surface border border-line text-ink-muted hover:bg-surface-muted hover:text-ink"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function FilterPillCount({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <span className="rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Helper to stop a cell's own clickable target (link, button) from bubbling
+ * up to the row click. Without this, the analytics drawer would open every
+ * time a user clicks the landingpage / video / PDF link.
+ */
+function stopRowClick(e: React.MouseEvent): void {
+  e.stopPropagation();
+}
+
+function formatWatchTime(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return "0:00";
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Compact German relative-time formatting for inline use in the table. No
+ * external dep; precision rolls up at boundaries that match what users
+ * actually want to see (just-now / minutes / hours / days).
+ */
+function formatRel(input: string | Date | null | undefined): string {
+  if (!input) return "—";
+  const d = input instanceof Date ? input : new Date(input);
+  const ms = Date.now() - d.getTime();
+  if (!Number.isFinite(ms)) return "—";
+  if (ms < 60_000) return "gerade eben";
+  if (ms < 3_600_000) return `vor ${Math.floor(ms / 60_000)} min`;
+  if (ms < 86_400_000) return `vor ${Math.floor(ms / 3_600_000)} Std`;
+  if (ms < 30 * 86_400_000) return `vor ${Math.floor(ms / 86_400_000)} Tg.`;
+  return d.toLocaleDateString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+  });
 }
 
 function mergePipelineEvents(
@@ -830,13 +1068,50 @@ function mergeLeads(prev: LeadRow[], updates: LeadRow[]): LeadRow[] {
   // id and falling through to the previous row when no update arrived keeps
   // the ordering stable and guarantees status / asset URL changes overwrite
   // the previous row instead of being shallow-merged into stale fields.
+  //
+  // Tracking fields (viewCount, watchTimeSec, ...) come from a separate code
+  // path (initial server-render) and aren't part of the SSE tick payload.
+  // We keep them sticky across ticks by re-overlaying the previous row's
+  // tracking aggregates onto the incoming patch.
   const updateMap = new Map(updates.map((u) => [u.id, u] as const));
   let changed = false;
   const next = prev.map((p) => {
     const u = updateMap.get(p.id);
     if (!u) return p;
     changed = true;
-    return u;
+    return mergeTrackingFields(u, p);
   });
   return changed ? next : prev;
+}
+
+/**
+ * Apply incoming SSE `next` lead-row but keep the tracking aggregates from
+ * the older `existing` row. Used for both snapshot-replace and tick-merge.
+ */
+function mergeTrackingFields(next: LeadRow, existing: LeadRow | undefined): LeadRow {
+  if (!existing) return next;
+  return {
+    ...next,
+    viewCount: next.viewCount ?? existing.viewCount,
+    firstViewedAt: next.firstViewedAt ?? existing.firstViewedAt,
+    lastViewedAt: next.lastViewedAt ?? existing.lastViewedAt,
+    playCount: next.playCount ?? existing.playCount,
+    watchTimeSec: next.watchTimeSec ?? existing.watchTimeSec,
+    ctaClickCount: next.ctaClickCount ?? existing.ctaClickCount,
+    lastCtaAt: next.lastCtaAt ?? existing.lastCtaAt,
+  };
+}
+
+/**
+ * Snapshot-style replace: the SSE snapshot resends every lead. We honour the
+ * server's ordering and field set, but overlay the previous tracking
+ * aggregates so a reconnect doesn't blank the new columns.
+ */
+function replaceLeadsPreservingTracking(
+  prev: LeadRow[],
+  incoming: LeadRow[],
+): LeadRow[] {
+  if (prev.length === 0) return incoming;
+  const prevMap = new Map(prev.map((l) => [l.id, l] as const));
+  return incoming.map((n) => mergeTrackingFields(n, prevMap.get(n.id)));
 }

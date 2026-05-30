@@ -165,6 +165,17 @@ export const leads = pgTable("leads", {
   // auf NULL gesetzt, damit Stuck-Recovery erkennt wo ein Job zuletzt hing.
   currentStage: text("current_stage"),
 
+  // ── Denormalized Tracking-Aggregate ────────────────────────────────────
+  // Aggregiert aus lead_events bei jedem insert (siehe queries/lead-events).
+  // Erlaubt dem UI, ohne Sub-Query auf Aggregaten zu filtern/sortieren.
+  viewCount: integer("view_count").notNull().default(0),
+  firstViewedAt: timestamp("first_viewed_at", { withTimezone: true }),
+  lastViewedAt: timestamp("last_viewed_at", { withTimezone: true }),
+  playCount: integer("play_count").notNull().default(0),
+  watchTimeSec: integer("watch_time_sec").notNull().default(0),
+  ctaClickCount: integer("cta_click_count").notNull().default(0),
+  lastCtaAt: timestamp("last_cta_at", { withTimezone: true }),
+
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -212,4 +223,26 @@ export const pipelineEvents = pgTable("pipeline_events", {
   durationMs: integer("duration_ms"),
 }, (t) => ({
   runTsIdx: index("pipeline_events_run_ts_idx").on(t.runId, t.ts),
+}));
+
+// ── Lead-Events (Tracking aus Landingpage / Player) ─────────────────────────
+// Persistentes Event-Log pro Lead (page_view, video_play, video_progress,
+// video_ended, cta_click). Wird vom oeffentlichen /api/track/event Endpoint
+// gefuettert. Aggregate werden inline in die leads-Tabelle geschrieben, damit
+// Filter im UI ohne Sub-Query auskommen (viewCount, watchTimeSec, ...).
+//
+// Privacy:
+//  - `ipHash` = sha256(ip).slice(0,16); raw IP wird nie gespeichert
+//  - `sessionId` = sha256(ip+ua+YYYY-MM-DD).slice(0,16); rotiert taeglich
+export const leadEvents = pgTable("lead_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leadId: uuid("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // 'page_view' | 'video_play' | 'video_progress' | 'video_ended' | 'cta_click'
+  ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+  payload: jsonb("payload").$type<Record<string, unknown>>(),
+  sessionId: text("session_id"),
+  ipHash: text("ip_hash"),
+}, (t) => ({
+  leadTsIdx: index("lead_events_lead_ts_idx").on(t.leadId, t.ts),
+  leadKindIdx: index("lead_events_lead_kind_idx").on(t.leadId, t.kind),
 }));

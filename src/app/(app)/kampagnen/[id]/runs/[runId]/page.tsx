@@ -42,6 +42,15 @@ export default async function RunDetailPage({
     errorMessage: l.errorMessage,
     completedAt: l.completedAt ? l.completedAt.toISOString() : null,
     data: l.data as Record<string, string>,
+    // Tracking aggregates (denormalized on `leads`). Serialised to ISO so the
+    // server payload stays JSON-clean.
+    viewCount: l.viewCount ?? 0,
+    firstViewedAt: l.firstViewedAt ? l.firstViewedAt.toISOString() : null,
+    lastViewedAt: l.lastViewedAt ? l.lastViewedAt.toISOString() : null,
+    playCount: l.playCount ?? 0,
+    watchTimeSec: l.watchTimeSec ?? 0,
+    ctaClickCount: l.ctaClickCount ?? 0,
+    lastCtaAt: l.lastCtaAt ? l.lastCtaAt.toISOString() : null,
   }));
 
   return (

@@ -134,6 +134,10 @@ export interface LandingRenderProps {
   templateContent: unknown;
   leadData: Record<string, string>;
   leadId: string;
+  /** Optional — only used here to keep the prop available for future
+   *  client-side tracking on this surface. The tracker module already
+   *  caches the slug via <TrackerInit>. */
+  slug?: string;
   videoSlot: React.ReactNode;
 }
 
@@ -211,6 +215,7 @@ export function LandingRender({
                 leadId={leadId}
                 label={primaryText}
                 href={primaryUrl}
+                position="primary"
                 className={cn(
                   "inline-flex items-center justify-center px-7 py-3.5 text-sm font-semibold rounded-full transition-all duration-150",
                   theme.ctaPrimary,
@@ -224,6 +229,7 @@ export function LandingRender({
                 leadId={leadId}
                 label={secondaryText}
                 href={secondaryUrl}
+                position="secondary"
                 className={cn(
                   "inline-flex items-center justify-center px-7 py-3.5 text-sm font-semibold rounded-full transition-all duration-150",
                   theme.ctaSecondary,

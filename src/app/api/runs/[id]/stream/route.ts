@@ -228,6 +228,13 @@ function projectLead(l: typeof leads.$inferSelect) {
     errorMessage: l.errorMessage,
     completedAt: l.completedAt,
     data: l.data,
+    viewCount: l.viewCount,
+    firstViewedAt: l.firstViewedAt,
+    lastViewedAt: l.lastViewedAt,
+    playCount: l.playCount,
+    watchTimeSec: l.watchTimeSec,
+    ctaClickCount: l.ctaClickCount,
+    lastCtaAt: l.lastCtaAt,
   };
 }
 
