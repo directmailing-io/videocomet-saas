@@ -4,7 +4,6 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { Readable } from "node:stream";
 import { z } from "zod";
-import { PDFDocument } from "pdf-lib";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getRun } from "@/lib/db/queries/runs";
 import { listLeadsByRun } from "@/lib/db/queries/leads";
@@ -145,6 +144,11 @@ async function streamBundle(
   const zipFilename = `${baseName}_pdf-bundle.zip`;
 
   const { archive, stream } = createArchive();
+
+  // pdf-lib via dynamic import: Next-Webpack hat sonst Probleme mit
+  // den ESM-Exports ("d is not a function" beim PDFDocument.create-Call,
+  // selbst mit serverComponentsExternalPackages).
+  const { PDFDocument } = await import("pdf-lib");
 
   // Build merged PDFs in batches and append each to the ZIP. Background
   // task so we can return the streaming Response immediately.
