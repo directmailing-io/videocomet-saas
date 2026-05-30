@@ -39,7 +39,10 @@ import {
   recordScroll,
 } from "../lib/scroll-recorder";
 import { renderPersonalizedGDocs } from "../lib/personalized-gdocs";
-import { renderWebsiteCapture } from "../lib/website-render-pipeline";
+import {
+  renderWebsiteCapture,
+  renderUnreachablePlaceholder,
+} from "../lib/website-render-pipeline";
 import type { Segment } from "@/lib/segments/types";
 
 export interface VideoRenderInput {
@@ -412,10 +415,12 @@ async function renderSegmentsBase(opts: {
               `[render] website capture failed for ${url} → placeholder:`,
               err instanceof Error ? err.message : err,
             );
-            const fb = await recordFallbackPage({
+            // Pure-sharp Placeholder (kein Puppeteer) — verhindert
+            // 5-min Hard-Timeout wenn der Browser-Pool deadlocked ist.
+            const fb = await renderUnreachablePlaceholder({
+              url,
               outputDir: join(opts.outDir, `web-${i}`),
               durationMs,
-              websiteLabel: url,
             });
             await imageSeqToMp4({
               framesDir: fb.framesDir,

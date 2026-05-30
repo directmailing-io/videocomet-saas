@@ -149,6 +149,65 @@ interface ScreencastFrame {
 }
 
 /**
+ * Pure-sharp Placeholder ohne Puppeteer. Wird gerufen wenn die Live-URL
+ * gar nicht erreichbar ist (DNS-fail, SSL-fail, server-timeout). Generiert
+ * ein neutrales Standbild mit Hinweis-Text und repliziert es N-mal als
+ * JPG. KEIN browser-pool, daher hängt nichts wenn Puppeteer deadlocked.
+ */
+export async function renderUnreachablePlaceholder(opts: {
+  url: string;
+  outputDir: string;
+  durationMs: number;
+  viewport?: { width: number; height: number };
+  fps?: number;
+}): Promise<RenderWebsiteResult> {
+  const viewport = opts.viewport ?? { width: 1280, height: 720 };
+  const fps = opts.fps ?? 30;
+  const framesDir = join(opts.outputDir, "frames");
+  await mkdir(framesDir, { recursive: true });
+
+  const frameIntervalMs = 1000 / fps;
+  const totalFrames = Math.max(
+    1,
+    Math.ceil(opts.durationMs / frameIntervalMs),
+  );
+
+  let host = opts.url;
+  try {
+    host = new URL(opts.url).hostname;
+  } catch {
+    /* keep raw */
+  }
+
+  // SVG → PNG via sharp. Brand-Lila Akzent, Apple/AirBNB-Style.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${viewport.width}" height="${viewport.height}">
+    <rect width="100%" height="100%" fill="#FAFAFA"/>
+    <rect x="${viewport.width / 2 - 220}" y="${viewport.height / 2 - 80}" width="440" height="36" rx="18" fill="#F3EEFF"/>
+    <text x="50%" y="${viewport.height / 2 - 54}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600" fill="#7C5CE8">Website nicht erreichbar</text>
+    <text x="50%" y="${viewport.height / 2 + 10}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="600" fill="#222">Wir konnten die Seite nicht laden</text>
+    <text x="50%" y="${viewport.height / 2 + 50}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="16" fill="#717171">Die folgende URL lieferte keine Antwort:</text>
+    <rect x="${viewport.width / 2 - 320}" y="${viewport.height / 2 + 70}" width="640" height="40" rx="20" fill="#fff" stroke="#EBEBEB"/>
+    <text x="50%" y="${viewport.height / 2 + 96}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#222">${host.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</text>
+  </svg>`;
+  const jpg = await sharp(Buffer.from(svg))
+    .jpeg({ quality: 82 })
+    .toBuffer();
+
+  for (let i = 0; i < totalFrames; i++) {
+    await writeFile(
+      join(framesDir, `frame-${String(i).padStart(4, "0")}.jpg`),
+      jpg,
+    );
+  }
+  return {
+    durationSec: opts.durationMs / 1000,
+    framesDir,
+    frameCount: totalFrames,
+    fps,
+  };
+}
+
+/**
  * Notfall-Fallback: wenn CDP-Screencast 0 Frames produzierte (z.B. wegen
  * GPU-Compositor-Issues), öffnen wir die Page nochmal kurz, machen EINEN
  * fullPage-Screenshot und replay-en das per sharp-Crop. Animationen
