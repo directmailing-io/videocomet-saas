@@ -56,13 +56,19 @@ let _pipelineQueue: Queue<LeadJobData> | null = null;
  * Returns the (lazy-initialized) BullMQ queue used to enqueue lead jobs
  * from the Next.js side. Kept as a function so importing the module never
  * touches Redis until actually needed.
+ *
+ * `attempts: 2` with a 5s exponential backoff means a single transient
+ * error (e.g. Bunny CDN 403, a momentary DB blip) gets one retry before
+ * the lead is marked failed. We do NOT want too many retries — long-running
+ * pipelines that fail for a "real" reason should fail fast rather than tie
+ * up worker slots.
  */
 export function pipelineQueue(): Queue<LeadJobData> {
   if (_pipelineQueue) return _pipelineQueue;
   _pipelineQueue = new Queue<LeadJobData>(QUEUE_NAME, {
     connection: getConnectionOpts(),
     defaultJobOptions: {
-      attempts: 3,
+      attempts: 2,
       backoff: { type: "exponential", delay: 5_000 },
       removeOnComplete: 100,
       removeOnFail: 500,
@@ -75,19 +81,35 @@ export function pipelineQueue(): Queue<LeadJobData> {
  * Creates a BullMQ Worker that consumes the lead-pipeline queue.
  *
  * Settings:
- *  - `maxStalledCount: 3`   - tolerate 3 stalls before failing the job
- *  - `lockDuration: 5min`   - long enough for full 10-stage pipeline
- *  - `removeOnComplete/Fail` - bounded retention to keep Redis small
+ *  - `concurrency: 8` (env: WORKER_CONCURRENCY) — the per-lead pipeline is
+ *    I/O-bound (Bunny upload, LibreOffice, ffmpeg, Puppeteer) rather than
+ *    CPU-bound. With the LibreOffice mutex removed (per-instance user
+ *    profile dirs, see `lib/libreoffice.ts`) 8 parallel pipelines fit
+ *    comfortably in memory.
+ *  - `stalledInterval: 30s` — how often BullMQ checks for stalled jobs.
+ *  - `maxStalledCount: 3` — tolerate 3 missed lock renewals before moving
+ *    the job to failed; default 1 was too aggressive for pipelines that
+ *    legitimately spend tens of seconds inside a single ffmpeg call.
+ *  - `lockDuration: 90s` — how long a worker "owns" a job before another
+ *    worker may claim it as stalled.
+ *  - `lockRenewTime: 30s` — proactively renew the lock at 1/3 of the
+ *    duration so we never lose ownership while still processing.
+ *  - On crash/restart, jobs whose lock expires get re-emitted as pending
+ *    automatically — this fixes the "166 pending leads after worker
+ *    restart" symptom we saw in the 250-lead run.
+ *  - `removeOnComplete/Fail` keeps Redis from growing unbounded.
  */
 export function pipelineWorker(
   processor: Processor<LeadJobData>,
 ): Worker<LeadJobData> {
-  const concurrency = Number(process.env.WORKER_CONCURRENCY ?? "4");
+  const concurrency = Number(process.env.WORKER_CONCURRENCY ?? "8");
   return new Worker<LeadJobData>(QUEUE_NAME, processor, {
     connection: getConnectionOpts(),
     concurrency,
+    stalledInterval: 30_000,
     maxStalledCount: 3,
-    lockDuration: 5 * 60 * 1000,
+    lockDuration: 90_000,
+    lockRenewTime: 30_000,
     removeOnComplete: { count: 100 },
     removeOnFail: { count: 500 },
   });

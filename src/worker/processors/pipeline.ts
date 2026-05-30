@@ -18,12 +18,13 @@
 
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Job } from "bullmq";
 import { db } from "@/lib/db";
 import { campaigns, leads, mediaItems, runs } from "@/lib/db/schema";
 import { updateLeadStatus } from "@/lib/db/queries/leads";
 import { finalizeRunIfAllLeadsDone } from "@/lib/db/queries/runs";
+import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
 import type { LeadJobData } from "../types";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
 import { runVideoRender } from "./video-render";
@@ -188,12 +189,22 @@ export async function pipelineProcessor(
 
   const skipVideo = data.skipVideo === true;
   const skipPdf = data.skipPdf === true;
+  const leadLabel = `Lead ${lead.rowIndex + 1}`;
+  const pipelineStartedAt = Date.now();
 
   await updateLeadStatus(data.leadId, {
     status: "rendering",
     startedAt: new Date(),
     errorMessage: null,
     attempts: (lead.attempts ?? 0) + 1,
+  });
+
+  await insertPipelineEvent({
+    runId: data.runId,
+    leadId: data.leadId,
+    level: "info",
+    stage: "run",
+    message: `${leadLabel}: pipeline started${skipVideo || skipPdf ? ` (skipVideo=${skipVideo}, skipPdf=${skipPdf})` : ""}`,
   });
 
   try {
@@ -210,8 +221,19 @@ export async function pipelineProcessor(
     // ── Stages 1-2: Video render + upload ────────────────────────────
     if (!skipVideo) {
       if (!webcam?.publicUrl) {
-        throw new Error("[pipeline] campaign has no webcam media");
+        // Campaign-level config issue: the campaign row has no webcam
+        // mediaId or the referenced media item has no publicUrl. We can't
+        // fix this per-lead — every lead in the run will hit the same
+        // error. Mark the lead failed with a clear, actionable message
+        // (the user needs to attach a webcam clip to the campaign and
+        // re-run) instead of the generic "[pipeline] campaign has no
+        // webcam media" so the run-detail page surfaces the cause without
+        // a deep-dive into the logs.
+        throw new Error(
+          `skipped: campaign "${campaign.name}" has no webcam media attached (campaignId=${campaign.id}). Attach a webcam clip in the campaign settings and re-run.`,
+        );
       }
+      const renderStart = Date.now();
       const render = await runVideoRender({
         outDir: workDir,
         mode: (campaign.mode === "with-presentation"
@@ -233,8 +255,18 @@ export async function pipelineProcessor(
         },
         defaultDurationSec: webcam.durationSec ?? 30,
       });
+      const renderMs = Date.now() - renderStart;
+      await insertPipelineEvent({
+        runId: data.runId,
+        leadId: data.leadId,
+        level: "info",
+        stage: "render",
+        message: `${leadLabel}: rendering done in ${(renderMs / 1000).toFixed(1)}s`,
+        durationMs: renderMs,
+      });
 
       await updateLeadStatus(data.leadId, { status: "uploading" });
+      const uploadStart = Date.now();
       const upload = await runVideoUpload({
         leadId: data.leadId,
         videoFilePath: render.videoFilePath,
@@ -242,8 +274,18 @@ export async function pipelineProcessor(
       });
       bunnyVideoId = upload.bunnyVideoId;
       videoUrl = upload.videoUrl;
+      const uploadMs = Date.now() - uploadStart;
+      await insertPipelineEvent({
+        runId: data.runId,
+        leadId: data.leadId,
+        level: "info",
+        stage: "upload",
+        message: `${leadLabel}: video upload done in ${(uploadMs / 1000).toFixed(1)}s`,
+        durationMs: uploadMs,
+      });
 
       // ── Stage 5 (early): Landingpage row + slug ──────────────────
+      const lpStart = Date.now();
       const lp = await runLandingPageCreate({
         leadId: data.leadId,
         appUrl,
@@ -251,8 +293,17 @@ export async function pipelineProcessor(
       });
       slug = lp.slug;
       pageUrl = lp.pageUrl;
+      await insertPipelineEvent({
+        runId: data.runId,
+        leadId: data.leadId,
+        level: "info",
+        stage: "landingpage",
+        message: `${leadLabel}: landing page created (/v/${slug})`,
+        durationMs: Date.now() - lpStart,
+      });
 
       // ── Stage 3: Thumbnail ───────────────────────────────────────
+      const thumbStart = Date.now();
       const thumb = await runThumbnailExtract({
         videoFilePath: render.videoFilePath,
         durationSec: render.durationSec,
@@ -261,6 +312,16 @@ export async function pipelineProcessor(
         enabled: campaign.pdfEnabled && campaign.pdfThumbnailEnabled,
       });
       thumbFilePath = thumb.thumbFilePath;
+      if (campaign.pdfEnabled && campaign.pdfThumbnailEnabled) {
+        await insertPipelineEvent({
+          runId: data.runId,
+          leadId: data.leadId,
+          level: "info",
+          stage: "thumbnail",
+          message: `${leadLabel}: thumbnail extracted in ${((Date.now() - thumbStart) / 1000).toFixed(1)}s`,
+          durationMs: Date.now() - thumbStart,
+        });
+      }
     } else {
       // Video stage skipped → reuse existing slug to rebuild pageUrl.
       // If the lead has no slug yet (selective regen on a never-completed
@@ -301,12 +362,23 @@ export async function pipelineProcessor(
 
     // ── Stage 4: QR-Code ─────────────────────────────────────────────
     if (pageUrl) {
+      const qrStart = Date.now();
       const qr = await runQrGenerate({
         outDir: workDir,
         pageUrl,
         enabled: campaign.pdfEnabled && campaign.pdfQrEnabled && !skipPdf,
       });
       qrPngPath = qr.qrPngPath;
+      if (campaign.pdfEnabled && campaign.pdfQrEnabled && !skipPdf) {
+        await insertPipelineEvent({
+          runId: data.runId,
+          leadId: data.leadId,
+          level: "info",
+          stage: "qr",
+          message: `${leadLabel}: QR code generated`,
+          durationMs: Date.now() - qrStart,
+        });
+      }
     }
 
     // ── Stages 6-9: PDF pipeline (only if enabled and not skipped) ──
@@ -316,12 +388,23 @@ export async function pipelineProcessor(
       campaign.pdfGoogleDocsUrl &&
       pageUrl
     ) {
+      const pdfStart = Date.now();
+
+      const docxStart = Date.now();
       const docx = await runDocxModify({
         outDir: workDir,
         googleDocsUrl: campaign.pdfGoogleDocsUrl,
         vars: buildDocxVars(lead.data ?? {}, pageUrl),
         qrPngPath,
         thumbJpgPath: thumbFilePath,
+      });
+      await insertPipelineEvent({
+        runId: data.runId,
+        leadId: data.leadId,
+        level: "info",
+        stage: "docx",
+        message: `${leadLabel}: docx generated in ${((Date.now() - docxStart) / 1000).toFixed(1)}s`,
+        durationMs: Date.now() - docxStart,
       });
 
       const pdf = await runDocxToPdf({
@@ -339,6 +422,14 @@ export async function pipelineProcessor(
         runId: data.runId,
         pdfPath: compressed.pdfPath,
       });
+      await insertPipelineEvent({
+        runId: data.runId,
+        leadId: data.leadId,
+        level: "info",
+        stage: "pdf",
+        message: `${leadLabel}: PDF rendered & uploaded in ${((Date.now() - pdfStart) / 1000).toFixed(1)}s`,
+        durationMs: Date.now() - pdfStart,
+      });
     }
 
     // ── Stage 10: mark complete ──────────────────────────────────────
@@ -346,16 +437,26 @@ export async function pipelineProcessor(
       status: "completed",
       completedAt: new Date(),
     });
+    await insertPipelineEvent({
+      runId: data.runId,
+      leadId: data.leadId,
+      level: "info",
+      stage: "run",
+      message: `${leadLabel}: completed in ${((Date.now() - pipelineStartedAt) / 1000).toFixed(1)}s`,
+      durationMs: Date.now() - pipelineStartedAt,
+    });
 
     // Run-Finalizer: wenn dies der letzte ausstehende Lead war, Run als
     // completed markieren. Idempotent — mehrere Lead-Jobs koennen den Check
     // gleichzeitig anstossen, nur der erste UPDATE faengt.
-    await finalizeRunIfAllLeadsDone(data.runId).catch((err) => {
-      console.warn(
-        `[pipeline] finalizeRunIfAllLeadsDone failed for run=${data.runId}:`,
-        err instanceof Error ? err.message : err,
-      );
-    });
+    await finalizeRunIfAllLeadsDone(data.runId)
+      .then((res) => writeRunCompletionEventIfFinalized(data.runId, res))
+      .catch((err) => {
+        console.warn(
+          `[pipeline] finalizeRunIfAllLeadsDone failed for run=${data.runId}:`,
+          err instanceof Error ? err.message : err,
+        );
+      });
 
     return {
       ok: true,
@@ -371,11 +472,95 @@ export async function pipelineProcessor(
       status: "failed",
       errorMessage: message.slice(0, 1000),
     });
+    await insertPipelineEvent({
+      runId: data.runId,
+      leadId: data.leadId,
+      level: "error",
+      stage: "run",
+      message: `${leadLabel}: ${message.slice(0, 500)}`,
+      durationMs: Date.now() - pipelineStartedAt,
+    });
     // Auch im Fehlerfall den Run-Status checken — sonst haengt der Run
     // wenn der letzte Lead failt.
-    await finalizeRunIfAllLeadsDone(data.runId).catch(() => undefined);
+    await finalizeRunIfAllLeadsDone(data.runId)
+      .then((res) => writeRunCompletionEventIfFinalized(data.runId, res))
+      .catch(() => undefined);
     throw err;
   } finally {
     await cleanupTempDir(workDir);
+  }
+}
+
+/**
+ * Schreibt nach erfolgreichem Run-Finalize EIN Run-Level-Event mit der
+ * Gesamttally (X done / Y failed / Z min). Wird sowohl im Success- als auch
+ * im Error-Pfad aufgerufen — `finalized: true` faellt nur beim erstmaligen
+ * UPDATE auf "completed", sodass das Event genau einmal erscheint.
+ */
+async function writeRunCompletionEventIfFinalized(
+  runId: string,
+  res: { finalized: boolean; total: number; done: number },
+): Promise<void> {
+  if (!res.finalized) return;
+  try {
+    const [runRow] = await db
+      .select({
+        startedAt: runs.startedAt,
+        completedAt: runs.completedAt,
+        completed: runs.completedLeads,
+        failed: runs.failedLeads,
+      })
+      .from(runs)
+      .where(eq(runs.id, runId))
+      .limit(1);
+    if (!runRow) return;
+
+    // Live-Counts aus der finalize-Antwort sind authoritativer als die
+    // gecachten Spalten auf runs.* (die werden bestenfalls best-effort
+    // aktualisiert). Wir berechnen die Tally hier nochmal sauber.
+    const [tally] = (await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE ${leads.status} = 'completed')::int AS completed,
+        COUNT(*) FILTER (WHERE ${leads.status} = 'failed')::int AS failed
+      FROM ${leads}
+      WHERE ${leads.runId} = ${runId}
+    `)) as unknown as Array<{ completed: number; failed: number }>;
+    const tallyRow = Array.isArray(tally)
+      ? tally
+      : (tally as { rows?: Array<{ completed: number; failed: number }> })
+          ?.rows?.[0];
+    const completed = Number(
+      (Array.isArray(tally) ? tally[0]?.completed : tallyRow?.completed) ?? 0,
+    );
+    const failed = Number(
+      (Array.isArray(tally) ? tally[0]?.failed : tallyRow?.failed) ?? 0,
+    );
+
+    const startedAt = runRow.startedAt;
+    const completedAt = runRow.completedAt ?? new Date();
+    const durationMs =
+      startedAt instanceof Date
+        ? completedAt.getTime() - startedAt.getTime()
+        : null;
+    const minutes = durationMs != null ? Math.floor(durationMs / 60000) : null;
+    const seconds = durationMs != null ? Math.floor((durationMs % 60000) / 1000) : null;
+    const durationLabel =
+      minutes != null && seconds != null
+        ? `${minutes} min ${seconds} s`
+        : "unbekannte Dauer";
+
+    await insertPipelineEvent({
+      runId,
+      leadId: null,
+      level: failed > 0 ? "warn" : "info",
+      stage: "run",
+      message: `Run abgeschlossen: ${completed} erfolgreich, ${failed} fehlgeschlagen in ${durationLabel}`,
+      durationMs,
+    });
+  } catch (err) {
+    console.warn(
+      `[pipeline] writeRunCompletionEventIfFinalized failed for run=${runId}:`,
+      err instanceof Error ? err.message : err,
+    );
   }
 }

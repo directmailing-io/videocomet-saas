@@ -65,6 +65,8 @@ export default async function RunDetailPage({
           name: run.name,
           status: run.status,
           totalLeads: run.totalLeads,
+          startedAt: run.startedAt ? run.startedAt.toISOString() : null,
+          completedAt: run.completedAt ? run.completedAt.toISOString() : null,
         }}
         initialCounts={counts}
         initialLeads={initialLeads}

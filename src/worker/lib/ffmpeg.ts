@@ -50,6 +50,16 @@ async function writeRoundedRectMaskPng(opts: {
 /**
  * Runs ffmpeg with the given args. Resolves on exit-code 0, rejects with the
  * tail of stderr otherwise.
+ *
+ * Error message strategy:
+ *   - We keep the full last 4KB of stderr for log diagnostics (printed line
+ *     by line as it arrives).
+ *   - On a non-zero exit we surface a COMPACT 1KB summary in the thrown
+ *     Error.message so the lead's errorMessage column (which is truncated
+ *     to 1000 chars in pipeline.ts) still shows the cause rather than
+ *     ffmpeg's verbose banner. We prefer lines that mention "Error",
+ *     "Invalid", "Conversion failed" or similar — those are the lines that
+ *     actually explain what went wrong; the rest is encoder noise.
  */
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -67,9 +77,29 @@ function runFfmpeg(args: string[]): Promise<void> {
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`ffmpeg exited with code ${code}: ${stderrTail}`));
+      else reject(new Error(`ffmpeg exited with code ${code}: ${summariseFfmpegStderr(stderrTail)}`));
     });
   });
+}
+
+/**
+ * Pick the most-informative lines out of ffmpeg stderr for the lead's
+ * surfaced error message (cap ~1KB). ffmpeg's stderr is dominated by the
+ * banner + per-stream metadata; the actual error usually appears as one or
+ * two lines containing "Error", "Invalid", "Failed", "Conversion failed",
+ * "No such file", "Permission denied", etc. We prefer those; if none match
+ * we fall back to the last few non-empty lines.
+ */
+function summariseFfmpegStderr(stderr: string): string {
+  if (!stderr.trim()) return "(empty stderr)";
+  const lines = stderr.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const errorRegex = /(error|invalid|failed|no such file|permission denied|moov atom not found|protocol not on whitelist|unable to|conversion failed|cannot)/i;
+  const matches = lines.filter((l) => errorRegex.test(l));
+  const picked = matches.length > 0 ? matches : lines.slice(-6);
+  const joined = picked.join(" | ");
+  // Hard cap at 1KB so the message comfortably fits in the 1000-char
+  // lead errorMessage column.
+  return joined.length > 1024 ? `…${joined.slice(-1024)}` : joined;
 }
 
 export interface ExtractFrameInput {

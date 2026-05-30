@@ -2,26 +2,46 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq, gt, inArray, or } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
 import { getRun } from "@/lib/db/queries/runs";
 import { countByStatus } from "@/lib/db/queries/leads";
+import {
+  listPipelineEvents,
+  listPipelineEventsSinceTs,
+  type PipelineEvent,
+} from "@/lib/db/queries/pipeline-events";
 import { createSSEResponse } from "@/lib/sse";
 
-const POLL_INTERVAL_MS = 2000;
-const RECENT_LIMIT = 50;
+const POLL_INTERVAL_MS = 1500;
+const CHANGED_LEAD_LIMIT = 200;
+const INITIAL_EVENT_LIMIT = 200;
+const TICK_EVENT_LIMIT = 50;
+const IN_FLIGHT_STATUSES = ["rendering", "uploading"] as const;
 
 /**
  * GET /api/runs/[id]/stream
  *
  * Server-Sent Events stream that pushes:
- *   - `snapshot` once on connect: { run, counts, leads }
- *   - `tick`     every 2s:      { counts, recentEvents, runStatus }
+ *   - `snapshot` once on connect: { run, counts, leads, pipelineEvents }
+ *   - `tick`     every POLL_INTERVAL_MS: { runStatus, counts, recentEvents, pipelineEvents }
+ *
+ * `pipelineEvents` on snapshot = last 200 events of the run; on tick = only
+ * events whose `ts` is newer than the cursor (set after the snapshot to the
+ * latest event's ts, advanced on each tick).
+ *
+ * `recentEvents` on tick = every lead whose `startedAt` OR `completedAt` is
+ * newer than `leadCursor` (advanced to `now()` after each tick) PLUS every
+ * lead currently in an in-flight status (`rendering`, `uploading`). The
+ * in-flight join catches intermediate status transitions (e.g. rendering →
+ * uploading) where no timestamp gets bumped — without it the row would freeze
+ * on its first-seen status until it finally completes.
  *
  * Closes the connection cleanly when the run reaches a terminal state
- * (`completed`, `failed`, or `cancelled`).
+ * (`completed`, `failed`, or `cancelled`) — but only AFTER pushing one final
+ * tick so the run-completion event surfaces in the UI.
  */
 export async function GET(
   _req: NextRequest,
@@ -45,10 +65,28 @@ export async function GET(
     const initialRun = await getRun(runId, userId);
     const initialCounts = await countByStatus(runId, userId);
     const initialLeads = await listAllLeads(runId, userId);
+    const initialEvents = await listPipelineEvents(runId, userId, {
+      limit: INITIAL_EVENT_LIMIT,
+    });
+
+    // Cursor = ts of the last event we've sent. New events sent on tick have
+    // ts > cursor. If there are no events yet, start cursor at run.createdAt
+    // (so any event written shortly after subscribe is picked up).
+    let eventCursor: Date =
+      initialEvents.length > 0
+        ? initialEvents[initialEvents.length - 1]!.ts
+        : initialRun.createdAt;
+
+    // Lead cursor: any lead whose startedAt OR completedAt advances past this
+    // ts on a tick is re-emitted. Starts at run.createdAt so leads that begin
+    // working right after subscribe are included.
+    let leadCursor: Date = initialRun.createdAt;
+
     send("snapshot", {
       run: initialRun,
       counts: initialCounts,
       leads: initialLeads,
+      pipelineEvents: initialEvents.map(projectPipelineEvent),
     });
 
     if (isTerminal(initialRun.status)) {
@@ -71,13 +109,33 @@ export async function GET(
           break;
         }
 
+        const tickStartedAt = new Date();
         const counts = await countByStatus(runId, userId);
-        const recentEvents = await listRecentLeadEvents(runId, userId);
+        const recentEvents = await listChangedOrInFlightLeads(
+          runId,
+          userId,
+          leadCursor,
+        );
+        // Advance the cursor to "now" so the next tick only picks up rows
+        // that change AFTER this query window. In-flight rows are still
+        // re-emitted regardless of cursor (see listChangedOrInFlightLeads).
+        leadCursor = tickStartedAt;
+
+        const newPipelineEvents = await listPipelineEventsSinceTs(
+          runId,
+          userId,
+          eventCursor,
+          TICK_EVENT_LIMIT,
+        );
+        if (newPipelineEvents.length > 0) {
+          eventCursor = newPipelineEvents[newPipelineEvents.length - 1]!.ts;
+        }
 
         send("tick", {
           runStatus: runRow.status,
           counts,
           recentEvents,
+          pipelineEvents: newPipelineEvents.map(projectPipelineEvent),
         });
 
         if (isTerminal(runRow.status)) {
@@ -122,14 +180,39 @@ async function listAllLeads(runId: string, userId: string) {
   return rows.map((r) => projectLead(r.lead));
 }
 
-async function listRecentLeadEvents(runId: string, userId: string) {
+/**
+ * Returns leads that need to be re-pushed to the client this tick:
+ *   1. Every lead whose `startedAt` OR `completedAt` advanced past `sinceTs`
+ *      (covers transitions pending → rendering and uploading → completed/failed).
+ *   2. Every lead currently in an in-flight status (`rendering`, `uploading`)
+ *      so the row reflects status flips that don't bump any timestamp
+ *      (e.g. rendering → uploading mid-pipeline).
+ *
+ * Bounded by CHANGED_LEAD_LIMIT as a safety cap. With typical worker
+ * concurrency the result is a handful of rows per tick.
+ */
+async function listChangedOrInFlightLeads(
+  runId: string,
+  userId: string,
+  sinceTs: Date,
+) {
   const rows = await db
     .select({ lead: leads })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
-    .where(and(eq(leads.runId, runId), eq(runs.userId, userId)))
-    .orderBy(desc(leads.completedAt), desc(leads.startedAt))
-    .limit(RECENT_LIMIT);
+    .where(
+      and(
+        eq(leads.runId, runId),
+        eq(runs.userId, userId),
+        or(
+          gt(leads.startedAt, sinceTs),
+          gt(leads.completedAt, sinceTs),
+          inArray(leads.status, [...IN_FLIGHT_STATUSES]),
+        ),
+      ),
+    )
+    .orderBy(leads.rowIndex)
+    .limit(CHANGED_LEAD_LIMIT);
   return rows.map((r) => projectLead(r.lead));
 }
 
@@ -145,5 +228,18 @@ function projectLead(l: typeof leads.$inferSelect) {
     errorMessage: l.errorMessage,
     completedAt: l.completedAt,
     data: l.data,
+  };
+}
+
+function projectPipelineEvent(e: PipelineEvent) {
+  return {
+    id: e.id,
+    runId: e.runId,
+    leadId: e.leadId,
+    ts: e.ts instanceof Date ? e.ts.toISOString() : e.ts,
+    level: e.level,
+    stage: e.stage,
+    message: e.message,
+    durationMs: e.durationMs,
   };
 }

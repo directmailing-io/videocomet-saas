@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import {
+  ChevronDown,
+  ChevronRight,
   Download,
   ExternalLink,
   FileDown,
@@ -24,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,6 +56,19 @@ interface Counts {
   failed: number;
 }
 
+interface PipelineEventDTO {
+  id: string;
+  runId: string;
+  leadId: string | null;
+  ts: string;
+  level: "info" | "warn" | "error" | string;
+  stage: string;
+  message: string;
+  durationMs: number | null;
+}
+
+const MAX_EVENTS_IN_MEMORY = 1000;
+
 export interface LiveTableProps {
   runId: string;
   campaignId: string;
@@ -62,6 +78,8 @@ export interface LiveTableProps {
     name: string;
     status: string;
     totalLeads: number;
+    startedAt: string | null;
+    completedAt: string | null;
   };
   initialCounts: Record<string, number>;
   initialLeads: LeadRow[];
@@ -128,6 +146,12 @@ export function LiveTable({
   initialLeads,
 }: LiveTableProps) {
   const [runStatus, setRunStatus] = React.useState(initialRun.status);
+  const [startedAt, setStartedAt] = React.useState<string | null>(
+    initialRun.startedAt,
+  );
+  const [completedAt, setCompletedAt] = React.useState<string | null>(
+    initialRun.completedAt,
+  );
   const [counts, setCounts] = React.useState<Counts>({
     pending: initialCounts.pending ?? 0,
     rendering: initialCounts.rendering ?? 0,
@@ -137,6 +161,14 @@ export function LiveTable({
   });
   const [leads, setLeads] = React.useState<LeadRow[]>(initialLeads);
   const [regenerating, setRegenerating] = React.useState(false);
+
+  // Live-Log state
+  const [events, setEvents] = React.useState<PipelineEventDTO[]>([]);
+  const [logOpen, setLogOpen] = React.useState(true);
+  const [autoScroll, setAutoScroll] = React.useState(true);
+  const [onlyErrors, setOnlyErrors] = React.useState(false);
+  const logScrollRef = React.useRef<HTMLDivElement | null>(null);
+
   const router = useRouter();
   const { toast } = useToast();
 
@@ -222,9 +254,30 @@ export function LiveTable({
       try {
         const payload = JSON.parse((e as MessageEvent).data);
         if (payload.counts) setCounts(payload.counts as Counts);
-        if (payload.run) setRunStatus(payload.run.status);
+        if (payload.run) {
+          setRunStatus(payload.run.status);
+          if (typeof payload.run.startedAt === "string") {
+            setStartedAt(payload.run.startedAt);
+          } else if (payload.run.startedAt === null) {
+            setStartedAt(null);
+          }
+          if (typeof payload.run.completedAt === "string") {
+            setCompletedAt(payload.run.completedAt);
+          } else if (payload.run.completedAt === null) {
+            setCompletedAt(null);
+          }
+        }
         if (Array.isArray(payload.leads)) {
           setLeads(payload.leads as LeadRow[]);
+        }
+        if (Array.isArray(payload.pipelineEvents)) {
+          // Snapshot replaces the log so a reconnect doesn't keep stale events
+          // from a previous run-cycle of the same component.
+          setEvents(
+            (payload.pipelineEvents as PipelineEventDTO[]).slice(
+              -MAX_EVENTS_IN_MEMORY,
+            ),
+          );
         }
       } catch {
         // ignore
@@ -234,9 +287,25 @@ export function LiveTable({
       try {
         const payload = JSON.parse((e as MessageEvent).data);
         if (payload.counts) setCounts(payload.counts as Counts);
-        if (payload.runStatus) setRunStatus(payload.runStatus as string);
+        if (payload.runStatus) {
+          const next = payload.runStatus as string;
+          setRunStatus(next);
+          if (
+            (next === "completed" || next === "failed" || next === "cancelled") &&
+            !completedAt
+          ) {
+            // Server doesn't push completedAt on tick; lock the "Dauer:" label
+            // to the moment the run terminated client-side.
+            setCompletedAt(new Date().toISOString());
+          }
+        }
         if (Array.isArray(payload.recentEvents)) {
           setLeads((prev) => mergeLeads(prev, payload.recentEvents as LeadRow[]));
+        }
+        if (Array.isArray(payload.pipelineEvents) && payload.pipelineEvents.length > 0) {
+          setEvents((prev) =>
+            mergePipelineEvents(prev, payload.pipelineEvents as PipelineEventDTO[]),
+          );
         }
       } catch {
         // ignore
@@ -253,6 +322,36 @@ export function LiveTable({
     counts.pending + counts.rendering + counts.uploading + counts.completed + counts.failed;
   const done = counts.completed + counts.failed;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  // 1s ticker so the "Läuft seit:" label updates live while the run is running.
+  // Stopped once the run terminates so we don't keep React waking up needlessly.
+  const [nowTick, setNowTick] = React.useState<number>(() => Date.now());
+  React.useEffect(() => {
+    if (isTerminal) return;
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [isTerminal]);
+
+  const filteredEvents = React.useMemo(
+    () => (onlyErrors ? events.filter((e) => e.level === "error") : events),
+    [events, onlyErrors],
+  );
+
+  // Auto-scroll: jump to bottom whenever new events arrive AND user wants it.
+  React.useEffect(() => {
+    if (!autoScroll || !logOpen) return;
+    const el = logScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [filteredEvents.length, autoScroll, logOpen]);
+
+  const runDurationLabel = formatRunDurationLabel({
+    startedAt,
+    completedAt,
+    isTerminal,
+    nowMs: nowTick,
+  });
+  const startedAtLabel = startedAt ? formatClock(startedAt) : null;
 
   return (
     <div className="space-y-6">
@@ -330,6 +429,112 @@ export function LiveTable({
           <div className="mt-4">
             <Progress value={pct} />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setLogOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-ink hover:text-brand-deep"
+              aria-expanded={logOpen}
+              aria-controls="live-log-body"
+            >
+              {logOpen ? (
+                <ChevronDown className="size-4" />
+              ) : (
+                <ChevronRight className="size-4" />
+              )}
+              Live-Log
+              <span className="ml-1 text-xs text-ink-muted">
+                ({filteredEvents.length}
+                {onlyErrors && events.length !== filteredEvents.length
+                  ? ` von ${events.length}`
+                  : ""}
+                )
+              </span>
+            </button>
+            <div className="flex flex-wrap items-center gap-4 text-xs text-ink-muted">
+              {startedAtLabel && (
+                <span>
+                  <span className="font-medium text-ink">Gestartet:</span>{" "}
+                  {startedAtLabel}
+                </span>
+              )}
+              {runDurationLabel && (
+                <span>
+                  <span className="font-medium text-ink">
+                    {isTerminal ? "Dauer:" : "Läuft seit:"}
+                  </span>{" "}
+                  {runDurationLabel}
+                </span>
+              )}
+              <label className="inline-flex items-center gap-1.5">
+                <Checkbox
+                  checked={autoScroll}
+                  onCheckedChange={(v) => setAutoScroll(v === true)}
+                  aria-label="Auto-Scroll"
+                />
+                <span>Auto-Scroll</span>
+              </label>
+              <label className="inline-flex items-center gap-1.5">
+                <Checkbox
+                  checked={onlyErrors}
+                  onCheckedChange={(v) => setOnlyErrors(v === true)}
+                  aria-label="Nur Fehler"
+                />
+                <span>{onlyErrors ? "Nur Fehler" : "Alle Events"}</span>
+              </label>
+            </div>
+          </div>
+          {logOpen && (
+            <div
+              id="live-log-body"
+              ref={logScrollRef}
+              className="mt-3 max-h-72 overflow-y-auto rounded-squircle-sm border border-line bg-surface-muted font-mono text-xs"
+            >
+              {filteredEvents.length === 0 ? (
+                <div className="px-3 py-6 text-center text-ink-muted">
+                  {onlyErrors
+                    ? "Keine Fehler im Log."
+                    : "Noch keine Events. Sobald der Worker arbeitet, erscheinen hier Live-Updates."}
+                </div>
+              ) : (
+                <ul className="divide-y divide-line/60">
+                  {filteredEvents.map((ev) => (
+                    <li
+                      key={ev.id}
+                      className="flex items-start gap-3 px-3 py-1.5"
+                    >
+                      <span className="shrink-0 tabular-nums text-ink-muted">
+                        {formatClock(ev.ts)}
+                      </span>
+                      <span
+                        className={`shrink-0 w-12 text-center font-semibold uppercase ${eventLevelClass(
+                          ev.level,
+                        )}`}
+                      >
+                        {ev.level}
+                      </span>
+                      <span className="shrink-0 w-24 truncate text-ink-muted">
+                        [{ev.stage}]
+                      </span>
+                      <span className="min-w-0 grow break-words text-ink">
+                        {ev.message}
+                        {typeof ev.durationMs === "number" && ev.durationMs > 0 ? (
+                          <span className="ml-2 text-ink-muted">
+                            ({formatDurationMs(ev.durationMs)})
+                          </span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -434,17 +639,87 @@ export function LiveTable({
   );
 }
 
+function mergePipelineEvents(
+  prev: PipelineEventDTO[],
+  incoming: PipelineEventDTO[],
+): PipelineEventDTO[] {
+  if (incoming.length === 0) return prev;
+  const byId = new Map(prev.map((e) => [e.id, e] as const));
+  for (const e of incoming) byId.set(e.id, e);
+  const merged = Array.from(byId.values()).sort((a, b) =>
+    a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0,
+  );
+  // Cap at last MAX_EVENTS_IN_MEMORY so a long run doesn't blow up the tab.
+  return merged.length > MAX_EVENTS_IN_MEMORY
+    ? merged.slice(-MAX_EVENTS_IN_MEMORY)
+    : merged;
+}
+
+function formatClock(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleTimeString("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function eventLevelClass(level: string): string {
+  if (level === "error") return "text-danger";
+  if (level === "warn") return "text-warn";
+  return "text-ink-muted";
+}
+
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms} ms`;
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)} s`;
+  const mins = Math.floor(seconds / 60);
+  const rest = Math.floor(seconds % 60);
+  return `${mins} min ${rest} s`;
+}
+
+function formatRunDurationLabel(input: {
+  startedAt: string | null;
+  completedAt: string | null;
+  isTerminal: boolean;
+  nowMs: number;
+}): string | null {
+  const { startedAt, completedAt, isTerminal, nowMs } = input;
+  if (!startedAt) return null;
+  const startMs = new Date(startedAt).getTime();
+  if (Number.isNaN(startMs)) return null;
+  const endMs = (() => {
+    if (completedAt) {
+      const t = new Date(completedAt).getTime();
+      return Number.isNaN(t) ? null : t;
+    }
+    return isTerminal ? null : nowMs;
+  })();
+  if (endMs == null) return null;
+  const diff = Math.max(0, endMs - startMs);
+  const totalSeconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes === 0) return `${seconds} s`;
+  return `${minutes} min ${seconds.toString().padStart(2, "0")} s`;
+}
+
 function mergeLeads(prev: LeadRow[], updates: LeadRow[]): LeadRow[] {
   if (updates.length === 0) return prev;
-  const byId = new Map(prev.map((l) => [l.id, l] as const));
-  for (const u of updates) {
-    byId.set(u.id, { ...byId.get(u.id), ...u });
-  }
-  // Preserve original row-order from `prev` (so a tick doesn't reorder rows
-  // every 2s); append any newly seen leads at the end.
-  const ordered = prev.map((l) => byId.get(l.id) ?? l);
-  for (const u of updates) {
-    if (!prev.some((p) => p.id === u.id)) ordered.push(u);
-  }
-  return ordered.sort((a, b) => a.rowIndex - b.rowIndex);
+  // Idempotent in-place replace: the initial snapshot already carries every
+  // lead, so a tick only ever PATCHES existing rows — never adds. Mapping by
+  // id and falling through to the previous row when no update arrived keeps
+  // the ordering stable and guarantees status / asset URL changes overwrite
+  // the previous row instead of being shallow-merged into stale fields.
+  const updateMap = new Map(updates.map((u) => [u.id, u] as const));
+  let changed = false;
+  const next = prev.map((p) => {
+    const u = updateMap.get(p.id);
+    if (!u) return p;
+    changed = true;
+    return u;
+  });
+  return changed ? next : prev;
 }

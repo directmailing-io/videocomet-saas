@@ -155,19 +155,33 @@ async function fetchToFile(url: string, outPath: string): Promise<void> {
   // For HLS playlists from Bunny Stream, switch to the MP4 fallback URL so
   // ffmpeg can read a single seekable file. The Library has MP4 fallback
   // enabled, so {guid}/play_720p.mp4 always exists.
+  //
+  // Pattern matches both bare and query-suffixed Bunny URLs:
+  //   https://vz-xxx.b-cdn.net/<guid>/playlist.m3u8
+  //   https://vz-xxx.b-cdn.net/<guid>/playlist.m3u8?token=…&expires=…
   let downloadUrl = url;
-  const hlsMatch = url.match(/^(https?:\/\/[^/]+)\/([0-9a-f-]{36})\/playlist\.m3u8$/i);
+  const hlsMatch = url.match(
+    /^(https?:\/\/[^/]+)\/([0-9a-f-]{36})\/playlist\.m3u8(?:\?.*)?$/i,
+  );
   if (hlsMatch) {
     downloadUrl = `${hlsMatch[1]}/${hlsMatch[2]}/play_720p.mp4`;
   }
   // Bunny CDN blocks none-referrer requests by default. Provide an APP_URL
-  // referrer so the hot-link protection lets us through.
+  // referrer so the hot-link protection lets us through. We pass BOTH
+  // Referer and Origin because some Bunny Stream pull-zones validate one
+  // or the other depending on the hotlink config.
   const referer = process.env.APP_URL ?? "https://app.videocomet.de";
   const res = await fetch(downloadUrl, {
-    headers: { Referer: referer, "User-Agent": "videocomet-worker/1.0" },
+    headers: {
+      Referer: referer,
+      Origin: referer,
+      "User-Agent": "videocomet-worker/1.0",
+    },
   });
   if (!res.ok) {
-    throw new Error(`[render] webcam fetch failed: ${res.status} ${downloadUrl}`);
+    throw new Error(
+      `[render] webcam fetch ${res.status} ${downloadUrl} (referer=${referer})`,
+    );
   }
   const buf = Buffer.from(await res.arrayBuffer());
   await writeFile(outPath, buf);

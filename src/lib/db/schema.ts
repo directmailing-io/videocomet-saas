@@ -191,3 +191,20 @@ export const workerHeartbeats = pgTable("worker_heartbeats", {
   currentJobs: integer("current_jobs").notNull().default(0),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ── Pipeline-Events (Live-Log pro Run / Lead) ───────────────────────────────
+// Append-only Log mit Stage-Start/Stop/Fehler-Events fuer den Live-Log im
+// Run-Detail-UI. `leadId` ist nullbar fuer Run-Level-Events (z.B.
+// "lead pipeline started" oder "run completed: X done, Y failed in Z min").
+export const pipelineEvents = pgTable("pipeline_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  runId: uuid("run_id").notNull().references(() => runs.id, { onDelete: "cascade" }),
+  leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+  ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+  level: text("level").notNull(), // 'info' | 'warn' | 'error'
+  stage: text("stage").notNull(), // 'render' | 'upload' | 'landingpage' | 'qr' | 'docx' | 'pdf' | 'thumbnail' | 'run' | ...
+  message: text("message").notNull(),
+  durationMs: integer("duration_ms"),
+}, (t) => ({
+  runTsIdx: index("pipeline_events_run_ts_idx").on(t.runId, t.ts),
+}));
