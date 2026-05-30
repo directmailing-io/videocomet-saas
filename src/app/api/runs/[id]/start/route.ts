@@ -119,6 +119,9 @@ export async function POST(
   // can be re-started by an admin / via a worker requeue script).
   try {
     const queue = pipelineQueue();
+    // jobId = leadId verhindert BullMQ-Duplikate falls dieser Endpoint
+    // versehentlich zweimal getriggert wird ODER stuck-recovery + manueller
+    // re-enqueue gleichzeitig laufen.
     await queue.addBulk(
       leadRows.map((lr) => ({
         name: "lead-pipeline",
@@ -128,6 +131,7 @@ export async function POST(
           userId: auth.user.id,
           campaignId: run.campaignId,
         },
+        opts: { jobId: lr.id },
       })),
     );
   } catch (err) {

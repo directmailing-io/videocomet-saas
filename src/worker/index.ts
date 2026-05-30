@@ -77,7 +77,9 @@ async function stuckLeadRecovery(): Promise<void> {
     })
     .where(inArray(leads.id, ids));
 
-  // Re-enqueue alle stuck leads in BullMQ.
+  // Re-enqueue alle stuck leads in BullMQ. WICHTIG: jobId = leadId
+  // damit BullMQ Duplikate ablehnt (falls das ursprüngliche Job noch in
+  // der waiting/delayed queue ist).
   try {
     const queue = pipelineQueue();
     await queue.addBulk(
@@ -89,6 +91,7 @@ async function stuckLeadRecovery(): Promise<void> {
           userId: s.userId,
           campaignId: s.campaignId,
         },
+        opts: { jobId: s.id },
       })),
     );
   } catch (err) {
@@ -123,11 +126,29 @@ async function main(): Promise<void> {
   }, 120_000);
   recoveryTimer.unref();
 
+  const PIPELINE_HARD_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per lead
   const worker = pipelineWorker(async (job: Job<LeadJobData>) => {
     incrementInFlight();
     try {
       log("info", `start job=${job.id} lead=${job.data.leadId}`);
-      const result = await pipelineProcessor(job);
+      // Hard timeout per Lead: wenn die Pipeline länger als 5 min braucht,
+      // werfen wir, BullMQ markiert den Job als failed UND der Slot wird
+      // frei. Verhindert dass ein hängendes Puppeteer/LibreOffice das
+      // ganze System einfriert.
+      const result = await Promise.race([
+        pipelineProcessor(job),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `[pipeline] lead exceeded ${PIPELINE_HARD_TIMEOUT_MS}ms hard timeout`,
+                ),
+              ),
+            PIPELINE_HARD_TIMEOUT_MS,
+          ),
+        ),
+      ]);
       log("info", `done  job=${job.id} lead=${job.data.leadId}`);
       return result;
     } catch (err) {

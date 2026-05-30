@@ -142,6 +142,7 @@ export async function POST(
           ...(skipVideo ? { skipVideo: true } : {}),
           ...(skipPdf ? { skipPdf: true } : {}),
         },
+        opts: { jobId: lr.id },
       })),
     );
   } catch (err) {
