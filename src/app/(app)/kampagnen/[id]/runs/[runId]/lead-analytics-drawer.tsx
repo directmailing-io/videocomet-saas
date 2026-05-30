@@ -57,6 +57,7 @@ interface AnalyticsPayload {
   summary: AnalyticsSummary;
   events: AnalyticsEvent[];
   watchTimeBuckets: AnalyticsBucket[];
+  videoDurationSec: number | null;
 }
 
 const EVENT_TIMELINE_LIMIT = 30;
@@ -178,7 +179,10 @@ export function LeadAnalyticsDrawer({
             {!loading && !error && data && hasAnyActivity && (
               <>
                 <SummaryGrid summary={data.summary} />
-                <WatchTimeHeatmap buckets={data.watchTimeBuckets} />
+                <WatchTimeHeatmap
+                  buckets={data.watchTimeBuckets}
+                  videoDurationSec={data.videoDurationSec}
+                />
                 <EventTimeline events={data.events.slice(0, EVENT_TIMELINE_LIMIT)} />
               </>
             )}
@@ -232,32 +236,50 @@ function SummaryTile({
  * video). X = seconds into the video, Y = view count per bucket. Peaks get a
  * darker brand colour so a glance is enough to spot where viewers actually
  * watched. No tooltip library — every bar gets a `<title>` for hover.
+ *
+ * When the player has reported a `durationSec`, we always draw the full
+ * timeline axis even if buckets are sparse — so the heatmap is meaningful
+ * after a single play (instead of just an empty placeholder).
  */
-function WatchTimeHeatmap({ buckets }: { buckets: AnalyticsBucket[] }) {
-  if (buckets.length === 0) {
+function WatchTimeHeatmap({
+  buckets,
+  videoDurationSec,
+}: {
+  buckets: AnalyticsBucket[];
+  videoDurationSec: number | null;
+}) {
+  // No buckets AND no known duration → nothing meaningful to draw.
+  if (buckets.length === 0 && !videoDurationSec) {
     return (
       <div>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">
           Watch-Time-Heatmap
         </h3>
         <div className="rounded-squircle-sm border border-line bg-surface-muted px-3 py-6 text-center text-xs text-ink-muted">
-          Noch keine Video-Progress-Events.
+          Sobald jemand das Video startet, erscheint hier eine
+          Sekunden-genaue Heatmap.
         </div>
       </div>
     );
   }
 
   const maxCount = Math.max(...buckets.map((b) => b.count), 1);
-  const maxSec = Math.max(...buckets.map((b) => b.sec), 5);
-  const width = 100; // % units, gets scaled by viewBox
+  const lastBucketSec = buckets.length > 0
+    ? Math.max(...buckets.map((b) => b.sec))
+    : 0;
+  // Prefer the player-reported duration; fall back to last bucket + 5s.
+  const totalSec = videoDurationSec
+    ? Math.max(videoDurationSec, lastBucketSec + 5)
+    : lastBucketSec + 5;
+
+  const width = 100;
   const height = 60;
   const padX = 2;
   const innerW = width - padX * 2;
-  // Span the entire video timeline (0 → maxSec+5) so empty seconds at the
-  // beginning/end still take their proportional slot — viewers can SEE that
-  // nobody watched the intro.
-  const totalSec = maxSec + 5;
-  const barUnit = innerW / Math.max(1, totalSec / 5);
+  const bucketCount = Math.max(1, Math.ceil(totalSec / 5));
+  const barUnit = innerW / bucketCount;
+
+  const bucketByKey = new Map(buckets.map((b) => [Math.floor(b.sec / 5), b.count]));
 
   return (
     <div>
@@ -277,27 +299,33 @@ function WatchTimeHeatmap({ buckets }: { buckets: AnalyticsBucket[] }) {
           role="img"
           aria-label="Watch-Time-Heatmap"
         >
-          {buckets.map((b) => {
-            const x = padX + (b.sec / 5) * barUnit;
-            const h = (b.count / maxCount) * height;
-            const isPeak = b.count === maxCount;
+          {Array.from({ length: bucketCount }).map((_, i) => {
+            const x = padX + i * barUnit;
+            const count = bucketByKey.get(i) ?? 0;
+            const isPeak = count > 0 && count === maxCount;
+            const isEmpty = count === 0;
+            // Empty slots render as a faint baseline tick so the axis stays
+            // perceptible even before any data arrives.
+            const h = isEmpty ? 1.5 : (count / maxCount) * height;
             return (
               <rect
-                key={b.sec}
+                key={i}
                 x={x}
                 y={height - h}
                 width={Math.max(0.5, barUnit - 0.4)}
                 height={h}
                 rx={0.5}
                 className={
-                  isPeak
-                    ? "fill-[var(--color-brand-deep,#3a36e0)]"
-                    : "fill-[var(--color-brand,#5a52ff)] opacity-70"
+                  isEmpty
+                    ? "fill-line"
+                    : isPeak
+                      ? "fill-[var(--color-brand-deep,#3a36e0)]"
+                      : "fill-[var(--color-brand,#5a52ff)] opacity-70"
                 }
               >
                 <title>
-                  {formatWatchTime(b.sec)}–{formatWatchTime(b.sec + 5)}:{" "}
-                  {b.count} {b.count === 1 ? "Aufruf" : "Aufrufe"}
+                  {formatWatchTime(i * 5)}–{formatWatchTime(i * 5 + 5)}:{" "}
+                  {count} {count === 1 ? "Aufruf" : "Aufrufe"}
                 </title>
               </rect>
             );
@@ -334,7 +362,7 @@ function EventTimeline({ events }: { events: AnalyticsEvent[] }) {
       </h3>
       <ul className="divide-y divide-line/60 rounded-squircle-sm border border-line bg-surface">
         {events.map((ev) => (
-          <li key={ev.id} className="flex items-start gap-3 px-3 py-2">
+          <li key={ev.id} className="flex items-start gap-3 px-3 py-2.5">
             <span className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-muted text-ink-muted">
               <EventIcon kind={ev.kind} />
             </span>
@@ -343,15 +371,21 @@ function EventTimeline({ events }: { events: AnalyticsEvent[] }) {
                 <span className="text-sm font-medium text-ink">
                   {eventLabel(ev.kind)}
                 </span>
-                <span className="shrink-0 text-xs text-ink-muted tabular-nums">
+                <span
+                  className="shrink-0 text-[11px] text-ink-muted tabular-nums"
+                  title={formatAbsolute(ev.ts)}
+                >
                   {formatRel(ev.ts)}
                 </span>
               </div>
-              {payloadPreview(ev) && (
-                <div className="mt-0.5 text-xs text-ink-muted">
-                  {payloadPreview(ev)}
-                </div>
-              )}
+              <div className="mt-0.5 flex items-baseline justify-between gap-3">
+                <span className="text-xs text-ink-muted truncate">
+                  {payloadPreview(ev) ?? "—"}
+                </span>
+                <span className="shrink-0 text-[10px] text-ink-muted tabular-nums">
+                  {formatAbsolute(ev.ts)}
+                </span>
+              </div>
             </div>
           </li>
         ))}
@@ -431,6 +465,25 @@ function formatWatchTime(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Sekunden-genauer absoluter Zeitstempel in DE-Locale, z.B.
+ * "30.05.2026, 21:38:45". Used as both the visible second-line stamp and
+ * the title-attribute on the relative-time pill.
+ */
+function formatAbsolute(input: string | Date | null | undefined): string {
+  if (!input) return "—";
+  const d = input instanceof Date ? input : new Date(input);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return d.toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 /**

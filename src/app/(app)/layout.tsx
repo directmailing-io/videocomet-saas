@@ -6,6 +6,10 @@ import { Toaster } from "@/components/ui/toaster";
 
 function navKeyFromPathname(pathname: string | null): AppNavKey {
   if (!pathname) return "dashboard";
+  // /analytics MUST be checked before /kampagnen, otherwise the per-campaign
+  // deep-dive route /analytics/kampagnen/[id] would incorrectly highlight
+  // the "Kampagnen" nav item.
+  if (pathname.startsWith("/analytics")) return "analytics";
   if (pathname.startsWith("/kampagnen")) return "campaigns";
   if (pathname.startsWith("/mediathek")) return "media";
   if (pathname.startsWith("/landingpages")) return "landingpages";

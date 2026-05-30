@@ -153,6 +153,10 @@ export interface LeadAnalytics {
   summary: LeadAnalyticsSummary;
   events: LeadAnalyticsEvent[];
   watchTimeBuckets: LeadAnalyticsBucket[];
+  /** Video length in seconds — derived from payload.durationSec across
+   *  video_play / progress / ended events. Null if no video event captured
+   *  the duration yet. Used to render the heatmap axis. */
+  videoDurationSec: number | null;
 }
 
 const EVENT_LIST_LIMIT = 500;
@@ -214,6 +218,10 @@ export async function getLeadAnalytics(
     .orderBy(desc(leadEvents.ts))
     .limit(EVENT_LIST_LIMIT);
 
+  // Buckets aggregate every video event that carries atSec — including
+  // video_play (just started here) and video_ended (reached end). With short
+  // videos (<5s) we'd otherwise never see a video_progress and the heatmap
+  // would be empty even after a complete view.
   const bucketRows = await db
     .select({
       bucket: sql<number>`floor(
@@ -225,7 +233,7 @@ export async function getLeadAnalytics(
     .where(
       and(
         eq(leadEvents.leadId, leadId),
-        sql`${leadEvents.kind} = 'video_progress'`,
+        sql`${leadEvents.kind} IN ('video_play', 'video_progress', 'video_ended')`,
         sql`${leadEvents.payload} ? 'atSec'`,
       ),
     )
@@ -238,6 +246,25 @@ export async function getLeadAnalytics(
     sec: Number(r.bucket ?? 0) * 5,
     count: Number(r.count ?? 0),
   }));
+
+  // Derive video duration from any event that captured durationSec.
+  const [durationRow] = await db
+    .select({
+      dur: sql<number | null>`MAX(
+        COALESCE(NULLIF(${leadEvents.payload} ->> 'durationSec', '')::float, 0)
+      )::float`,
+    })
+    .from(leadEvents)
+    .where(
+      and(
+        eq(leadEvents.leadId, leadId),
+        sql`${leadEvents.payload} ? 'durationSec'`,
+      ),
+    );
+  const videoDurationSec =
+    durationRow?.dur && durationRow.dur > 0
+      ? Math.round(durationRow.dur)
+      : null;
 
   return {
     summary: {
@@ -256,5 +283,6 @@ export async function getLeadAnalytics(
       payload: r.payload,
     })),
     watchTimeBuckets,
+    videoDurationSec,
   };
 }

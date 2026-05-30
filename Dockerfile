@@ -24,6 +24,10 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# ffmpeg: needed by /api/media/[id]/frame for the wizard's live thumbnail
+# preview (single-frame extraction). Runs in-process for sub-200ms response —
+# the worker queue would add too much latency for the interactive UI.
+RUN apk add --no-cache ffmpeg
 RUN addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 nextjs
 COPY --from=builder /app/public ./public
