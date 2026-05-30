@@ -41,12 +41,15 @@ import type { Job } from "bullmq";
 async function stuckLeadRecovery(): Promise<void> {
   const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
   // Hole alle stuck leads UND ihre Run-Daten in einem Query.
+  // WICHTIG: attempts < 3 — sonst landet ein dauerhaft kaputter Lead
+  // (broken DNS, unzugängliche URL, ...) in einer Endlos-Recovery-Schleife.
   const stuck = await db
     .select({
       id: leads.id,
       runId: leads.runId,
       userId: runs.userId,
       campaignId: runs.campaignId,
+      attempts: leads.attempts,
     })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
@@ -54,10 +57,39 @@ async function stuckLeadRecovery(): Promise<void> {
       and(
         inArray(leads.status, ["rendering", "uploading"]),
         lt(leads.startedAt, fiveMinutesAgo),
-        // Nur Leads in laufenden Runden (sonst spammt das die DB)
         eq(runs.status, "generating"),
+        lt(leads.attempts, 3),
       ),
     );
+
+  // Leads mit >=3 attempts: hart als failed markieren statt requeue.
+  const exhausted = await db
+    .select({ id: leads.id })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        inArray(leads.status, ["rendering", "uploading"]),
+        lt(leads.startedAt, fiveMinutesAgo),
+        eq(runs.status, "generating"),
+        sql`${leads.attempts} >= 3`,
+      ),
+    );
+  if (exhausted.length > 0) {
+    const exIds = exhausted.map((e) => e.id);
+    await db
+      .update(leads)
+      .set({
+        status: "failed",
+        completedAt: new Date(),
+        errorMessage: sql`COALESCE(${leads.errorMessage}, 'exceeded max retries (3) — likely a bad URL or unrecoverable error')`,
+      })
+      .where(inArray(leads.id, exIds));
+    // eslint-disable-next-line no-console
+    console.log(
+      `[worker:${WORKER_ID}] stuck-recovery: marked ${exhausted.length} exhausted leads as failed`,
+    );
+  }
 
   if (stuck.length === 0) return;
 

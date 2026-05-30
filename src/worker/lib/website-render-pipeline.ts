@@ -29,11 +29,36 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { lookup as dnsLookup } from "node:dns/promises";
 import sharp from "sharp";
 import type { Page, CDPSession } from "puppeteer-core";
 import type { ScrollFrame } from "@/lib/segments/types";
 import { getContext, type PooledContext } from "./browser-pool";
 import { dismissCookieBanners } from "./cookie-dismiss";
+
+/**
+ * Schnelle DNS-Vorab-Prüfung: löst den Host der URL in 3s auf, sonst wirft.
+ * Verhindert dass page.goto bei broken Domains 30s in den Timeout läuft
+ * + retry + fallback — was sich auf 60-90s pro broken-URL-Lead summiert.
+ */
+async function preflightDnsCheck(url: string): Promise<void> {
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    throw new Error(`[dns-preflight] invalid URL: ${url}`);
+  }
+  const TIMEOUT_MS = 3_000;
+  await Promise.race([
+    dnsLookup(host),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`[dns-preflight] timeout for ${host}`)),
+        TIMEOUT_MS,
+      ),
+    ),
+  ]);
+}
 
 export interface RenderWebsiteOpts {
   url: string;
@@ -241,6 +266,10 @@ export async function renderWebsiteCapture(
       height: viewport.height,
       deviceScaleFactor: 1,
     });
+
+    // DNS-Preflight: bei broken Domain sofort werfen, kein 30s+10s
+    // page.goto-Tanz für offensichtlich nicht erreichbare URLs.
+    await preflightDnsCheck(opts.url);
 
     try {
       await page.goto(opts.url, {
