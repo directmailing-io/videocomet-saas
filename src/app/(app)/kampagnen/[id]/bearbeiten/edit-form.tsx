@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toaster";
+import { ThumbnailFramePicker } from "@/components/editor/thumbnail-frame-picker";
 import { cn } from "@/lib/utils";
 
 export interface EditCampaignWebcam {
@@ -211,17 +212,6 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
   const currentWebcam = data.webcams.find(
     (w) => w.id === state.webcamMediaId,
   );
-
-  function setPdfThumbnailFrame(value: string): void {
-    if (!value.trim()) {
-      setState((s) => ({ ...s, pdfThumbnailFrameMs: null }));
-      return;
-    }
-    const n = Number(value);
-    if (Number.isFinite(n) && n >= 0) {
-      setState((s) => ({ ...s, pdfThumbnailFrameMs: Math.floor(n) }));
-    }
-  }
 
   return (
     <>
@@ -655,22 +645,19 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
                 </div>
 
                 {state.pdfThumbnailEnabled && (
-                  <div>
-                    <Label htmlFor="edit-pdf-frame">Frame-Zeit (ms)</Label>
-                    <Input
-                      id="edit-pdf-frame"
-                      type="number"
-                      placeholder="3000"
-                      value={state.pdfThumbnailFrameMs ?? ""}
-                      onChange={(e) => setPdfThumbnailFrame(e.target.value)}
-                      onBlur={() => {
+                  <div className="pt-3 border-t border-line">
+                    <ThumbnailFramePicker
+                      webcamMediaId={state.webcamMediaId}
+                      webcamDurationSec={currentWebcam?.durationSec ?? null}
+                      value={state.pdfThumbnailFrameMs}
+                      onChange={(ms) => {
+                        setState((s) => ({ ...s, pdfThumbnailFrameMs: ms }));
                         void patchAndSync(
-                          {
-                            pdfThumbnailFrameMs: state.pdfThumbnailFrameMs,
-                          },
+                          { pdfThumbnailFrameMs: ms },
                           "Frame-Zeit",
                         );
                       }}
+                      inputId="edit-pdf-frame"
                     />
                   </div>
                 )}

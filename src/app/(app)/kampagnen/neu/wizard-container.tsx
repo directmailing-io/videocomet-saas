@@ -253,17 +253,21 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
             onChange={(id) => update({ landingPageTemplateId: id })}
           />
         )}
-        {step === 4 && (
-          <WizardStep5Pdf
-            enabled={state.pdfEnabled}
-            googleDocsUrl={state.pdfGoogleDocsUrl}
-            qrEnabled={state.pdfQrEnabled}
-            thumbnailEnabled={state.pdfThumbnailEnabled}
-            frameMs={state.pdfThumbnailFrameMs}
-            webcamMediaId={state.webcamMediaId}
-            onChange={(patch) => update(patch)}
-          />
-        )}
+        {step === 4 && (() => {
+          const wc = webcams.find((w) => w.id === state.webcamMediaId);
+          return (
+            <WizardStep5Pdf
+              enabled={state.pdfEnabled}
+              googleDocsUrl={state.pdfGoogleDocsUrl}
+              qrEnabled={state.pdfQrEnabled}
+              thumbnailEnabled={state.pdfThumbnailEnabled}
+              frameMs={state.pdfThumbnailFrameMs}
+              webcamMediaId={state.webcamMediaId}
+              webcamDurationSec={wc?.durationSec ?? null}
+              onChange={(patch) => update(patch)}
+            />
+          );
+        })()}
         {step === 5 && (
           <WizardStep6Summary
             state={state}
