@@ -145,51 +145,66 @@ export function LiveTable({
     runStatus === "failed" ||
     runStatus === "cancelled";
 
-  const regenerate = React.useCallback(async () => {
-    if (!isTerminal || regenerating) return;
-    const confirmed = window.confirm(
-      "Alle Videos und PDFs dieser Runde werden neu erzeugt. Bestehende Outputs werden überschrieben. Fortfahren?",
-    );
-    if (!confirmed) return;
-    setRegenerating(true);
-    try {
-      const res = await fetch(`/api/runs/${runId}/regenerate`, {
-        method: "POST",
-        credentials: "same-origin",
-      });
-      if (!res.ok) {
-        let msg = `HTTP ${res.status}`;
-        try {
-          const j = (await res.json()) as { error?: string };
-          if (j.error) msg = j.error;
-        } catch {
-          /* ignore */
+  const regenerate = React.useCallback(
+    async (mode: "all" | "video" | "pdf") => {
+      if (!isTerminal || regenerating) return;
+      const confirmMessage =
+        mode === "all"
+          ? "Alle Videos und PDFs dieser Runde werden neu erzeugt. Bestehende Outputs werden überschrieben. Fortfahren?"
+          : mode === "video"
+            ? "Nur die Videos werden neu erzeugt — bestehende PDFs bleiben. Bestehende Outputs werden überschrieben. Fortfahren?"
+            : "Nur die Briefe werden neu erzeugt — bestehende Videos bleiben. Bestehende Outputs werden überschrieben. Fortfahren?";
+      const confirmed = window.confirm(confirmMessage);
+      if (!confirmed) return;
+      setRegenerating(true);
+      try {
+        const res = await fetch(`/api/runs/${runId}/regenerate`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ mode }),
+        });
+        if (!res.ok) {
+          let msg = `HTTP ${res.status}`;
+          try {
+            const j = (await res.json()) as { error?: string };
+            if (j.error) msg = j.error;
+          } catch {
+            /* ignore */
+          }
+          toast({
+            title: "Neu generieren fehlgeschlagen",
+            description: msg,
+            variant: "danger",
+          });
+          return;
         }
+        const toastTitle =
+          mode === "all"
+            ? "Runde wird neu generiert"
+            : mode === "video"
+              ? "Videos werden neu generiert"
+              : "Briefe werden neu generiert";
+        toast({
+          title: toastTitle,
+          description: "Die Worker arbeiten die Leads jetzt erneut ab.",
+        });
+        // Run-Status springt zurueck auf 'generating' — SSE Stream kickt sich
+        // beim naechsten Render-Pass von alleine neu an.
+        setRunStatus("generating");
+        router.refresh();
+      } catch (err) {
         toast({
           title: "Neu generieren fehlgeschlagen",
-          description: msg,
+          description: err instanceof Error ? err.message : "Netzwerkfehler.",
           variant: "danger",
         });
-        return;
+      } finally {
+        setRegenerating(false);
       }
-      toast({
-        title: "Runde wird neu generiert",
-        description: "Die Worker arbeiten die Leads jetzt erneut ab.",
-      });
-      // Run-Status springt zurueck auf 'generating' — SSE Stream kickt sich
-      // beim naechsten Render-Pass von alleine neu an.
-      setRunStatus("generating");
-      router.refresh();
-    } catch (err) {
-      toast({
-        title: "Neu generieren fehlgeschlagen",
-        description: err instanceof Error ? err.message : "Netzwerkfehler.",
-        variant: "danger",
-      });
-    } finally {
-      setRegenerating(false);
-    }
-  }, [isTerminal, regenerating, runId, router, toast]);
+    },
+    [isTerminal, regenerating, runId, router, toast],
+  );
 
   React.useEffect(() => {
     // Skip SSE if the run is already in a terminal state.
@@ -259,20 +274,34 @@ export function LiveTable({
             </div>
             <div className="flex items-center gap-2">
               {isTerminal && (
-                <Button
-                  variant="ghost"
-                  onClick={regenerate}
-                  disabled={regenerating}
-                  iconLeft={
-                    regenerating ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <RotateCcw className="size-4" />
-                    )
-                  }
-                >
-                  {regenerating ? "Wird gestartet…" : "Neu generieren"}
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      disabled={regenerating}
+                      iconLeft={
+                        regenerating ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <RotateCcw className="size-4" />
+                        )
+                      }
+                    >
+                      {regenerating ? "Wird gestartet…" : "Neu generieren"}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => void regenerate("all")}>
+                      Alles neu generieren
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => void regenerate("video")}>
+                      Nur Video neu generieren
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => void regenerate("pdf")}>
+                      Nur Brief neu generieren
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

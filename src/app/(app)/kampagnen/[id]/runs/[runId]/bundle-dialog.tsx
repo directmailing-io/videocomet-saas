@@ -51,8 +51,9 @@ export function BundleDialog({ runId }: BundleDialogProps) {
         <DialogHeader>
           <DialogTitle>PDF-Bundle herunterladen</DialogTitle>
           <DialogDescription>
-            Wähle, wie viele PDFs in der ZIP-Datei zusammengefasst werden sollen.
-            Mit dem Offset kannst du Folge-Pakete laden.
+            Lade die PDFs aller fertigen Leads als ZIP-Datei. Bei sehr großen
+            Runden splittest du das Bundle in Pakete (z.B. 100 pro ZIP) und
+            startest die folgenden Pakete ab Lead 101, 201 usw.
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
@@ -72,19 +73,23 @@ export function BundleDialog({ runId }: BundleDialogProps) {
             </Select>
           </div>
           <div>
-            <Label htmlFor="bundle-offset">Start-Offset</Label>
+            <Label htmlFor="bundle-offset">Ab Lead Nr.</Label>
             <Select value={offset} onValueChange={setOffset}>
               <SelectTrigger id="bundle-offset">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[0, 100, 250, 500, 1000, 2000].map((o) => (
+                <SelectItem value="0">1 (Anfang)</SelectItem>
+                {[100, 250, 500, 1000, 2000].map((o) => (
                   <SelectItem key={o} value={String(o)}>
-                    {o}
+                    {o + 1}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <p className="mt-1 text-xs text-ink-muted">
+              Standard: 1. Nur ändern wenn du Folge-Pakete einer großen Runde holst.
+            </p>
           </div>
         </div>
         <DialogFooter>

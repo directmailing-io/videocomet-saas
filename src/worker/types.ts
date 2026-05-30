@@ -10,6 +10,19 @@ export interface LeadJobData {
   runId: string;
   userId: string;
   campaignId: string;
+  /**
+   * When `true`, the pipeline skips all video-related stages (render, upload,
+   * thumbnail, landingpage) and only re-generates the PDF brief. The existing
+   * `videoUrl`, `thumbnailUrl`, `slug`, etc. on the lead row are kept intact.
+   * Used by selective regeneration ("Nur Brief neu generieren").
+   */
+  skipVideo?: boolean;
+  /**
+   * When `true`, the pipeline skips the DOCX → PDF stages (docx-modify,
+   * docx-to-pdf, pdf-compress, pdf-upload). Existing `lead.pdfUrl` is kept.
+   * Used by selective regeneration ("Nur Video neu generieren").
+   */
+  skipPdf?: boolean;
 }
 
 export interface RenderJobResult {

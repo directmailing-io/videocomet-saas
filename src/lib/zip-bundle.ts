@@ -8,7 +8,15 @@
 
 import { PassThrough, Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import archiver from "archiver";
+// CJS-Interop: `import archiver from "archiver"` brachte zur Laufzeit
+// "i.default is not a function" weil archiver keinen ESM-default exportiert.
+// Mit `import * as` greifen wir auf die module.exports-function via .default
+// oder direkt zu.
+import * as archiverModule from "archiver";
+import type ArchiverNs from "archiver";
+const archiver: typeof ArchiverNs =
+  (archiverModule as unknown as { default?: typeof ArchiverNs }).default ??
+  (archiverModule as unknown as typeof ArchiverNs);
 
 export interface ZipEntry {
   name: string;
@@ -64,7 +72,7 @@ export function createZipStream(entries: ZipEntry[]): Readable {
  * so the resulting ZIP is never silently incomplete.
  */
 export async function addRemoteFileToZip(
-  archive: archiver.Archiver,
+  archive: ArchiverNs.Archiver,
   name: string,
   url: string,
 ): Promise<void> {
@@ -96,7 +104,7 @@ export async function addRemoteFileToZip(
  * + output stream; caller is responsible for `archive.finalize()`.
  */
 export function createArchive(): {
-  archive: archiver.Archiver;
+  archive: ArchiverNs.Archiver;
   stream: Readable;
 } {
   const archive = archiver("zip", { zlib: { level: 6 } });

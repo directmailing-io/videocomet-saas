@@ -153,7 +153,7 @@ async function streamBundle(
       if (!lead.pdfUrl) continue;
       await addRemoteFileToZip(archive, name, lead.pdfUrl);
     }
-    archive.finalize().catch((err) => {
+    archive.finalize().catch((err: unknown) => {
       // eslint-disable-next-line no-console
       console.error("[pdf-bundle] finalize failed:", err);
     });

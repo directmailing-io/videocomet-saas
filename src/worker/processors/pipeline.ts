@@ -9,8 +9,15 @@
  * The pipeline takes a single BullMQ job (one Lead). Per-Lead failures are
  * recorded on the row (`status = failed`, `errorMessage`); BullMQ handles
  * retries via the queue's default options.
+ *
+ * Selective regeneration: when the job carries `skipVideo`/`skipPdf` flags
+ * (set by /api/runs/[id]/regenerate?mode=…), the corresponding stages are
+ * bypassed and the already-stored `lead.videoUrl` / `lead.thumbnailUrl` /
+ * `lead.slug` / `lead.pdfUrl` are reused.
  */
 
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import type { Job } from "bullmq";
 import { db } from "@/lib/db";
@@ -66,6 +73,28 @@ async function loadJobContext(jobData: LeadJobData) {
   }
 
   return { lead: leadRow, run: runRow, campaign: campaignRow, webcam };
+}
+
+/**
+ * Downloads the Bunny CDN thumbnail JPG to a local file inside `outDir`.
+ * Used by selective regeneration (skipVideo) so the PDF still embeds the
+ * same thumbnail that the existing landing page is using — we cannot
+ * re-extract a frame because we no longer have the source video locally.
+ */
+async function downloadThumb(
+  thumbnailUrl: string,
+  outDir: string,
+): Promise<string> {
+  const res = await fetch(thumbnailUrl);
+  if (!res.ok) {
+    throw new Error(
+      `thumbnail fetch HTTP ${res.status} ${res.statusText} url=${thumbnailUrl}`,
+    );
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  const outPath = join(outDir, "thumb.jpg");
+  await writeFile(outPath, buf);
+  return outPath;
 }
 
 function buildPrettyName(data: Record<string, string>): string {
@@ -157,6 +186,9 @@ export async function pipelineProcessor(
   const workDir = await createTempDir(`lead-${data.leadId.slice(0, 8)}`);
   const appUrl = process.env.APP_URL ?? "https://app.videocomet.de";
 
+  const skipVideo = data.skipVideo === true;
+  const skipPdf = data.skipPdf === true;
+
   await updateLeadStatus(data.leadId, {
     status: "rendering",
     startedAt: new Date(),
@@ -165,73 +197,131 @@ export async function pipelineProcessor(
   });
 
   try {
-    if (!webcam?.publicUrl) {
-      throw new Error("[pipeline] campaign has no webcam media");
+    // Stage outputs (filled lazily depending on skip flags). Defaults reuse
+    // whatever the lead row already carries, so a selective regen leaves the
+    // unrelated outputs intact.
+    let bunnyVideoId: string | null = lead.bunnyVideoId ?? null;
+    let videoUrl: string | null = lead.videoUrl ?? null;
+    let pageUrl: string | null = null;
+    let slug: string | null = lead.slug ?? null;
+    let qrPngPath: string | null = null;
+    let thumbFilePath: string | null = null;
+
+    // ── Stages 1-2: Video render + upload ────────────────────────────
+    if (!skipVideo) {
+      if (!webcam?.publicUrl) {
+        throw new Error("[pipeline] campaign has no webcam media");
+      }
+      const render = await runVideoRender({
+        outDir: workDir,
+        mode: (campaign.mode === "with-presentation"
+          ? "with-presentation"
+          : "webcam-only") as "webcam-only" | "with-presentation",
+        webcamSourceUrl: webcam.publicUrl,
+        website: lead.data?.website ?? null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        segments: (campaign.segments as any) ?? [],
+        leadData: (lead.data ?? {}) as Record<string, string>,
+        pip: {
+          position: campaign.pipPosition?.includes("right") ? "right" : "left",
+          shape:
+            campaign.pipShape === "circle"
+              ? "circle"
+              : campaign.pipShape === "square"
+                ? "square"
+                : "rounded",
+        },
+        defaultDurationSec: webcam.durationSec ?? 30,
+      });
+
+      await updateLeadStatus(data.leadId, { status: "uploading" });
+      const upload = await runVideoUpload({
+        leadId: data.leadId,
+        videoFilePath: render.videoFilePath,
+        title: `${campaign.name} – Lead ${lead.rowIndex}`,
+      });
+      bunnyVideoId = upload.bunnyVideoId;
+      videoUrl = upload.videoUrl;
+
+      // ── Stage 5 (early): Landingpage row + slug ──────────────────
+      const lp = await runLandingPageCreate({
+        leadId: data.leadId,
+        appUrl,
+        prettyName: buildPrettyName(lead.data ?? {}),
+      });
+      slug = lp.slug;
+      pageUrl = lp.pageUrl;
+
+      // ── Stage 3: Thumbnail ───────────────────────────────────────
+      const thumb = await runThumbnailExtract({
+        videoFilePath: render.videoFilePath,
+        durationSec: render.durationSec,
+        frameMs: campaign.pdfThumbnailFrameMs,
+        outDir: workDir,
+        enabled: campaign.pdfEnabled && campaign.pdfThumbnailEnabled,
+      });
+      thumbFilePath = thumb.thumbFilePath;
+    } else {
+      // Video stage skipped → reuse existing slug to rebuild pageUrl.
+      // If the lead has no slug yet (selective regen on a never-completed
+      // lead), generate one now so the QR / docx still get a valid URL.
+      if (!slug) {
+        const lp = await runLandingPageCreate({
+          leadId: data.leadId,
+          appUrl,
+          prettyName: buildPrettyName(lead.data ?? {}),
+        });
+        slug = lp.slug;
+        pageUrl = lp.pageUrl;
+      } else {
+        pageUrl = `${appUrl.replace(/\/+$/, "")}/v/${slug}`;
+      }
+
+      // For the PDF brief we still want the original thumbnail. Try to
+      // pull the already-uploaded Bunny thumbnail down to disk; if that
+      // fails we just skip the thumb replacement (the marker stays in
+      // place but the rest of the PDF rebuilds correctly).
+      if (
+        campaign.pdfEnabled &&
+        campaign.pdfThumbnailEnabled &&
+        lead.thumbnailUrl
+      ) {
+        thumbFilePath = await downloadThumb(
+          lead.thumbnailUrl,
+          workDir,
+        ).catch((err) => {
+          console.warn(
+            `[pipeline] could not fetch thumb for lead=${data.leadId}:`,
+            err instanceof Error ? err.message : err,
+          );
+          return null;
+        });
+      }
     }
 
-    // ── Stage 1: Video render ────────────────────────────────────────
-    const render = await runVideoRender({
-      outDir: workDir,
-      mode: (campaign.mode === "with-presentation"
-        ? "with-presentation"
-        : "webcam-only") as "webcam-only" | "with-presentation",
-      webcamSourceUrl: webcam.publicUrl,
-      website: lead.data?.website ?? null,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      segments: (campaign.segments as any) ?? [],
-      leadData: (lead.data ?? {}) as Record<string, string>,
-      pip: {
-        position: campaign.pipPosition?.includes("right") ? "right" : "left",
-        shape:
-          campaign.pipShape === "circle"
-            ? "circle"
-            : campaign.pipShape === "square"
-              ? "square"
-              : "rounded",
-      },
-      defaultDurationSec: webcam.durationSec ?? 30,
-    });
-
-    // ── Stage 2: Video upload ────────────────────────────────────────
-    await updateLeadStatus(data.leadId, { status: "uploading" });
-    const upload = await runVideoUpload({
-      leadId: data.leadId,
-      videoFilePath: render.videoFilePath,
-      title: `${campaign.name} – Lead ${lead.rowIndex}`,
-    });
-
-    // ── Stage 5 (early): Landingpage row + slug ──────────────────────
-    // Done before QR so we can encode the page URL into the QR PNG.
-    const lp = await runLandingPageCreate({
-      leadId: data.leadId,
-      appUrl,
-      prettyName: buildPrettyName(lead.data ?? {}),
-    });
-
-    // ── Stage 3: Thumbnail ───────────────────────────────────────────
-    const thumb = await runThumbnailExtract({
-      videoFilePath: render.videoFilePath,
-      durationSec: render.durationSec,
-      frameMs: campaign.pdfThumbnailFrameMs,
-      outDir: workDir,
-      enabled: campaign.pdfEnabled && campaign.pdfThumbnailEnabled,
-    });
-
     // ── Stage 4: QR-Code ─────────────────────────────────────────────
-    const qr = await runQrGenerate({
-      outDir: workDir,
-      pageUrl: lp.pageUrl,
-      enabled: campaign.pdfEnabled && campaign.pdfQrEnabled,
-    });
+    if (pageUrl) {
+      const qr = await runQrGenerate({
+        outDir: workDir,
+        pageUrl,
+        enabled: campaign.pdfEnabled && campaign.pdfQrEnabled && !skipPdf,
+      });
+      qrPngPath = qr.qrPngPath;
+    }
 
-    // ── Stages 6-9: PDF pipeline (only if enabled) ───────────────────
-    if (campaign.pdfEnabled && campaign.pdfGoogleDocsUrl) {
+    // ── Stages 6-9: PDF pipeline (only if enabled and not skipped) ──
+    if (
+      !skipPdf &&
+      campaign.pdfEnabled &&
+      campaign.pdfGoogleDocsUrl &&
+      pageUrl
+    ) {
       const docx = await runDocxModify({
         outDir: workDir,
         googleDocsUrl: campaign.pdfGoogleDocsUrl,
-        vars: buildDocxVars(lead.data ?? {}, lp.pageUrl),
-        qrPngPath: qr.qrPngPath,
-        thumbJpgPath: thumb.thumbFilePath,
+        vars: buildDocxVars(lead.data ?? {}, pageUrl),
+        qrPngPath,
+        thumbJpgPath: thumbFilePath,
       });
 
       const pdf = await runDocxToPdf({
@@ -269,9 +359,11 @@ export async function pipelineProcessor(
 
     return {
       ok: true,
-      bunnyVideoId: upload.bunnyVideoId,
-      videoUrl: upload.videoUrl,
-      pageUrl: lp.pageUrl,
+      bunnyVideoId,
+      videoUrl,
+      pageUrl,
+      skipVideo,
+      skipPdf,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

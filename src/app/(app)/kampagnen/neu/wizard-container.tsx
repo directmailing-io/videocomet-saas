@@ -260,6 +260,7 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
             qrEnabled={state.pdfQrEnabled}
             thumbnailEnabled={state.pdfThumbnailEnabled}
             frameMs={state.pdfThumbnailFrameMs}
+            webcamMediaId={state.webcamMediaId}
             onChange={(patch) => update(patch)}
           />
         )}
