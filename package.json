@@ -44,6 +44,7 @@
     "fix-webm-duration": "^1.0.6",
     "framer-motion": "^12.40.0",
     "ioredis": "^5.11.0",
+    "jszip": "^3.10.1",
     "lucia": "^3.2.2",
     "lucide-react": "0.515.0",
     "mime-types": "^3.0.2",

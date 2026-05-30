@@ -2,12 +2,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { Readable } from "node:stream";
 import { z } from "zod";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getRun } from "@/lib/db/queries/runs";
 import { listLeadsByRun } from "@/lib/db/queries/leads";
-import { createArchive } from "@/lib/zip-bundle";
 
 /**
  * POST /api/runs/[id]/pdf-bundle
@@ -17,9 +15,11 @@ import { createArchive } from "@/lib/zip-bundle";
  * Konzept (User-Wunsch):
  *   - Es werden ALLE fertigen Leads in das Bundle aufgenommen.
  *   - Je `pdfsPerFile` Lead-PDFs werden zu EINER Multi-Page-PDF gemerged.
- *   - Bei 1000 Leads + 100 pro Datei → 10 grosse PDFs:
- *     <baseName>_1-100.pdf, <baseName>_101-200.pdf, ...
- *   - Alles wandert in ein ZIP, das gestreamt wird.
+ *   - Bei 1000 Leads + 100 pro Datei → 10 grosse PDFs als ZIP.
+ *
+ * Tech-Note: pdf-lib + jszip via dynamic import. archiver und Next-
+ * Webpack vertragen sich auch mit serverComponentsExternalPackages
+ * nicht — jszip ist pure JS und funktioniert sauber.
  */
 
 const sizeSchema = z
@@ -56,7 +56,7 @@ export async function POST(
     );
   }
 
-  return streamBundle(
+  return buildBundle(
     params.id,
     auth.user.id,
     body.pdfsPerFile,
@@ -64,11 +64,6 @@ export async function POST(
   );
 }
 
-/**
- * GET /api/runs/[id]/pdf-bundle?pdfsPerFile=100&baseName=Outreach
- *
- * URL-getriebene Variante (für direkten Browser-Download via <a href>).
- */
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } },
@@ -80,10 +75,9 @@ export async function GET(
     1,
     Math.min(1000, Number(req.nextUrl.searchParams.get("pdfsPerFile") ?? 100)),
   );
-  const baseNameRaw =
-    req.nextUrl.searchParams.get("baseName") ?? undefined;
+  const baseNameRaw = req.nextUrl.searchParams.get("baseName") ?? undefined;
 
-  return streamBundle(
+  return buildBundle(
     params.id,
     auth.user.id,
     pdfsPerFile,
@@ -93,7 +87,6 @@ export async function GET(
 
 function sanitizeBaseName(input: string | undefined, fallback: string): string {
   const raw = (input ?? fallback).trim();
-  // Nur ASCII Alphanumeric + _ - + Umlaute -> ASCII; sonst durch _ ersetzen.
   const transl: Record<string, string> = {
     ä: "ae",
     ö: "oe",
@@ -109,7 +102,7 @@ function sanitizeBaseName(input: string | undefined, fallback: string): string {
   return s.slice(0, 60) || "videocomet";
 }
 
-async function streamBundle(
+async function buildBundle(
   runId: string,
   userId: string,
   pdfsPerFile: number,
@@ -137,80 +130,94 @@ async function streamBundle(
     );
   }
 
-  // Sort by rowIndex so the bundle reflects the CSV-Reihenfolge.
   completed.sort((a, b) => a.rowIndex - b.rowIndex);
 
   const baseName = sanitizeBaseName(baseNameInput, run.name);
   const zipFilename = `${baseName}_pdf-bundle.zip`;
 
-  const { archive, stream } = await createArchive();
-
-  // pdf-lib via dynamic import: Next-Webpack hat sonst Probleme mit
-  // den ESM-Exports ("d is not a function" beim PDFDocument.create-Call,
-  // selbst mit serverComponentsExternalPackages).
+  // Beide via dynamic import — Next-Webpack mangled sonst die Default-
+  // Resolution (archiver-Bug). Dynamic import resolved at runtime.
   const { PDFDocument } = await import("pdf-lib");
+  const JSZipMod = (await import("jszip")) as unknown as {
+    default?: typeof import("jszip");
+  } & typeof import("jszip");
+  const JSZip = JSZipMod.default ?? (JSZipMod as unknown as typeof import("jszip"));
 
-  // Build merged PDFs in batches and append each to the ZIP. Background
-  // task so we can return the streaming Response immediately.
-  (async () => {
-    try {
-      for (let batchStart = 0; batchStart < completed.length; batchStart += pdfsPerFile) {
-        const batch = completed.slice(batchStart, batchStart + pdfsPerFile);
-        const firstIdx = batchStart + 1;
-        const lastIdx = batchStart + batch.length;
+  const zip = new JSZip();
 
-        // Merge all lead PDFs in this batch into ONE PDFDocument.
-        const merged = await PDFDocument.create();
-        for (const lead of batch) {
-          if (!lead.pdfUrl) continue;
-          try {
-            const res = await fetch(lead.pdfUrl);
-            if (!res.ok) {
-              // eslint-disable-next-line no-console
-              console.warn(
-                `[pdf-bundle] skip lead=${lead.id} HTTP ${res.status}`,
-              );
-              continue;
-            }
-            const buf = Buffer.from(await res.arrayBuffer());
-            const src = await PDFDocument.load(buf, {
-              ignoreEncryption: true,
-            });
-            const pages = await merged.copyPages(src, src.getPageIndices());
-            for (const p of pages) merged.addPage(p);
-          } catch (err) {
+  try {
+    for (let batchStart = 0; batchStart < completed.length; batchStart += pdfsPerFile) {
+      const batch = completed.slice(batchStart, batchStart + pdfsPerFile);
+      const firstIdx = batchStart + 1;
+      const lastIdx = batchStart + batch.length;
+
+      const merged = await PDFDocument.create();
+      for (const lead of batch) {
+        if (!lead.pdfUrl) continue;
+        try {
+          const res = await fetch(lead.pdfUrl);
+          if (!res.ok) {
             // eslint-disable-next-line no-console
             console.warn(
-              `[pdf-bundle] merge fail lead=${lead.id}:`,
-              err instanceof Error ? err.message : err,
+              `[pdf-bundle] skip lead=${lead.id} HTTP ${res.status}`,
             );
+            continue;
           }
+          const buf = Buffer.from(await res.arrayBuffer());
+          const src = await PDFDocument.load(buf, {
+            ignoreEncryption: true,
+          });
+          const pages = await merged.copyPages(src, src.getPageIndices());
+          for (const p of pages) merged.addPage(p);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[pdf-bundle] merge fail lead=${lead.id}:`,
+            err instanceof Error ? err.message : err,
+          );
         }
+      }
 
-        const mergedBytes = Buffer.from(await merged.save());
-        const pdfName = `${baseName}_${firstIdx}-${lastIdx}.pdf`;
-        archive.append(mergedBytes, { name: pdfName });
-      }
-      await archive.finalize();
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error("[pdf-bundle] failure:", err);
-      try {
-        archive.abort();
-      } catch {
-        /* ignore */
-      }
+      const mergedBytes = await merged.save();
+      const pdfName = `${baseName}_${firstIdx}-${lastIdx}.pdf`;
+      zip.file(pdfName, mergedBytes);
     }
-  })();
 
-  const webStream = Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>;
+    // JSZip generateAsync streamed nicht — wir bauen das gesamte ZIP
+    // im Memory. Bei 1000 Leads × 100KB pro Lead-PDF = ~100MB. Bei
+    // 10 Multi-Page PDFs liegt das im Range, sollte für die meisten
+    // Runden problemlos sein.
+    const zipBuffer = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
 
-  return new Response(webStream, {
-    status: 200,
-    headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${zipFilename}"`,
-      "Cache-Control": "no-store",
-    },
-  });
+    // Wrap als Blob: Node's Buffer ist nicht direkt BodyInit-assignable
+    // unter den aktuellen TS-lib types (SharedArrayBuffer vs ArrayBuffer).
+    const ab = zipBuffer.buffer.slice(
+      zipBuffer.byteOffset,
+      zipBuffer.byteOffset + zipBuffer.byteLength,
+    ) as ArrayBuffer;
+    const blob = new Blob([ab], { type: "application/zip" });
+    return new Response(blob, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="${zipFilename}"`,
+        "Content-Length": String(zipBuffer.byteLength),
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[pdf-bundle] failure:", err);
+    return NextResponse.json(
+      {
+        error: "Bundle konnte nicht erzeugt werden.",
+        details: err instanceof Error ? err.message : null,
+      },
+      { status: 500 },
+    );
+  }
 }
