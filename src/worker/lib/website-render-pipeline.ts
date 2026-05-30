@@ -77,8 +77,8 @@ export interface RenderWebsiteResult {
   fps: number;
 }
 
-const HARD_TIMEOUT_MS = 240_000;
-const GOTO_TIMEOUT_MS = 30_000;
+const HARD_TIMEOUT_MS = 90_000;
+const GOTO_TIMEOUT_MS = 12_000;
 
 /**
  * Module-level cache for per-host browser-chrome / static-hero JPGs.
