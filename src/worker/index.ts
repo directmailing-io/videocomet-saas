@@ -40,6 +40,58 @@ import type { Job } from "bullmq";
  */
 async function stuckLeadRecovery(): Promise<void> {
   const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+  // ── ZUERST: Orphaned-Pending-Recovery ──────────────────────────────
+  // Leads die in "pending" sind aber KEIN Job in der BullMQ-Queue —
+  // passiert wenn der Worker mitten in der Pipeline starb (BullMQ
+  // stalled-detection nimmt sie aus active, mein Hard-Timeout setzt
+  // sie auf failed mit BullMQ aber DB-status bleibt pending wenn die
+  // Stage 1 nie zuende lief). Wir re-enqueuen ALLE pending leads in
+  // aktiven runs — jobId-Dedup verhindert Duplikate falls schon einer
+  // wartet.
+  const orphanedPending = await db
+    .select({
+      id: leads.id,
+      runId: leads.runId,
+      userId: runs.userId,
+      campaignId: runs.campaignId,
+    })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        eq(leads.status, "pending"),
+        eq(runs.status, "generating"),
+      ),
+    )
+    .limit(2000);
+
+  if (orphanedPending.length > 0) {
+    try {
+      const queue = pipelineQueue();
+      await queue.addBulk(
+        orphanedPending.map((s) => ({
+          name: "lead-pipeline",
+          data: {
+            leadId: s.id,
+            runId: s.runId,
+            userId: s.userId,
+            campaignId: s.campaignId,
+          },
+          opts: { jobId: s.id },
+        })),
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        `[worker:${WORKER_ID}] orphaned-pending-recovery: re-enqueued ${orphanedPending.length} pending leads (jobId dedup)`,
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[worker:${WORKER_ID}] orphaned recovery failed:`, err);
+    }
+  }
+
+  // ── DANN: Stuck-Rendering-Recovery ─────────────────────────────────
   // Hole alle stuck leads UND ihre Run-Daten in einem Query.
   // WICHTIG: attempts < 3 — sonst landet ein dauerhaft kaputter Lead
   // (broken DNS, unzugängliche URL, ...) in einer Endlos-Recovery-Schleife.
