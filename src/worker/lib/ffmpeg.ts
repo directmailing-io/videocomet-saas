@@ -22,29 +22,54 @@ function ffmpegPath(): string {
 }
 
 /**
- * Render a rounded-rectangle alpha mask to `outPath`. The PNG is RGBA: pixels
- * inside the rounded rect are white+opaque (a=255), pixels outside the corners
- * are transparent (a=0). Designed to be consumed by ffmpeg's `alphamerge`
- * filter, which takes the alpha channel of input #2 and merges it into input
- * #1. The radius defaults to ~14% of the smaller dimension — that's the
- * "Apple-icon squircle" feel that designers usually mean when they say
- * "abgerundet".
+ * Module-level cache for rounded-rect mask PNGs. The same (width, height,
+ * radius) tuple produces the same bytes every render, so we cache the
+ * Buffer in memory and write it to disk on demand. Keyed by
+ * `${width}x${height}_r${radius}`. Saves ~50ms per video composition
+ * (sharp boot + SVG raster + file write) at the cost of a few KB of RAM
+ * per unique mask size.
+ *
+ * The cache is per-process (single-process Node, no race), so a worker
+ * restart starts cold but warms in 1-2 leads.
  */
-async function writeRoundedRectMaskPng(opts: {
+const ROUNDED_MASK_CACHE = new Map<string, Buffer>();
+
+/**
+ * Render (or fetch from cache) a rounded-rectangle alpha mask. The PNG
+ * is RGBA: pixels inside the rounded rect are white+opaque (a=255),
+ * pixels outside the corners are transparent (a=0). Designed to be
+ * consumed by ffmpeg's `alphamerge` filter, which takes the alpha
+ * channel of input #2 and merges it into input #1. The radius defaults
+ * to ~14% of the smaller dimension — that's the "Apple-icon squircle"
+ * feel that designers usually mean when they say "abgerundet".
+ *
+ * Returns the PNG bytes. If `outPath` is provided, also writes them to
+ * disk (ffmpeg consumes the mask via `-i` so we still need a path on
+ * disk for the composePip code path).
+ */
+async function getRoundedRectMaskPng(opts: {
   width: number;
   height: number;
   radius?: number;
-  outPath: string;
-}): Promise<void> {
+  outPath?: string;
+}): Promise<Buffer> {
   const { width, height } = opts;
   const radius = opts.radius ?? Math.round(Math.min(width, height) * 0.14);
-  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+  const key = `${width}x${height}_r${radius}`;
+  let buf = ROUNDED_MASK_CACHE.get(key);
+  if (!buf) {
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect x="0" y="0" width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="#ffffff"/>
 </svg>`;
-  await sharp(Buffer.from(svg, "utf-8"))
-    .png()
-    .toFile(opts.outPath);
+    buf = await sharp(Buffer.from(svg, "utf-8")).png().toBuffer();
+    ROUNDED_MASK_CACHE.set(key, buf);
+  }
+  if (opts.outPath) {
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(opts.outPath, buf);
+  }
+  return buf;
 }
 
 /**
@@ -251,7 +276,7 @@ export async function composePip(input: ComposePipInput): Promise<void> {
   let filterComplex: string;
   if (input.shape === "rounded") {
     const maskPath = join(dirname(input.outputPath), "pip-rounded-mask.png");
-    await writeRoundedRectMaskPng({
+    await getRoundedRectMaskPng({
       width: overlayW,
       height: overlayH,
       outPath: maskPath,

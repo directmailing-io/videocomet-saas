@@ -28,12 +28,23 @@ function getRedisUrl(): string {
  * Lazily creates a shared IORedis connection. BullMQ requires
  * `maxRetriesPerRequest: null` for blocking commands; we also wire a
  * basic exponential retry strategy so brief redis hiccups don't kill us.
+ *
+ * Connection knobs:
+ *  - `connectTimeout: 10s` — fail fast if Redis is unreachable instead
+ *    of hanging the worker boot indefinitely (Coolify will restart the
+ *    container and surface the error).
+ *  - `enableOfflineQueue: false` — when the connection is down, reject
+ *    queued commands immediately rather than buffering them. Pipelines
+ *    that try to enqueue mid-outage will see the error right away and
+ *    can fall through to the lead-recovery path on next boot.
  */
 export function getRedisConnection(): IORedis {
   if (redisConnection) return redisConnection;
   redisConnection = new IORedis(getRedisUrl(), {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
+    connectTimeout: 10_000,
+    enableOfflineQueue: false,
     retryStrategy(times: number) {
       // Exponential backoff capped at 10s.
       return Math.min(1000 * 2 ** Math.min(times, 6), 10_000);
@@ -81,11 +92,18 @@ export function pipelineQueue(): Queue<LeadJobData> {
  * Creates a BullMQ Worker that consumes the lead-pipeline queue.
  *
  * Settings:
- *  - `concurrency: 8` (env: WORKER_CONCURRENCY) — the per-lead pipeline is
- *    I/O-bound (Bunny upload, LibreOffice, ffmpeg, Puppeteer) rather than
- *    CPU-bound. With the LibreOffice mutex removed (per-instance user
- *    profile dirs, see `lib/libreoffice.ts`) 8 parallel pipelines fit
- *    comfortably in memory.
+ *  - `concurrency: 16` (env: WORKER_CONCURRENCY) — the per-lead pipeline
+ *    is I/O-bound (Bunny upload, LibreOffice, ffmpeg, Puppeteer CDP
+ *    screencast) rather than CPU-bound. At idle the worker uses ~0.25%
+ *    CPU + ~730 MB RAM on a CPX42 (8 vCPU / 16 GB RAM); doubling
+ *    parallelism from 8 → 16 still leaves headroom. Peak RSS estimate at
+ *    16 parallel leads:
+ *      LibreOffice    16 × ~200 MB  ≈  3.2 GB
+ *      Chromium                      ≈  1.0 GB (pooled, shared)
+ *      Node heap                     ≈  1.0 GB
+ *      sharp + ffmpeg buffers        ≈  1.0-2.0 GB
+ *      ───────────────────────────────────────
+ *      Total                         ≈  6-8 GB  (well within 15 GB)
  *  - `stalledInterval: 30s` — how often BullMQ checks for stalled jobs.
  *  - `maxStalledCount: 3` — tolerate 3 missed lock renewals before moving
  *    the job to failed; default 1 was too aggressive for pipelines that
@@ -102,7 +120,7 @@ export function pipelineQueue(): Queue<LeadJobData> {
 export function pipelineWorker(
   processor: Processor<LeadJobData>,
 ): Worker<LeadJobData> {
-  const concurrency = Number(process.env.WORKER_CONCURRENCY ?? "8");
+  const concurrency = Number(process.env.WORKER_CONCURRENCY ?? "16");
   return new Worker<LeadJobData>(QUEUE_NAME, processor, {
     connection: getConnectionOpts(),
     concurrency,

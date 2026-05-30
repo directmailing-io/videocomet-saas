@@ -56,6 +56,14 @@ interface Counts {
   failed: number;
 }
 
+interface WorkerStats {
+  workers: number;
+  inFlight: number;
+  active: number;
+  waiting: number;
+  lastSeenAt: string | null;
+}
+
 interface PipelineEventDTO {
   id: string;
   runId: string;
@@ -178,14 +186,17 @@ export function LiveTable({
     runStatus === "cancelled";
 
   const regenerate = React.useCallback(
-    async (mode: "all" | "video" | "pdf") => {
+    async (mode: "all" | "video" | "pdf" | "failed") => {
       if (!isTerminal || regenerating) return;
+      const failedCount = counts.failed;
       const confirmMessage =
         mode === "all"
           ? "Alle Videos und PDFs dieser Runde werden neu erzeugt. Bestehende Outputs werden überschrieben. Fortfahren?"
           : mode === "video"
             ? "Nur die Videos werden neu erzeugt — bestehende PDFs bleiben. Bestehende Outputs werden überschrieben. Fortfahren?"
-            : "Nur die Briefe werden neu erzeugt — bestehende Videos bleiben. Bestehende Outputs werden überschrieben. Fortfahren?";
+            : mode === "pdf"
+              ? "Nur die Briefe werden neu erzeugt — bestehende Videos bleiben. Bestehende Outputs werden überschrieben. Fortfahren?"
+              : `${failedCount} fehlgeschlagene Leads werden neu versucht. Bestehende erfolgreiche Outputs bleiben.`;
       const confirmed = window.confirm(confirmMessage);
       if (!confirmed) return;
       setRegenerating(true);
@@ -216,7 +227,9 @@ export function LiveTable({
             ? "Runde wird neu generiert"
             : mode === "video"
               ? "Videos werden neu generiert"
-              : "Briefe werden neu generiert";
+              : mode === "pdf"
+                ? "Briefe werden neu generiert"
+                : "Fehlgeschlagene Leads werden neu versucht";
         toast({
           title: toastTitle,
           description: "Die Worker arbeiten die Leads jetzt erneut ab.",
@@ -235,7 +248,7 @@ export function LiveTable({
         setRegenerating(false);
       }
     },
-    [isTerminal, regenerating, runId, router, toast],
+    [isTerminal, regenerating, runId, router, toast, counts.failed],
   );
 
   React.useEffect(() => {
@@ -353,6 +366,73 @@ export function LiveTable({
   });
   const startedAtLabel = startedAt ? formatClock(startedAt) : null;
 
+  // ETA: gewichtetes "noch ~X min" basierend auf bisher fertigen Leads pro ms.
+  // Erst sichtbar, wenn der Run läuft, mindestens 30 s alt ist und schon
+  // mindestens einen Completion-Event hatte (sonst Division durch 0).
+  const etaLabel = React.useMemo(() => {
+    if (isTerminal) return null;
+    if (!startedAt) return null;
+    const startMs = new Date(startedAt).getTime();
+    if (Number.isNaN(startMs)) return null;
+    const elapsedMs = nowTick - startMs;
+    if (elapsedMs <= 30_000) return null;
+    if (counts.completed <= 0) return null;
+    const completedRate = counts.completed / elapsedMs; // leads pro ms
+    if (completedRate <= 0) return null;
+    const remaining = counts.pending + counts.rendering + counts.uploading;
+    if (remaining <= 0) return null;
+    const etaMs = remaining / completedRate;
+    return formatEta(etaMs);
+  }, [
+    isTerminal,
+    startedAt,
+    nowTick,
+    counts.completed,
+    counts.pending,
+    counts.rendering,
+    counts.uploading,
+  ]);
+
+  // Worker-Stats Mini-Anzeige: alle 5 s pollen, solange der Run läuft.
+  // Cache-Header der Route deckelt das auf ein realistisches Maß ab.
+  const [workerStats, setWorkerStats] = React.useState<WorkerStats | null>(null);
+  React.useEffect(() => {
+    if (isTerminal) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/worker/stats", {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const j = (await res.json()) as WorkerStats;
+        if (!cancelled) setWorkerStats(j);
+      } catch {
+        // Netzwerkfehler ignorieren — nächste Tick versucht es erneut.
+      }
+    };
+    void load();
+    const id = window.setInterval(() => void load(), 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [isTerminal]);
+
+  const workerStatsLabel = (() => {
+    if (!workerStats) return null;
+    const w = workerStats.workers;
+    const a = workerStats.active;
+    if (w === 0 && a === 0 && workerStats.waiting === 0) {
+      return "Worker: offline";
+    }
+    // Bevorzugt die DB-Sicht; fällt auf BullMQ-active zurück, falls noch
+    // kein Heartbeat geschrieben wurde.
+    const workerCount = w > 0 ? w : a > 0 ? 1 : 0;
+    return `Worker: ${workerCount} aktiv · ${a} laufen`;
+  })();
+
   return (
     <div className="space-y-6">
       <Card>
@@ -399,6 +479,16 @@ export function LiveTable({
                     <DropdownMenuItem onSelect={() => void regenerate("pdf")}>
                       Nur Brief neu generieren
                     </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={counts.failed === 0}
+                      onSelect={() => {
+                        if (counts.failed === 0) return;
+                        void regenerate("failed");
+                      }}
+                    >
+                      Nur Fehlgeschlagene neu versuchen
+                      {counts.failed > 0 ? ` (${counts.failed})` : ""}
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -435,27 +525,42 @@ export function LiveTable({
       <Card>
         <CardContent className="py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => setLogOpen((v) => !v)}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-ink hover:text-brand-deep"
-              aria-expanded={logOpen}
-              aria-controls="live-log-body"
-            >
-              {logOpen ? (
-                <ChevronDown className="size-4" />
-              ) : (
-                <ChevronRight className="size-4" />
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setLogOpen((v) => !v)}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-ink hover:text-brand-deep"
+                aria-expanded={logOpen}
+                aria-controls="live-log-body"
+              >
+                {logOpen ? (
+                  <ChevronDown className="size-4" />
+                ) : (
+                  <ChevronRight className="size-4" />
+                )}
+                Live-Log
+                <span className="ml-1 text-xs text-ink-muted">
+                  ({filteredEvents.length}
+                  {onlyErrors && events.length !== filteredEvents.length
+                    ? ` von ${events.length}`
+                    : ""}
+                  )
+                </span>
+              </button>
+              {workerStatsLabel && (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-squircle-sm border border-line bg-surface-muted px-2 py-0.5 text-xs text-ink-muted"
+                  title={
+                    workerStats
+                      ? `BullMQ active: ${workerStats.active} · waiting: ${workerStats.waiting} · in-flight: ${workerStats.inFlight}`
+                      : undefined
+                  }
+                >
+                  <span className="size-1.5 rounded-full bg-brand-deep/70" aria-hidden />
+                  {workerStatsLabel}
+                </span>
               )}
-              Live-Log
-              <span className="ml-1 text-xs text-ink-muted">
-                ({filteredEvents.length}
-                {onlyErrors && events.length !== filteredEvents.length
-                  ? ` von ${events.length}`
-                  : ""}
-                )
-              </span>
-            </button>
+            </div>
             <div className="flex flex-wrap items-center gap-4 text-xs text-ink-muted">
               {startedAtLabel && (
                 <span>
@@ -469,6 +574,12 @@ export function LiveTable({
                     {isTerminal ? "Dauer:" : "Läuft seit:"}
                   </span>{" "}
                   {runDurationLabel}
+                </span>
+              )}
+              {etaLabel && (
+                <span>
+                  <span className="font-medium text-ink">ETA:</span>{" "}
+                  {etaLabel}
                 </span>
               )}
               <label className="inline-flex items-center gap-1.5">
@@ -669,6 +780,12 @@ function eventLevelClass(level: string): string {
   if (level === "error") return "text-danger";
   if (level === "warn") return "text-warn";
   return "text-ink-muted";
+}
+
+function formatEta(ms: number): string {
+  if (ms < 60_000) return "<1 min";
+  if (ms < 3_600_000) return `~${Math.round(ms / 60_000)} min`;
+  return `~${(ms / 3_600_000).toFixed(1)} Std`;
 }
 
 function formatDurationMs(ms: number): string {

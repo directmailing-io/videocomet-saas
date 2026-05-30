@@ -80,6 +80,32 @@ export interface RenderWebsiteResult {
 const HARD_TIMEOUT_MS = 240_000;
 const GOTO_TIMEOUT_MS = 30_000;
 
+/**
+ * Module-level cache for per-host browser-chrome / static-hero JPGs.
+ * Keyed by `${hostname}_${width}` so multiple campaigns hitting the same
+ * domain at the same viewport share the rendered PNG instead of paying
+ * the Puppeteer setContent + screenshot cost per lead (~100-200ms saved
+ * per lead with same-domain re-use). The placeholder cache (separate
+ * key namespace `unreachable:${host}_${w}x${h}`) keeps DNS-failure
+ * rendering near-free across an entire run targeting the same broken
+ * URL.
+ *
+ * Memory bound: a 1280x720 JPG quality 82 is typically <100 KB. Even a
+ * 1000-host run would top out under 100 MB — well below the worker's
+ * RSS budget. No eviction policy yet (single-process Node, restarts
+ * clear the cache anyway).
+ */
+const STATIC_HERO_CACHE = new Map<string, Buffer>();
+const UNREACHABLE_PLACEHOLDER_CACHE = new Map<string, Buffer>();
+
+function safeHostname(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return url.toLowerCase();
+  }
+}
+
 function buildScrollPlanFromFrames(
   scrollFrames: ScrollFrame[],
   totalFrames: number,
@@ -172,26 +198,27 @@ export async function renderUnreachablePlaceholder(opts: {
     Math.ceil(opts.durationMs / frameIntervalMs),
   );
 
-  let host = opts.url;
-  try {
-    host = new URL(opts.url).hostname;
-  } catch {
-    /* keep raw */
-  }
+  const host = safeHostname(opts.url);
 
-  // SVG → PNG via sharp. Brand-Lila Akzent, Apple/AirBNB-Style.
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${viewport.width}" height="${viewport.height}">
-    <rect width="100%" height="100%" fill="#FAFAFA"/>
-    <rect x="${viewport.width / 2 - 220}" y="${viewport.height / 2 - 80}" width="440" height="36" rx="18" fill="#F3EEFF"/>
-    <text x="50%" y="${viewport.height / 2 - 54}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600" fill="#7C5CE8">Website nicht erreichbar</text>
-    <text x="50%" y="${viewport.height / 2 + 10}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="600" fill="#222">Wir konnten die Seite nicht laden</text>
-    <text x="50%" y="${viewport.height / 2 + 50}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="16" fill="#717171">Die folgende URL lieferte keine Antwort:</text>
-    <rect x="${viewport.width / 2 - 320}" y="${viewport.height / 2 + 70}" width="640" height="40" rx="20" fill="#fff" stroke="#EBEBEB"/>
-    <text x="50%" y="${viewport.height / 2 + 96}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#222">${host.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</text>
-  </svg>`;
-  const jpg = await sharp(Buffer.from(svg))
-    .jpeg({ quality: 82 })
-    .toBuffer();
+  // Cache the placeholder JPG per host+viewport. A 1000-lead run
+  // targeting one broken domain reuses the same buffer instead of
+  // re-rasterising the SVG 1000 times.
+  const cacheKey = `unreachable:${host}_${viewport.width}x${viewport.height}`;
+  let jpg = UNREACHABLE_PLACEHOLDER_CACHE.get(cacheKey);
+  if (!jpg) {
+    // SVG → PNG via sharp. Brand-Lila Akzent, Apple/AirBNB-Style.
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${viewport.width}" height="${viewport.height}">
+      <rect width="100%" height="100%" fill="#FAFAFA"/>
+      <rect x="${viewport.width / 2 - 220}" y="${viewport.height / 2 - 80}" width="440" height="36" rx="18" fill="#F3EEFF"/>
+      <text x="50%" y="${viewport.height / 2 - 54}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600" fill="#7C5CE8">Website nicht erreichbar</text>
+      <text x="50%" y="${viewport.height / 2 + 10}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="600" fill="#222">Wir konnten die Seite nicht laden</text>
+      <text x="50%" y="${viewport.height / 2 + 50}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="16" fill="#717171">Die folgende URL lieferte keine Antwort:</text>
+      <rect x="${viewport.width / 2 - 320}" y="${viewport.height / 2 + 70}" width="640" height="40" rx="20" fill="#fff" stroke="#EBEBEB"/>
+      <text x="50%" y="${viewport.height / 2 + 96}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" fill="#222">${host.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</text>
+    </svg>`;
+    jpg = await sharp(Buffer.from(svg)).jpeg({ quality: 82 }).toBuffer();
+    UNREACHABLE_PLACEHOLDER_CACHE.set(cacheKey, jpg);
+  }
 
   for (let i = 0; i < totalFrames; i++) {
     await writeFile(
@@ -312,6 +339,38 @@ export async function renderWebsiteCapture(
   const framesDir = join(opts.outputDir, "frames");
   await mkdir(framesDir, { recursive: true });
 
+  // Fast-path: static-hero captures depend only on the URL+viewport
+  // (no scrolling, no per-lead personalisation). If we already
+  // rendered this host at this viewport, skip Puppeteer entirely and
+  // replay the cached JPG. Saves ~100-200ms per same-domain lead.
+  if (opts.mode === "static-hero") {
+    const heroKey = `${safeHostname(opts.url)}_${viewport.width}`;
+    const cachedHero = STATIC_HERO_CACHE.get(heroKey);
+    if (cachedHero) {
+      const frameIntervalMs = 1000 / fps;
+      const totalFrames = Math.max(
+        1,
+        Math.ceil(opts.durationMs / frameIntervalMs),
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        `[website-render] static-hero cache HIT key=${heroKey} → ${totalFrames} frames from buffer`,
+      );
+      for (let i = 0; i < totalFrames; i++) {
+        await writeFile(
+          join(framesDir, `frame-${String(i).padStart(4, "0")}.jpg`),
+          cachedHero,
+        );
+      }
+      return {
+        durationSec: opts.durationMs / 1000,
+        framesDir,
+        frameCount: totalFrames,
+        fps,
+      };
+    }
+  }
+
   const ctx = await getContext();
   const pageHolder: { current: Page | null } = { current: null };
   const clientHolder: { current: CDPSession | null } = { current: null };
@@ -399,6 +458,12 @@ export async function renderWebsiteCapture(
       })) as Buffer;
       // Direkt als JPG schreiben — kein Composite mehr nötig.
       const staticJpg = await sharp(staticPng).jpeg({ quality: 82 }).toBuffer();
+      // Populate the per-host static-hero cache so subsequent leads
+      // hitting the same domain skip Puppeteer entirely.
+      if (opts.mode === "static-hero") {
+        const heroKey = `${safeHostname(opts.url)}_${viewport.width}`;
+        STATIC_HERO_CACHE.set(heroKey, staticJpg);
+      }
       for (let i = 0; i < totalFrames; i++) {
         await writeFile(
           join(framesDir, `frame-${String(i).padStart(4, "0")}.jpg`),

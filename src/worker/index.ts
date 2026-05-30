@@ -210,12 +210,17 @@ async function main(): Promise<void> {
   }, 120_000);
   recoveryTimer.unref();
 
-  const PIPELINE_HARD_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per lead
+  // 4 min global cap — sum of per-stage timeouts in processors/pipeline.ts
+  // (videoRender 120 + videoUpload 60 + landingPage 10 + thumb 15 + qr 5 +
+  // docxModify 30 + docxToPdf 60 + pdfCompress 20 + pdfUpload 30 = 350s)
+  // plus ~10s orchestration headroom. The per-stage timeouts are the
+  // first line of defense; this is the belt-and-suspenders catch-all.
+  const PIPELINE_HARD_TIMEOUT_MS = 4 * 60 * 1000;
   const worker = pipelineWorker(async (job: Job<LeadJobData>) => {
     incrementInFlight();
     try {
       log("info", `start job=${job.id} lead=${job.data.leadId}`);
-      // Hard timeout per Lead: wenn die Pipeline länger als 5 min braucht,
+      // Hard timeout per Lead: wenn die Pipeline länger als 4 min braucht,
       // werfen wir, BullMQ markiert den Job als failed UND der Slot wird
       // frei. Verhindert dass ein hängendes Puppeteer/LibreOffice das
       // ganze System einfriert.

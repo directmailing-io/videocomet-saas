@@ -160,6 +160,11 @@ export const leads = pgTable("leads", {
   errorMessage: text("error_message"),
   attempts: integer("attempts").notNull().default(0),
 
+  // Aktive Pipeline-Stage (z.B. 'videoRender', 'docxToPdf'). Wird beim Eintritt
+  // jeder Stage gesetzt und am Ende der Pipeline (Erfolg ODER Fehler) wieder
+  // auf NULL gesetzt, damit Stuck-Recovery erkennt wo ein Job zuletzt hing.
+  currentStage: text("current_stage"),
+
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

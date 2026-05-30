@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { leads } from "@/lib/db/schema";
@@ -13,26 +13,36 @@ import { pipelineQueue } from "@/worker/queue";
  * POST /api/runs/[id]/regenerate
  *
  * Setzt eine abgeschlossene (oder fehlgeschlagene) Runde teilweise oder
- * komplett zurück und schickt ALLE Leads erneut durch die Pipeline.
+ * komplett zurück und schickt Leads erneut durch die Pipeline.
  *
- * Body (optional): { mode?: "all" | "video" | "pdf" }
- *   - "all"   (Default, back-compat): alle Outputs werden zurückgesetzt
- *             und die volle Pipeline läuft erneut.
+ * Body (optional): { mode?: "all" | "video" | "pdf" | "failed" }
+ *   - "all"    (Default, back-compat): alle Outputs werden zurückgesetzt
+ *              und die volle Pipeline läuft für ALLE Leads erneut.
  *   - "video": nur Video + Landingpage werden neu erzeugt. Der bestehende
- *             `pdfUrl` bleibt erhalten; die Worker überspringen die PDF-
- *             Stages (`skipPdf=true`).
+ *              `pdfUrl` bleibt erhalten; die Worker überspringen die PDF-
+ *              Stages (`skipPdf=true`).
  *   - "pdf":   nur das PDF-Brief wird neu erzeugt. Bestehende `videoUrl`,
- *             `thumbnailUrl` und `slug` bleiben erhalten; die Worker
- *             überspringen Render/Upload/Landingpage (`skipVideo=true`).
+ *              `thumbnailUrl` und `slug` bleiben erhalten; die Worker
+ *              überspringen Render/Upload/Landingpage (`skipVideo=true`).
+ *   - "failed": nur Leads mit `status='failed'` werden zurückgesetzt und
+ *              durch die volle Pipeline geschickt. Bestehende erfolgreiche
+ *              Outputs anderer Leads bleiben unangetastet.
  *
  * Sichtbar nur wenn der Run einen terminalen Status hat (completed /
  * failed / cancelled). Ein laufender Run wird mit 409 abgelehnt.
  */
 
-type RegenerateMode = "all" | "video" | "pdf";
+type RegenerateMode = "all" | "video" | "pdf" | "failed";
 
 function parseMode(input: unknown): RegenerateMode {
-  if (input === "video" || input === "pdf" || input === "all") return input;
+  if (
+    input === "video" ||
+    input === "pdf" ||
+    input === "all" ||
+    input === "failed"
+  ) {
+    return input;
+  }
   return "all";
 }
 
@@ -71,14 +81,30 @@ export async function POST(
   }
 
   // Lead-IDs in row-Reihenfolge holen — für stabile Re-enqueue-Order.
-  const leadRows = await db
-    .select({ id: leads.id, rowIndex: leads.rowIndex })
+  // status wird mitselektiert, damit der "failed"-Modus die nicht-fehlgeschlagenen
+  // Leads ohne Extra-Roundtrip ausfiltern kann.
+  const allLeadRows = await db
+    .select({ id: leads.id, rowIndex: leads.rowIndex, status: leads.status })
     .from(leads)
     .where(eq(leads.runId, params.id));
 
-  if (leadRows.length === 0) {
+  if (allLeadRows.length === 0) {
     return NextResponse.json(
       { error: "Keine Leads in dieser Runde." },
+      { status: 400 },
+    );
+  }
+
+  // "failed" beschränkt sich auf Leads mit status='failed'. Alle anderen Modi
+  // operieren auf dem kompletten Lead-Set.
+  const leadRows =
+    mode === "failed"
+      ? allLeadRows.filter((l) => l.status === "failed")
+      : allLeadRows;
+
+  if (mode === "failed" && leadRows.length === 0) {
+    return NextResponse.json(
+      { error: "Keine fehlgeschlagenen Leads in dieser Runde." },
       { status: 400 },
     );
   }
@@ -86,9 +112,12 @@ export async function POST(
   leadRows.sort((a, b) => a.rowIndex - b.rowIndex);
 
   // Reset der Lead-Felder hängt vom Modus ab:
-  //  - "all":   alle URLs werden genullt.
-  //  - "video": nur video- und landingpage-bezogene Felder; pdfUrl bleibt.
-  //  - "pdf":   nur pdfUrl; video / thumbnail / slug bleiben unverändert.
+  //  - "all":    alle URLs werden genullt.
+  //  - "video":  nur video- und landingpage-bezogene Felder; pdfUrl bleibt.
+  //  - "pdf":    nur pdfUrl; video / thumbnail / slug bleiben unverändert.
+  //  - "failed": volle Pipeline; URLs sind bei failed-Leads ohnehin null und
+  //              werden hier nicht angefasst, um keine evtl. teilweise
+  //              gesetzten Felder gewollt überschreiben zu müssen.
   // In allen Fällen: status zurück auf "pending", errorMessage / Zeitstempel
   // zurücksetzen, damit die Live-Tabelle sauber neu trackt.
   const baseReset = {
@@ -111,12 +140,25 @@ export async function POST(
             videoUrl: null,
             thumbnailUrl: null,
           }
-        : {
-            ...baseReset,
-            pdfUrl: null,
-          };
+        : mode === "pdf"
+          ? {
+              ...baseReset,
+              pdfUrl: null,
+            }
+          : // mode === "failed": keine URLs anfassen, nur Status/Error/Timestamps
+            baseReset;
 
-  await db.update(leads).set(resetPatch).where(eq(leads.runId, params.id));
+  if (mode === "failed") {
+    // Nur die ausgewählten failed-Lead-IDs aktualisieren — andere Leads (z.B.
+    // 'completed') bleiben unverändert.
+    const failedIds = leadRows.map((l) => l.id);
+    await db
+      .update(leads)
+      .set(resetPatch)
+      .where(and(eq(leads.runId, params.id), inArray(leads.id, failedIds)));
+  } else {
+    await db.update(leads).set(resetPatch).where(eq(leads.runId, params.id));
+  }
 
   await updateRun(params.id, auth.user.id, {
     status: "generating",
@@ -158,5 +200,10 @@ export async function POST(
     );
   }
 
-  return NextResponse.json({ ok: true, mode, totalLeads: leadRows.length });
+  return NextResponse.json({
+    ok: true,
+    mode,
+    totalLeads: leadRows.length,
+    retried: leadRows.length,
+  });
 }
