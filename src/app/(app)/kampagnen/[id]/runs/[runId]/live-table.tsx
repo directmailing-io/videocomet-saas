@@ -322,7 +322,9 @@ export function LiveTable({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              {pdfEnabled && <BundleDialog runId={runId} />}
+              {pdfEnabled && (
+                <BundleDialog runId={runId} runName={initialRun.name} />
+              )}
             </div>
           </div>
           <div className="mt-4">

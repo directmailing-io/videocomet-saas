@@ -4,42 +4,35 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { Readable } from "node:stream";
 import { z } from "zod";
-import Papa from "papaparse";
+import { PDFDocument } from "pdf-lib";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getRun } from "@/lib/db/queries/runs";
 import { listLeadsByRun } from "@/lib/db/queries/leads";
-import { createArchive, addRemoteFileToZip } from "@/lib/zip-bundle";
-
-const ALLOWED_SIZES = [25, 50, 100, 150, 200, 250, 500] as const;
-type BundleSize = (typeof ALLOWED_SIZES)[number];
-
-const sizeSchema = z.number().int().refine((n) =>
-  (ALLOWED_SIZES as readonly number[]).includes(n),
-);
-
-function parseSize(value: string | null, fallback: BundleSize = 100): BundleSize {
-  if (!value) return fallback;
-  const n = Number(value);
-  return (ALLOWED_SIZES as readonly number[]).includes(n)
-    ? (n as BundleSize)
-    : fallback;
-}
-
-function parseOffset(value: string | null): number {
-  if (!value) return 0;
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
-}
+import { createArchive } from "@/lib/zip-bundle";
 
 /**
  * POST /api/runs/[id]/pdf-bundle
  *
- * Body: `{ size: 25|50|100|150|200|250|500, offset?: number }`
+ * Body: `{ pdfsPerFile: number, baseName?: string }`
  *
- * Streams a ZIP archive of up to `size` PDFs starting at `offset` (so a
- * client can iterate through batches). Each archive contains a
- * `manifest.csv` listing every included PDF.
+ * Konzept (User-Wunsch):
+ *   - Es werden ALLE fertigen Leads in das Bundle aufgenommen.
+ *   - Je `pdfsPerFile` Lead-PDFs werden zu EINER Multi-Page-PDF gemerged.
+ *   - Bei 1000 Leads + 100 pro Datei → 10 grosse PDFs:
+ *     <baseName>_1-100.pdf, <baseName>_101-200.pdf, ...
+ *   - Alles wandert in ein ZIP, das gestreamt wird.
  */
+
+const sizeSchema = z
+  .number()
+  .int()
+  .refine((n) => n >= 1 && n <= 1000, "PDFs pro Datei: 1..1000");
+
+const bodySchema = z.object({
+  pdfsPerFile: sizeSchema,
+  baseName: z.string().max(80).optional(),
+});
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } },
@@ -47,12 +40,13 @@ export async function POST(
   const auth = await requireUserApi();
   if (!auth.ok) return auth.response;
 
-  let body: { size: BundleSize; offset?: number };
+  let body: { pdfsPerFile: number; baseName?: string };
   try {
     const json = await req.json();
-    const size = sizeSchema.parse(Number(json.size));
-    const offset = Math.max(0, Math.floor(Number(json.offset ?? 0)));
-    body = { size: size as BundleSize, offset };
+    body = bodySchema.parse({
+      pdfsPerFile: Number(json.pdfsPerFile),
+      baseName: typeof json.baseName === "string" ? json.baseName : undefined,
+    });
   } catch (err) {
     return NextResponse.json(
       {
@@ -63,13 +57,18 @@ export async function POST(
     );
   }
 
-  return streamBundle(params.id, auth.user.id, body.size, body.offset ?? 0);
+  return streamBundle(
+    params.id,
+    auth.user.id,
+    body.pdfsPerFile,
+    body.baseName,
+  );
 }
 
 /**
- * GET /api/runs/[id]/pdf-bundle?size=100&offset=0
+ * GET /api/runs/[id]/pdf-bundle?pdfsPerFile=100&baseName=Outreach
  *
- * Same as POST but URL-driven so links can be opened directly from the UI.
+ * URL-getriebene Variante (für direkten Browser-Download via <a href>).
  */
 export async function GET(
   req: NextRequest,
@@ -78,16 +77,44 @@ export async function GET(
   const auth = await requireUserApi();
   if (!auth.ok) return auth.response;
 
-  const size = parseSize(req.nextUrl.searchParams.get("size"));
-  const offset = parseOffset(req.nextUrl.searchParams.get("offset"));
-  return streamBundle(params.id, auth.user.id, size, offset);
+  const pdfsPerFile = Math.max(
+    1,
+    Math.min(1000, Number(req.nextUrl.searchParams.get("pdfsPerFile") ?? 100)),
+  );
+  const baseNameRaw =
+    req.nextUrl.searchParams.get("baseName") ?? undefined;
+
+  return streamBundle(
+    params.id,
+    auth.user.id,
+    pdfsPerFile,
+    baseNameRaw ?? undefined,
+  );
+}
+
+function sanitizeBaseName(input: string | undefined, fallback: string): string {
+  const raw = (input ?? fallback).trim();
+  // Nur ASCII Alphanumeric + _ - + Umlaute -> ASCII; sonst durch _ ersetzen.
+  const transl: Record<string, string> = {
+    ä: "ae",
+    ö: "oe",
+    ü: "ue",
+    ß: "ss",
+    Ä: "Ae",
+    Ö: "Oe",
+    Ü: "Ue",
+  };
+  let s = raw.replace(/[äöüßÄÖÜ]/g, (c) => transl[c] ?? c);
+  s = s.replace(/[^a-zA-Z0-9-_]+/g, "_").replace(/_+/g, "_");
+  s = s.replace(/^_+|_+$/g, "");
+  return s.slice(0, 60) || "videocomet";
 }
 
 async function streamBundle(
   runId: string,
   userId: string,
-  size: number,
-  offset: number,
+  pdfsPerFile: number,
+  baseNameInput: string | undefined,
 ): Promise<Response> {
   let run;
   try {
@@ -100,9 +127,8 @@ async function streamBundle(
   const completed = allLeads.filter(
     (l) => l.status === "completed" && !!l.pdfUrl,
   );
-  const slice = completed.slice(offset, offset + size);
 
-  if (slice.length === 0) {
+  if (completed.length === 0) {
     return NextResponse.json(
       {
         error:
@@ -112,80 +138,75 @@ async function streamBundle(
     );
   }
 
-  const appUrl = process.env.APP_URL ?? "https://app.videocomet.de";
-  const safeName =
-    run.name.replace(/[^a-zA-Z0-9-_]+/g, "_").slice(0, 80) || "runde";
-  const filename = `videocomet-${safeName}-pdfs-${offset + 1}-${offset + slice.length}.zip`;
+  // Sort by rowIndex so the bundle reflects the CSV-Reihenfolge.
+  completed.sort((a, b) => a.rowIndex - b.rowIndex);
+
+  const baseName = sanitizeBaseName(baseNameInput, run.name);
+  const zipFilename = `${baseName}_pdf-bundle.zip`;
 
   const { archive, stream } = createArchive();
 
-  // Build manifest first so it appears even if some PDFs fail to fetch.
-  const manifestRows = slice.map((lead, i) => {
-    const data = (lead.data ?? {}) as Record<string, string>;
-    const prettyName =
-      data.firstName || data.Vorname || data.name || data.fullName || `Lead ${lead.rowIndex}`;
-    return {
-      Index: offset + i + 1,
-      Lead: prettyName,
-      PDF: `${pdfFilename(lead, prettyName, i)}`,
-      Landingpage: lead.slug ? `${appUrl}/v/${lead.slug}` : "",
-    };
-  });
-  const manifestCsv = Papa.unparse(manifestRows, {
-    header: true,
-    delimiter: ";",
-    newline: "\r\n",
-  });
-  archive.append("﻿" + manifestCsv, { name: "manifest.csv" });
-
-  // Kick off fetches sequentially to keep memory bounded.
+  // Build merged PDFs in batches and append each to the ZIP. Background
+  // task so we can return the streaming Response immediately.
   (async () => {
-    for (let i = 0; i < slice.length; i += 1) {
-      const lead = slice[i];
-      const data = (lead.data ?? {}) as Record<string, string>;
-      const prettyName =
-        data.firstName ||
-        data.Vorname ||
-        data.name ||
-        data.fullName ||
-        `Lead ${lead.rowIndex}`;
-      const name = pdfFilename(lead, prettyName, i);
-      if (!lead.pdfUrl) continue;
-      await addRemoteFileToZip(archive, name, lead.pdfUrl);
-    }
-    archive.finalize().catch((err: unknown) => {
-      // eslint-disable-next-line no-console
-      console.error("[pdf-bundle] finalize failed:", err);
-    });
-  })().catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error("[pdf-bundle] bundle failed:", err);
-  });
+    try {
+      for (let batchStart = 0; batchStart < completed.length; batchStart += pdfsPerFile) {
+        const batch = completed.slice(batchStart, batchStart + pdfsPerFile);
+        const firstIdx = batchStart + 1;
+        const lastIdx = batchStart + batch.length;
 
-  // Convert Node Readable into a Web ReadableStream for Response.
+        // Merge all lead PDFs in this batch into ONE PDFDocument.
+        const merged = await PDFDocument.create();
+        for (const lead of batch) {
+          if (!lead.pdfUrl) continue;
+          try {
+            const res = await fetch(lead.pdfUrl);
+            if (!res.ok) {
+              // eslint-disable-next-line no-console
+              console.warn(
+                `[pdf-bundle] skip lead=${lead.id} HTTP ${res.status}`,
+              );
+              continue;
+            }
+            const buf = Buffer.from(await res.arrayBuffer());
+            const src = await PDFDocument.load(buf, {
+              ignoreEncryption: true,
+            });
+            const pages = await merged.copyPages(src, src.getPageIndices());
+            for (const p of pages) merged.addPage(p);
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[pdf-bundle] merge fail lead=${lead.id}:`,
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
+
+        const mergedBytes = Buffer.from(await merged.save());
+        const pdfName = `${baseName}_${firstIdx}-${lastIdx}.pdf`;
+        archive.append(mergedBytes, { name: pdfName });
+      }
+      await archive.finalize();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[pdf-bundle] failure:", err);
+      try {
+        archive.abort();
+      } catch {
+        /* ignore */
+      }
+    }
+  })();
+
   const webStream = Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>;
 
   return new Response(webStream, {
     status: 200,
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": `attachment; filename="${zipFilename}"`,
       "Cache-Control": "no-store",
     },
   });
-}
-
-function pdfFilename(
-  lead: { rowIndex: number; id: string },
-  prettyName: string,
-  i: number,
-): string {
-  const safe = prettyName
-    .normalize("NFKD")
-    .replace(/[^a-zA-Z0-9-_ ]+/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .slice(0, 60);
-  const idx = String(i + 1).padStart(4, "0");
-  return `${idx}_${safe || `lead-${lead.rowIndex}`}.pdf`;
 }
