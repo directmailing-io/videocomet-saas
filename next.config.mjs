@@ -6,7 +6,7 @@ const nextConfig = {
   // as external lets node resolve it natively at runtime in the
   // server-component / route-handler runtime.
   experimental: {
-    serverComponentsExternalPackages: ["archiver", "xlsx"],
+    serverComponentsExternalPackages: ["archiver", "xlsx", "pdf-lib"],
   },
 };
 
