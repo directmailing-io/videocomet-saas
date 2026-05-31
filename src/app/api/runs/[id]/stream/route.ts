@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 import { and, eq, gt, inArray, or } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
-import { leads, runs } from "@/lib/db/schema";
+import { leads, runs, userDomains } from "@/lib/db/schema";
 import { getRun } from "@/lib/db/queries/runs";
 import { countByStatus } from "@/lib/db/queries/leads";
 import {
@@ -172,12 +172,13 @@ function wait(ms: number, signal: AbortSignal): Promise<void> {
 
 async function listAllLeads(runId: string, userId: string) {
   const rows = await db
-    .select({ lead: leads })
+    .select({ lead: leads, customHostname: userDomains.hostname })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
+    .leftJoin(userDomains, eq(userDomains.id, leads.domainId))
     .where(and(eq(leads.runId, runId), eq(runs.userId, userId)))
     .orderBy(leads.rowIndex);
-  return rows.map((r) => projectLead(r.lead));
+  return rows.map((r) => projectLead(r.lead, r.customHostname));
 }
 
 /**
@@ -197,9 +198,10 @@ async function listChangedOrInFlightLeads(
   sinceTs: Date,
 ) {
   const rows = await db
-    .select({ lead: leads })
+    .select({ lead: leads, customHostname: userDomains.hostname })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
+    .leftJoin(userDomains, eq(userDomains.id, leads.domainId))
     .where(
       and(
         eq(leads.runId, runId),
@@ -213,10 +215,13 @@ async function listChangedOrInFlightLeads(
     )
     .orderBy(leads.rowIndex)
     .limit(CHANGED_LEAD_LIMIT);
-  return rows.map((r) => projectLead(r.lead));
+  return rows.map((r) => projectLead(r.lead, r.customHostname));
 }
 
-function projectLead(l: typeof leads.$inferSelect) {
+function projectLead(
+  l: typeof leads.$inferSelect,
+  customHostname: string | null,
+) {
   return {
     id: l.id,
     rowIndex: l.rowIndex,
@@ -235,6 +240,8 @@ function projectLead(l: typeof leads.$inferSelect) {
     watchTimeSec: l.watchTimeSec,
     ctaClickCount: l.ctaClickCount,
     lastCtaAt: l.lastCtaAt,
+    /** Hostname der Custom-Domain (NULL = Default app.videocomet.de). */
+    customHostname,
   };
 }
 

@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth-guard";
 import { getCampaign } from "@/lib/db/queries/campaigns";
 import { getRun } from "@/lib/db/queries/runs";
 import { listLeadsByRun, countByStatus } from "@/lib/db/queries/leads";
+import { getUserDomain } from "@/lib/db/queries/user-domains";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { LiveTable } from "./live-table";
@@ -31,6 +32,16 @@ export default async function RunDetailPage({
     countByStatus(runId, user.id),
   ]);
 
+  // Custom-Domain-Hostname holen (alle Leads in einer Runde erben dieselbe
+  // Domain ueber die Kampagne — wir machen einen Lookup statt eines JOINs).
+  // Bei nicht-aktiver Domain (verifying/failed/etc.) lassen wir das Feld
+  // null, damit das UI auf die Default-app.videocomet.de-URL faellt.
+  let customHostname: string | null = null;
+  if (campaign.domainId) {
+    const d = await getUserDomain(campaign.domainId, user.id).catch(() => null);
+    if (d && d.status === "active") customHostname = d.hostname;
+  }
+
   const initialLeads = leads.map((l) => ({
     id: l.id,
     rowIndex: l.rowIndex,
@@ -42,13 +53,17 @@ export default async function RunDetailPage({
     errorMessage: l.errorMessage,
     completedAt: l.completedAt ? l.completedAt.toISOString() : null,
     data: l.data as Record<string, string>,
+    // Per-lead override: falls leads.domain_id explizit gesetzt ist (also
+    // der Lead wurde mit der aktiven Custom-Domain generiert) und die
+    // Campaign-Domain noch dieselbe ist, gilt customHostname. Sonst null.
+    customHostname: l.domainId === campaign.domainId ? customHostname : null,
     // Tracking aggregates (denormalized on `leads`). Serialised to ISO so the
     // server payload stays JSON-clean.
     viewCount: l.viewCount ?? 0,
     firstViewedAt: l.firstViewedAt ? l.firstViewedAt.toISOString() : null,
     lastViewedAt: l.lastViewedAt ? l.lastViewedAt.toISOString() : null,
     playCount: l.playCount ?? 0,
-    watchTimeSec: l.watchTimeSec ?? 0,
+    watchTimeSec: l.watchTimeSec ? l.watchTimeSec : 0,
     ctaClickCount: l.ctaClickCount ?? 0,
     lastCtaAt: l.lastCtaAt ? l.lastCtaAt.toISOString() : null,
   }));

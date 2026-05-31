@@ -7,6 +7,9 @@ import Papa from "papaparse";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getRun } from "@/lib/db/queries/runs";
 import { listLeadsByRun } from "@/lib/db/queries/leads";
+import { getUserDomain } from "@/lib/db/queries/user-domains";
+import { getCampaign } from "@/lib/db/queries/campaigns";
+import { buildLeadPublicUrl } from "@/lib/lead-public-url";
 
 /**
  * GET /api/runs/[id]/export?format=xlsx|csv
@@ -40,6 +43,19 @@ export async function GET(
 
   const appUrl = process.env.APP_URL ?? "https://app.videocomet.de";
 
+  // Custom-Domain einmal pro Runde holen (alle Leads in einer Runde teilen
+  // die Domain ueber die Kampagne).
+  let customHostname: string | null = null;
+  try {
+    const campaign = await getCampaign(run.campaignId, auth.user.id);
+    if (campaign.domainId) {
+      const d = await getUserDomain(campaign.domainId, auth.user.id);
+      if (d && d.status === "active") customHostname = d.hostname;
+    }
+  } catch {
+    // schweigend — fallback auf Default-URL
+  }
+
   // Collect every "original" column across leads (preserving order).
   const seen = new Set<string>();
   const dataColumns: string[] = [];
@@ -59,7 +75,15 @@ export async function GET(
     for (const col of dataColumns) {
       out[col] = data[col] ?? "";
     }
-    out["Landingpage-URL"] = lead.slug ? `${appUrl}/v/${lead.slug}` : "";
+    // Pro-Lead-Override: nutze customHostname nur, wenn der Lead auch wirklich
+    // mit dieser Domain rendered wurde (lead.domainId === campaign.domainId).
+    const effectiveHost =
+      lead.domainId && customHostname ? customHostname : null;
+    out["Landingpage-URL"] =
+      buildLeadPublicUrl(
+        { slug: lead.slug, customHostname: effectiveHost, defaultAppUrl: appUrl },
+        { absolute: true },
+      ) ?? "";
     out["Video-URL"] = lead.videoUrl ?? "";
     out["PDF-URL"] = lead.pdfUrl ?? "";
     out["Status"] = statusLabel(lead.status);

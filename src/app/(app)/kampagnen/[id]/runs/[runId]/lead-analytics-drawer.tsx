@@ -19,10 +19,13 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { ExternalLink, Eye, MousePointerClick, Play, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { buildLeadPublicUrl } from "@/lib/lead-public-url";
 
 export interface LeadAnalyticsDrawerLead {
   id: string;
   slug: string | null;
+  /** Custom-Domain-Hostname falls die Kampagne eine aktive hat. */
+  customHostname?: string | null;
   data: Record<string, string>;
 }
 
@@ -159,11 +162,23 @@ export function LeadAnalyticsDrawer({
             <div className="flex items-center gap-1.5 shrink-0">
               {lead?.slug && (
                 <a
-                  href={`/v/${lead.slug}?preview=1`}
+                  href={
+                    buildLeadPublicUrl(
+                      {
+                        slug: lead.slug,
+                        customHostname: lead.customHostname ?? null,
+                      },
+                      { preview: true },
+                    ) ?? `/v/${lead.slug}?preview=1`
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold text-ink-muted hover:border-ink-muted hover:text-ink transition-colors"
-                  title="Landingpage im Vorschau-Modus oeffnen (kein Tracking)"
+                  title={
+                    lead.customHostname
+                      ? `Auf ${lead.customHostname} im Vorschau-Modus oeffnen`
+                      : "Landingpage im Vorschau-Modus oeffnen (kein Tracking)"
+                  }
                 >
                   <ExternalLink className="size-3" />
                   Vorschau

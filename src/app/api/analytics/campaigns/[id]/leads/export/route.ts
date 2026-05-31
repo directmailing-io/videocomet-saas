@@ -26,7 +26,8 @@ import Papa from "papaparse";
 import { and, desc, eq, gt } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
-import { campaigns, leads, runs } from "@/lib/db/schema";
+import { campaigns, leads, runs, userDomains } from "@/lib/db/schema";
+import { buildLeadPublicUrl } from "@/lib/lead-public-url";
 
 type Filter = "all" | "opened" | "played" | "cta";
 type Format = "csv" | "xlsx";
@@ -127,9 +128,14 @@ export async function GET(
       runId: leads.runId,
       runName: runs.name,
       runCreatedAt: runs.createdAt,
+      // Pro-Lead hostname: NULL wenn keine Custom-Domain oder Domain
+      // nicht (mehr) aktiv.
+      customHostname: userDomains.hostname,
+      customDomainStatus: userDomains.status,
     })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
+    .leftJoin(userDomains, eq(userDomains.id, leads.domainId))
     .where(and(...conditions))
     .orderBy(desc(runs.createdAt), leads.rowIndex);
 
@@ -177,7 +183,13 @@ export async function GET(
     out["Watch-Time (Sek.)"] = r.watchTimeSec ?? 0;
     out["CTA-Klicks"] = r.ctaClickCount ?? 0;
     out["Letzter CTA"] = fmtTs(r.lastCtaAt);
-    out["Landingpage-URL"] = r.slug ? `${appUrl}/v/${r.slug}` : "";
+    const effectiveHost =
+      r.customDomainStatus === "active" ? r.customHostname : null;
+    out["Landingpage-URL"] =
+      buildLeadPublicUrl(
+        { slug: r.slug, customHostname: effectiveHost, defaultAppUrl: appUrl },
+        { absolute: true },
+      ) ?? "";
     out["Video-URL"] = r.videoUrl ?? "";
     out["PDF-URL"] = r.pdfUrl ?? "";
     out["Runde"] = r.runName ?? "";

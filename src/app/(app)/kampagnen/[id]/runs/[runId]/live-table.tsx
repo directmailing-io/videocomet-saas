@@ -15,6 +15,7 @@ import {
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useToast } from "@/components/ui/toaster";
 import { LeadAnalyticsDrawer } from "./lead-analytics-drawer";
+import { buildLeadPublicUrl } from "@/lib/lead-public-url";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -57,6 +58,8 @@ interface LeadRow {
   watchTimeSec?: number;
   ctaClickCount?: number;
   lastCtaAt?: string | null;
+  /** Custom-Domain-Hostname (NULL = Default app.videocomet.de). */
+  customHostname?: string | null;
 }
 
 type FilterKey = "all" | "opened" | "played" | "cta";
@@ -854,11 +857,23 @@ export function LiveTable({
                   <TableCell onClick={stopRowClick}>
                     {l.slug ? (
                       <a
-                        href={`/v/${l.slug}?preview=1`}
+                        href={
+                          buildLeadPublicUrl(
+                            {
+                              slug: l.slug,
+                              customHostname: l.customHostname ?? null,
+                            },
+                            { preview: true },
+                          ) ?? `/v/${l.slug}?preview=1`
+                        }
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-brand-deep hover:underline text-xs"
-                        title="Im Vorschau-Modus oeffnen (kein Tracking)"
+                        title={
+                          l.customHostname
+                            ? `Auf ${l.customHostname} im Vorschau-Modus oeffnen`
+                            : "Im Vorschau-Modus oeffnen (kein Tracking)"
+                        }
                       >
                         <ExternalLink className="size-3.5" />
                         Vorschau
@@ -1100,6 +1115,7 @@ function mergeTrackingFields(next: LeadRow, existing: LeadRow | undefined): Lead
     watchTimeSec: next.watchTimeSec ?? existing.watchTimeSec,
     ctaClickCount: next.ctaClickCount ?? existing.ctaClickCount,
     lastCtaAt: next.lastCtaAt ?? existing.lastCtaAt,
+    customHostname: next.customHostname ?? existing.customHostname,
   };
 }
 

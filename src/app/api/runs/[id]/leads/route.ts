@@ -5,7 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
-import { analyticsEvents, leads, runs } from "@/lib/db/schema";
+import { analyticsEvents, campaigns, leads, runs, userDomains } from "@/lib/db/schema";
+import { buildLeadPublicUrl } from "@/lib/lead-public-url";
 
 type ListStatus = "all" | "opened" | "started" | "completed" | "failed";
 type SortKey = "name" | "status" | "openedAt";
@@ -54,14 +55,30 @@ export async function GET(
   const search = (url.searchParams.get("q") ?? "").trim().toLowerCase();
   const offset = page * limit;
 
-  // Tenant-Guard: ensure the run belongs to the caller.
+  // Tenant-Guard: ensure the run belongs to the caller. Mit-Lookup auf
+  // Campaign-Domain damit pageUrl unten korrekt mit Custom-Hostname gebaut
+  // wird (oder Default app.videocomet.de wenn keine Custom-Domain aktiv).
   const [runRow] = await db
-    .select({ id: runs.id, name: runs.name })
+    .select({
+      id: runs.id,
+      name: runs.name,
+      campaignDomainId: campaigns.domainId,
+    })
     .from(runs)
+    .innerJoin(campaigns, eq(campaigns.id, runs.campaignId))
     .where(and(eq(runs.id, params.id), eq(runs.userId, auth.user.id)))
     .limit(1);
   if (!runRow) {
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
+  }
+  let customHostname: string | null = null;
+  if (runRow.campaignDomainId) {
+    const [d] = await db
+      .select({ hostname: userDomains.hostname, status: userDomains.status })
+      .from(userDomains)
+      .where(eq(userDomains.id, runRow.campaignDomainId))
+      .limit(1);
+    if (d && d.status === "active") customHostname = d.hostname;
   }
 
   // Per-lead aggregates over analyticsEvents. We compute these for every lead
@@ -114,7 +131,12 @@ export async function GET(
     const lastName = pickField(data, ["nachname", "lastname", "last_name", "last name"]);
     const email = pickField(data, ["email", "e-mail", "mail"]);
     const slug = r.slug;
-    const pageUrl = slug ? `/v/${slug}` : null;
+    // Custom-Domain bevorzugen wenn aktiv — sonst Default /v/<slug> (relativ,
+    // damit der Konsument die App-Origin selbst dranschreiben kann).
+    const pageUrl = buildLeadPublicUrl({
+      slug,
+      customHostname,
+    });
     return {
       id: r.id,
       slug,
