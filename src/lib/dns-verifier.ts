@@ -11,11 +11,28 @@
  * haengt wenn ein autoritativer Nameserver tot ist.
  */
 
-import { promises as dns } from "node:dns";
+import { Resolver } from "node:dns/promises";
 
 const LOOKUP_TIMEOUT_MS = 3_000;
 const DEFAULT_SERVER_IP = "178.105.208.68";
 const DEFAULT_CNAME_TARGET = "cname.videocomet.de";
+
+/**
+ * Public recursive DNS-Resolver — bewusst NICHT Docker's eingebetteter
+ * Resolver (127.0.0.11). Der cached TXT/CNAME-Records mit dem ersten TTL
+ * den er sieht und ignoriert Updates am Public-DNS. Wir wollen aber bei
+ * jedem Verifier-Tick frische Antworten von authoritative.
+ *
+ * 1.1.1.1 (Cloudflare) und 8.8.8.8 (Google) als Fallback. Beide haben
+ * niedrige Cache-TTLs fuer kleine Records und respektieren NS-TTL.
+ */
+const PUBLIC_DNS_SERVERS = ["1.1.1.1", "8.8.8.8"] as const;
+
+function makeResolver(): Resolver {
+  const r = new Resolver({ timeout: LOOKUP_TIMEOUT_MS, tries: 1 });
+  r.setServers([...PUBLIC_DNS_SERVERS]);
+  return r;
+}
 
 function getExpectedIp(): string {
   return process.env.SERVER_IP ?? DEFAULT_SERVER_IP;
@@ -51,6 +68,7 @@ export async function checkDns(hostname: string): Promise<DnsCheck> {
   const host = hostname.toLowerCase().replace(/\.$/, "");
   const expectedIp = getExpectedIp();
   const expectedCname = getExpectedCname();
+  const dns = makeResolver();
 
   // 1) CNAME-Check
   try {
@@ -106,6 +124,7 @@ export interface TxtCheck {
 export async function checkTxt(hostname: string, expectedToken: string): Promise<TxtCheck> {
   const name = `_videocomet.${hostname.toLowerCase().replace(/\.$/, "")}`;
   const expected = `vc-verify=${expectedToken}`;
+  const dns = makeResolver();
   try {
     const records = await withTimeout(dns.resolveTxt(name), LOOKUP_TIMEOUT_MS, "TXT");
     const flat = records.map((chunks) => chunks.join("")).map((s) => s.trim());
