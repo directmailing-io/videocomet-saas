@@ -180,7 +180,7 @@ export function LeadAnalyticsDrawer({
               <>
                 <SummaryGrid summary={data.summary} />
                 <WatchTimeHeatmap
-                  buckets={data.watchTimeBuckets}
+                  events={data.events}
                   videoDurationSec={data.videoDurationSec}
                 />
                 <EventTimeline events={data.events.slice(0, EVENT_TIMELINE_LIMIT)} />
@@ -232,24 +232,46 @@ function SummaryTile({
 }
 
 /**
- * Pure-SVG horizontal bar chart of `watchTimeBuckets` (5s buckets along the
- * video). X = seconds into the video, Y = view count per bucket. Peaks get a
- * darker brand colour so a glance is enough to spot where viewers actually
- * watched. No tooltip library — every bar gets a `<title>` for hover.
+ * Pure-SVG horizontal bar chart der gesehenen Video-Sekunden.
  *
- * When the player has reported a `durationSec`, we always draw the full
- * timeline axis even if buckets are sparse — so the heatmap is meaningful
- * after a single play (instead of just an empty placeholder).
+ * Buckets werden HIER (client-seitig) aus dem Events-Array berechnet, nicht
+ * vom Server vorgebucket — dadurch koennen wir die Bucket-Groesse dynamisch
+ * an die Video-Laenge anpassen:
+ *
+ *   <= 20s  → 1s-Buckets    (kurze Test-Videos)
+ *   <= 120s → 2s-Buckets
+ *   <= 600s → 10s-Buckets
+ *   sonst   → 30s-Buckets
+ *
+ * Verhindert den frueheren "Ein-Block-Bug" bei sehr kurzen Videos, wo das
+ * 5s-Server-Bucketing den gesamten Chart als einen Vollblock rendert.
  */
 function WatchTimeHeatmap({
-  buckets,
+  events,
   videoDurationSec,
 }: {
-  buckets: AnalyticsBucket[];
+  events: AnalyticsEvent[];
   videoDurationSec: number | null;
 }) {
-  // No buckets AND no known duration → nothing meaningful to draw.
-  if (buckets.length === 0 && !videoDurationSec) {
+  // Alle Video-Events mit gueltigem atSec sammeln (play / progress / ended).
+  const atSecs: number[] = [];
+  for (const ev of events) {
+    if (
+      ev.kind !== "video_play" &&
+      ev.kind !== "video_progress" &&
+      ev.kind !== "video_ended"
+    ) {
+      continue;
+    }
+    const p = ev.payload;
+    if (!p || typeof p !== "object") continue;
+    const v = (p as Record<string, unknown>).atSec;
+    const n = typeof v === "number" ? v : Number(v);
+    if (Number.isFinite(n) && n >= 0) atSecs.push(n);
+  }
+
+  // No data AND no known duration → nothing meaningful to draw.
+  if (atSecs.length === 0 && !videoDurationSec) {
     return (
       <div>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">
@@ -263,23 +285,36 @@ function WatchTimeHeatmap({
     );
   }
 
-  const maxCount = Math.max(...buckets.map((b) => b.count), 1);
-  const lastBucketSec = buckets.length > 0
-    ? Math.max(...buckets.map((b) => b.sec))
-    : 0;
-  // Prefer the player-reported duration; fall back to last bucket + 5s.
-  const totalSec = videoDurationSec
-    ? Math.max(videoDurationSec, lastBucketSec + 5)
-    : lastBucketSec + 5;
+  const maxAtSec = atSecs.length > 0 ? Math.max(...atSecs) : 0;
+  // Prefer the player-reported duration; fall back to highest observed atSec.
+  const totalSec = Math.max(
+    videoDurationSec ?? 0,
+    Math.ceil(maxAtSec),
+    1,
+  );
 
+  // Dynamic bucket size — fine-grained for short videos, coarser as duration
+  // grows so the chart still fits without becoming a sea of 1px bars.
+  const bucketSizeSec =
+    totalSec <= 20 ? 1 : totalSec <= 120 ? 2 : totalSec <= 600 ? 10 : 30;
+  const bucketCount = Math.max(1, Math.ceil(totalSec / bucketSizeSec));
+
+  const counts = new Map<number, number>();
+  for (const s of atSecs) {
+    const key = Math.floor(s / bucketSizeSec);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const maxCount = Math.max(1, ...Array.from(counts.values()));
+
+  // SVG geometry — narrow gap so even single-bucket charts look like a bar,
+  // not a solid block.
   const width = 100;
   const height = 60;
   const padX = 2;
   const innerW = width - padX * 2;
-  const bucketCount = Math.max(1, Math.ceil(totalSec / 5));
   const barUnit = innerW / bucketCount;
-
-  const bucketByKey = new Map(buckets.map((b) => [Math.floor(b.sec / 5), b.count]));
+  const barGap = Math.min(0.6, barUnit * 0.15);
+  const barWidth = Math.max(0.5, barUnit - barGap);
 
   return (
     <div>
@@ -288,7 +323,8 @@ function WatchTimeHeatmap({
           Watch-Time-Heatmap
         </h3>
         <span className="text-[10px] text-ink-muted">
-          Sekunden im Video · Spitze: {maxCount}
+          {formatWatchTime(totalSec)} Video · {bucketSizeSec}s-Bloecke ·
+          Spitze: {maxCount}
         </span>
       </div>
       <div className="rounded-squircle-sm border border-line bg-surface-muted p-3">
@@ -300,19 +336,19 @@ function WatchTimeHeatmap({
           aria-label="Watch-Time-Heatmap"
         >
           {Array.from({ length: bucketCount }).map((_, i) => {
-            const x = padX + i * barUnit;
-            const count = bucketByKey.get(i) ?? 0;
+            const x = padX + i * barUnit + barGap / 2;
+            const count = counts.get(i) ?? 0;
             const isPeak = count > 0 && count === maxCount;
             const isEmpty = count === 0;
             // Empty slots render as a faint baseline tick so the axis stays
             // perceptible even before any data arrives.
-            const h = isEmpty ? 1.5 : (count / maxCount) * height;
+            const h = isEmpty ? 1.2 : (count / maxCount) * height;
             return (
               <rect
                 key={i}
                 x={x}
                 y={height - h}
-                width={Math.max(0.5, barUnit - 0.4)}
+                width={barWidth}
                 height={h}
                 rx={0.5}
                 className={
@@ -324,7 +360,8 @@ function WatchTimeHeatmap({
                 }
               >
                 <title>
-                  {formatWatchTime(i * 5)}–{formatWatchTime(i * 5 + 5)}:{" "}
+                  {formatWatchTime(i * bucketSizeSec)}–
+                  {formatWatchTime(i * bucketSizeSec + bucketSizeSec)}:{" "}
                   {count} {count === 1 ? "Aufruf" : "Aufrufe"}
                 </title>
               </rect>

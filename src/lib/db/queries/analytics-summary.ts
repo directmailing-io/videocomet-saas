@@ -61,6 +61,7 @@ export interface CampaignDeepDive {
   timeSeries: DailyEventCount[];
   runs: Array<{
     id: string;
+    name: string;
     startedAt: Date | null;
     createdAt: Date;
     status: string;
@@ -375,6 +376,7 @@ export async function getCampaignDeepDive(
   const runRows = await db
     .select({
       id: runs.id,
+      name: runs.name,
       startedAt: runs.startedAt,
       createdAt: runs.createdAt,
       status: runs.status,
@@ -416,6 +418,7 @@ export async function getCampaignDeepDive(
     timeSeries,
     runs: runRows.map((r) => ({
       id: r.id,
+      name: r.name,
       startedAt: r.startedAt,
       createdAt: r.createdAt,
       status: r.status,

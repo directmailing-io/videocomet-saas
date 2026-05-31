@@ -25,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TimeSeriesChart } from "../../_components/time-series-chart";
+import { CampaignLeadExport } from "../../_components/campaign-lead-export";
 import {
   fmtDate,
   fmtDateTime,
@@ -122,6 +123,20 @@ export default async function CampaignAnalyticsPage({
         </CardContent>
       </Card>
 
+      {/* Lead-Export */}
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Leads exportieren</CardTitle>
+          <p className="text-sm text-ink-muted">
+            Liste aller Leads dieser Kampagne nach Aktivitaet gefiltert, als
+            CSV oder Excel.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <CampaignLeadExport campaignId={campaign.id} />
+        </CardContent>
+      </Card>
+
       {/* Runs table */}
       <Card className="mb-8">
         <CardHeader>
@@ -142,7 +157,7 @@ export default async function CampaignAnalyticsPage({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Datum/Zeit</TableHead>
+                  <TableHead>Runde</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Leads</TableHead>
                   <TableHead className="text-right">Aufrufe</TableHead>
@@ -156,8 +171,13 @@ export default async function CampaignAnalyticsPage({
               <TableBody>
                 {runs.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="whitespace-nowrap">
-                      {fmtDateTime(r.startedAt ?? r.createdAt)}
+                    <TableCell>
+                      <div className="font-medium text-ink truncate max-w-[260px]">
+                        {r.name}
+                      </div>
+                      <div className="text-xs text-ink-muted tabular-nums whitespace-nowrap">
+                        {fmtDateTime(r.startedAt ?? r.createdAt)}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant={runStatusVariant(r.status)} dot>
