@@ -235,10 +235,20 @@ export function AddDomainModal({
           : prev,
       );
       onDomainChanged();
+      const newStatus = body.domain.status as DomainStatus;
+      const isReady = newStatus === "active";
+      const isFail = newStatus === "failed";
       toast({
-        title: "Pruefung gestartet",
-        description: `Status: ${statusLabel(body.domain.status as DomainStatus)}`,
-        variant: "success",
+        title: isReady
+          ? "Domain ist aktiv"
+          : isFail
+            ? "Konfiguration fehlgeschlagen"
+            : "DNS-Pruefung abgeschlossen",
+        description: isReady
+          ? "Sie koennen die Domain ab sofort fuer Kampagnen auswaehlen."
+          : body.domain.lastError ??
+            `Status: ${statusLabel(newStatus)} — Diagnose siehe Modal.`,
+        variant: isReady ? "success" : isFail ? "danger" : "default",
       });
     } catch {
       toast({
@@ -391,6 +401,17 @@ function DnsInstructions({
               Wir pruefen alle 10 Sekunden automatisch. Die DNS-Aenderungen
               koennen je nach Provider 5 Minuten bis 24 Stunden brauchen.
             </p>
+            {domain.lastError && (
+              <div className="mt-2 rounded-md border border-warn/40 bg-surface px-2.5 py-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-warn">
+                  Letzte Diagnose
+                </p>
+                <p className="text-xs text-ink-soft mt-0.5 leading-relaxed break-words">
+                  {domain.lastError}
+                </p>
+                <DiagnosisHint message={domain.lastError} />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -469,6 +490,45 @@ interface DnsRecordRow {
   type: string;
   name: string;
   value: string;
+}
+
+/**
+ * Uebersetzt die generische DNS-Fehlermeldung in eine konkrete Handlungs-
+ * empfehlung. Triggert anhand von Schluesselwoertern in der Diagnose.
+ *
+ * Hintergrund: Die haeufigsten Konfigurationsfehler beim ersten Setup sind
+ *   - TXT-Record-Name in den Wert kopiert (statt vc-verify=<token>)
+ *   - CNAME zeigt auf alte oder fremde Host-IP
+ *   - TXT/CNAME noch nicht propagiert (TTL)
+ * Statt den User raten zu lassen, geben wir eine passende One-Liner-Hilfe.
+ */
+function DiagnosisHint({ message }: { message: string }): React.JSX.Element | null {
+  const m = message.toLowerCase();
+  let hint: string | null = null;
+
+  if (m.includes("txt") && (m.includes("kein vc-verify") || m.includes("vc-verify"))) {
+    hint =
+      "Ihr TXT-Record existiert, aber der WERT ist falsch. Pruefen Sie, ob Sie versehentlich den Namen ins Wert-Feld kopiert haben — der Wert muss mit \"vc-verify=\" beginnen.";
+  } else if (m.includes("kein txt") || m.includes("txt-record fehlt") || m.includes("kein txt-record")) {
+    hint =
+      "Bitte den TXT-Record beim DNS-Provider eintragen (Name beginnt mit _videocomet). Bei manchen Providern muss der Name OHNE die Top-Domain eingetragen werden.";
+  } else if (m.includes("cname zeigt auf") || m.includes("a-record zeigt auf")) {
+    hint =
+      "Der DNS-Record zeigt auf eine fremde IP. Bitte den Wert auf cname.videocomet.de (CNAME) bzw. 178.105.208.68 (A) setzen.";
+  } else if (m.includes("nxdomain") || m.includes("dns-record fehlt")) {
+    hint =
+      "Es gibt noch keinen DNS-Eintrag fuer diesen Hostname. Bitte den CNAME (oder A-Record bei Root-Domain) beim DNS-Provider anlegen.";
+  } else if (m.includes("timeout")) {
+    hint =
+      "Der DNS-Server hat innerhalb 3 Sekunden nicht geantwortet. Bitte in 1-2 Minuten erneut pruefen.";
+  }
+
+  if (!hint) return null;
+  return (
+    <p className="mt-1.5 text-[11px] text-brand-deep leading-relaxed">
+      <strong>Tipp:</strong> {hint}
+    </p>
+  );
 }
 
 function DnsRecord({ label, record }: { label: string; record: DnsRecordRow }) {
