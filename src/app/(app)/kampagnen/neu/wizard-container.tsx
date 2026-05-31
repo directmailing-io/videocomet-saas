@@ -27,6 +27,13 @@ export interface WizardTemplate {
   themeId: string;
 }
 
+export interface WizardDomain {
+  id: string;
+  hostname: string;
+  status: string;
+  kind: string;
+}
+
 import type { Segment } from "@/lib/segments/types";
 
 /** @deprecated kept for back-compat with older callsites — use Segment. */
@@ -44,6 +51,10 @@ export interface WizardState {
   pipPosition: "bottom-left" | "bottom-right";
   pipShape: "square" | "rounded" | "circle";
   landingPageTemplateId: string | null;
+  /** NULL = default `app.videocomet.de/v/<slug>`. */
+  domainId: string | null;
+  /** NULL = default `{firstName}-{lastName}`. */
+  slugTemplate: string | null;
   pdfEnabled: boolean;
   pdfGoogleDocsUrl: string;
   pdfQrEnabled: boolean;
@@ -64,6 +75,8 @@ export interface NewCampaignWizardProps {
     templates: WizardTemplate[];
     /** Optional — image/video media items the editor can pick from. */
     media?: MediathekItem[];
+    /** Optional — Custom-Domains des Users, fuer Step 4. */
+    domains?: WizardDomain[];
   };
 }
 
@@ -93,6 +106,8 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
     pipPosition: "bottom-left",
     pipShape: "rounded",
     landingPageTemplateId: null,
+    domainId: null,
+    slugTemplate: null,
     pdfEnabled: false,
     pdfGoogleDocsUrl: "",
     pdfQrEnabled: false,
@@ -134,6 +149,8 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
           pipPosition: state.pipPosition,
           pipShape: state.pipShape,
           landingPageTemplateId: state.landingPageTemplateId,
+          domainId: state.domainId,
+          slugTemplate: state.slugTemplate,
           pdfEnabled: state.pdfEnabled,
           pdfGoogleDocsUrl: state.pdfGoogleDocsUrl || null,
           pdfQrEnabled: state.pdfQrEnabled,
@@ -251,6 +268,11 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
             templates={initialData.templates}
             value={state.landingPageTemplateId}
             onChange={(id) => update({ landingPageTemplateId: id })}
+            availableDomains={initialData.domains ?? []}
+            domainId={state.domainId}
+            onDomainChange={(id) => update({ domainId: id })}
+            slugTemplate={state.slugTemplate}
+            onSlugTemplateChange={(t) => update({ slugTemplate: t })}
           />
         )}
         {step === 4 && (() => {

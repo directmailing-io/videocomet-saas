@@ -10,6 +10,7 @@ import {
   LogOut,
   Menu,
   User as UserIcon,
+  Globe,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +31,12 @@ import {
 } from "@/components/ui/dialog";
 import { cn, getInitials } from "@/lib/utils";
 
-export type AdminNavKey = "dashboard" | "users" | "system" | "settings";
+export type AdminNavKey =
+  | "dashboard"
+  | "users"
+  | "domains"
+  | "system"
+  | "settings";
 
 export interface AdminShellUser {
   email: string;
@@ -57,6 +63,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { key: "users", label: "User-Verwaltung", href: "/admin/users", icon: Users },
+  { key: "domains", label: "Domains", href: "/admin/domains", icon: Globe },
   { key: "system", label: "System", href: "/admin/system", icon: ServerCog },
   { key: "settings", label: "Einstellungen", href: "/admin/settings", icon: Settings },
 ];

@@ -1,25 +1,37 @@
 /**
  * Stage 5: Landing-page row creation.
  *
- * Persists the lead's slug and page URL. Slug is generated via the global
- * slugify helper (UMLAUTS→ASCII transliteration + 4-hex suffix). On the
- * extremely unlikely event of a collision we regenerate up to 5 times.
+ * Persists the lead's slug and page URL. The slug is generated via the
+ * centralized `generateSlug()` engine from `@/lib/slug`, which:
+ *   - Renders the campaign's slug-template against the lead's CSV data
+ *     (with German/English field aliases like firstName ↔ Vorname)
+ *   - Falls back to `{firstName}-{lastName}` when no template is set
+ *   - Guarantees uniqueness via an availability callback (scoped to either
+ *     the campaign's custom-domain OR the default app.videocomet.de space)
+ *   - Adds a 4-hex suffix on collision (same shape as before)
+ *
+ * The page URL respects the custom-domain assignment of the lead's campaign:
+ *   - With a custom domain → https://<hostname>/<slug>   (no /v/ prefix)
+ *   - Default              → https://app.videocomet.de/v/<slug>
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { leads } from "@/lib/db/schema";
-import { slugify } from "@/lib/utils";
+import { leads, userDomains } from "@/lib/db/schema";
+import { generateSlug } from "@/lib/slug";
 import { updateLeadStatus } from "@/lib/db/queries/leads";
 
 export interface LandingPageInput {
   leadId: string;
   appUrl: string;
-  /**
-   * Pretty name to feed into the slugifier (typically the lead's company /
-   * full name). If empty we fall back to `lead-<id>`.
-   */
-  prettyName: string;
+  /** Raw lead-data row (CSV) — feeds the slug-template renderer. */
+  leadData: Record<string, string | null | undefined>;
+  /** Lead's row index in the run — used as deterministic fallback. */
+  rowIndex: number;
+  /** Slug template from the campaign, e.g. `{firstName}-{lastName}`. */
+  slugTemplate: string | null;
+  /** Optional custom-domain id (the campaign chose a custom domain). */
+  domainId: string | null;
 }
 
 export interface LandingPageOutput {
@@ -27,14 +39,58 @@ export interface LandingPageOutput {
   pageUrl: string;
 }
 
-async function isSlugFree(slug: string, excludeLeadId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: leads.id })
-    .from(leads)
-    .where(and(eq(leads.slug, slug)))
-    .limit(1);
-  if (!row) return true;
-  return row.id === excludeLeadId;
+/**
+ * Slug-Verfuegbarkeits-Check, korrekt scoped:
+ *   - Custom-Domain: unique innerhalb dieser domain_id (partial unique-Index)
+ *   - Default:       unique innerhalb (domain_id IS NULL) — Backward-Compat
+ * Schliesst den eigenen Lead aus, damit ein Retry idempotent ist.
+ */
+async function buildAvailabilityCheck(
+  leadId: string,
+  domainId: string | null,
+): Promise<(candidate: string) => Promise<boolean>> {
+  return async (candidate: string) => {
+    const where = domainId
+      ? and(eq(leads.slug, candidate), eq(leads.domainId, domainId))
+      : and(eq(leads.slug, candidate), isNull(leads.domainId));
+    const [row] = await db
+      .select({ id: leads.id })
+      .from(leads)
+      .where(where)
+      .limit(1);
+    if (!row) return true;
+    return row.id === leadId;
+  };
+}
+
+/**
+ * Resolves the hostname to use for the page URL. If the campaign's domain
+ * is set AND still active, use it; otherwise fall back to the default app
+ * URL. This silently degrades when a customer deletes a domain that a
+ * running campaign still references (variant B per product decision).
+ */
+async function resolvePageUrl(
+  domainId: string | null,
+  defaultAppUrl: string,
+  slug: string,
+): Promise<{ pageUrl: string; effectiveDomainId: string | null }> {
+  if (domainId) {
+    const [d] = await db
+      .select({ id: userDomains.id, hostname: userDomains.hostname, status: userDomains.status })
+      .from(userDomains)
+      .where(eq(userDomains.id, domainId))
+      .limit(1);
+    if (d && d.status === "active") {
+      return {
+        pageUrl: `https://${d.hostname}/${slug}`,
+        effectiveDomainId: d.id,
+      };
+    }
+  }
+  return {
+    pageUrl: `${defaultAppUrl.replace(/\/+$/, "")}/v/${slug}`,
+    effectiveDomainId: null,
+  };
 }
 
 /**
@@ -44,15 +100,30 @@ async function isSlugFree(slug: string, excludeLeadId: string): Promise<boolean>
 export async function runLandingPageCreate(
   input: LandingPageInput,
 ): Promise<LandingPageOutput> {
-  const base = input.prettyName?.trim() ? input.prettyName : `lead ${input.leadId.slice(0, 6)}`;
+  const isAvailable = await buildAvailabilityCheck(input.leadId, input.domainId);
 
-  let slug = slugify(base, true);
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    if (await isSlugFree(slug, input.leadId)) break;
-    slug = slugify(base, true);
-  }
+  const slug = await generateSlug({
+    template: input.slugTemplate,
+    leadData: input.leadData,
+    isAvailable,
+    fallbackId: input.rowIndex,
+  });
 
-  const pageUrl = `${input.appUrl.replace(/\/+$/, "")}/v/${slug}`;
+  const { pageUrl, effectiveDomainId } = await resolvePageUrl(
+    input.domainId,
+    input.appUrl,
+    slug,
+  );
+
   await updateLeadStatus(input.leadId, { slug });
+  // Persist the effectiveDomainId on the lead so the public router can
+  // resolve `<hostname>/<slug>` later. If the campaign's domain has been
+  // deleted between scheduling and pipeline execution, we degrade to
+  // domain_id=NULL (default URL) instead of crashing.
+  await db
+    .update(leads)
+    .set({ domainId: effectiveDomainId ?? sql`NULL` })
+    .where(eq(leads.id, input.leadId));
+
   return { slug, pageUrl };
 }

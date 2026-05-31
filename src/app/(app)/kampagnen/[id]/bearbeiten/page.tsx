@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth-guard";
 import { getCampaign } from "@/lib/db/queries/campaigns";
 import { listUserMedia } from "@/lib/db/queries/media";
 import { listUserTpls } from "@/lib/db/queries/landingPageTemplates";
+import { listUserDomains } from "@/lib/db/queries/user-domains";
 import { EditCampaignForm, type EditCampaignData } from "./edit-form";
 
 export default async function CampaignEditPage({
@@ -20,10 +21,11 @@ export default async function CampaignEditPage({
     notFound();
   }
 
-  const [webcams, templates, allMedia] = await Promise.all([
+  const [webcams, templates, allMedia, domains] = await Promise.all([
     listUserMedia(user.id, "webcam"),
     listUserTpls(user.id),
     listUserMedia(user.id),
+    listUserDomains(user.id),
   ]);
 
   const data: EditCampaignData = {
@@ -39,6 +41,8 @@ export default async function CampaignEditPage({
         (campaign.pipShape as "square" | "rounded" | "circle" | null) ??
         "rounded",
       landingPageTemplateId: campaign.landingPageTemplateId,
+      domainId: campaign.domainId ?? null,
+      slugTemplate: campaign.slugTemplate ?? null,
       pdfEnabled: campaign.pdfEnabled,
       pdfGoogleDocsUrl: campaign.pdfGoogleDocsUrl ?? "",
       pdfQrEnabled: campaign.pdfQrEnabled,
@@ -64,6 +68,12 @@ export default async function CampaignEditPage({
         publicUrl: m.publicUrl,
         type: m.type,
       })),
+    domains: domains.map((d) => ({
+      id: d.id,
+      hostname: d.hostname,
+      status: d.status,
+      kind: d.kind,
+    })),
   };
 
   return <EditCampaignForm data={data} />;

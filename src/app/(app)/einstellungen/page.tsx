@@ -5,6 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProfileForm, BillingForm } from "./profile-form";
 import { PasswordForm } from "./password-form";
+import { DomainsTab } from "./domains-tab";
 
 export default async function EinstellungenPage() {
   const { user: sessionUser } = await requireUser();
@@ -14,7 +15,7 @@ export default async function EinstellungenPage() {
     <>
       <PageHeader
         title="Einstellungen"
-        subtitle="Verwalte dein Profil, Passwort und deine Rechnungsadresse."
+        subtitle="Verwalten Sie Profil, Passwort, Rechnungsadresse und Custom-Domains."
       />
 
       <Tabs defaultValue="profil">
@@ -22,6 +23,7 @@ export default async function EinstellungenPage() {
           <TabsTrigger value="profil">Profil</TabsTrigger>
           <TabsTrigger value="passwort">Passwort</TabsTrigger>
           <TabsTrigger value="rechnung">Rechnungsadresse</TabsTrigger>
+          <TabsTrigger value="domains">Domains</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profil">
@@ -62,6 +64,10 @@ export default async function EinstellungenPage() {
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="domains">
+          <DomainsTab />
         </TabsContent>
       </Tabs>
     </>

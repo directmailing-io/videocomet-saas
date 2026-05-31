@@ -22,6 +22,8 @@ import { screenshotWorker, type ScreenshotJobData } from "./screenshot-queue";
 import { pipelineProcessor } from "./processors/pipeline";
 import { screenshotProcessor } from "./processors/screenshot";
 import { closeBrowserPool } from "./lib/browser-pool";
+import { startDomainVerifier } from "./jobs/domain-verifier";
+import { startDomainMonitor } from "./jobs/domain-monitor";
 import {
   startHeartbeat,
   stopHeartbeat,
@@ -210,6 +212,17 @@ async function main(): Promise<void> {
   }, 120_000);
   recoveryTimer.unref();
 
+  // Custom-Domain-Verifier: laeuft alle 30s, checkt pending/verifying/
+  // issuing_cert Domains gegen DNS+TXT und schreibt Traefik-YAMLs nach
+  // erfolgreicher Verifikation. Boot-Sync schreibt aktive Domains neu —
+  // damit ein Container-Restart die Configs garantiert wiederherstellt.
+  const stopDomainVerifier = startDomainVerifier();
+
+  // Custom-Domain-Monitor: stuendlicher HTTPS-Health-Check pro aktiver
+  // Domain + taegliches acme.json-Backup. Ergaenzt den Verifier (der nur
+  // bis "active" geht) um Operational-Reliability.
+  const stopDomainMonitor = startDomainMonitor();
+
   // 4 min global cap — sum of per-stage timeouts in processors/pipeline.ts
   // (videoRender 120 + videoUpload 60 + landingPage 10 + thumb 15 + qr 5 +
   // docxModify 30 + docxToPdf 60 + pdfCompress 20 + pdfUpload 30 = 350s)
@@ -303,6 +316,16 @@ async function main(): Promise<void> {
       await closeBrowserPool();
     } catch (err) {
       log("error", "browser pool shutdown failed:", err);
+    }
+    try {
+      stopDomainVerifier();
+    } catch (err) {
+      log("error", "domain verifier stop failed:", err);
+    }
+    try {
+      stopDomainMonitor();
+    } catch (err) {
+      log("error", "domain monitor stop failed:", err);
     }
     stopHeartbeat();
     log("info", "bye.");

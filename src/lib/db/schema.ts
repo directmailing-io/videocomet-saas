@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, jsonb, pgEnum, index, unique } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, boolean, integer, jsonb, pgEnum, index } from "drizzle-orm/pg-core";
 
 // ── Enums ───────────────────────────────────────────────────────────────────
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
@@ -101,6 +101,14 @@ export const campaigns = pgTable("campaigns", {
 
   // Landingpage
   landingPageTemplateId: uuid("landing_page_template_id").references(() => landingPageTemplates.id, { onDelete: "set null" }),
+  /** Custom-Domain für die Landingpage-URL. NULL = Default `app.videocomet.de/v/<slug>`. */
+  domainId: uuid("domain_id"),
+  /**
+   * Slug-Template für Leads dieser Kampagne, z.B. `{firstName}-{lastName}`.
+   * Felder werden aus `leads.data` (oder bekannten Aliases wie `firstName`
+   * ↔ `Vorname`) befüllt. NULL → Default `{firstName}-{lastName}`.
+   */
+  slugTemplate: text("slug_template"),
 
   // PDF-Brief
   pdfEnabled: boolean("pdf_enabled").notNull().default(false),
@@ -113,6 +121,7 @@ export const campaigns = pgTable("campaigns", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userIdx: index("campaigns_user_idx").on(t.userId),
+  domainIdx: index("campaigns_domain_idx").on(t.domainId),
 }));
 
 // ── Runs (Runden) ───────────────────────────────────────────────────────────
@@ -147,6 +156,8 @@ export const leads = pgTable("leads", {
 
   // Slug für Landingpage
   slug: text("slug"),
+  /** Custom-Domain für diesen Lead. NULL = Default `app.videocomet.de/v/<slug>`. */
+  domainId: uuid("domain_id"),
 
   status: leadStatusEnum("status").notNull().default("pending"),
 
@@ -181,7 +192,10 @@ export const leads = pgTable("leads", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   runIdx: index("leads_run_idx").on(t.runId),
-  slugIdx: unique("leads_slug_uq").on(t.slug),
+  // Slug-Eindeutigkeit ist als zwei partielle Unique-Indexes definiert
+  // (Migration 0004) — Drizzle-Schema-Builder kann partial-unique nicht
+  // ausdruecken, daher bewusst kein .unique() hier.
+  domainIdx: index("leads_domain_idx").on(t.domainId),
   statusIdx: index("leads_status_idx").on(t.status),
 }));
 
@@ -245,4 +259,46 @@ export const leadEvents = pgTable("lead_events", {
 }, (t) => ({
   leadTsIdx: index("lead_events_lead_ts_idx").on(t.leadId, t.ts),
   leadKindIdx: index("lead_events_lead_kind_idx").on(t.leadId, t.kind),
+}));
+
+// ── User-Domains (Custom-Domains pro Kunde) ─────────────────────────────────
+// Jeder Kunde kann bis zu 3 Domains/Subdomains anbinden, ueber die seine
+// personalisierten Landingpages ausgeliefert werden (statt
+// app.videocomet.de/v/<slug>).
+//
+// Lebenszyklus:
+//   pending      → User hat die Domain hinzugefuegt, DNS noch nicht geprueft
+//   verifying    → DNS-Verifier laeuft, prueft A/CNAME + TXT-Token
+//   issuing_cert → DNS ok, Traefik schreibt YAML, Cert wird via Let's
+//                  Encrypt HTTP-01 geholt
+//   active       → Cert vorhanden, Domain produktiv nutzbar
+//   failed       → Verifikation / Cert nach 24h Retries gescheitert
+export const userDomains = pgTable("user_domains", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  hostname: text("hostname").notNull(),       // case-insensitive eindeutig (Index in Migration)
+  kind: text("kind").notNull(),               // 'subdomain' | 'apex'
+  status: text("status").notNull().default("pending"),
+  verifyToken: text("verify_token").notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  sslIssuedAt: timestamp("ssl_issued_at", { withTimezone: true }),
+  sslExpiresAt: timestamp("ssl_expires_at", { withTimezone: true }),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("user_domains_user_idx").on(t.userId),
+  statusIdx: index("user_domains_status_idx").on(t.status),
+}));
+
+// Verifikations- / Cert-Health-Historie pro Domain — fuer Admin-Diagnose.
+export const domainCheckLog = pgTable("domain_check_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  domainId: uuid("domain_id").notNull().references(() => userDomains.id, { onDelete: "cascade" }),
+  ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+  kind: text("kind").notNull(),    // 'dns' | 'txt' | 'cert' | 'health'
+  ok: boolean("ok").notNull(),
+  message: text("message"),
+}, (t) => ({
+  domainTsIdx: index("domain_check_log_domain_idx").on(t.domainId, t.ts),
 }));

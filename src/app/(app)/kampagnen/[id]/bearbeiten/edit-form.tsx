@@ -10,6 +10,8 @@ import {
   Video,
   LayoutTemplate,
   Info,
+  Globe,
+  Sparkles,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -24,9 +26,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toaster";
 import { ThumbnailFramePicker } from "@/components/editor/thumbnail-frame-picker";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_SLUG_TEMPLATE,
+  renderSlugTemplate,
+} from "@/lib/slug";
 
 export interface EditCampaignWebcam {
   id: string;
@@ -48,6 +55,13 @@ export interface EditCampaignMedia {
   type: string;
 }
 
+export interface EditCampaignDomain {
+  id: string;
+  hostname: string;
+  status: string;
+  kind: string;
+}
+
 export interface EditCampaignData {
   campaign: {
     id: string;
@@ -57,6 +71,8 @@ export interface EditCampaignData {
     pipPosition: "bottom-left" | "bottom-right";
     pipShape: "square" | "rounded" | "circle";
     landingPageTemplateId: string | null;
+    domainId: string | null;
+    slugTemplate: string | null;
     pdfEnabled: boolean;
     pdfGoogleDocsUrl: string;
     pdfQrEnabled: boolean;
@@ -66,6 +82,7 @@ export interface EditCampaignData {
   webcams: EditCampaignWebcam[];
   templates: EditCampaignTemplate[];
   media: EditCampaignMedia[];
+  domains: EditCampaignDomain[];
 }
 
 interface FormState {
@@ -75,6 +92,8 @@ interface FormState {
   pipPosition: "bottom-left" | "bottom-right";
   pipShape: "square" | "rounded" | "circle";
   landingPageTemplateId: string | null;
+  domainId: string | null;
+  slugTemplate: string | null;
   pdfEnabled: boolean;
   pdfGoogleDocsUrl: string;
   pdfQrEnabled: boolean;
@@ -89,6 +108,8 @@ type PatchBody = Partial<{
   pipPosition: "bottom-left" | "bottom-right";
   pipShape: "square" | "rounded" | "circle";
   landingPageTemplateId: string | null;
+  domainId: string | null;
+  slugTemplate: string | null;
   pdfEnabled: boolean;
   pdfGoogleDocsUrl: string | null;
   pdfQrEnabled: boolean;
@@ -107,6 +128,8 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
     pipPosition: data.campaign.pipPosition,
     pipShape: data.campaign.pipShape,
     landingPageTemplateId: data.campaign.landingPageTemplateId,
+    domainId: data.campaign.domainId,
+    slugTemplate: data.campaign.slugTemplate,
     pdfEnabled: data.campaign.pdfEnabled,
     pdfGoogleDocsUrl: data.campaign.pdfGoogleDocsUrl,
     pdfQrEnabled: data.campaign.pdfQrEnabled,
@@ -173,6 +196,8 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
           pipPosition: state.pipPosition,
           pipShape: state.pipShape,
           landingPageTemplateId: state.landingPageTemplateId,
+          domainId: state.domainId,
+          slugTemplate: state.slugTemplate,
           pdfEnabled: state.pdfEnabled,
           pdfGoogleDocsUrl: state.pdfGoogleDocsUrl
             ? state.pdfGoogleDocsUrl
@@ -553,6 +578,43 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
           </CardContent>
         </Card>
 
+        {/* Custom-Domain */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Custom-Domain</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DomainSelect
+              value={state.domainId}
+              domains={data.domains}
+              onChange={(next) => {
+                setState((s) => ({ ...s, domainId: next }));
+                void patchAndSync({ domainId: next }, "Custom-Domain");
+              }}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Slug-Vorlage */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Slug-Vorlage</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SlugTemplateField
+              value={state.slugTemplate}
+              domain={data.domains.find((d) => d.id === state.domainId) ?? null}
+              onCommit={(next) => {
+                setState((s) => ({ ...s, slugTemplate: next }));
+                void patchAndSync({ slugTemplate: next }, "Slug-Vorlage");
+              }}
+              onLocalChange={(next) =>
+                setState((s) => ({ ...s, slugTemplate: next }))
+              }
+            />
+          </CardContent>
+        </Card>
+
         {/* PDF */}
         <Card>
           <CardHeader>
@@ -667,5 +729,256 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
         </Card>
       </div>
     </>
+  );
+}
+
+// ── Custom-Domain Select ──────────────────────────────────────────────────
+
+const DEFAULT_HOST = "app.videocomet.de";
+
+function domainBadge(status: string): {
+  label: string;
+  variant: "success" | "warn" | "danger" | "neutral";
+} {
+  switch (status) {
+    case "active":
+      return { label: "Aktiv", variant: "success" };
+    case "verifying":
+      return { label: "DNS-Pruefung", variant: "warn" };
+    case "issuing_cert":
+      return { label: "SSL wird ausgestellt", variant: "warn" };
+    case "failed":
+      return { label: "Fehlgeschlagen", variant: "danger" };
+    case "pending":
+    default:
+      return { label: "Wartet", variant: "neutral" };
+  }
+}
+
+function DomainSelect({
+  value,
+  domains,
+  onChange,
+}: {
+  value: string | null;
+  domains: EditCampaignDomain[];
+  onChange: (id: string | null) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-ink-muted">
+        Waehlen Sie eine Custom-Domain oder behalten Sie die VIDEOCOMET-Standard-URL.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <DomainOptionButton
+          active={value === null}
+          icon={<Globe className="size-4" />}
+          title="VIDEOCOMET-Subdomain"
+          hostname={DEFAULT_HOST}
+          badge={{ label: "Standard", variant: "neutral" }}
+          selectable
+          onClick={() => onChange(null)}
+        />
+        {domains.map((d) => {
+          const isActive = d.status === "active";
+          const b = domainBadge(d.status);
+          return (
+            <DomainOptionButton
+              key={d.id}
+              active={value === d.id}
+              icon={<Globe className="size-4" />}
+              title={d.kind === "apex" ? "Apex-Domain" : "Subdomain"}
+              hostname={d.hostname}
+              badge={b}
+              selectable={isActive}
+              onClick={() => {
+                if (isActive) onChange(d.id);
+              }}
+            />
+          );
+        })}
+      </div>
+      {domains.length === 0 && (
+        <p className="text-xs text-ink-muted">
+          Noch keine Custom-Domain. Sie koennen unter{" "}
+          <span className="font-semibold text-ink">
+            Einstellungen → Domains
+          </span>{" "}
+          eine eigene Domain hinzufuegen.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DomainOptionButton({
+  active,
+  icon,
+  title,
+  hostname,
+  badge,
+  selectable,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  title: string;
+  hostname: string;
+  badge: { label: string; variant: "success" | "warn" | "danger" | "neutral" };
+  selectable: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!selectable}
+      className={cn(
+        "text-left rounded-squircle-md border bg-surface p-3 transition-all relative",
+        selectable && active && "border-brand ring-2 ring-brand/30",
+        selectable && !active && "border-line hover:border-brand/50",
+        !selectable &&
+          "border-line opacity-60 cursor-not-allowed bg-surface-muted",
+      )}
+    >
+      {active && selectable && (
+        <span className="absolute top-2 right-2 inline-flex size-5 items-center justify-center rounded-full bg-brand text-white">
+          <Check className="size-3" />
+        </span>
+      )}
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="inline-flex size-7 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep shrink-0">
+          {icon}
+        </span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted truncate">
+          {title}
+        </span>
+      </div>
+      <p className="text-sm font-mono font-semibold text-ink break-all leading-tight pr-6">
+        {hostname}
+      </p>
+      <div className="mt-2">
+        <Badge variant={badge.variant} dot>
+          {badge.label}
+        </Badge>
+      </div>
+    </button>
+  );
+}
+
+// ── Slug-Vorlage Feld ─────────────────────────────────────────────────────
+
+const SLUG_PRESETS: Array<{ template: string; label: string }> = [
+  { template: "{firstName}-{lastName}", label: "Vor- + Nachname" },
+  { template: "{firstName}.{lastName}", label: "Vorname.Nachname" },
+  { template: "{lastName}", label: "Nur Nachname" },
+  { template: "{companyName}", label: "Firmenname" },
+  { template: "{firstName}-{companyName}", label: "Vorname + Firma" },
+];
+
+const PREVIEW_LEAD = {
+  firstName: "Peter",
+  lastName: "Mueller",
+  companyName: "Mueller GmbH",
+};
+
+function SlugTemplateField({
+  value,
+  domain,
+  onCommit,
+  onLocalChange,
+}: {
+  value: string | null;
+  domain: EditCampaignDomain | null;
+  onCommit: (next: string | null) => void;
+  onLocalChange: (next: string | null) => void;
+}) {
+  const effective =
+    value && value.trim() !== "" ? value : DEFAULT_SLUG_TEMPLATE;
+  const previewSlug = React.useMemo(
+    () => renderSlugTemplate(effective, PREVIEW_LEAD) || "lead",
+    [effective],
+  );
+  const host =
+    domain && domain.status === "active"
+      ? domain.hostname
+      : null;
+  const previewUrl = host
+    ? `${host}/${previewSlug}`
+    : `${DEFAULT_HOST}/v/${previewSlug}-a3f7`;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label htmlFor="edit-slug-template">Vorlage</Label>
+        <Input
+          id="edit-slug-template"
+          value={value ?? ""}
+          placeholder={DEFAULT_SLUG_TEMPLATE}
+          spellCheck={false}
+          onChange={(e) => {
+            const v = e.target.value;
+            onLocalChange(v.trim() === "" ? null : v);
+          }}
+          onBlur={() => {
+            // Commit on blur
+            onCommit(value && value.trim() !== "" ? value : null);
+          }}
+        />
+        <p className="mt-1.5 text-xs text-ink-muted">
+          Leer lassen fuer den Standard{" "}
+          <code className="font-mono">{DEFAULT_SLUG_TEMPLATE}</code>.
+        </p>
+      </div>
+
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+          Vorschlaege
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {SLUG_PRESETS.map((preset) => {
+            const current = value ?? DEFAULT_SLUG_TEMPLATE;
+            const selected = current === preset.template;
+            return (
+              <button
+                key={preset.template}
+                type="button"
+                onClick={() => {
+                  const next =
+                    preset.template === DEFAULT_SLUG_TEMPLATE
+                      ? null
+                      : preset.template;
+                  onCommit(next);
+                }}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  selected
+                    ? "border-brand bg-brand-soft text-brand-deep"
+                    : "border-line bg-surface text-ink-muted hover:text-ink hover:border-ink-muted",
+                )}
+                title={preset.template}
+              >
+                <span className="font-mono">{preset.template}</span>
+                <span className="text-[10px] opacity-70">
+                  ({preset.label})
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-squircle-sm border border-line bg-surface-muted/50 px-4 py-3">
+        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5">
+          <Sparkles className="size-3.5" />
+          Live-Vorschau (mit Test-Lead Peter Mueller)
+        </div>
+        <p className="text-sm font-mono text-ink break-all">{previewUrl}</p>
+        <p className="mt-1 text-[11px] text-ink-muted">
+          Bei Namens-Kollision wird ein 4-stelliger Hex-Suffix angehaengt (z.B.{" "}
+          <span className="font-mono">peter-mueller-a3f7</span>).
+        </p>
+      </div>
+    </div>
   );
 }

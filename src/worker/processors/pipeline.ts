@@ -39,7 +39,7 @@ import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import type { Job } from "bullmq";
 import { db } from "@/lib/db";
-import { campaigns, leads, mediaItems, runs } from "@/lib/db/schema";
+import { campaigns, leads, mediaItems, runs, userDomains } from "@/lib/db/schema";
 import { updateLeadStatus } from "@/lib/db/queries/leads";
 import { finalizeRunIfAllLeadsDone } from "@/lib/db/queries/runs";
 import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
@@ -189,23 +189,28 @@ async function downloadThumb(
   return outPath;
 }
 
-function buildPrettyName(data: Record<string, string>): string {
-  // Best-effort pretty name for the slug. Tries common columns first.
-  const candidates = [
-    "name",
-    "fullName",
-    "company",
-    "Firma",
-    "company_name",
-    "Vorname",
-    "first_name",
-  ];
-  for (const key of candidates) {
-    const value = data[key];
-    if (value && value.trim()) return value.trim();
+/**
+ * Reconstructs the public page URL for a lead based on its resolved
+ * `domainId`. Used on retry / skipped-stage paths where the slug is already
+ * persisted. Falls back to the default app URL if the custom domain has
+ * been deleted/deactivated in the meantime.
+ */
+async function rebuildPageUrl(
+  domainId: string | null,
+  slug: string,
+  defaultAppUrl: string,
+): Promise<string> {
+  if (domainId) {
+    const [d] = await db
+      .select({ hostname: userDomains.hostname, status: userDomains.status })
+      .from(userDomains)
+      .where(eq(userDomains.id, domainId))
+      .limit(1);
+    if (d && d.status === "active") {
+      return `https://${d.hostname}/${slug}`;
+    }
   }
-  const firstValue = Object.values(data).find((v) => v && v.trim());
-  return firstValue ?? "";
+  return `${defaultAppUrl.replace(/\/+$/, "")}/v/${slug}`;
 }
 
 /**
@@ -431,7 +436,10 @@ export async function pipelineProcessor(
           runLandingPageCreate({
             leadId: data.leadId,
             appUrl,
-            prettyName: buildPrettyName(lead.data ?? {}),
+            leadData: (lead.data ?? {}) as Record<string, string>,
+            rowIndex: lead.rowIndex,
+            slugTemplate: campaign.slugTemplate ?? null,
+            domainId: campaign.domainId ?? null,
           }),
         STAGE_TIMEOUTS_MS.landingPageCreate,
         "landingPageCreate",
@@ -443,13 +451,14 @@ export async function pipelineProcessor(
         leadId: data.leadId,
         level: "info",
         stage: "landingpage",
-        message: `${leadLabel}: landing page created (/v/${slug})`,
+        message: `${leadLabel}: landing page created (${pageUrl})`,
         durationMs: Date.now() - lpStart,
       });
     } else {
-      // Reuse existing slug; reconstruct the public URL from APP_URL so
-      // QR + docx still get a valid landing URL on retry.
-      pageUrl = `${appUrl.replace(/\/+$/, "")}/v/${slug}`;
+      // Reuse existing slug; reconstruct the public URL respecting the
+      // lead's resolved domain (set during the original landingPageCreate).
+      // slugAlreadyDone guarantees `slug` is non-null at this point.
+      pageUrl = await rebuildPageUrl(lead.domainId ?? null, slug!, appUrl);
       await insertPipelineEvent({
         runId: data.runId,
         leadId: data.leadId,

@@ -44,6 +44,26 @@ export async function getLeadBySlug(slug: string): Promise<Lead | null> {
   return row ?? null;
 }
 
+/**
+ * Resolves a slug WITHIN a specific custom-domain. Used by the public-page
+ * route when a request hits one of the customer's own domains — the slug
+ * is only unique within `(domain_id, slug)`, not globally.
+ *
+ * Returns null if no lead matches OR the matched lead doesn't belong to
+ * the given domain.
+ */
+export async function getLeadBySlugAndDomain(
+  slug: string,
+  domainId: string,
+): Promise<Lead | null> {
+  const [row] = await db
+    .select()
+    .from(leads)
+    .where(and(eq(leads.slug, slug), eq(leads.domainId, domainId)))
+    .limit(1);
+  return row ?? null;
+}
+
 export async function listLeadsByRun(runId: string, userId: string): Promise<Lead[]> {
   const rows = await db
     .select({ lead: leads })

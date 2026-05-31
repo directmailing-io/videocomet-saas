@@ -8,7 +8,11 @@ import {
   landingPageTemplates,
   runs,
 } from "@/lib/db/schema";
-import { getLeadBySlug } from "@/lib/db/queries/leads";
+import {
+  getLeadBySlug,
+  getLeadBySlugAndDomain,
+} from "@/lib/db/queries/leads";
+import { getDomainByHostname } from "@/lib/db/queries/user-domains";
 import { Logo } from "@/components/ui/logo";
 import { VideoPlayer } from "./video-player";
 import { LandingRender } from "./landing-render";
@@ -99,9 +103,24 @@ export default async function PublicLandingPage({
   searchParams,
 }: PublicLandingProps) {
   const { slug } = await params;
+  const sp = await searchParams;
   const isPreview = await detectPreviewMode(searchParams);
 
-  const lead = await getLeadBySlug(slug);
+  // Custom-Domain-Routing: die Middleware setzt `_host` wenn der Request
+  // ueber einen Kunden-Host kam. Dann muessen wir den Lead innerhalb der
+  // Domain aufloesen, NICHT global — sonst kann ein gleichnamiger Slug auf
+  // einer anderen Custom-Domain (oder app.videocomet.de) falsch matchen.
+  const hostParam = typeof sp?._host === "string" ? sp._host : null;
+  let isCustomDomain = false;
+  let lead: Awaited<ReturnType<typeof getLeadBySlug>> = null;
+  if (hostParam) {
+    const domain = await getDomainByHostname(hostParam);
+    if (!domain || domain.status !== "active") notFound();
+    isCustomDomain = true;
+    lead = await getLeadBySlugAndDomain(slug, domain.id);
+  } else {
+    lead = await getLeadBySlug(slug);
+  }
   if (!lead) notFound();
 
   // If the lead is still being rendered (no slug-page artifacts yet), show
@@ -116,7 +135,7 @@ export default async function PublicLandingPage({
     return (
       <main className="min-h-screen w-full bg-surface-soft flex flex-col">
         <PendingState leadId={lead.id} suppressPixel={isPreview} />
-        <Footer />
+        {!isCustomDomain && <Footer />}
       </main>
     );
   }
@@ -174,7 +193,9 @@ export default async function PublicLandingPage({
           }}
         />
       )}
-      <Footer />
+      {/* White-Label: auf einer Custom-Domain blenden wir den
+          VIDEOCOMET-Footer aus (Policy-Entscheidung Q3). */}
+      {!isCustomDomain && <Footer />}
     </>
   );
 }

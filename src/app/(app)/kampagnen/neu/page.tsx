@@ -1,16 +1,18 @@
 import { requireUser } from "@/lib/auth-guard";
 import { listUserMedia } from "@/lib/db/queries/media";
 import { listUserTpls } from "@/lib/db/queries/landingPageTemplates";
+import { listUserDomains } from "@/lib/db/queries/user-domains";
 import { NewCampaignWizard } from "./wizard-container";
 
 export default async function NeuePage() {
   const { user } = await requireUser();
 
-  const [webcams, templates, allMedia] = await Promise.all([
+  const [webcams, templates, allMedia, domains] = await Promise.all([
     listUserMedia(user.id, "webcam"),
     listUserTpls(user.id),
     // Editor needs images + videos for image / video segments
     listUserMedia(user.id),
+    listUserDomains(user.id),
   ]);
 
   return (
@@ -35,6 +37,12 @@ export default async function NeuePage() {
             publicUrl: m.publicUrl,
             type: m.type,
           })),
+        domains: domains.map((d) => ({
+          id: d.id,
+          hostname: d.hostname,
+          status: d.status,
+          kind: d.kind,
+        })),
       }}
     />
   );
