@@ -10,12 +10,14 @@ import {
   updateTpl,
 } from "@/lib/db/queries/landingPageTemplates";
 
-const THEME_IDS = ["noir", "clean", "gradient", "warm"] as const;
-
+// Theme-IDs are now stored on `landing_page_templates.themeId` only for
+// legacy/back-compat reasons — the authoritative theme lives in
+// `content.theme` (v2). We keep this column loose to accept the 5 new
+// presets (noir/clean/warm/bold/editorial) AND any future "custom"-id.
 const patchSchema = z
   .object({
     name: z.string().min(1).max(120).optional(),
-    themeId: z.enum(THEME_IDS).optional(),
+    themeId: z.string().min(1).max(40).optional(),
     content: z.record(z.string(), z.unknown()).optional(),
   })
   .refine(

@@ -13,10 +13,106 @@ import {
   getLeadBySlugAndDomain,
 } from "@/lib/db/queries/leads";
 import { getDomainByHostname } from "@/lib/db/queries/user-domains";
-import { Logo } from "@/components/ui/logo";
+import { LandingThemeProvider } from "@/components/landing-blocks/theme-provider";
+import {
+  DEFAULT_BRAND,
+  DEFAULT_THEME,
+  type BrandConfig,
+  type ThemeConfig,
+} from "@/lib/landing-theme/types";
+import { themeFromPreset } from "@/lib/landing-theme/presets";
 import { VideoPlayer } from "./video-player";
 import { LandingRender } from "./landing-render";
 import { TrackerInit } from "./tracker-init";
+
+/**
+ * Best-effort theme/brand extraction from the stored template JSON.
+ *
+ * The content column is JSONB and historically held v1 templates
+ * (`{ headline, ctaText, … }`). v2 wraps that in
+ * `{ version: 2, theme, brand, blocks, legacy }`. We accept both shapes:
+ *   - v2 → use `theme` / `brand` directly (with defaults filling holes)
+ *   - v1 → fall back to the stored `themeId` (preset) + default brand
+ *
+ * Tolerant of partial / hand-edited JSON: every missing key falls back
+ * to the safe default so the page always renders something sensible.
+ */
+function extractThemeAndBrand(
+  templateContent: unknown,
+  themeId: string | null | undefined,
+): { theme: ThemeConfig; brand: BrandConfig } {
+  if (templateContent && typeof templateContent === "object") {
+    const root = templateContent as Record<string, unknown>;
+    const version = root.version;
+    if (version === 2 || version === "2") {
+      const theme = mergeTheme(root.theme);
+      const brand = mergeBrand(root.brand);
+      return { theme, brand };
+    }
+  }
+  // Legacy v1: only the column-level themeId is meaningful.
+  return {
+    theme: themeFromPreset(themeId as Parameters<typeof themeFromPreset>[0]),
+    brand: { ...DEFAULT_BRAND },
+  };
+}
+
+function mergeTheme(raw: unknown): ThemeConfig {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_THEME };
+  const t = raw as Record<string, unknown>;
+  const colors = (t.colors && typeof t.colors === "object"
+    ? (t.colors as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+  const fonts = (t.fonts && typeof t.fonts === "object"
+    ? (t.fonts as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
+  const preset =
+    typeof t.preset === "string"
+      ? (t.preset as ThemeConfig["preset"])
+      : DEFAULT_THEME.preset;
+  return {
+    preset,
+    colors: {
+      primary: pickStr(colors.primary, DEFAULT_THEME.colors.primary),
+      accent: pickStr(colors.accent, DEFAULT_THEME.colors.accent),
+      bg: pickStr(colors.bg, DEFAULT_THEME.colors.bg),
+      surface: pickStr(colors.surface, DEFAULT_THEME.colors.surface),
+      text: pickStr(colors.text, DEFAULT_THEME.colors.text),
+      muted: pickStr(colors.muted, DEFAULT_THEME.colors.muted),
+    },
+    fonts: {
+      heading: pickStr(fonts.heading, DEFAULT_THEME.fonts.heading),
+      body: pickStr(fonts.body, DEFAULT_THEME.fonts.body),
+    },
+    spacing:
+      t.spacing === "compact" || t.spacing === "spacious" || t.spacing === "cozy"
+        ? t.spacing
+        : DEFAULT_THEME.spacing,
+    radius:
+      t.radius === "sharp" || t.radius === "rounded" || t.radius === "pill"
+        ? t.radius
+        : DEFAULT_THEME.radius,
+  };
+}
+
+function mergeBrand(raw: unknown): BrandConfig {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_BRAND };
+  const b = raw as Record<string, unknown>;
+  return {
+    logoUrl:
+      typeof b.logoUrl === "string" && b.logoUrl.length > 0
+        ? b.logoUrl
+        : null,
+    logoAlign: b.logoAlign === "center" ? "center" : "left",
+    showFooter:
+      typeof b.showFooter === "boolean" ? b.showFooter : undefined,
+    footerText: typeof b.footerText === "string" ? b.footerText : "",
+  };
+}
+
+function pickStr(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -131,12 +227,32 @@ export default async function PublicLandingPage({
 
   const campaignInfo = await loadCampaignAndTemplate(lead.runId);
 
+  // Theme + brand are extracted defensively — partial JSON / legacy v1
+  // templates all collapse to safe defaults. See `extractThemeAndBrand`.
+  const { theme, brand } = extractThemeAndBrand(
+    campaignInfo?.templateContent ?? null,
+    campaignInfo?.themeId,
+  );
+
+  // Footer visibility:
+  //   - user-set boolean wins (true → always show, false → always hide),
+  //   - otherwise default ON for the platform default domain and OFF for
+  //     white-label custom domains.
+  const wantsFooter =
+    brand.showFooter ?? (isCustomDomain ? false : true);
+
   if (isPending) {
     return (
-      <main className="min-h-screen w-full bg-surface-soft flex flex-col">
-        <PendingState leadId={lead.id} suppressPixel={isPreview} />
-        {!isCustomDomain && <Footer />}
-      </main>
+      <LandingThemeProvider
+        theme={theme}
+        brand={brand}
+        showFooter={wantsFooter}
+        isDefaultDomain={!isCustomDomain}
+      >
+        <main className="min-h-screen w-full flex flex-col">
+          <PendingState leadId={lead.id} suppressPixel={isPreview} />
+        </main>
+      </LandingThemeProvider>
     );
   }
 
@@ -165,14 +281,21 @@ export default async function PublicLandingPage({
       {/* Initialises the tracker module and fires the page_view event
           from the client. Server-side cannot read referrer/language. */}
       <TrackerInit slug={slug} initialPreview={isPreview} />
-      <LandingRender
-        themeId={campaignInfo?.themeId}
-        templateContent={campaignInfo?.templateContent ?? null}
-        leadData={lead.data}
-        leadId={lead.id}
-        slug={slug}
-        videoSlot={videoSlot}
-      />
+      <LandingThemeProvider
+        theme={theme}
+        brand={brand}
+        showFooter={wantsFooter}
+        isDefaultDomain={!isCustomDomain}
+      >
+        <LandingRender
+          themeId={campaignInfo?.themeId}
+          templateContent={campaignInfo?.templateContent ?? null}
+          leadData={lead.data}
+          leadId={lead.id}
+          slug={slug}
+          videoSlot={videoSlot}
+        />
+      </LandingThemeProvider>
       {/* Tracking pixel — fires page_view from the bare HTML even if
           JavaScript fails to load. Suppressed in preview-mode so internal
           test-visits do not count. */}
@@ -193,9 +316,6 @@ export default async function PublicLandingPage({
           }}
         />
       )}
-      {/* White-Label: auf einer Custom-Domain blenden wir den
-          VIDEOCOMET-Footer aus (Policy-Entscheidung Q3). */}
-      {!isCustomDomain && <Footer />}
     </>
   );
 }
@@ -239,17 +359,9 @@ function PendingState({
   );
 }
 
-function Footer() {
-  return (
-    <footer className="w-full py-8 flex items-center justify-center">
-      <a
-        href="https://videocomet.de"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 opacity-60 hover:opacity-100 transition-opacity"
-      >
-        <Logo variant="horizontal" height={20} />
-      </a>
-    </footer>
-  );
-}
+// The legacy `<Footer />` (VIDEOCOMET logo) has moved into
+// `src/components/landing-blocks/brand-footer.tsx`. It now renders
+// automatically as part of `<LandingThemeProvider>` when:
+//   - the user supplied no custom `footerText`, AND
+//   - the page is on the platform default domain, AND
+//   - the resolved `wantsFooter` flag is true.

@@ -271,47 +271,13 @@ export function VideoPlayer({
 }
 
 /**
- * CTA button with click-tracking. Renders as an <a> so right-click /
- * middle-click / open-in-new-tab continue to work normally.
- *
- * The click handler fires `track("cta_click", …)` synchronously before
- * the browser tears down the page for navigation. Because `track()` uses
- * `navigator.sendBeacon` under the hood, the event is queued by the
- * browser and survives the unload.
+ * `<CtaButton>` lived here historically. It now ships from the shared
+ * block-component library so any block can render a tracked CTA without
+ * pulling on the public-page tree. The re-export keeps existing imports
+ * working without forcing a churn-only PR across callers.
  */
-export type CtaPosition = "primary" | "secondary";
-
-export interface CtaButtonProps {
-  leadId: string;
-  label: string;
-  href: string;
-  position?: CtaPosition;
-  className?: string;
-  children: React.ReactNode;
-}
-
-export function CtaButton({
-  leadId,
-  label,
-  href,
-  position = "primary",
-  className,
-  children,
-}: CtaButtonProps) {
-  const handleClick = React.useCallback(() => {
-    track("cta_click", { label, url: href, position });
-    legacyTrackEvent("/api/track/cta-click", { leadId, label, href });
-  }, [leadId, label, href, position]);
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={handleClick}
-      onAuxClick={handleClick}
-      className={className}
-    >
-      {children}
-    </a>
-  );
-}
+export { CtaButton } from "@/components/landing-blocks/cta-button";
+export type {
+  CtaButtonProps,
+  CtaPosition,
+} from "@/components/landing-blocks/cta-button";
