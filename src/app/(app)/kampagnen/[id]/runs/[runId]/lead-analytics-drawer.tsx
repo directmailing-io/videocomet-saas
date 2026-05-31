@@ -17,11 +17,12 @@
 
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Eye, MousePointerClick, Play, X } from "lucide-react";
+import { ExternalLink, Eye, MousePointerClick, Play, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface LeadAnalyticsDrawerLead {
   id: string;
+  slug: string | null;
   data: Record<string, string>;
 }
 
@@ -155,12 +156,26 @@ export function LeadAnalyticsDrawer({
                 Tracking-Übersicht für diesen Lead
               </DialogPrimitive.Description>
             </div>
-            <DialogPrimitive.Close
-              className="rounded-full p-1.5 text-ink-muted opacity-70 transition-opacity hover:bg-line-soft hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-              aria-label="Schliessen"
-            >
-              <X className="size-4" />
-            </DialogPrimitive.Close>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {lead?.slug && (
+                <a
+                  href={`/v/${lead.slug}?preview=1`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold text-ink-muted hover:border-ink-muted hover:text-ink transition-colors"
+                  title="Landingpage im Vorschau-Modus oeffnen (kein Tracking)"
+                >
+                  <ExternalLink className="size-3" />
+                  Vorschau
+                </a>
+              )}
+              <DialogPrimitive.Close
+                className="rounded-full p-1.5 text-ink-muted opacity-70 transition-opacity hover:bg-line-soft hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                aria-label="Schliessen"
+              >
+                <X className="size-4" />
+              </DialogPrimitive.Close>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">

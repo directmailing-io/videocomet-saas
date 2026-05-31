@@ -26,6 +26,7 @@ export type TrackKind =
   | "cta_click";
 
 let cachedSlug: string | null = null;
+let previewMode = false;
 
 export function setTrackingSlug(slug: string): void {
   cachedSlug = slug;
@@ -36,14 +37,29 @@ export function getTrackingSlug(): string | null {
 }
 
 /**
+ * Toggles preview mode. When `true`, all subsequent `track()` calls become
+ * no-ops. Used when an internal user opens the landing page via an
+ * authenticated link (`?preview=1` URL param or `vc_preview` cookie) so
+ * test-clicks don't pollute production analytics.
+ */
+export function setPreviewMode(enabled: boolean): void {
+  previewMode = enabled;
+}
+
+export function isPreviewMode(): boolean {
+  return previewMode;
+}
+
+/**
  * Sends a tracking event. Uses sendBeacon if available (survives page
  * unload), otherwise fetch with keepalive. Never throws; tracking is
- * fire-and-forget.
+ * fire-and-forget. Becomes a no-op while preview-mode is active.
  */
 export function track(
   kind: TrackKind,
   payload?: Record<string, unknown>,
 ): void {
+  if (previewMode) return;
   if (!cachedSlug) return;
   try {
     const body = JSON.stringify({ slug: cachedSlug, kind, payload });

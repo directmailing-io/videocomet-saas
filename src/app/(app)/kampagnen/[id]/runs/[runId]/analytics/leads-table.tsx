@@ -368,9 +368,14 @@ function RowActions({ lead }: { lead: LeadRow }) {
       <DropdownMenuContent align="end">
         {lead.pageUrl ? (
           <DropdownMenuItem asChild>
-            <a href={lead.pageUrl} target="_blank" rel="noreferrer">
+            <a
+              href={`${lead.pageUrl}${lead.pageUrl.includes("?") ? "&" : "?"}preview=1`}
+              target="_blank"
+              rel="noreferrer"
+              title="Im Vorschau-Modus oeffnen (kein Tracking)"
+            >
               <ExternalLink className="size-4 text-ink-muted" />
-              Landingpage öffnen
+              Landingpage öffnen (Vorschau)
             </a>
           </DropdownMenuItem>
         ) : (

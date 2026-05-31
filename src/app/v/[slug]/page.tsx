@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
@@ -18,6 +19,30 @@ export const runtime = "nodejs";
 
 interface PublicLandingProps {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+/**
+ * Internal "preview" mode is enabled when EITHER:
+ *   - the URL carries `?preview=1` (typical first hit from the admin UI), OR
+ *   - the `vc_preview=1` cookie is set (subsequent same-browser navigations,
+ *     written client-side by TrackerInit for 1h).
+ *
+ * In preview mode the no-JS fallback pixel is suppressed server-side, the
+ * JS tracker becomes a no-op, and a visible badge is shown to the tester.
+ */
+async function detectPreviewMode(searchParams: PublicLandingProps["searchParams"]): Promise<boolean> {
+  const sp = await searchParams;
+  const param = sp?.preview;
+  if (Array.isArray(param) ? param.includes("1") : param === "1") {
+    return true;
+  }
+  try {
+    const c = await cookies();
+    return c.get("vc_preview")?.value === "1";
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -69,8 +94,12 @@ export async function generateMetadata({
   };
 }
 
-export default async function PublicLandingPage({ params }: PublicLandingProps) {
+export default async function PublicLandingPage({
+  params,
+  searchParams,
+}: PublicLandingProps) {
   const { slug } = await params;
+  const isPreview = await detectPreviewMode(searchParams);
 
   const lead = await getLeadBySlug(slug);
   if (!lead) notFound();
@@ -86,7 +115,7 @@ export default async function PublicLandingPage({ params }: PublicLandingProps) 
   if (isPending) {
     return (
       <main className="min-h-screen w-full bg-surface-soft flex flex-col">
-        <PendingState leadId={lead.id} />
+        <PendingState leadId={lead.id} suppressPixel={isPreview} />
         <Footer />
       </main>
     );
@@ -116,7 +145,7 @@ export default async function PublicLandingPage({ params }: PublicLandingProps) 
     <>
       {/* Initialises the tracker module and fires the page_view event
           from the client. Server-side cannot read referrer/language. */}
-      <TrackerInit slug={slug} />
+      <TrackerInit slug={slug} initialPreview={isPreview} />
       <LandingRender
         themeId={campaignInfo?.themeId}
         templateContent={campaignInfo?.templateContent ?? null}
@@ -126,28 +155,37 @@ export default async function PublicLandingPage({ params }: PublicLandingProps) 
         videoSlot={videoSlot}
       />
       {/* Tracking pixel — fires page_view from the bare HTML even if
-          JavaScript fails to load. The endpoint always returns a 1x1 GIF. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/api/track/page-view?leadId=${encodeURIComponent(lead.id)}`}
-        alt=""
-        aria-hidden="true"
-        width={1}
-        height={1}
-        style={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          opacity: 0,
-          pointerEvents: "none",
-        }}
-      />
+          JavaScript fails to load. Suppressed in preview-mode so internal
+          test-visits do not count. */}
+      {!isPreview && (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={`/api/track/page-view?leadId=${encodeURIComponent(lead.id)}`}
+          alt=""
+          aria-hidden="true"
+          width={1}
+          height={1}
+          style={{
+            position: "absolute",
+            width: 1,
+            height: 1,
+            opacity: 0,
+            pointerEvents: "none",
+          }}
+        />
+      )}
       <Footer />
     </>
   );
 }
 
-function PendingState({ leadId }: { leadId: string }) {
+function PendingState({
+  leadId,
+  suppressPixel,
+}: {
+  leadId: string;
+  suppressPixel: boolean;
+}) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-20 text-center">
       <div className="size-14 rounded-full border-2 border-brand/30 border-t-brand animate-spin mb-6" />
@@ -157,22 +195,25 @@ function PendingState({ leadId }: { leadId: string }) {
         Seite in wenigen Minuten erneut.
       </p>
       {/* Pixel-Tracking läuft auch im Pending-State, damit wir wissen,
-          wann Empfänger zum ersten Mal geklickt haben. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/api/track/page-view?leadId=${encodeURIComponent(leadId)}`}
-        alt=""
-        aria-hidden="true"
-        width={1}
-        height={1}
-        style={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          opacity: 0,
-          pointerEvents: "none",
-        }}
-      />
+          wann Empfänger zum ersten Mal geklickt haben — außer im
+          internen Vorschau-Modus. */}
+      {!suppressPixel && (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={`/api/track/page-view?leadId=${encodeURIComponent(leadId)}`}
+          alt=""
+          aria-hidden="true"
+          width={1}
+          height={1}
+          style={{
+            position: "absolute",
+            width: 1,
+            height: 1,
+            opacity: 0,
+            pointerEvents: "none",
+          }}
+        />
+      )}
     </div>
   );
 }

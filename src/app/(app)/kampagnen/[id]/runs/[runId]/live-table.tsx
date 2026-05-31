@@ -854,13 +854,14 @@ export function LiveTable({
                   <TableCell onClick={stopRowClick}>
                     {l.slug ? (
                       <a
-                        href={`/v/${l.slug}`}
+                        href={`/v/${l.slug}?preview=1`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-brand-deep hover:underline text-xs"
+                        title="Im Vorschau-Modus oeffnen (kein Tracking)"
                       >
                         <ExternalLink className="size-3.5" />
-                        öffnen
+                        Vorschau
                       </a>
                     ) : (
                       <span className="text-ink-muted text-xs">—</span>
