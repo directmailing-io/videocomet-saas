@@ -28,6 +28,7 @@ docker run -d --name videocomet-worker --restart unless-stopped \
   --network videocomet-net \
   --env-file /opt/videocomet/.env \
   --shm-size=1g \
+  --user 0:0 \
   -e TRAEFIK_DYNAMIC_DIR=/traefik-dynamic \
   -e TRAEFIK_ACME_PATH=/traefik-acme/acme.json \
   -e ACME_BACKUP_DIR=/acme-backup \
@@ -38,6 +39,12 @@ docker run -d --name videocomet-worker --restart unless-stopped \
   -v /opt/videocomet/backups/acme:/acme-backup:rw \
   videocomet-worker:latest
 ```
+
+**`--user 0:0` ist Pflicht** — der Coolify-Dynamic-Folder gehoert `9999:root`
+mit Mode `0700`, der Worker laeuft im Image als `nextjs:1001` und bekommt
+sonst `EACCES: permission denied, scandir '/traefik-dynamic'`. Da der Worker
+Container-isoliert ist und keine externen TCP-Listener oeffnet, ist
+Root-im-Container hier akzeptabel.
 
 **Vorbedingung:** Backup-Ordner anlegen, weil Docker sonst eine Datei statt
 Ordner erzeugen koennte:
