@@ -5,10 +5,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
-import { leads, runs } from "@/lib/db/schema";
+import { campaigns, customLpTemplates, leads, runs } from "@/lib/db/schema";
 import { getRun, updateRun } from "@/lib/db/queries/runs";
 import { bulkInsertLeads, type BulkLeadRow } from "@/lib/db/queries/leads";
 import { pipelineQueue } from "@/worker/queue";
+
+/**
+ * Looks up the active Custom-LP-Version-ID for a campaign at the moment a run
+ * starts. Returns null if the campaign has no Custom-LP-Template bound, or if
+ * the template has no active version (edge-case: ZIP uploaded but never
+ * activated — we degrade silently and the run uses the Block-LP / default).
+ */
+async function resolveActiveCustomLpVersionId(
+  campaignId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({
+      customLpTemplateId: campaigns.customLpTemplateId,
+      activeVersionId: customLpTemplates.activeVersionId,
+    })
+    .from(campaigns)
+    .leftJoin(
+      customLpTemplates,
+      eq(customLpTemplates.id, campaigns.customLpTemplateId),
+    )
+    .where(eq(campaigns.id, campaignId))
+    .limit(1);
+  if (!row || !row.customLpTemplateId) return null;
+  return row.activeVersionId ?? null;
+}
 
 interface StoredColumnMapping {
   mapping?: Record<string, string>;
@@ -101,10 +126,17 @@ export async function POST(
   // Sort by rowIndex for predictable enqueue order.
   leadRows.sort((a, b) => a.rowIndex - b.rowIndex);
 
+  // Snapshot the campaign's active Custom-LP version onto the run, so future
+  // template edits do not silently change what THIS run delivers.
+  const customLpVersionId = await resolveActiveCustomLpVersionId(
+    run.campaignId,
+  );
+
   await updateRun(params.id, auth.user.id, {
     status: "generating",
     startedAt: new Date(),
     totalLeads: inserted,
+    customLpVersionId,
   });
 
   // Free the parsed-rows blob (they're now in `leads`).

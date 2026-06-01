@@ -10,9 +10,16 @@
  *     the campaign's custom-domain OR the default app.videocomet.de space)
  *   - Adds a 4-hex suffix on collision (same shape as before)
  *
- * The page URL respects the custom-domain assignment of the lead's campaign:
- *   - With a custom domain → https://<hostname>/<slug>   (no /v/ prefix)
- *   - Default              → https://app.videocomet.de/v/<slug>
+ * The page URL respects three orthogonal settings, in this precedence:
+ *   1. Custom domain active                         → https://<hostname>/<slug>
+ *   2. Custom-LP active on the run (customLpVersionId pinned)
+ *                                                   → https://lp.videocomet.de/<slug>
+ *   3. Default                                      → https://app.videocomet.de/v/<slug>
+ *
+ * (1) wins over (2) so a customer who has both a Custom-Domain AND a Custom-LP
+ * still gets their white-label hostname. The Custom-Domain Traefik-Router
+ * forwards to the App; the App's middleware then re-routes to the Custom-LP
+ * renderer via the same path it would on `lp.videocomet.de`.
  */
 
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -32,6 +39,17 @@ export interface LandingPageInput {
   slugTemplate: string | null;
   /** Optional custom-domain id (the campaign chose a custom domain). */
   domainId: string | null;
+  /**
+   * Pinned Custom-LP version id (snapshotted on `runs` at run-start). When
+   * set AND the campaign has no active custom-domain, the public page URL
+   * routes via the Custom-LP sandbox host instead of `/v/<slug>`.
+   */
+  customLpVersionId: string | null;
+  /**
+   * Sandbox host for Custom-LP delivery (e.g. `lp.videocomet.de`). Resolved
+   * from the worker's `SANDBOX_LP_HOST` env at call time.
+   */
+  customLpHost: string;
 }
 
 export interface LandingPageOutput {
@@ -73,6 +91,8 @@ async function resolvePageUrl(
   domainId: string | null,
   defaultAppUrl: string,
   slug: string,
+  customLpVersionId: string | null,
+  customLpHost: string,
 ): Promise<{ pageUrl: string; effectiveDomainId: string | null }> {
   if (domainId) {
     const [d] = await db
@@ -86,6 +106,12 @@ async function resolvePageUrl(
         effectiveDomainId: d.id,
       };
     }
+  }
+  if (customLpVersionId) {
+    return {
+      pageUrl: `https://${customLpHost}/${slug}`,
+      effectiveDomainId: null,
+    };
   }
   return {
     pageUrl: `${defaultAppUrl.replace(/\/+$/, "")}/v/${slug}`,
@@ -113,6 +139,8 @@ export async function runLandingPageCreate(
     input.domainId,
     input.appUrl,
     slug,
+    input.customLpVersionId,
+    input.customLpHost,
   );
 
   await updateLeadStatus(input.leadId, { slug });

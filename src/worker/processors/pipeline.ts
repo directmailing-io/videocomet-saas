@@ -199,6 +199,8 @@ async function rebuildPageUrl(
   domainId: string | null,
   slug: string,
   defaultAppUrl: string,
+  customLpVersionId: string | null,
+  customLpHost: string,
 ): Promise<string> {
   if (domainId) {
     const [d] = await db
@@ -209,6 +211,9 @@ async function rebuildPageUrl(
     if (d && d.status === "active") {
       return `https://${d.hostname}/${slug}`;
     }
+  }
+  if (customLpVersionId) {
+    return `https://${customLpHost}/${slug}`;
   }
   return `${defaultAppUrl.replace(/\/+$/, "")}/v/${slug}`;
 }
@@ -278,7 +283,7 @@ export async function pipelineProcessor(
   if (!ctx) {
     throw new Error(`[pipeline] missing context for lead=${data.leadId}`);
   }
-  const { lead, campaign, webcam } = ctx;
+  const { lead, run, campaign, webcam } = ctx;
 
   const workDir = await createTempDir(`lead-${data.leadId.slice(0, 8)}`);
   const appUrl = process.env.APP_URL ?? "https://app.videocomet.de";
@@ -428,6 +433,8 @@ export async function pipelineProcessor(
     }
 
     // ── Stage 5: Landingpage row + slug ─────────────────────────────
+    const customLpHost = process.env.SANDBOX_LP_HOST || "lp.videocomet.de";
+    const customLpVersionId = run.customLpVersionId ?? null;
     if (!slugAlreadyDone) {
       await setCurrentStage(data.leadId, "landingPageCreate");
       const lpStart = Date.now();
@@ -440,6 +447,8 @@ export async function pipelineProcessor(
             rowIndex: lead.rowIndex,
             slugTemplate: campaign.slugTemplate ?? null,
             domainId: campaign.domainId ?? null,
+            customLpVersionId,
+            customLpHost,
           }),
         STAGE_TIMEOUTS_MS.landingPageCreate,
         "landingPageCreate",
@@ -456,9 +465,16 @@ export async function pipelineProcessor(
       });
     } else {
       // Reuse existing slug; reconstruct the public URL respecting the
-      // lead's resolved domain (set during the original landingPageCreate).
+      // lead's resolved domain (set during the original landingPageCreate)
+      // AND any Custom-LP pin on the run.
       // slugAlreadyDone guarantees `slug` is non-null at this point.
-      pageUrl = await rebuildPageUrl(lead.domainId ?? null, slug!, appUrl);
+      pageUrl = await rebuildPageUrl(
+        lead.domainId ?? null,
+        slug!,
+        appUrl,
+        customLpVersionId,
+        customLpHost,
+      );
       await insertPipelineEvent({
         runId: data.runId,
         leadId: data.leadId,

@@ -17,6 +17,7 @@ const createSchema = z.object({
   pipPosition: z.enum(["bottom-left", "bottom-right"]).optional(),
   pipShape: z.enum(["square", "rounded", "circle"]).optional(),
   landingPageTemplateId: z.string().uuid().nullable().optional(),
+  customLpTemplateId: z.string().uuid().nullable().optional(),
   domainId: z.string().uuid().nullable().optional(),
   slugTemplate: z.string().min(1).max(120).nullable().optional(),
   pdfEnabled: z.boolean().optional(),

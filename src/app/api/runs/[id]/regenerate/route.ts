@@ -5,9 +5,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
-import { leads } from "@/lib/db/schema";
+import { campaigns, customLpTemplates, leads } from "@/lib/db/schema";
 import { getRun, updateRun } from "@/lib/db/queries/runs";
 import { pipelineQueue } from "@/worker/queue";
+
+async function resolveActiveCustomLpVersionId(
+  campaignId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({
+      customLpTemplateId: campaigns.customLpTemplateId,
+      activeVersionId: customLpTemplates.activeVersionId,
+    })
+    .from(campaigns)
+    .leftJoin(
+      customLpTemplates,
+      eq(customLpTemplates.id, campaigns.customLpTemplateId),
+    )
+    .where(eq(campaigns.id, campaignId))
+    .limit(1);
+  if (!row || !row.customLpTemplateId) return null;
+  return row.activeVersionId ?? null;
+}
 
 /**
  * POST /api/runs/[id]/regenerate
@@ -160,10 +179,19 @@ export async function POST(
     await db.update(leads).set(resetPatch).where(eq(leads.runId, params.id));
   }
 
+  // Re-snapshot der aktuell aktiven Custom-LP-Version: ein Regenerate soll
+  // explizit den NEUSTEN Stand der Vorlage übernehmen — sonst klebt der Run
+  // an einer alten Pin-Version und der User wundert sich, warum sein Update
+  // nicht ankommt.
+  const customLpVersionId = await resolveActiveCustomLpVersionId(
+    run.campaignId,
+  );
+
   await updateRun(params.id, auth.user.id, {
     status: "generating",
     startedAt: new Date(),
     completedAt: null,
+    customLpVersionId,
   });
 
   // Re-enqueue. Wenn Redis weg ist: rollen wir den Status NICHT zurück —
