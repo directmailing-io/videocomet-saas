@@ -48,6 +48,14 @@ export interface EditCampaignTemplate {
   themeId: string;
 }
 
+export interface EditCampaignCustomTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  versionCount: number;
+  hasActiveVersion: boolean;
+}
+
 export interface EditCampaignMedia {
   id: string;
   name: string;
@@ -71,6 +79,7 @@ export interface EditCampaignData {
     pipPosition: "bottom-left" | "bottom-right";
     pipShape: "square" | "rounded" | "circle";
     landingPageTemplateId: string | null;
+    customLpTemplateId: string | null;
     domainId: string | null;
     slugTemplate: string | null;
     pdfEnabled: boolean;
@@ -81,6 +90,7 @@ export interface EditCampaignData {
   };
   webcams: EditCampaignWebcam[];
   templates: EditCampaignTemplate[];
+  customTemplates: EditCampaignCustomTemplate[];
   media: EditCampaignMedia[];
   domains: EditCampaignDomain[];
 }
@@ -92,6 +102,7 @@ interface FormState {
   pipPosition: "bottom-left" | "bottom-right";
   pipShape: "square" | "rounded" | "circle";
   landingPageTemplateId: string | null;
+  customLpTemplateId: string | null;
   domainId: string | null;
   slugTemplate: string | null;
   pdfEnabled: boolean;
@@ -108,6 +119,7 @@ type PatchBody = Partial<{
   pipPosition: "bottom-left" | "bottom-right";
   pipShape: "square" | "rounded" | "circle";
   landingPageTemplateId: string | null;
+  customLpTemplateId: string | null;
   domainId: string | null;
   slugTemplate: string | null;
   pdfEnabled: boolean;
@@ -128,6 +140,7 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
     pipPosition: data.campaign.pipPosition,
     pipShape: data.campaign.pipShape,
     landingPageTemplateId: data.campaign.landingPageTemplateId,
+    customLpTemplateId: data.campaign.customLpTemplateId,
     domainId: data.campaign.domainId,
     slugTemplate: data.campaign.slugTemplate,
     pdfEnabled: data.campaign.pdfEnabled,
@@ -195,7 +208,10 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
           webcamMediaId: state.webcamMediaId,
           pipPosition: state.pipPosition,
           pipShape: state.pipShape,
-          landingPageTemplateId: state.landingPageTemplateId,
+          landingPageTemplateId: state.customLpTemplateId
+            ? null
+            : state.landingPageTemplateId,
+          customLpTemplateId: state.customLpTemplateId,
           domainId: state.domainId,
           slugTemplate: state.slugTemplate,
           pdfEnabled: state.pdfEnabled,
@@ -546,34 +562,47 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
             <CardTitle>Landingpage-Vorlage</CardTitle>
           </CardHeader>
           <CardContent>
-            {data.templates.length === 0 ? (
+            {data.templates.length === 0 &&
+            data.customTemplates.length === 0 ? (
               <p className="text-sm text-ink-muted">
-                Noch keine Vorlagen vorhanden. Lege im Bereich Landingpages
-                eine Vorlage an.
+                Noch keine Vorlagen vorhanden. Legen Sie im Bereich
+                Landingpages eine Vorlage an.
               </p>
             ) : (
-              <Select
-                value={state.landingPageTemplateId ?? ""}
-                onValueChange={(v) => {
-                  const next = v === "" ? null : v;
-                  setState((s) => ({ ...s, landingPageTemplateId: next }));
+              <LandingpageTemplateSelect
+                templates={data.templates}
+                customTemplates={data.customTemplates}
+                blockValue={state.landingPageTemplateId}
+                customValue={state.customLpTemplateId}
+                onSelectBlock={(id) => {
+                  setState((s) => ({
+                    ...s,
+                    landingPageTemplateId: id,
+                    customLpTemplateId: null,
+                  }));
                   void patchAndSync(
-                    { landingPageTemplateId: next },
+                    {
+                      landingPageTemplateId: id,
+                      customLpTemplateId: null,
+                    },
                     "Landingpage-Vorlage",
                   );
                 }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Vorlage wählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {data.templates.map((tpl) => (
-                    <SelectItem key={tpl.id} value={tpl.id}>
-                      {tpl.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onSelectCustom={(id) => {
+                  setState((s) => ({
+                    ...s,
+                    customLpTemplateId: id,
+                    landingPageTemplateId: null,
+                  }));
+                  void patchAndSync(
+                    {
+                      customLpTemplateId: id,
+                      landingPageTemplateId: null,
+                    },
+                    "Custom-LP-Vorlage",
+                  );
+                }}
+              />
             )}
           </CardContent>
         </Card>
@@ -980,5 +1009,94 @@ function SlugTemplateField({
         </p>
       </div>
     </div>
+  );
+}
+
+// ── Landingpage-Template-Selector ─────────────────────────────────────────
+// Vereint Block-Vorlagen und Custom-HTML-Vorlagen in EINEM Select. Items
+// werden mit Typ-Badge versehen. Beim Setzen wird der jeweils andere
+// State-Key auf null gesetzt (mutually exclusive).
+
+function LandingpageTemplateSelect({
+  templates,
+  customTemplates,
+  blockValue,
+  customValue,
+  onSelectBlock,
+  onSelectCustom,
+}: {
+  templates: EditCampaignTemplate[];
+  customTemplates: EditCampaignCustomTemplate[];
+  blockValue: string | null;
+  customValue: string | null;
+  onSelectBlock: (id: string | null) => void;
+  onSelectCustom: (id: string | null) => void;
+}) {
+  // Build composite value as `block:<id>` or `custom:<id>` so we can use one
+  // Radix-Select.
+  const composite =
+    customValue !== null
+      ? `custom:${customValue}`
+      : blockValue !== null
+        ? `block:${blockValue}`
+        : "";
+
+  function onValueChange(next: string) {
+    if (next === "") {
+      onSelectBlock(null);
+      onSelectCustom(null);
+      return;
+    }
+    if (next.startsWith("custom:")) {
+      onSelectCustom(next.slice("custom:".length));
+    } else if (next.startsWith("block:")) {
+      onSelectBlock(next.slice("block:".length));
+    }
+  }
+
+  return (
+    <Select value={composite} onValueChange={onValueChange}>
+      <SelectTrigger>
+        <SelectValue placeholder="Vorlage wählen" />
+      </SelectTrigger>
+      <SelectContent>
+        {templates.length > 0 && (
+          <>
+            {templates.map((tpl) => (
+              <SelectItem key={`block-${tpl.id}`} value={`block:${tpl.id}`}>
+                <span className="inline-flex items-center gap-2">
+                  <Badge variant="neutral">Block</Badge>
+                  <span>{tpl.name}</span>
+                </span>
+              </SelectItem>
+            ))}
+          </>
+        )}
+        {customTemplates.length > 0 && (
+          <>
+            {customTemplates.map((tpl) => (
+              <SelectItem
+                key={`custom-${tpl.id}`}
+                value={`custom:${tpl.id}`}
+                disabled={!tpl.hasActiveVersion}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Badge variant="brand">Custom HTML</Badge>
+                  <span>
+                    {tpl.name}
+                    {!tpl.hasActiveVersion && (
+                      <span className="text-ink-muted">
+                        {" "}
+                        (noch keine Version)
+                      </span>
+                    )}
+                  </span>
+                </span>
+              </SelectItem>
+            ))}
+          </>
+        )}
+      </SelectContent>
+    </Select>
   );
 }

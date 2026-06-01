@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Globe, LayoutTemplate, Sparkles } from "lucide-react";
+import { Check, FileArchive, Globe, LayoutTemplate, Sparkles } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,14 @@ interface Template {
   themeId: string;
 }
 
+interface CustomTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  versionCount: number;
+  hasActiveVersion: boolean;
+}
+
 interface AvailableDomain {
   id: string;
   hostname: string;
@@ -30,6 +38,11 @@ export interface WizardStep4Props {
   templates: Template[];
   value: string | null;
   onChange: (id: string) => void;
+
+  // ── Custom-LP-Vorlagen (ZIP-Upload) ───────────────────────────────────────
+  customTemplates: CustomTemplate[];
+  customValue: string | null;
+  onCustomChange: (id: string | null) => void;
 
   // ── Custom-Domain ─────────────────────────────────────────────────────────
   availableDomains: AvailableDomain[];
@@ -88,6 +101,9 @@ export function WizardStep4Landingpage({
   templates,
   value,
   onChange,
+  customTemplates,
+  customValue,
+  onCustomChange,
   availableDomains,
   domainId,
   onDomainChange,
@@ -285,58 +301,142 @@ export function WizardStep4Landingpage({
           Landingpage-Vorlage wählen
         </h2>
         <p className="text-sm text-ink-muted mb-4">
-          Diese Vorlage wird als personalisierte Landingpage für jeden Lead
-          verwendet.
+          Wählen Sie eine Block-basierte Vorlage ODER Ihre eigene
+          HTML-Vorlage. Beides ist möglich — beim Speichern wird die
+          jeweils gewählte Variante übernommen.
         </p>
 
-        {templates.length === 0 ? (
+        {templates.length === 0 && customTemplates.length === 0 ? (
           <EmptyState
             icon={<LayoutTemplate />}
             title="Noch keine Vorlagen"
             subtitle="Legen Sie im Bereich Landingpages eine Vorlage an, bevor Sie sie hier auswählen können."
           />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {templates.map((tpl) => {
-              const active = tpl.id === value;
-              const preview =
-                THEME_PREVIEW[tpl.themeId] ?? THEME_PREVIEW.clean;
-              return (
-                <button
-                  key={tpl.id}
-                  type="button"
-                  onClick={() => onChange(tpl.id)}
-                  className={cn(
-                    "text-left rounded-squircle-md border transition-all relative",
-                    active
-                      ? "border-brand ring-2 ring-brand/30"
-                      : "border-line hover:border-brand/50",
-                  )}
-                >
-                  {active && (
-                    <span className="absolute top-3 right-3 z-10 inline-flex size-6 items-center justify-center rounded-full bg-brand text-white">
-                      <Check className="size-3.5" />
-                    </span>
-                  )}
-                  <Card className="border-0 shadow-none">
-                    <CardContent className="p-3">
-                      <div
+          <div className="space-y-6">
+            {templates.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge variant="neutral">Block</Badge>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                    Block-Vorlagen
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {templates.map((tpl) => {
+                    const active = tpl.id === value && !customValue;
+                    const preview =
+                      THEME_PREVIEW[tpl.themeId] ?? THEME_PREVIEW.clean;
+                    return (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        onClick={() => {
+                          onChange(tpl.id);
+                          onCustomChange(null);
+                        }}
                         className={cn(
-                          "aspect-[4/3] rounded-squircle-sm mb-3",
-                          preview,
+                          "text-left rounded-squircle-md border transition-all relative",
+                          active
+                            ? "border-brand ring-2 ring-brand/30"
+                            : "border-line hover:border-brand/50",
                         )}
-                      />
-                      <p className="text-sm font-semibold text-ink truncate">
-                        {tpl.name}
-                      </p>
-                      <p className="text-xs text-ink-muted capitalize">
-                        Theme: {tpl.themeId}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </button>
-              );
-            })}
+                      >
+                        {active && (
+                          <span className="absolute top-3 right-3 z-10 inline-flex size-6 items-center justify-center rounded-full bg-brand text-white">
+                            <Check className="size-3.5" />
+                          </span>
+                        )}
+                        <Card className="border-0 shadow-none">
+                          <CardContent className="p-3">
+                            <div
+                              className={cn(
+                                "aspect-[4/3] rounded-squircle-sm mb-3",
+                                preview,
+                              )}
+                            />
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-sm font-semibold text-ink truncate flex-1">
+                                {tpl.name}
+                              </p>
+                              <Badge variant="neutral">Block</Badge>
+                            </div>
+                            <p className="text-xs text-ink-muted capitalize">
+                              Theme: {tpl.themeId}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {customTemplates.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge variant="brand">Custom HTML</Badge>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                    Eigene HTML-Vorlagen
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {customTemplates.map((tpl) => {
+                    const active = tpl.id === customValue;
+                    const disabled = !tpl.hasActiveVersion;
+                    return (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => {
+                          if (disabled) return;
+                          onCustomChange(tpl.id);
+                          // Klar machen, dass Custom-LP gewählt ist —
+                          // Block-Auswahl bleibt im State, wird aber beim
+                          // Save NICHT gesendet (s. Wizard-Container).
+                        }}
+                        className={cn(
+                          "text-left rounded-squircle-md border transition-all relative",
+                          active
+                            ? "border-brand ring-2 ring-brand/30"
+                            : "border-line hover:border-brand/50",
+                          disabled &&
+                            "opacity-60 cursor-not-allowed bg-surface-muted",
+                        )}
+                      >
+                        {active && (
+                          <span className="absolute top-3 right-3 z-10 inline-flex size-6 items-center justify-center rounded-full bg-brand text-white">
+                            <Check className="size-3.5" />
+                          </span>
+                        )}
+                        <Card className="border-0 shadow-none">
+                          <CardContent className="p-3">
+                            <div className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-center justify-center bg-gradient-to-br from-brand-soft to-surface-muted border border-line text-brand-deep">
+                              <FileArchive className="size-10 opacity-70" />
+                            </div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-sm font-semibold text-ink truncate flex-1">
+                                {tpl.name}
+                              </p>
+                              <Badge variant="brand">Custom HTML</Badge>
+                            </div>
+                            <p className="text-xs text-ink-muted">
+                              {tpl.hasActiveVersion
+                                ? `${tpl.versionCount} Version${
+                                    tpl.versionCount === 1 ? "" : "en"
+                                  }`
+                                : "Noch keine Version – bitte zuerst ZIP hochladen"}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </section>

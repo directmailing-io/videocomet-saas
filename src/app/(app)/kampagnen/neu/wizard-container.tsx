@@ -27,6 +27,14 @@ export interface WizardTemplate {
   themeId: string;
 }
 
+export interface WizardCustomTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  versionCount: number;
+  hasActiveVersion: boolean;
+}
+
 export interface WizardDomain {
   id: string;
   hostname: string;
@@ -51,6 +59,12 @@ export interface WizardState {
   pipPosition: "bottom-left" | "bottom-right";
   pipShape: "square" | "rounded" | "circle";
   landingPageTemplateId: string | null;
+  /**
+   * Wenn gesetzt, hat es Vorrang vor `landingPageTemplateId` — die Kampagne
+   * verwendet eine vom Kunden hochgeladene HTML-Vorlage. Beide Felder
+   * werden gesendet; das Backend übernimmt das, das nicht NULL ist.
+   */
+  customLpTemplateId: string | null;
   /** NULL = default `app.videocomet.de/v/<slug>`. */
   domainId: string | null;
   /** NULL = default `{firstName}-{lastName}`. */
@@ -73,6 +87,8 @@ export interface NewCampaignWizardProps {
   initialData: {
     webcams: WizardWebcam[];
     templates: WizardTemplate[];
+    /** Custom-HTML-Vorlagen des Users (ZIP-Upload). */
+    customTemplates?: WizardCustomTemplate[];
     /** Optional — image/video media items the editor can pick from. */
     media?: MediathekItem[];
     /** Optional — Custom-Domains des Users, für Step 4. */
@@ -106,6 +122,7 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
     pipPosition: "bottom-left",
     pipShape: "rounded",
     landingPageTemplateId: null,
+    customLpTemplateId: null,
     domainId: null,
     slugTemplate: null,
     pdfEnabled: false,
@@ -148,7 +165,12 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
           segments: state.segments,
           pipPosition: state.pipPosition,
           pipShape: state.pipShape,
-          landingPageTemplateId: state.landingPageTemplateId,
+          // Wir senden beide Felder; das Backend übernimmt jenes, das
+          // !== null ist. customLpTemplateId hat Vorrang.
+          landingPageTemplateId: state.customLpTemplateId
+            ? null
+            : state.landingPageTemplateId,
+          customLpTemplateId: state.customLpTemplateId,
           domainId: state.domainId,
           slugTemplate: state.slugTemplate,
           pdfEnabled: state.pdfEnabled,
@@ -184,7 +206,8 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
     if (step === 0) return Boolean(state.webcamMediaId);
     if (step === 1) return Boolean(state.mode);
     if (step === 2) return true;
-    if (step === 3) return Boolean(state.landingPageTemplateId);
+    if (step === 3)
+      return Boolean(state.landingPageTemplateId || state.customLpTemplateId);
     if (step === 4) {
       if (!state.pdfEnabled) return true;
       return state.pdfGoogleDocsUrl.trim().length > 0;
@@ -267,7 +290,17 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
           <WizardStep4Landingpage
             templates={initialData.templates}
             value={state.landingPageTemplateId}
-            onChange={(id) => update({ landingPageTemplateId: id })}
+            onChange={(id) =>
+              update({ landingPageTemplateId: id, customLpTemplateId: null })
+            }
+            customTemplates={initialData.customTemplates ?? []}
+            customValue={state.customLpTemplateId}
+            onCustomChange={(id) =>
+              update({
+                customLpTemplateId: id,
+                landingPageTemplateId: id ? null : state.landingPageTemplateId,
+              })
+            }
             availableDomains={initialData.domains ?? []}
             domainId={state.domainId}
             onDomainChange={(id) => update({ domainId: id })}

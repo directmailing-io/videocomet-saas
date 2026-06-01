@@ -18,14 +18,28 @@ const ADMIN_PUBLIC_PATHS = ["/admin/login"];
 /**
  * Hosts that we serve as the "main app" — anything else is treated as a
  * potential custom-domain. Includes localhost variants so local dev works.
+ *
+ * `lp.videocomet.de` is the dedicated Custom-LP sandbox subdomain. It is
+ * counted as an OWN host (so it bypasses the custom-domain rewrite) but
+ * gets its own /<slug> → /cv/<slug> rewrite below.
  */
 const OWN_HOSTS = new Set<string>([
   "app.videocomet.de",
   "videocomet.de",
   "www.videocomet.de",
+  "lp.videocomet.de",
   "localhost",
   "127.0.0.1",
 ]);
+
+/**
+ * The Custom-LP sandbox subdomain. Requests on this host with a non-app
+ * path are rewritten to `/cv/<slug>` so the sandbox renderer handles
+ * them. Calling it out separately (instead of overloading
+ * `app.videocomet.de`) keeps the security boundary clean: any future
+ * cookie/CORS policy applies to the entire host, not to a sub-path.
+ */
+const SANDBOX_LP_HOST = "lp.videocomet.de";
 
 /**
  * Pfade die NIE durch das Custom-Domain-Rewrite gehen — sonst zerlegen wir
@@ -76,7 +90,36 @@ function classifyHost(host: string | null | undefined): "own" | "custom" | "igno
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const session = req.cookies.get(SESSION_COOKIE)?.value;
-  const hostKind = classifyHost(req.headers.get("host"));
+  const rawHost = (req.headers.get("host") ?? "").toLowerCase().split(":")[0];
+  const hostKind = classifyHost(rawHost);
+
+  // ── Custom-LP-Sandbox-Routing (lp.videocomet.de) ──────────────────────
+  // Requests on the dedicated sandbox host map `/[slug]` → `/cv/[slug]`,
+  // and `/[slug]/<rest>` → `/cv/[slug]/<rest>` so the asset pass-through
+  // route handles deeper paths. This is HOST-based (not path-based)
+  // because the customer's uploaded HTML uses root-relative URLs that
+  // must keep resolving against `/cv/<slug>/`.
+  //
+  // We intentionally don't try to be smart about WHETHER the slug
+  // belongs to a Custom-LP campaign here — the /cv/ handler does that
+  // DB lookup in Node-runtime. In Edge runtime we'd have to import the
+  // DB driver which is not viable.
+  //
+  // v1 limitation: this host is the ONLY way to reach a Custom-LP. A
+  // campaign that mixes a Custom-LP template with a Custom-Domain is
+  // unsupported until v2 (the customer must point users at
+  // lp.videocomet.de).
+  if (rawHost === SANDBOX_LP_HOST && !isPassthroughPath(pathname)) {
+    // Already on the right internal path? Let it through unchanged.
+    if (pathname.startsWith("/cv/")) return NextResponse.next();
+    const segments = pathname.replace(/^\/+/, "").split("/");
+    const slug = segments[0];
+    if (!slug) return NextResponse.next();
+    const rest = segments.slice(1).join("/");
+    const url = req.nextUrl.clone();
+    url.pathname = rest ? `/cv/${slug}/${rest}` : `/cv/${slug}`;
+    return NextResponse.rewrite(url);
+  }
 
   // ── Custom-Domain-Routing ────────────────────────────────────────────
   // Requests auf Kunden-Hosts werden auf /v/<slug>?_host=<host> rewritten.

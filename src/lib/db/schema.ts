@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, jsonb, pgEnum, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, boolean, integer, jsonb, pgEnum, index, unique } from "drizzle-orm/pg-core";
 
 // ── Enums ───────────────────────────────────────────────────────────────────
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
@@ -101,6 +101,14 @@ export const campaigns = pgTable("campaigns", {
 
   // Landingpage
   landingPageTemplateId: uuid("landing_page_template_id").references(() => landingPageTemplates.id, { onDelete: "set null" }),
+  /**
+   * Optional: Custom-HTML/CSS/JS Landingpage-Template, das vom Kunden als ZIP
+   * hochgeladen wurde. Wenn gesetzt, hat es Vorrang vor dem Block-basierten
+   * `landingPageTemplateId`. NULL = Default-/Blocks-Landingpage wird benutzt.
+   * FK wird in Migration 0005 hinzugefügt (Vorwärtsreferenz auf
+   * `custom_lp_templates`).
+   */
+  customLpTemplateId: uuid("custom_lp_template_id"),
   /** Custom-Domain für die Landingpage-URL. NULL = Default `app.videocomet.de/v/<slug>`. */
   domainId: uuid("domain_id"),
   /**
@@ -138,12 +146,22 @@ export const runs = pgTable("runs", {
   completedLeads: integer("completed_leads").notNull().default(0),
   failedLeads: integer("failed_leads").notNull().default(0),
 
+  /**
+   * Optional: an diesen Run gepinnte Custom-LP-Version. Wenn gesetzt, wird
+   * für alle Leads dieses Runs genau diese Version ausgespielt (immutable).
+   * Bei NULL fällt der Renderer auf `campaigns.customLpTemplateId →
+   * activeVersionId` zurück. FK wird in Migration 0005 hinzugefügt
+   * (Vorwärtsreferenz auf `custom_lp_versions`).
+   */
+  customLpVersionId: uuid("custom_lp_version_id"),
+
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   campaignIdx: index("runs_campaign_idx").on(t.campaignId),
   userIdx: index("runs_user_idx").on(t.userId),
+  customLpVersionIdx: index("runs_custom_lp_version_idx").on(t.customLpVersionId),
 }));
 
 // ── Leads ───────────────────────────────────────────────────────────────────
@@ -289,6 +307,58 @@ export const userDomains = pgTable("user_domains", {
 }, (t) => ({
   userIdx: index("user_domains_user_idx").on(t.userId),
   statusIdx: index("user_domains_status_idx").on(t.status),
+}));
+
+// ── Custom-Landingpages (Kunden-eigene HTML/CSS/JS Templates) ───────────────
+// Kunden laden ein ZIP mit ihrer eigenen statischen Landingpage hoch. Das ZIP
+// wird serverseitig validiert (Allow-Liste, Pfad-Traversal, Zip-Bomb),
+// sanitiert (index.html → strip on*-Handler, javascript:-URLs etc.) und
+// in Bunny Storage abgelegt. Jede Upload-Iteration ist eine eigene
+// **immutable** Version. Pro Template gibt es eine `activeVersionId` für
+// neu gestartete Runs; existierende Runs werden über `runs.customLpVersionId`
+// auf eine konkrete Version gepinnt und bleiben somit reproduzierbar.
+export const customLpTemplates = pgTable("custom_lp_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  /** Verweist auf `custom_lp_versions.id`. FK in Migration 0005. */
+  activeVersionId: uuid("active_version_id"),
+  thumbnailUrl: text("thumbnail_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("custom_lp_templates_user_idx").on(t.userId),
+}));
+
+export const customLpVersions = pgTable("custom_lp_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  templateId: uuid("template_id").notNull().references(() => customLpTemplates.id, { onDelete: "cascade" }),
+  /** 1, 2, 3, … (auto-incrementiert per Template). */
+  version: integer("version").notNull(),
+  /** Bunny-Storage-Prefix, z.B. `custom-lp/<tplId>/v1/`. Endet mit `/`. */
+  storagePath: text("storage_path").notNull(),
+  /** Pfad zum Einstiegs-HTML innerhalb des ZIPs, default `index.html`. */
+  entryHtml: text("entry_html").notNull().default("index.html"),
+  /** Inhalt der optionalen `videocomet.json` im ZIP (parsed). */
+  manifest: jsonb("manifest").$type<Record<string, unknown>>(),
+  /** Liste aller hochgeladenen Dateien für die Sandbox-Auslieferung. */
+  fileManifest: jsonb("file_manifest").notNull().$type<Array<{
+    path: string;
+    size: number;
+    hash: string;
+    mime: string;
+  }>>(),
+  /**
+   * Annotationen aus dem visuellen Element-Picker (Agent C):
+   * z.B. `{ videoSelector: ".hero video", primaryCta: ".btn-primary", … }`.
+   */
+  annotations: jsonb("annotations").$type<Record<string, unknown>>(),
+  bytesTotal: integer("bytes_total").notNull(),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  templateIdx: index("custom_lp_versions_template_idx").on(t.templateId),
+  uniqueVersionPerTemplate: unique("custom_lp_versions_tpl_ver_uq").on(t.templateId, t.version),
 }));
 
 // Verifikations- / Cert-Health-Historie pro Domain — für Admin-Diagnose.
