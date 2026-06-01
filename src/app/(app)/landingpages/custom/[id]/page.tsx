@@ -62,6 +62,7 @@ import {
   UpdatePromptDialog,
   type AffectedRunRow,
 } from "./_components/update-prompt-dialog";
+import { InlinePreview } from "./_components/inline-preview";
 
 interface DetailVersion {
   id: string;
@@ -500,46 +501,23 @@ export default function CustomLpDetailPage() {
             </Card>
           )}
 
-          {stage.kind === "picker" ? (
-            stage.html ? (
-              <ElementPicker
-                html={stage.html}
-                value={annotations}
-                onChange={setAnnotations}
-                onCommit={commitAnnotations}
-                onSkip={() => setStage({ kind: "viewing" })}
-              />
-            ) : (
-              <Card>
-                <CardContent className="p-5">
-                  <div className="flex items-start gap-3 rounded-squircle-sm bg-brand-soft p-4">
-                    <Info className="size-5 text-brand-deep shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-semibold text-ink">
-                        Lokale Vorschau gerade nicht verfügbar
-                      </p>
-                      <p className="text-xs text-ink-muted mt-1 leading-relaxed">
-                        Das betrifft nur den Element-Picker hier im Editor. Die
-                        echte Auslieferung an Ihre Kunden auf{" "}
-                        <code className="font-mono">lp.videocomet.de</code>{" "}
-                        funktioniert vollständig — laden Sie die Vorlage einfach
-                        nochmal neu oder fügen Sie{" "}
-                        <code className="font-mono">data-vc-cta="primary"</code>{" "}
-                        direkt in Ihrem HTML hinzu.
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="mt-3"
-                        onClick={() => setStage({ kind: "viewing" })}
-                      >
-                        Schließen
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )
+          {/* Live-Vorschau — sichtbar sobald eine aktive Version existiert */}
+          {data.template.activeVersionId && stage.kind !== "picker" && (
+            <InlinePreview
+              templateId={id}
+              versionId={data.template.activeVersionId}
+              isActive={true}
+            />
+          )}
+
+          {stage.kind === "picker" && stage.html ? (
+            <ElementPicker
+              html={stage.html}
+              value={annotations}
+              onChange={setAnnotations}
+              onCommit={commitAnnotations}
+              onSkip={() => setStage({ kind: "viewing" })}
+            />
           ) : (
             <Card>
               <CardContent className="p-5">
