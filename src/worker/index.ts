@@ -71,6 +71,16 @@ async function stuckLeadRecovery(): Promise<void> {
   if (orphanedPending.length > 0) {
     try {
       const queue = pipelineQueue();
+      // BullMQ-`addBulk` dedupt stillschweigend, wenn ein Job mit dem
+      // gleichen `jobId` schon in Redis liegt — auch wenn er im
+      // failed/completed-ZSET ist. Dadurch laufen pending leads in einen
+      // Recovery-Deadlock. Lösung: alle stale Job-IDs explizit entfernen
+      // bevor wir re-adden.
+      await Promise.all(
+        orphanedPending.map((s) =>
+          queue.remove(s.id).catch(() => undefined),
+        ),
+      );
       await queue.addBulk(
         orphanedPending.map((s) => ({
           name: "lead-pipeline",
@@ -85,7 +95,7 @@ async function stuckLeadRecovery(): Promise<void> {
       );
       // eslint-disable-next-line no-console
       console.log(
-        `[worker:${WORKER_ID}] orphaned-pending-recovery: re-enqueued ${orphanedPending.length} pending leads (jobId dedup)`,
+        `[worker:${WORKER_ID}] orphaned-pending-recovery: re-enqueued ${orphanedPending.length} pending leads (stale-jobs purged first)`,
       );
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -163,11 +173,13 @@ async function stuckLeadRecovery(): Promise<void> {
     })
     .where(inArray(leads.id, ids));
 
-  // Re-enqueue alle stuck leads in BullMQ. WICHTIG: jobId = leadId
-  // damit BullMQ Duplikate ablehnt (falls das ursprüngliche Job noch in
-  // der waiting/delayed queue ist).
+  // Re-enqueue alle stuck leads in BullMQ. Stale Job-IDs erst raus, dann
+  // bulk-add — siehe Kommentar oben im orphaned-pending-Block.
   try {
     const queue = pipelineQueue();
+    await Promise.all(
+      stuck.map((s) => queue.remove(s.id).catch(() => undefined)),
+    );
     await queue.addBulk(
       stuck.map((s) => ({
         name: "lead-pipeline",

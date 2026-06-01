@@ -516,12 +516,14 @@ export default function CustomLpDetailPage() {
                     <Info className="size-5 text-brand-deep shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-semibold text-ink">
-                        Vorschau nicht direkt verfügbar
+                        Lokale Vorschau gerade nicht verfügbar
                       </p>
                       <p className="text-xs text-ink-muted mt-1 leading-relaxed">
-                        Die Vorschau wird nach dem nächsten Reload aus der
-                        Sandbox geladen. Sie können den Element-Picker dann
-                        erneut starten — oder fügen Sie{" "}
+                        Das betrifft nur den Element-Picker hier im Editor. Die
+                        echte Auslieferung an Ihre Kunden auf{" "}
+                        <code className="font-mono">lp.videocomet.de</code>{" "}
+                        funktioniert vollständig — laden Sie die Vorlage einfach
+                        nochmal neu oder fügen Sie{" "}
                         <code className="font-mono">data-vc-cta="primary"</code>{" "}
                         direkt in Ihrem HTML hinzu.
                       </p>

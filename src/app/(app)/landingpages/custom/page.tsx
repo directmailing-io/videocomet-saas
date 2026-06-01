@@ -174,7 +174,7 @@ export default function CustomLpListPage() {
         <EmptyState
           icon={<FileArchive />}
           title="Noch keine HTML-Vorlagen"
-          subtitle="Laden Sie ein ZIP mit Ihrer eigenen, statischen Landingpage hoch. Wir validieren, sandboxen und liefern sie personalisiert pro Lead aus."
+          subtitle="Laden Sie ein ZIP mit Ihrer eigenen Landingpage hoch. Wir prüfen die Inhalte und liefern sie personalisiert pro Lead auf lp.videocomet.de aus — wie eine ganz normale Webseite."
           action={
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <Button asChild iconLeft={<Plus className="size-4" />}>
