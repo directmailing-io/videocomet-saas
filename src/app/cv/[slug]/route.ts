@@ -38,7 +38,7 @@ import {
   type CustomLpPublicContext,
 } from "@/lib/db/queries/custom-lp-public";
 import { getDomainByHostname } from "@/lib/db/queries/user-domains";
-import { getBunnyStorageEnv } from "@/lib/bunny/env";
+import { getCustomLpStorageEnv } from "@/lib/custom-lp/storage";
 import { bunnyFetch, BunnyApiError } from "@/lib/bunny/_fetch";
 
 export const dynamic = "force-dynamic";
@@ -135,7 +135,10 @@ export async function GET(
  * `readObject(path)` we'll replace this inline helper.
  */
 async function fetchFromBunnyStorage(remotePath: string): Promise<Buffer> {
-  const env = getBunnyStorageEnv();
+  // WICHTIG: Custom-LPs liegen in der videocomet-custom-lp Zone, NICHT in
+  // der PDF-Zone. Vorher wurde versehentlich getBunnyStorageEnv (=PDF-Zone)
+  // benutzt -> 404 für jeden Lead.
+  const env = getCustomLpStorageEnv();
   const cleanedPath = remotePath.replace(/^\/+/, "");
   const url = `https://storage.bunnycdn.com/${env.zone}/${cleanedPath}`;
   const response = await bunnyFetch(

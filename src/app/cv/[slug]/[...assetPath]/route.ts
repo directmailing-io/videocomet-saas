@@ -27,7 +27,7 @@ import {
   type CustomLpPublicContext,
 } from "@/lib/db/queries/custom-lp-public";
 import { getDomainByHostname } from "@/lib/db/queries/user-domains";
-import { getBunnyStorageEnv } from "@/lib/bunny/env";
+import { getCustomLpStorageEnv } from "@/lib/custom-lp/storage";
 import { bunnyFetch, BunnyApiError } from "@/lib/bunny/_fetch";
 
 export const dynamic = "force-dynamic";
@@ -122,7 +122,8 @@ async function proxyBunnyAsset(args: {
   relativePath: string;
   rangeHeader: string | null;
 }): Promise<Response> {
-  const env = getBunnyStorageEnv();
+  // Custom-LP-Zone, NICHT die PDF-Zone (siehe /cv/[slug]/route.ts).
+  const env = getCustomLpStorageEnv();
   const prefix = args.storagePath.replace(/\/+$/, "");
   const remote = `${prefix}/${args.relativePath}`.replace(/^\/+/, "");
   const url = `https://storage.bunnycdn.com/${env.zone}/${remote}`;
