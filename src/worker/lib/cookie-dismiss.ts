@@ -3,7 +3,7 @@
  *
  * Versucht, in der aktuellen Puppeteer-Page gängige Cookie-Consent-Banner
  * (OneTrust, Cookiebot, Usercentrics, generische DSGVO-Banner, etc.)
- * automatisch zu schliessen. Wird vor jedem Capture aufgerufen, damit
+ * automatisch zu schließen. Wird vor jedem Capture aufgerufen, damit
  * die Hero-Section sauber sichtbar ist und nicht von einem Modal verdeckt
  * wird.
  *
@@ -46,7 +46,7 @@ const TEXT_RE = /^(alle akzeptieren|akzeptieren|zustimmen|einverstanden|accept a
 
 /**
  * Versucht über `timeoutMs` Millisekunden (in 200ms-Intervallen) ein
- * Cookie-Banner zu finden und zu schliessen.
+ * Cookie-Banner zu finden und zu schließen.
  *
  * @returns `true` wenn ein Banner geklickt wurde, sonst `false`.
  */

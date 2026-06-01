@@ -4,10 +4,10 @@ export const runtime = "nodejs";
 /**
  * POST /api/admin/domains/:id/reset
  *
- * Setzt eine Domain auf den initialen 'pending'-State zurueck. Cleant zuerst
+ * Setzt eine Domain auf den initialen 'pending'-State zurück. Cleant zuerst
  * die Traefik-YAML (damit ein evtl. kaputtes Routing weg ist) und nullt dann
  * lastError / Cert-Felder. Der Verifier-Worker picked die Domain beim
- * naechsten Tick wieder auf und faehrt den Lifecycle frisch durch.
+ * nächsten Tick wieder auf und faehrt den Lifecycle frisch durch.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -31,7 +31,7 @@ export async function POST(
   }
 
   // Best-effort: Traefik-YAML entfernen — der Verifier schreibt sie beim
-  // naechsten erfolgreichen Tick neu. So sind wir sicher, dass kein
+  // nächsten erfolgreichen Tick neu. So sind wir sicher, dass kein
   // verwaister Cert/Router-Eintrag mehr lebt.
   try {
     await cleanupDeletedDomain(d.hostname);

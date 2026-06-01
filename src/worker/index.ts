@@ -212,7 +212,7 @@ async function main(): Promise<void> {
   }, 120_000);
   recoveryTimer.unref();
 
-  // Custom-Domain-Verifier: laeuft alle 30s, checkt pending/verifying/
+  // Custom-Domain-Verifier: läuft alle 30s, checkt pending/verifying/
   // issuing_cert Domains gegen DNS+TXT und schreibt Traefik-YAMLs nach
   // erfolgreicher Verifikation. Boot-Sync schreibt aktive Domains neu —
   // damit ein Container-Restart die Configs garantiert wiederherstellt.

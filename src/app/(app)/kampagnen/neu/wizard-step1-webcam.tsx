@@ -219,7 +219,7 @@ export function WizardStep1Webcam({
             <EmptyState
               icon={<Video />}
               title="Keine Webcam-Aufnahmen"
-              subtitle="Nimm jetzt deine erste Webcam-Aufnahme auf, um sie hier auswaehlen zu können."
+              subtitle="Nimm jetzt deine erste Webcam-Aufnahme auf, um sie hier auswählen zu können."
             />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">

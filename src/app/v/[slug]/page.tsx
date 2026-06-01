@@ -203,7 +203,7 @@ export default async function PublicLandingPage({
   const isPreview = await detectPreviewMode(searchParams);
 
   // Custom-Domain-Routing: die Middleware setzt `_host` wenn der Request
-  // ueber einen Kunden-Host kam. Dann muessen wir den Lead innerhalb der
+  // ueber einen Kunden-Host kam. Dann müssen wir den Lead innerhalb der
   // Domain aufloesen, NICHT global — sonst kann ein gleichnamiger Slug auf
   // einer anderen Custom-Domain (oder app.videocomet.de) falsch matchen.
   const hostParam = typeof sp?._host === "string" ? sp._host : null;

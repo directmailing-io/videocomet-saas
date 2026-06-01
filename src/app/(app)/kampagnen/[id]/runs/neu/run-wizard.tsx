@@ -107,7 +107,7 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
         form.set("url", sheetUrl.trim());
       } else {
         if (!file) {
-          setError("Bitte eine Datei auswaehlen.");
+          setError("Bitte eine Datei auswählen.");
           return false;
         }
         const lower = file.name.toLowerCase();
@@ -284,7 +284,7 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
                 >
                   <Globe className="size-5 text-brand-deep" />
                   <span className="text-sm font-semibold text-ink">Google Sheets</span>
-                  <span className="text-xs text-ink-muted">URL einfuegen (öffentlich)</span>
+                  <span className="text-xs text-ink-muted">URL einfügen (öffentlich)</span>
                 </button>
               </div>
             </div>

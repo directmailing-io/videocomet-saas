@@ -58,7 +58,7 @@ export const DialogContent = React.forwardRef<
       {showClose && (
         <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 text-ink-muted opacity-70 transition-opacity hover:opacity-100 hover:bg-line-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
           <X className="size-4" />
-          <span className="sr-only">Schliessen</span>
+          <span className="sr-only">Schließen</span>
         </DialogPrimitive.Close>
       )}
     </DialogPrimitive.Content>

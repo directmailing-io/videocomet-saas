@@ -99,7 +99,7 @@ export function ChartsRow({
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <Card>
         <CardHeader>
-          <CardTitle>Oeffnungs-Verteilung</CardTitle>
+          <CardTitle>Öffnungs-Verteilung</CardTitle>
         </CardHeader>
         <CardContent>
           <div style={{ width: "100%", height: 240 }}>

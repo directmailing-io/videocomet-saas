@@ -10,7 +10,7 @@ interface PageProps {
   searchParams?: { token?: string | string[] };
 }
 
-export default function PasswortZuruecksetzenPage({ searchParams }: PageProps) {
+export default function PasswortZurücksetzenPage({ searchParams }: PageProps) {
   const raw = searchParams?.token;
   const token = Array.isArray(raw) ? raw[0] : raw;
 

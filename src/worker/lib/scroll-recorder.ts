@@ -168,7 +168,7 @@ async function shootFrame(
  *
  * Algorithmus: für jeden Output-Frame i wird der Zeitpunkt
  *   t_frame = (i / fps) * 1000 (ms)
- * berechnet, anschliessend werden die zwei Sample-Punkte gesucht, die
+ * berechnet, anschließend werden die zwei Sample-Punkte gesucht, die
  * t_frame umklammern, und linear interpoliert.
  *
  * Sortiert die Samples nach `t` defensiv, falls der Client sie ungeordnet

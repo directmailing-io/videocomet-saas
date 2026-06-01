@@ -29,7 +29,7 @@ const FILTERS: FilterDef[] = [
   },
   {
     key: "opened",
-    label: "Landingpage geoeffnet",
+    label: "Landingpage geöffnet",
     hint: "Leads, die die personalisierte Seite mindestens einmal aufgerufen haben.",
     icon: Eye,
   },

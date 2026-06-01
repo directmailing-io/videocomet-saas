@@ -1,12 +1,12 @@
 /**
  * Domain-Verifier-Job.
  *
- * Laeuft im Worker-Prozess als simpler setInterval-Tick (kein BullMQ noetig —
+ * Läuft im Worker-Prozess als simpler setInterval-Tick (kein BullMQ nötig —
  * die Last ist trivial: 5-7 Domains, 30s-Intervall, DNS-Lookups mit Timeout).
  *
  * Loop-Logik pro Tick:
  *  1. Hole alle Domains in Status pending / verifying / issuing_cert
- *  2. Pro Domain: DNS + TXT pruefen
+ *  2. Pro Domain: DNS + TXT prüfen
  *  3. State-Maschine:
  *       pending      → verifying    (sofort beim ersten Tick)
  *       verifying    → issuing_cert (wenn DNS+TXT ok → Traefik-YAML schreiben)
@@ -15,12 +15,12 @@
  *  4. Log-Eintrag pro Check in domain_check_log
  *
  * Plus: Boot-Sync — sobald der Worker startet, schreiben wir Traefik-YAMLs
- * fuer alle aktiven Domains (idempotent), damit ein Container-Restart die
+ * für alle aktiven Domains (idempotent), damit ein Container-Restart die
  * Configs garantiert wiederherstellt.
  *
- * Cert-Status-Pruefung: vereinfacht — sobald die YAML 30s alt ist und die
+ * Cert-Status-Prüfung: vereinfacht — sobald die YAML 30s alt ist und die
  * Domain via HTTPS antwortet, gilt der Cert als ausgestellt. Praezisere
- * Health-Pruefung kommt im separaten cert-health-monitor-Job.
+ * Health-Prüfung kommt im separaten cert-health-monitor-Job.
  */
 
 import {
@@ -51,7 +51,7 @@ function log(level: "info" | "warn" | "error", msg: string, extra?: unknown): vo
 
 /**
  * Eine einzelne Domain durch ihren Lifecycle pushen. Returnt true wenn der
- * State sich geaendert hat (fuer Logging-Zwecke).
+ * State sich geändert hat (für Logging-Zwecke).
  */
 async function tickDomain(d: UserDomain): Promise<void> {
   const v = await verifyDomain(d.hostname, d.verifyToken);
@@ -84,7 +84,7 @@ async function tickDomain(d: UserDomain): Promise<void> {
     return;
   }
 
-  // DNS + TXT ok — naechster Schritt haengt vom aktuellen Status ab.
+  // DNS + TXT ok — nächster Schritt haengt vom aktuellen Status ab.
   if (d.status === "active") {
     // Re-Check eines aktiven — alles ok, nur lastCheckedAt updaten.
     await updateDomainStatus(d.id, { lastCheckedAt: now, lastError: null });
@@ -123,7 +123,7 @@ async function tickDomain(d: UserDomain): Promise<void> {
     return;
   }
 
-  // Noch kein Cert — Status bleibt issuing_cert; Re-Check beim naechsten Tick.
+  // Noch kein Cert — Status bleibt issuing_cert; Re-Check beim nächsten Tick.
   await updateDomainStatus(d.id, {
     status: "issuing_cert",
     verifiedAt: d.verifiedAt ?? now,
@@ -154,7 +154,7 @@ async function runVerifierTick(): Promise<void> {
 
 /**
  * Boot-Sync: alle aktiven Domains haben garantiert eine YAML auf der Disk.
- * Verwaiste YAMLs (Domain im DB geloescht) werden bereinigt.
+ * Verwaiste YAMLs (Domain im DB gelöscht) werden bereinigt.
  */
 async function bootSync(): Promise<void> {
   const active = await listActiveDomains();
@@ -171,7 +171,7 @@ async function bootSync(): Promise<void> {
 
 /**
  * Public: Starte den Verifier-Loop. Wird vom worker/index.ts beim Boot
- * aufgerufen. Returnt eine stop()-Funktion fuer Graceful-Shutdown.
+ * aufgerufen. Returnt eine stop()-Funktion für Graceful-Shutdown.
  */
 export function startDomainVerifier(): () => void {
   void bootSync();

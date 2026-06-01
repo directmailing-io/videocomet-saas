@@ -6,13 +6,13 @@
  * Layout:
  *   - Top: Name-Input, Theme-Picker (Preset-Dropdown), Save-Status
  *   - Linke Spalte: Block-Liste mit Add-Menü, Up/Down/Delete pro Block
- *   - Mittlere Spalte: Inspector fuer den aktiven Block (typ-spezifisches
+ *   - Mittlere Spalte: Inspector für den aktiven Block (typ-spezifisches
  *     Form oder JSON-Fallback) + Brand-Panel (Logo + Footer)
  *   - Rechte Spalte: Live-Preview via `LpPreview` (block-renderer mit
  *     Sample-Lead-Daten + Theme-Provider)
  *
  * Migration: lp-editor benutzt `useLpEditorState`, das auch alte v1-
- * Templates beim Mount via `migrateLegacyContent()` in v2 ueberfuehrt.
+ * Templates beim Mount via `migrateLegacyContent()` in v2 überführt.
  * Der "Diese Vorlage wurde migriert"-Banner kommt sobald das geschieht.
  */
 
@@ -134,7 +134,7 @@ export function LpEditor({ template }: { template: LpEditorTemplate }) {
             type="button"
             onClick={s.dismissMigrationBanner}
             className="text-ink-muted hover:text-ink shrink-0"
-            aria-label="Hinweis schliessen"
+            aria-label="Hinweis schließen"
           >
             <X className="size-4" />
           </button>

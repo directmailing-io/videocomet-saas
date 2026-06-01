@@ -202,7 +202,7 @@ export async function GET(
     filter === "all"
       ? "alle"
       : filter === "opened"
-        ? "geoeffnet"
+        ? "geöffnet"
         : filter === "played"
           ? "video"
           : "cta";

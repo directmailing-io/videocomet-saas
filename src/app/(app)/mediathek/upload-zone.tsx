@@ -330,7 +330,7 @@ export function UploadZone({ onClose }: UploadZoneProps) {
           size="sm"
           onClick={() => inputRef.current?.click()}
         >
-          Dateien auswaehlen
+          Dateien auswählen
         </Button>
       </div>
 
@@ -379,7 +379,7 @@ export function UploadZone({ onClose }: UploadZoneProps) {
       {onClose && (
         <div className="flex justify-end pt-2">
           <Button variant="ghost" onClick={onClose}>
-            Schliessen
+            Schließen
           </Button>
         </div>
       )}

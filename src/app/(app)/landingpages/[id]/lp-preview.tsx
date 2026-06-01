@@ -8,14 +8,14 @@ import type { BrandConfig, ThemeConfig } from "@/lib/landing-theme/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Live-Preview fuer den Block-Editor.
+ * Live-Preview für den Block-Editor.
  *
  * Rendert die aktuelle Block-Liste innerhalb des `<LandingThemeProvider>`
  * mit Sample-Lead-Daten. Klick auf einen Block macht ihn im Editor aktiv —
- * wir blenden dafuer einen 1px-Outline um den aktiven Block ein.
+ * wir blenden dafür einen 1px-Outline um den aktiven Block ein.
  *
  * Hinweis: das Hero-Block-Video-Slot bleibt hier leer — eine echte
- * Video-Wiedergabe wuerde Tracking/Lead-Lookup brauchen, was im Editor
+ * Video-Wiedergabe würde Tracking/Lead-Lookup brauchen, was im Editor
  * irrelevant ist. Stattdessen rendert die Hero-Komponente nur Headline +
  * Subheadline.
  */
@@ -43,7 +43,7 @@ export function LpPreview({
   activeBlockId,
   onSelectBlock,
 }: LpPreviewProps) {
-  // Footer-Sichtbarkeit im Editor: standardmaessig zeigen wenn brand.
+  // Footer-Sichtbarkeit im Editor: standardmäßig zeigen wenn brand.
   // showFooter explizit true ist — die Domain-Logik der Public-Page
   // brauchen wir hier nicht.
   const showFooter = brand.showFooter === true;

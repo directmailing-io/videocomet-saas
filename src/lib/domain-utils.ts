@@ -60,7 +60,7 @@ export function validateHostname(input: string): HostnameValidation {
 
   // Wildcard nicht erlaubt
   if (h.includes("*")) {
-    return { ok: false, error: "Wildcard-Domains werden nicht unterstuetzt." };
+    return { ok: false, error: "Wildcard-Domains werden nicht unterstützt." };
   }
 
   // IP-Adresse nicht erlaubt
@@ -102,7 +102,7 @@ export function generateVerifyToken(): string {
   // Bewusst kein crypto.randomBytes-Import damit die Datei auch in
   // Edge-Runtime tickt — wir nutzen Web-Crypto.
   const bytes = new Uint8Array(12);
-  // crypto ist in Node 18+ und in Edge global verfuegbar.
+  // crypto ist in Node 18+ und in Edge global verfügbar.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const c = (globalThis as any).crypto;
   if (c?.getRandomValues) {

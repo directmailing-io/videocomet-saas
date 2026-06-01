@@ -87,7 +87,7 @@ export async function runDocxModify(
   replacePlaceholders(zip, input.vars);
 
   // 4. QR-Marker swap. Dimensions-Fallback (400x400) faengt die Faelle ab,
-  //    in denen Google Docs das PNG beim Einfuegen re-encoded hat.
+  //    in denen Google Docs das PNG beim Einfügen re-encoded hat.
   let qrReplaced = false;
   if (input.qrPngPath) {
     const targetSha = await getQrMarkerSha();

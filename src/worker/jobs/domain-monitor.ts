@@ -1,5 +1,5 @@
 /**
- * Domain-Monitor: laeuft alle 1h und macht zwei Dinge:
+ * Domain-Monitor: läuft alle 1h und macht zwei Dinge:
  *
  *  1. **Health-Check pro aktiver Domain** — HTTPS-Request auf die Custom-
  *     Domain (Pfad: /api/healthz). Wenn nicht erreichbar oder Cert ungueltig,
@@ -8,11 +8,11 @@
  *
  *  2. **acme.json-Backup** — taeglich (nicht stuendlich) eine Kopie nach
  *     /opt/videocomet/backups/acme/ mit 30 Tage Retention. Sehr klein
- *     (KB-bereich), aber kritisch: ohne Backup koennen wir nach einem
+ *     (KB-bereich), aber kritisch: ohne Backup können wir nach einem
  *     Cert-Storage-Verlust nicht innerhalb der Let's-Encrypt-Rate-Limits
  *     wiederherstellen.
  *
- * Beide Operationen sind Best-Effort — sie duerfen den Worker nie crashen.
+ * Beide Operationen sind Best-Effort — sie dürfen den Worker nie crashen.
  */
 
 import { promises as fs } from "node:fs";
@@ -77,7 +77,7 @@ async function runHealthChecks(): Promise<void> {
     // HEALTH_FAIL_THRESHOLD_HOURS keinen erfolgreichen Check mehr hatte,
     // markieren wir sie als failed. Vereinfachte Logik: wir nutzen
     // `lastCheckedAt` als Proxy — wenn der letzte erfolgreiche Check
-    // >= Threshold zurueckliegt, ziehen wir die Notbremse.
+    // >= Threshold zurückliegt, ziehen wir die Notbremse.
     const ageMs = d.lastCheckedAt ? Date.now() - d.lastCheckedAt.getTime() : 0;
     const ageHours = ageMs / 3_600_000;
     if (ageHours >= HEALTH_FAIL_THRESHOLD_HOURS) {
@@ -100,7 +100,7 @@ async function runHealthChecks(): Promise<void> {
 
 function getAcmePath(): string {
   // Default-Pfad wenn der Coolify-Proxy-Mount /traefik-dynamic ist, liegt
-  // acme.json eine Ebene drueber.
+  // acme.json eine Ebene drüber.
   return process.env.TRAEFIK_ACME_PATH ?? "/traefik-dynamic/../acme.json";
 }
 
@@ -167,7 +167,7 @@ async function tick(): Promise<void> {
 
 export function startDomainMonitor(): () => void {
   // Beim Boot: kein sofortiger Tick — der Verifier hat seine eigene Boot-
-  // Sequenz, wir wollen ihn nicht ueberholen. Nach 5 min ersten Tick.
+  // Sequenz, wir wollen ihn nicht überholen. Nach 5 min ersten Tick.
   const t = setTimeout(() => {
     void tick();
   }, 5 * 60 * 1000);

@@ -140,7 +140,7 @@ export function SegmentEditorVideo({
                       : "border-line hover:border-brand-300",
                   )}
                   aria-pressed={selected}
-                  aria-label={`Video ${item.name} auswaehlen`}
+                  aria-label={`Video ${item.name} auswählen`}
                 >
                   <div className="flex size-full flex-col items-center justify-center gap-1 px-2 text-center">
                     <VideoIcon className="size-6 text-ink-muted" />

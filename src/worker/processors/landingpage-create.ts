@@ -40,7 +40,7 @@ export interface LandingPageOutput {
 }
 
 /**
- * Slug-Verfuegbarkeits-Check, korrekt scoped:
+ * Slug-Verfügbarkeits-Check, korrekt scoped:
  *   - Custom-Domain: unique innerhalb dieser domain_id (partial unique-Index)
  *   - Default:       unique innerhalb (domain_id IS NULL) — Backward-Compat
  * Schliesst den eigenen Lead aus, damit ein Retry idempotent ist.

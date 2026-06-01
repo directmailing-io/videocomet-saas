@@ -1,7 +1,7 @@
 /**
- * DNS-Verifikation fuer Custom-Domains.
+ * DNS-Verifikation für Custom-Domains.
  *
- * Prueft zwei Dinge:
+ * Prüft zwei Dinge:
  *  1. Der Hostname resolvt auf unseren Server. Akzeptiert wird:
  *     - direkter A-Record auf SERVER_IP
  *     - CNAME-Kette die letztlich auf cname.videocomet.de oder SERVER_IP fuehrt
@@ -24,7 +24,7 @@ const DEFAULT_CNAME_TARGET = "cname.videocomet.de";
  * jedem Verifier-Tick frische Antworten von authoritative.
  *
  * 1.1.1.1 (Cloudflare) und 8.8.8.8 (Google) als Fallback. Beide haben
- * niedrige Cache-TTLs fuer kleine Records und respektieren NS-TTL.
+ * niedrige Cache-TTLs für kleine Records und respektieren NS-TTL.
  */
 const PUBLIC_DNS_SERVERS = ["1.1.1.1", "8.8.8.8"] as const;
 
@@ -60,7 +60,7 @@ export interface DnsCheck {
 }
 
 /**
- * Versucht den Hostname zu resolven und prueft, ob er auf uns zeigt.
+ * Versucht den Hostname zu resolven und prüft, ob er auf uns zeigt.
  * Akzeptiert sowohl direkten A-Record als auch CNAME-Kette die letztlich
  * auf cname.videocomet.de fuehrt.
  */
@@ -117,8 +117,8 @@ export interface TxtCheck {
 }
 
 /**
- * Prueft den `_videocomet.<hostname>` TXT-Record auf den vc-verify-Token.
- * TXT-Werte koennen quotedstring sein und in Chunks (255 chars) aufgeteilt —
+ * Prüft den `_videocomet.<hostname>` TXT-Record auf den vc-verify-Token.
+ * TXT-Werte können quotedstring sein und in Chunks (255 chars) aufgeteilt —
  * dns.resolveTxt liefert ein 2D-Array (records[chunks[]]), wir flatten.
  */
 export async function checkTxt(hostname: string, expectedToken: string): Promise<TxtCheck> {
@@ -136,7 +136,7 @@ export async function checkTxt(hostname: string, expectedToken: string): Promise
     }
     return {
       ok: false,
-      message: `TXT vorhanden (${flat.length} Eintraege), aber kein vc-verify=<token> mit unserem Token.`,
+      message: `TXT vorhanden (${flat.length} Einträge), aber kein vc-verify=<token> mit unserem Token.`,
     };
   } catch (err) {
     const code = (err as NodeJS.ErrnoException)?.code;

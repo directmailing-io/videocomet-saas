@@ -289,8 +289,8 @@ export function LiveTable({
           title: toastTitle,
           description: "Die Worker arbeiten die Leads jetzt erneut ab.",
         });
-        // Run-Status springt zurueck auf 'generating' — SSE Stream kickt sich
-        // beim naechsten Render-Pass von alleine neu an.
+        // Run-Status springt zurück auf 'generating' — SSE Stream kickt sich
+        // beim nächsten Render-Pass von alleine neu an.
         setRunStatus("generating");
         router.refresh();
       } catch (err) {
@@ -871,8 +871,8 @@ export function LiveTable({
                         className="inline-flex items-center gap-1 text-brand-deep hover:underline text-xs"
                         title={
                           l.customHostname
-                            ? `Auf ${l.customHostname} im Vorschau-Modus oeffnen`
-                            : "Im Vorschau-Modus oeffnen (kein Tracking)"
+                            ? `Auf ${l.customHostname} im Vorschau-Modus öffnen`
+                            : "Im Vorschau-Modus öffnen (kein Tracking)"
                         }
                       >
                         <ExternalLink className="size-3.5" />

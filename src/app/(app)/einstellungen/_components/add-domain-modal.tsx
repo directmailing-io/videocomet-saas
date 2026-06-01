@@ -10,7 +10,7 @@
  *             Live-Polling alle 10s auf GET /api/domains/:id bis Status = active
  *             oder failed.
  *
- * Wird sowohl fuer "neu hinzufuegen" als auch fuer "Anweisungen anzeigen" einer
+ * Wird sowohl für "neu hinzufügen" als auch für "Anweisungen anzeigen" einer
  * existierenden Domain wiederverwendet (Prop `existingDomain`).
  */
 
@@ -50,7 +50,7 @@ export interface AddDomainModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /**
-   * Wenn gesetzt: Modal wird im "Instruktionen"-Modus geoeffnet, fuer eine
+   * Wenn gesetzt: Modal wird im "Instruktionen"-Modus geöffnet, für eine
    * bereits angelegte Domain. Sonst Eingabe-Modus.
    */
   existingDomain?: DomainListItem | null;
@@ -91,7 +91,7 @@ export function AddDomainModal({
     existingDomain ?? null,
   );
 
-  // Beim Oeffnen mit `existingDomain` setzen, beim Schliessen zurueck.
+  // Beim Öffnen mit `existingDomain` setzen, beim Schließen zurück.
   React.useEffect(() => {
     if (!open) {
       // Reset nach Animation
@@ -137,7 +137,7 @@ export function AddDomainModal({
               : (body.error ?? "Domain konnte nicht angelegt werden.");
         setCreateError(msg);
         toast({
-          title: "Hinzufuegen fehlgeschlagen",
+          title: "Hinzufügen fehlgeschlagen",
           description: msg,
           variant: "danger",
         });
@@ -147,14 +147,14 @@ export function AddDomainModal({
       onDomainChanged();
       toast({
         title: "Domain angelegt",
-        description: "Bitte richten Sie nun die DNS-Eintraege ein.",
+        description: "Bitte richten Sie nun die DNS-Einträge ein.",
         variant: "success",
       });
     } catch {
       const msg = "Verbindung zum Server fehlgeschlagen.";
       setCreateError(msg);
       toast({
-        title: "Hinzufuegen fehlgeschlagen",
+        title: "Hinzufügen fehlgeschlagen",
         description: msg,
         variant: "danger",
       });
@@ -179,7 +179,7 @@ export function AddDomainModal({
           if (!res.ok) return;
           const body = (await res.json()) as FetchResponse;
           if (cancelled || !body.domain) return;
-          // GET /api/domains/:id liefert kein dnsInstructions zurueck — wir
+          // GET /api/domains/:id liefert kein dnsInstructions zurück — wir
           // mergen daher mit dem bisherigen domain-Objekt um Instruktionen zu
           // behalten.
           setDomain((prev) =>
@@ -197,7 +197,7 @@ export function AddDomainModal({
           // Eltern-Liste live aktualisieren
           onDomainChanged();
         } catch {
-          // Stille — naechster Tick versucht es wieder
+          // Stille — nächster Tick versucht es wieder
         }
       })();
     }, POLL_INTERVAL_MS);
@@ -216,7 +216,7 @@ export function AddDomainModal({
       const body = (await res.json().catch(() => ({}))) as FetchResponse;
       if (!res.ok || !body.domain) {
         toast({
-          title: "Pruefung fehlgeschlagen",
+          title: "Prüfung fehlgeschlagen",
           description: body.error ?? "Bitte erneut versuchen.",
           variant: "danger",
         });
@@ -243,16 +243,16 @@ export function AddDomainModal({
           ? "Domain ist aktiv"
           : isFail
             ? "Konfiguration fehlgeschlagen"
-            : "DNS-Pruefung abgeschlossen",
+            : "DNS-Prüfung abgeschlossen",
         description: isReady
-          ? "Sie koennen die Domain ab sofort fuer Kampagnen auswaehlen."
+          ? "Sie können die Domain ab sofort für Kampagnen auswählen."
           : body.domain.lastError ??
             `Status: ${statusLabel(newStatus)} — Diagnose siehe Modal.`,
         variant: isReady ? "success" : isFail ? "danger" : "default",
       });
     } catch {
       toast({
-        title: "Pruefung fehlgeschlagen",
+        title: "Prüfung fehlgeschlagen",
         description: "Verbindung zum Server fehlgeschlagen.",
         variant: "danger",
       });
@@ -270,12 +270,12 @@ export function AddDomainModal({
       <DialogContent size="lg" className="gap-5">
         <DialogHeader>
           <DialogTitle>
-            {domain ? "DNS-Eintraege einrichten" : "Custom-Domain hinzufuegen"}
+            {domain ? "DNS-Einträge einrichten" : "Custom-Domain hinzufügen"}
           </DialogTitle>
           <DialogDescription>
             {domain
-              ? "Hinterlegen Sie folgende Eintraege bei Ihrem DNS-Provider. Wir pruefen die Eintraege automatisch."
-              : "Verbinden Sie eine eigene (Sub-)Domain. Apex (z.B. ihr-name.de) und Subdomain (z.B. video.ihr-name.de) werden unterstuetzt."}
+              ? "Hinterlegen Sie folgende Einträge bei Ihrem DNS-Provider. Wir prüfen die Einträge automatisch."
+              : "Verbinden Sie eine eigene (Sub-)Domain. Apex (z.B. ihr-name.de) und Subdomain (z.B. video.ihr-name.de) werden unterstützt."}
           </DialogDescription>
         </DialogHeader>
 
@@ -398,8 +398,8 @@ function DnsInstructions({
           <div className="flex-1 min-w-0">
             <p className="font-semibold">Wartet auf DNS-Konfiguration</p>
             <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
-              Wir pruefen alle 10 Sekunden automatisch. Die DNS-Aenderungen
-              koennen je nach Provider 5 Minuten bis 24 Stunden brauchen.
+              Wir prüfen alle 10 Sekunden automatisch. Die DNS-Änderungen
+              können je nach Provider 5 Minuten bis 24 Stunden brauchen.
             </p>
             {domain.lastError && (
               <div className="mt-2 rounded-md border border-warn/40 bg-surface px-2.5 py-1.5">
@@ -422,7 +422,7 @@ function DnsInstructions({
           <div className="flex-1 min-w-0">
             <p className="font-semibold">Domain ist aktiv</p>
             <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
-              Sie koennen die Domain ab sofort fuer Kampagnen auswaehlen.
+              Sie können die Domain ab sofort für Kampagnen auswählen.
             </p>
             <a
               href={`https://${domain.hostname}`}
@@ -431,7 +431,7 @@ function DnsInstructions({
               className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-deep hover:underline"
             >
               <ExternalLink className="size-3.5" />
-              Test oeffnen
+              Test öffnen
             </a>
           </div>
         </div>
@@ -448,8 +448,8 @@ function DnsInstructions({
               </p>
             )}
             <p className="text-xs text-ink-muted mt-1 leading-relaxed">
-              Pruefen Sie die DNS-Eintraege unten und klicken Sie auf
-              &ldquo;Erneut pruefen&rdquo;.
+              Prüfen Sie die DNS-Einträge unten und klicken Sie auf
+              &ldquo;Erneut prüfen&rdquo;.
             </p>
           </div>
         </div>
@@ -458,7 +458,7 @@ function DnsInstructions({
       {dns && (
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
-            DNS-Eintraege
+            DNS-Einträge
           </p>
           <DnsRecord
             label={dns.pointing.type === "CNAME" ? "Pointing (CNAME)" : "Pointing (A)"}
@@ -470,7 +470,7 @@ function DnsInstructions({
 
       <DialogFooter>
         <Button variant="ghost" onClick={onClose}>
-          Schliessen
+          Schließen
         </Button>
         {!isActive && (
           <Button
@@ -478,7 +478,7 @@ function DnsInstructions({
             onClick={onManualCheck}
             iconLeft={<RefreshCw className="size-4" />}
           >
-            Jetzt pruefen
+            Jetzt prüfen
           </Button>
         )}
       </DialogFooter>
@@ -493,10 +493,10 @@ interface DnsRecordRow {
 }
 
 /**
- * Uebersetzt die generische DNS-Fehlermeldung in eine konkrete Handlungs-
+ * Übersetzt die generische DNS-Fehlermeldung in eine konkrete Handlungs-
  * empfehlung. Triggert anhand von Schluesselwoertern in der Diagnose.
  *
- * Hintergrund: Die haeufigsten Konfigurationsfehler beim ersten Setup sind
+ * Hintergrund: Die häufigsten Konfigurationsfehler beim ersten Setup sind
  *   - TXT-Record-Name in den Wert kopiert (statt vc-verify=<token>)
  *   - CNAME zeigt auf alte oder fremde Host-IP
  *   - TXT/CNAME noch nicht propagiert (TTL)
@@ -508,7 +508,7 @@ function DiagnosisHint({ message }: { message: string }): React.JSX.Element | nu
 
   if (m.includes("txt") && (m.includes("kein vc-verify") || m.includes("vc-verify"))) {
     hint =
-      "Ihr TXT-Record existiert, aber der WERT ist falsch. Pruefen Sie, ob Sie versehentlich den Namen ins Wert-Feld kopiert haben — der Wert muss mit \"vc-verify=\" beginnen.";
+      "Ihr TXT-Record existiert, aber der WERT ist falsch. Prüfen Sie, ob Sie versehentlich den Namen ins Wert-Feld kopiert haben — der Wert muss mit \"vc-verify=\" beginnen.";
   } else if (m.includes("kein txt") || m.includes("txt-record fehlt") || m.includes("kein txt-record")) {
     hint =
       "Bitte den TXT-Record beim DNS-Provider eintragen (Name beginnt mit _videocomet). Bei manchen Providern muss der Name OHNE die Top-Domain eingetragen werden.";
@@ -517,10 +517,10 @@ function DiagnosisHint({ message }: { message: string }): React.JSX.Element | nu
       "Der DNS-Record zeigt auf eine fremde IP. Bitte den Wert auf cname.videocomet.de (CNAME) bzw. 178.105.208.68 (A) setzen.";
   } else if (m.includes("nxdomain") || m.includes("dns-record fehlt")) {
     hint =
-      "Es gibt noch keinen DNS-Eintrag fuer diesen Hostname. Bitte den CNAME (oder A-Record bei Root-Domain) beim DNS-Provider anlegen.";
+      "Es gibt noch keinen DNS-Eintrag für diesen Hostname. Bitte den CNAME (oder A-Record bei Root-Domain) beim DNS-Provider anlegen.";
   } else if (m.includes("timeout")) {
     hint =
-      "Der DNS-Server hat innerhalb 3 Sekunden nicht geantwortet. Bitte in 1-2 Minuten erneut pruefen.";
+      "Der DNS-Server hat innerhalb 3 Sekunden nicht geantwortet. Bitte in 1-2 Minuten erneut prüfen.";
   }
 
   if (!hint) return null;

@@ -662,7 +662,7 @@ export async function pipelineProcessor(
     });
 
     // Run-Finalizer: wenn dies der letzte ausstehende Lead war, Run als
-    // completed markieren. Idempotent — mehrere Lead-Jobs koennen den Check
+    // completed markieren. Idempotent — mehrere Lead-Jobs können den Check
     // gleichzeitig anstossen, nur der erste UPDATE faengt.
     await finalizeRunIfAllLeadsDone(data.runId)
       .then((res) => writeRunCompletionEventIfFinalized(data.runId, res))

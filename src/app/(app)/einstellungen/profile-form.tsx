@@ -50,7 +50,7 @@ export function ProfileForm({ initialValues }: ProfileFormProps) {
         const data = await res.json().catch(() => ({}));
         setMessage(data?.error ?? "Speichern fehlgeschlagen.");
       } else {
-        setMessage("Aenderungen gespeichert.");
+        setMessage("Änderungen gespeichert.");
       }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Fehler beim Speichern.");

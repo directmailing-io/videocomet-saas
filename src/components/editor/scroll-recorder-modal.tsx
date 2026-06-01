@@ -757,7 +757,7 @@ function Controls({
     return (
       <div className="flex justify-end">
         <Button variant="ghost" onClick={onCancel}>
-          Schliessen
+          Schließen
         </Button>
       </div>
     );

@@ -44,7 +44,7 @@ export function SegmentEditorImage({
         {imageItems.length === 0 ? (
           <div className="rounded-squircle-sm border border-dashed border-line p-6 text-center text-sm text-ink-muted">
             <ImageIcon className="mx-auto mb-2 size-6 opacity-50" />
-            Noch keine Bilder hochgeladen. Bilder können in der Mediathek hinzugefuegt werden.
+            Noch keine Bilder hochgeladen. Bilder können in der Mediathek hinzugefügt werden.
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
@@ -62,7 +62,7 @@ export function SegmentEditorImage({
                       : "border-line hover:border-brand-300",
                   )}
                   aria-pressed={selected}
-                  aria-label={`Bild ${item.name} auswaehlen`}
+                  aria-label={`Bild ${item.name} auswählen`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img

@@ -34,7 +34,7 @@ export async function GET(
   }
   if (!row.pdfUrl) {
     return NextResponse.json(
-      { error: "PDF noch nicht verfuegbar." },
+      { error: "PDF noch nicht verfügbar." },
       { status: 404 },
     );
   }

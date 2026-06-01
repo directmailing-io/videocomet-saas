@@ -124,7 +124,7 @@ async function buildBundle(
     return NextResponse.json(
       {
         error:
-          "Keine PDFs verfuegbar. Vergewissere dich, dass die Runde fertig ist.",
+          "Keine PDFs verfügbar. Vergewissere dich, dass die Runde fertig ist.",
       },
       { status: 404 },
     );

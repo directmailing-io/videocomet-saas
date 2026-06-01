@@ -100,7 +100,7 @@ export function SegmentEditorText({ segment, onChange }: SegmentEditorTextProps)
 
       <div>
         <Label>
-          Schriftgroesse: <span className="text-ink font-mono normal-case">{segment.fontSize}px</span>
+          Schriftgröße: <span className="text-ink font-mono normal-case">{segment.fontSize}px</span>
         </Label>
         <input
           type="range"

@@ -72,7 +72,7 @@ function domainStatusBadge(status: string): {
     case "active":
       return { label: "Aktiv", variant: "success" };
     case "verifying":
-      return { label: "DNS-Pruefung", variant: "warn" };
+      return { label: "DNS-Prüfung", variant: "warn" };
     case "issuing_cert":
       return { label: "SSL wird ausgestellt", variant: "warn" };
     case "pending":
@@ -128,10 +128,10 @@ export function WizardStep4Landingpage({
       {/* ── 1. Domain-Auswahl ─────────────────────────────────────────────── */}
       <section>
         <h2 className="text-lg font-semibold text-ink mb-1">
-          Domain fuer die Landingpages
+          Domain für die Landingpages
         </h2>
         <p className="text-sm text-ink-muted mb-4">
-          Waehlen Sie aus, unter welcher Domain die personalisierten
+          Wählen Sie aus, unter welcher Domain die personalisierten
           Landingpages dieser Kampagne ausgeliefert werden.
         </p>
 
@@ -160,7 +160,7 @@ export function WizardStep4Landingpage({
                 description={
                   isActive
                     ? "Bereit zur Auslieferung."
-                    : "Noch nicht aktiv — Konfiguration in den Einstellungen abschliessen."
+                    : "Noch nicht aktiv — Konfiguration in den Einstellungen abschließen."
                 }
                 badge={badge}
                 selectable={isActive}
@@ -174,11 +174,11 @@ export function WizardStep4Landingpage({
 
         {availableDomains.length === 0 && (
           <div className="mt-3 text-xs text-ink-muted">
-            Sie haben noch keine Custom-Domain verbunden. Sie koennen unter{" "}
+            Sie haben noch keine Custom-Domain verbunden. Sie können unter{" "}
             <span className="font-semibold text-ink">
               Einstellungen → Domains
             </span>{" "}
-            eine eigene Domain hinzufuegen.
+            eine eigene Domain hinzufügen.
           </div>
         )}
       </section>
@@ -208,7 +208,7 @@ export function WizardStep4Landingpage({
                 spellCheck={false}
               />
               <p className="mt-1.5 text-xs text-ink-muted">
-                Leer lassen fuer den Standard{" "}
+                Leer lassen für den Standard{" "}
                 <code className="font-mono">{DEFAULT_SLUG_TEMPLATE}</code>.
               </p>
             </div>
@@ -272,7 +272,7 @@ export function WizardStep4Landingpage({
               <p className="leading-relaxed">
                 Bei Namens-Kollision wird ein 4-stelliger Hex-Suffix angehaengt
                 (z.B. <span className="font-mono">peter-mueller-a3f7</span>).
-                Leere Felder werden uebersprungen.
+                Leere Felder werden übersprungen.
               </p>
             </div>
           </CardContent>
@@ -282,10 +282,10 @@ export function WizardStep4Landingpage({
       {/* ── 3. Landingpage-Vorlage ────────────────────────────────────────── */}
       <section>
         <h2 className="text-lg font-semibold text-ink mb-1">
-          Landingpage-Vorlage waehlen
+          Landingpage-Vorlage wählen
         </h2>
         <p className="text-sm text-ink-muted mb-4">
-          Diese Vorlage wird als personalisierte Landingpage fuer jeden Lead
+          Diese Vorlage wird als personalisierte Landingpage für jeden Lead
           verwendet.
         </p>
 
@@ -293,7 +293,7 @@ export function WizardStep4Landingpage({
           <EmptyState
             icon={<LayoutTemplate />}
             title="Noch keine Vorlagen"
-            subtitle="Legen Sie im Bereich Landingpages eine Vorlage an, bevor Sie sie hier auswaehlen koennen."
+            subtitle="Legen Sie im Bereich Landingpages eine Vorlage an, bevor Sie sie hier auswählen können."
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

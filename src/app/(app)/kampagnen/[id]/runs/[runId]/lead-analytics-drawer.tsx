@@ -176,8 +176,8 @@ export function LeadAnalyticsDrawer({
                   className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold text-ink-muted hover:border-ink-muted hover:text-ink transition-colors"
                   title={
                     lead.customHostname
-                      ? `Auf ${lead.customHostname} im Vorschau-Modus oeffnen`
-                      : "Landingpage im Vorschau-Modus oeffnen (kein Tracking)"
+                      ? `Auf ${lead.customHostname} im Vorschau-Modus öffnen`
+                      : "Landingpage im Vorschau-Modus öffnen (kein Tracking)"
                   }
                 >
                   <ExternalLink className="size-3" />
@@ -186,7 +186,7 @@ export function LeadAnalyticsDrawer({
               )}
               <DialogPrimitive.Close
                 className="rounded-full p-1.5 text-ink-muted opacity-70 transition-opacity hover:bg-line-soft hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                aria-label="Schliessen"
+                aria-label="Schließen"
               >
                 <X className="size-4" />
               </DialogPrimitive.Close>
@@ -447,7 +447,7 @@ function deriveMarkers(points: VideoPoint[]): EventMarker[] {
           atSec: p.atSec,
           ts: p.ts,
           kind: "seekback",
-          label: `Zurueckgespult auf ${formatWatchTime(p.atSec)}`,
+          label: `Zurückgespult auf ${formatWatchTime(p.atSec)}`,
         });
       }
       // Pause: wall-clock advanced but video didn't (within tolerance)
@@ -563,8 +563,8 @@ function EngagementStory({
       insights.push({
         label:
           ctaPlacements.length === 1
-            ? `CTA waehrend Video bei ${formatWatchTime(Math.round(ctaPlacements[0].atSec!))}`
-            : `${ctaPlacements.length} CTA-Klicks waehrend Video`,
+            ? `CTA während Video bei ${formatWatchTime(Math.round(ctaPlacements[0].atSec!))}`
+            : `${ctaPlacements.length} CTA-Klicks während Video`,
         tone: "good",
       });
     } else if (inVideo === 0) {
@@ -574,7 +574,7 @@ function EngagementStory({
       });
     } else {
       insights.push({
-        label: `${ctaPlacements.length} CTA-Klicks (${inVideo} waehrend, ${ctaPlacements.length - inVideo} danach)`,
+        label: `${ctaPlacements.length} CTA-Klicks (${inVideo} während, ${ctaPlacements.length - inVideo} danach)`,
         tone: "good",
       });
     }

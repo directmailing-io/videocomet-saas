@@ -6,7 +6,7 @@ export const runtime = "nodejs";
  *
  *  GET /api/admin/domains → { domains, stats }
  *
- *  Liefert alle Domains aller Tenants sowie aggregierte Status-Zaehler fuer
+ *  Liefert alle Domains aller Tenants sowie aggregierte Status-Zaehler für
  *  die Admin-Stat-Cards (Aktiv, In-Verifikation, Fehler >1h, Cert <14d).
  */
 

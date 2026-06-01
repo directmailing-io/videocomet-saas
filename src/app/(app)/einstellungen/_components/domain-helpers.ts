@@ -1,5 +1,5 @@
 /**
- * Gemeinsame Typen + UI-Helper fuer die Custom-Domain-Komponenten.
+ * Gemeinsame Typen + UI-Helper für die Custom-Domain-Komponenten.
  *
  * Status-Lebenszyklus laut Worker:
  *   pending → verifying → issuing_cert → active   (Happy-Path)
@@ -39,13 +39,13 @@ export interface DomainListItem {
   dnsInstructions?: DnsInstructions;
 }
 
-/** Deutsch-Label fuer Status — wird im Badge und in Toasts genutzt. */
+/** Deutsch-Label für Status — wird im Badge und in Toasts genutzt. */
 export function statusLabel(status: DomainStatus): string {
   switch (status) {
     case "pending":
       return "Wartet";
     case "verifying":
-      return "DNS-Pruefung";
+      return "DNS-Prüfung";
     case "issuing_cert":
       return "SSL wird ausgestellt";
     case "active":
@@ -79,7 +79,7 @@ export function statusBadgeVariant(
   }
 }
 
-/** Kurz-Format fuer "Letzte Pruefung" / "SSL gueltig bis" Spalten. */
+/** Kurz-Format für "Letzte Prüfung" / "SSL gueltig bis" Spalten. */
 export function formatRelativeOrDate(
   iso: string | null,
   fallback = "—",

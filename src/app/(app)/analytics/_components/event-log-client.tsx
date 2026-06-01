@@ -412,7 +412,7 @@ export function EventLogClient({
             </div>
           ) : events.length === 0 ? (
             <div className="px-6 py-10 text-center text-sm text-ink-muted">
-              Keine Events fuer die aktuellen Filter.
+              Keine Events für die aktuellen Filter.
             </div>
           ) : (
             <Table>
@@ -485,7 +485,7 @@ export function EventLogClient({
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               iconLeft={<ChevronLeft className="size-4" />}
             >
-              Zurueck
+              Zurück
             </Button>
             <span className="text-xs text-ink-muted tabular-nums">
               Seite {page + 1} / {totalPages}

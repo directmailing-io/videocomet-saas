@@ -70,7 +70,7 @@ export default async function CampaignAnalyticsPage({
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-brand-deep"
           >
             <ArrowLeft className="size-3.5" />
-            Zurueck zur Uebersicht
+            Zurück zur Übersicht
           </Link>
         }
         title={campaign.name}
@@ -113,7 +113,7 @@ export default async function CampaignAnalyticsPage({
       {/* Time-series */}
       <Card className="mb-8">
         <CardHeader>
-          <CardTitle>Events ueber Zeit</CardTitle>
+          <CardTitle>Events über Zeit</CardTitle>
           <p className="text-sm text-ink-muted">
             Letzte 30 Tage · Aufrufe, Plays und CTA-Klicks.
           </p>
@@ -207,7 +207,7 @@ export default async function CampaignAnalyticsPage({
                         href={`/kampagnen/${campaign.id}/runs/${r.id}`}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-brand-deep hover:underline whitespace-nowrap"
                       >
-                        Oeffnen
+                        Öffnen
                         <ArrowRight className="size-3.5" />
                       </Link>
                     </TableCell>

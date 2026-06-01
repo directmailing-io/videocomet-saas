@@ -341,7 +341,7 @@ export function AdminDomainList({ initialDomains }: Props): JSX.Element {
                         <TooltipContent>
                           {d.lastCheckedAt
                             ? formatDateTime(d.lastCheckedAt)
-                            : "Noch nie gepruefte"}
+                            : "Noch nie geprüfte"}
                         </TooltipContent>
                       </Tooltip>
                     </TableCell>

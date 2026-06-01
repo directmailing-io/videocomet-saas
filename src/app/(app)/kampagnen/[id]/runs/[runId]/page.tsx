@@ -33,7 +33,7 @@ export default async function RunDetailPage({
   ]);
 
   // Custom-Domain-Hostname holen (alle Leads in einer Runde erben dieselbe
-  // Domain ueber die Kampagne — wir machen einen Lookup statt eines JOINs).
+  // Domain über die Kampagne — wir machen einen Lookup statt eines JOINs).
   // Bei nicht-aktiver Domain (verifying/failed/etc.) lassen wir das Feld
   // null, damit das UI auf die Default-app.videocomet.de-URL faellt.
   let customHostname: string | null = null;

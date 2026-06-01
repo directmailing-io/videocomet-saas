@@ -744,7 +744,7 @@ function domainBadge(status: string): {
     case "active":
       return { label: "Aktiv", variant: "success" };
     case "verifying":
-      return { label: "DNS-Pruefung", variant: "warn" };
+      return { label: "DNS-Prüfung", variant: "warn" };
     case "issuing_cert":
       return { label: "SSL wird ausgestellt", variant: "warn" };
     case "failed":
@@ -767,7 +767,7 @@ function DomainSelect({
   return (
     <div className="space-y-3">
       <p className="text-sm text-ink-muted">
-        Waehlen Sie eine Custom-Domain oder behalten Sie die VIDEOCOMET-Standard-URL.
+        Wählen Sie eine Custom-Domain oder behalten Sie die VIDEOCOMET-Standard-URL.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <DomainOptionButton
@@ -800,11 +800,11 @@ function DomainSelect({
       </div>
       {domains.length === 0 && (
         <p className="text-xs text-ink-muted">
-          Noch keine Custom-Domain. Sie koennen unter{" "}
+          Noch keine Custom-Domain. Sie können unter{" "}
           <span className="font-semibold text-ink">
             Einstellungen → Domains
           </span>{" "}
-          eine eigene Domain hinzufuegen.
+          eine eigene Domain hinzufügen.
         </p>
       )}
     </div>
@@ -926,7 +926,7 @@ function SlugTemplateField({
           }}
         />
         <p className="mt-1.5 text-xs text-ink-muted">
-          Leer lassen fuer den Standard{" "}
+          Leer lassen für den Standard{" "}
           <code className="font-mono">{DEFAULT_SLUG_TEMPLATE}</code>.
         </p>
       </div>

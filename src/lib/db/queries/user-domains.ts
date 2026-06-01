@@ -1,13 +1,13 @@
 /**
- * CRUD-Queries fuer Custom-Domains.
+ * CRUD-Queries für Custom-Domains.
  *
  * Wichtige Invarianten:
  *  - Hostnames sind case-insensitive eindeutig (Migration enforced via
  *    LOWER(hostname) UNIQUE-Index). Wir vergleichen IMMER lowercase.
  *  - Maximal 3 Domains pro User (Soft-Cap, hier durchgesetzt).
- *  - Loeschen einer Domain mit aktiven Kampagnen ist erlaubt (Variante B),
+ *  - Löschen einer Domain mit aktiven Kampagnen ist erlaubt (Variante B),
  *    aber der Caller soll vorher die Anzahl der betroffenen Leads/Kampagnen
- *    holen und dem User zur Bestaetigung zeigen.
+ *    holen und dem User zur Bestätigung zeigen.
  */
 
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -74,7 +74,7 @@ export interface CreateDomainOk {
 }
 
 /**
- * Legt eine neue Domain fuer einen User an. Validiert Hostname-Form, prueft
+ * Legt eine neue Domain für einen User an. Validiert Hostname-Form, prüft
  * den globalen Hostname-Unique-Index und das Per-User-Limit.
  */
 export async function createUserDomain(
@@ -156,7 +156,7 @@ export async function getDomainByIdAdmin(
   return row ? rowToDomain(row) : null;
 }
 
-/** Lookup per Hostname (case-insensitive). Vom Middleware fuer Routing genutzt. */
+/** Lookup per Hostname (case-insensitive). Vom Middleware für Routing genutzt. */
 export async function getDomainByHostname(
   hostname: string,
 ): Promise<UserDomain | null> {
@@ -169,7 +169,7 @@ export async function getDomainByHostname(
   return row ? rowToDomain(row) : null;
 }
 
-/** Alle Domains in einem Status — fuer den Verifier-Worker. */
+/** Alle Domains in einem Status — für den Verifier-Worker. */
 export async function listDomainsByStatus(
   statuses: DomainStatus[],
 ): Promise<UserDomain[]> {
@@ -181,7 +181,7 @@ export async function listDomainsByStatus(
   return rows.map(rowToDomain);
 }
 
-/** Alle aktiven Domains — fuer den Boot-Sync des Traefik-Writers. */
+/** Alle aktiven Domains — für den Boot-Sync des Traefik-Writers. */
 export async function listActiveDomains(): Promise<UserDomain[]> {
   const rows = await db
     .select()
@@ -206,7 +206,7 @@ export async function updateDomainStatus(
 
 /**
  * Zaehlt die Auswirkungen einer Domain-Loeschung. Vom UI gezeigt, bevor
- * der User bestaetigt (Variante B aus dem Konzept).
+ * der User bestätigt (Variante B aus dem Konzept).
  */
 export interface DomainImpact {
   affectedCampaigns: number;
@@ -249,7 +249,7 @@ export async function deleteUserDomain(
 
 /**
  * Loescht eine Domain ohne Tenant-Filter (Admin-Override). Returnt den
- * geloeschten Hostname, damit der Caller die Traefik-YAML cleanen kann.
+ * gelöschten Hostname, damit der Caller die Traefik-YAML cleanen kann.
  */
 export async function deleteUserDomainAdmin(
   domainId: string,
@@ -263,9 +263,9 @@ export async function deleteUserDomainAdmin(
 }
 
 /**
- * Setzt eine Domain zurueck auf den Initial-State: status='pending',
- * lastError=null, alle Cert-/Verify-Timestamps geloescht. Der Verifier-Worker
- * picked sie beim naechsten Tick wieder auf.
+ * Setzt eine Domain zurück auf den Initial-State: status='pending',
+ * lastError=null, alle Cert-/Verify-Timestamps gelöscht. Der Verifier-Worker
+ * picked sie beim nächsten Tick wieder auf.
  */
 export async function resetDomainAdmin(domainId: string): Promise<void> {
   await db

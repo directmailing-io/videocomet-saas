@@ -80,7 +80,7 @@ export function middleware(req: NextRequest) {
 
   // ── Custom-Domain-Routing ────────────────────────────────────────────
   // Requests auf Kunden-Hosts werden auf /v/<slug>?_host=<host> rewritten.
-  // /api/*, /_next/* etc. werden unveraendert durchgelassen, damit
+  // /api/*, /_next/* etc. werden unverändert durchgelassen, damit
   // Tracking-Endpoint + statische Assets weiter funktionieren.
   if (hostKind === "custom" && !isPassthroughPath(pathname)) {
     // Schon ein /v/-Pfad? Dann lass durch — kann ein direkter Aufruf sein.

@@ -223,8 +223,8 @@ export const workerHeartbeats = pgTable("worker_heartbeats", {
 });
 
 // ── Pipeline-Events (Live-Log pro Run / Lead) ───────────────────────────────
-// Append-only Log mit Stage-Start/Stop/Fehler-Events fuer den Live-Log im
-// Run-Detail-UI. `leadId` ist nullbar fuer Run-Level-Events (z.B.
+// Append-only Log mit Stage-Start/Stop/Fehler-Events für den Live-Log im
+// Run-Detail-UI. `leadId` ist nullbar für Run-Level-Events (z.B.
 // "lead pipeline started" oder "run completed: X done, Y failed in Z min").
 export const pipelineEvents = pgTable("pipeline_events", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -262,13 +262,13 @@ export const leadEvents = pgTable("lead_events", {
 }));
 
 // ── User-Domains (Custom-Domains pro Kunde) ─────────────────────────────────
-// Jeder Kunde kann bis zu 3 Domains/Subdomains anbinden, ueber die seine
+// Jeder Kunde kann bis zu 3 Domains/Subdomains anbinden, über die seine
 // personalisierten Landingpages ausgeliefert werden (statt
 // app.videocomet.de/v/<slug>).
 //
 // Lebenszyklus:
-//   pending      → User hat die Domain hinzugefuegt, DNS noch nicht geprueft
-//   verifying    → DNS-Verifier laeuft, prueft A/CNAME + TXT-Token
+//   pending      → User hat die Domain hinzugefügt, DNS noch nicht geprüft
+//   verifying    → DNS-Verifier läuft, prüft A/CNAME + TXT-Token
 //   issuing_cert → DNS ok, Traefik schreibt YAML, Cert wird via Let's
 //                  Encrypt HTTP-01 geholt
 //   active       → Cert vorhanden, Domain produktiv nutzbar
@@ -291,7 +291,7 @@ export const userDomains = pgTable("user_domains", {
   statusIdx: index("user_domains_status_idx").on(t.status),
 }));
 
-// Verifikations- / Cert-Health-Historie pro Domain — fuer Admin-Diagnose.
+// Verifikations- / Cert-Health-Historie pro Domain — für Admin-Diagnose.
 export const domainCheckLog = pgTable("domain_check_log", {
   id: uuid("id").primaryKey().defaultRandom(),
   domainId: uuid("domain_id").notNull().references(() => userDomains.id, { onDelete: "cascade" }),

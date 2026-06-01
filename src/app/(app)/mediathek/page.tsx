@@ -49,7 +49,7 @@ function MediaGrid({ items }: { items: MediaItem[] }) {
     return (
       <EmptyState
         icon={<Library />}
-        title="Keine Eintraege"
+        title="Keine Einträge"
         subtitle="In diesem Bereich ist noch nichts hinterlegt."
       />
     );

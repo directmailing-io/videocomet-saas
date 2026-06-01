@@ -1,5 +1,5 @@
 /**
- * Zentraler URL-Builder fuer Lead-Landingpages.
+ * Zentraler URL-Builder für Lead-Landingpages.
  *
  * Eine Quelle der Wahrheit, damit alle internen + externen Links
  * konsistent die richtige URL haben — Custom-Domain wenn die Kampagne
@@ -11,19 +11,19 @@
 
 export interface BuildLeadUrlInput {
   slug: string | null | undefined;
-  /** Hostname der Custom-Domain — NULL fuer Default-App. */
+  /** Hostname der Custom-Domain — NULL für Default-App. */
   customHostname?: string | null;
   /** Default-App-URL ohne Trailing-Slash, z.B. `https://app.videocomet.de`. */
   defaultAppUrl?: string;
 }
 
 export interface BuildLeadUrlOptions {
-  /** ?preview=1 anhaengen — fuer interne Vorschau-Links. */
+  /** ?preview=1 anhaengen — für interne Vorschau-Links. */
   preview?: boolean;
   /**
    * Erzwingt absolute URL (mit https://). Default: nur bei
    * Custom-Hostname absolute, bei Default-App relativer Pfad. Setze
-   * `true` fuer Export-CSVs/Mail wo absolute Links Pflicht sind.
+   * `true` für Export-CSVs/Mail wo absolute Links Pflicht sind.
    */
   absolute?: boolean;
 }
@@ -31,10 +31,10 @@ export interface BuildLeadUrlOptions {
 const DEFAULT_APP = "https://app.videocomet.de";
 
 /**
- * Liefert die oeffentliche Landing-URL fuer einen Lead.
+ * Liefert die oeffentliche Landing-URL für einen Lead.
  *
  *   - Custom-Domain aktiv  → `https://video.kunde.de/<slug>`
- *   - Default              → `/v/<slug>` (relativ) oder absolut wenn gewuenscht
+ *   - Default              → `/v/<slug>` (relativ) oder absolut wenn gewünscht
  *
  * Returnt NULL nur wenn weder slug noch hostname auswertbar sind.
  */

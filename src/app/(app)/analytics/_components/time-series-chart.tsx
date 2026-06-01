@@ -73,7 +73,7 @@ export function TimeSeriesChart({ data }: { data: TimeSeriesPoint[] }) {
         viewBox={`0 0 ${W} ${H}`}
         className="block w-full h-auto"
         role="img"
-        aria-label="Events ueber Zeit"
+        aria-label="Events über Zeit"
         onMouseLeave={() => setHoverIdx(null)}
       >
         {/* Grid */}

@@ -8,7 +8,7 @@ import { asString } from "./shared";
 
 /**
  * Lightweight markdown editor — full Tiptap kommt in einer spaeteren
- * Iteration. Aktuell: Textarea + Hinweise auf die unterstuetzte Syntax.
+ * Iteration. Aktuell: Textarea + Hinweise auf die unterstützte Syntax.
  */
 export function BlockRichTextForm({
   block,

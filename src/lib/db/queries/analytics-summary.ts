@@ -529,6 +529,77 @@ export async function listAnalyticsEvents(
   return { events, total: totalRow?.total ?? 0 };
 }
 
+// ── Flat-Lead-Liste für das Kampagnen-Dashboard ─────────────────────────────
+
+export interface CampaignLeadRow {
+  id: string;
+  rowIndex: number;
+  runId: string;
+  runName: string;
+  runCreatedAt: Date | null;
+  data: Record<string, string>;
+  slug: string | null;
+  status: string;
+  videoUrl: string | null;
+  pdfUrl: string | null;
+  thumbnailUrl: string | null;
+  viewCount: number;
+  firstViewedAt: Date | null;
+  lastViewedAt: Date | null;
+  playCount: number;
+  watchTimeSec: number;
+  ctaClickCount: number;
+  lastCtaAt: Date | null;
+  errorMessage: string | null;
+  createdAt: Date;
+}
+
+/**
+ * Alle Leads einer Kampagne über sämtliche Runden flach gelistet, sortiert
+ * nach neuster Runde + Lead-Reihenfolge. Joint nur die Run-Tabelle für den
+ * Run-Namen — Aggregate kommen aus den denormalisierten Lead-Spalten.
+ */
+export async function listAllCampaignLeads(
+  campaignId: string,
+  userId: string,
+): Promise<CampaignLeadRow[]> {
+  const rows = await db
+    .select({
+      id: leads.id,
+      rowIndex: leads.rowIndex,
+      runId: leads.runId,
+      runName: runs.name,
+      runCreatedAt: runs.createdAt,
+      data: leads.data,
+      slug: leads.slug,
+      status: leads.status,
+      videoUrl: leads.videoUrl,
+      pdfUrl: leads.pdfUrl,
+      thumbnailUrl: leads.thumbnailUrl,
+      viewCount: leads.viewCount,
+      firstViewedAt: leads.firstViewedAt,
+      lastViewedAt: leads.lastViewedAt,
+      playCount: leads.playCount,
+      watchTimeSec: leads.watchTimeSec,
+      ctaClickCount: leads.ctaClickCount,
+      lastCtaAt: leads.lastCtaAt,
+      errorMessage: leads.errorMessage,
+      createdAt: leads.createdAt,
+    })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(and(eq(runs.campaignId, campaignId), eq(runs.userId, userId)))
+    .orderBy(desc(runs.createdAt), asc(leads.rowIndex));
+  return rows.map((r) => ({
+    ...r,
+    data: (r.data ?? {}) as Record<string, string>,
+    viewCount: r.viewCount ?? 0,
+    playCount: r.playCount ?? 0,
+    watchTimeSec: r.watchTimeSec ?? 0,
+    ctaClickCount: r.ctaClickCount ?? 0,
+  }));
+}
+
 /** Lightweight campaign list (id + name) for the Event-Log filter dropdown. */
 export async function listCampaignsForFilter(
   userId: string,

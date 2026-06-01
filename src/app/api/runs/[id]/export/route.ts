@@ -44,7 +44,7 @@ export async function GET(
   const appUrl = process.env.APP_URL ?? "https://app.videocomet.de";
 
   // Custom-Domain einmal pro Runde holen (alle Leads in einer Runde teilen
-  // die Domain ueber die Kampagne).
+  // die Domain über die Kampagne).
   let customHostname: string | null = null;
   try {
     const campaign = await getCampaign(run.campaignId, auth.user.id);

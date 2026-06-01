@@ -4,8 +4,8 @@ export const runtime = "nodejs";
 /**
  * POST /api/admin/domains/:id/recheck
  *
- * Erzwingt einen sofortigen DNS + TXT + Cert-Re-Check ueber den Verifier-Job
- * und liefert die aktualisierte Domain zurueck.
+ * Erzwingt einen sofortigen DNS + TXT + Cert-Re-Check über den Verifier-Job
+ * und liefert die aktualisierte Domain zurück.
  */
 
 import { NextRequest, NextResponse } from "next/server";

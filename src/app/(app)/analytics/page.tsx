@@ -82,7 +82,7 @@ export default async function AnalyticsOverviewPage() {
         subtitle="Vergleichen Sie Kampagnen-Performance und sehen Sie, wie Ihre personalisierten Videos wirken."
         actions={
           <Button variant="ghost" asChild>
-            <Link href="/analytics/events">Event-Log oeffnen</Link>
+            <Link href="/analytics/events">Event-Log öffnen</Link>
           </Button>
         }
       />

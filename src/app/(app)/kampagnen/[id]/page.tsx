@@ -1,17 +1,64 @@
+import type * as React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Plus } from "lucide-react";
+import {
+  BarChart3,
+  Eye,
+  MousePointerClick,
+  Play,
+  Plus,
+  Timer,
+  Users,
+} from "lucide-react";
+import { eq } from "drizzle-orm";
 import { requireUser } from "@/lib/auth-guard";
 import { getCampaign } from "@/lib/db/queries/campaigns";
 import { listCampaignRunsWithCounts } from "@/lib/db/queries/runs";
+import {
+  getCampaignDeepDive,
+  listAllCampaignLeads,
+} from "@/lib/db/queries/analytics-summary";
+import { db } from "@/lib/db";
+import { mediaItems } from "@/lib/db/schema";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
+import { StatCard } from "@/components/ui/stat-card";
+
+/**
+ * Light wrapper über StatCard, der unter dem Wert eine einzeilige
+ * Erläuterungs-Zeile rendert. Die Basis-StatCard kennt keinen `hint`-Prop —
+ * wir fügen die Zeile per CSS-Sibling hinzu.
+ */
+function StatCardWithHint({
+  label,
+  value,
+  icon,
+  hint,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  hint: string;
+}) {
+  return (
+    <div className="relative">
+      <StatCard label={label} value={value} icon={icon} />
+      <p className="absolute bottom-3 left-5 right-5 text-[11px] text-ink-muted truncate">
+        {hint}
+      </p>
+    </div>
+  );
+}
 import { RunsTable, type RunRow } from "./runs-table";
 import { CampaignActions } from "./campaign-actions";
+import {
+  CampaignLeadsTable,
+  type CampaignLeadRowSerialized,
+} from "./campaign-leads-table";
 
 function formatDate(d: Date | null): string {
   if (!d) return "";
@@ -42,6 +89,27 @@ function pipShapeLabel(shape: string | null): string {
   return "Abgerundet";
 }
 
+function fmtPercent(num: number, denom: number): string {
+  if (!Number.isFinite(num) || !Number.isFinite(denom) || denom <= 0) {
+    return "0 %";
+  }
+  const pct = (num / denom) * 100;
+  return `${new Intl.NumberFormat("de-DE", {
+    minimumFractionDigits: pct < 10 ? 1 : 0,
+    maximumFractionDigits: 1,
+  }).format(pct)} %`;
+}
+
+function fmtDuration(sec: number): string {
+  if (!Number.isFinite(sec) || sec <= 0) return "0:00";
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s.toString().padStart(2, "0")}s`;
+  return `${s}s`;
+}
+
 export default async function CampaignDetailPage({
   params,
 }: {
@@ -57,7 +125,25 @@ export default async function CampaignDetailPage({
     notFound();
   }
 
-  const runsWithCounts = await listCampaignRunsWithCounts(campaign.id, user.id);
+  // Parallel: Runden-Liste, Aggregate, Lead-Flat-Liste, Webcam-Media
+  const [runsWithCounts, deepDive, allLeads, webcamMedia] = await Promise.all([
+    listCampaignRunsWithCounts(campaign.id, user.id),
+    getCampaignDeepDive(campaign.id, user.id).catch(() => null),
+    listAllCampaignLeads(campaign.id, user.id),
+    campaign.webcamMediaId
+      ? db
+          .select({
+            publicUrl: mediaItems.publicUrl,
+            name: mediaItems.name,
+            durationSec: mediaItems.durationSec,
+          })
+          .from(mediaItems)
+          .where(eq(mediaItems.id, campaign.webcamMediaId))
+          .limit(1)
+          .then((r) => r[0] ?? null)
+      : Promise.resolve(null),
+  ]);
+
   const initialRuns: RunRow[] = runsWithCounts.map((r) => ({
     id: r.id,
     name: r.name,
@@ -70,11 +156,46 @@ export default async function CampaignDetailPage({
     completedAt: r.completedAt ? r.completedAt.toISOString() : null,
   }));
 
+  // Aggregates aus getCampaignDeepDive ODER aus allLeads als Fallback
+  const summary = deepDive?.summary ?? {
+    leadsCount: allLeads.length,
+    viewCount: allLeads.reduce((s, l) => s + l.viewCount, 0),
+    playCount: allLeads.reduce((s, l) => s + l.playCount, 0),
+    watchTimeSec: allLeads.reduce((s, l) => s + l.watchTimeSec, 0),
+    ctaClickCount: allLeads.reduce((s, l) => s + l.ctaClickCount, 0),
+  };
+  const leadsCount = summary.leadsCount;
+  const uniqueViewedCount = allLeads.filter((l) => l.viewCount > 0).length;
+  const uniquePlayedCount = allLeads.filter((l) => l.playCount > 0).length;
+  const uniqueCtaCount = allLeads.filter((l) => l.ctaClickCount > 0).length;
+
+  const initialLeadRows: CampaignLeadRowSerialized[] = allLeads.map((l) => ({
+    id: l.id,
+    rowIndex: l.rowIndex,
+    runId: l.runId,
+    runName: l.runName,
+    data: l.data,
+    slug: l.slug,
+    status: l.status,
+    videoUrl: l.videoUrl,
+    pdfUrl: l.pdfUrl,
+    viewCount: l.viewCount,
+    firstViewedAt: l.firstViewedAt ? l.firstViewedAt.toISOString() : null,
+    lastViewedAt: l.lastViewedAt ? l.lastViewedAt.toISOString() : null,
+    playCount: l.playCount,
+    watchTimeSec: l.watchTimeSec,
+    ctaClickCount: l.ctaClickCount,
+    lastCtaAt: l.lastCtaAt ? l.lastCtaAt.toISOString() : null,
+    createdAt: l.createdAt.toISOString(),
+  }));
+
+  const appUrl = process.env.APP_URL ?? "https://app.videocomet.de";
+
   return (
     <>
       <PageHeader
         title={campaign.name}
-        subtitle={`Modus: ${modeLabel(campaign.mode)} . Erstellt am ${formatDate(campaign.createdAt)}`}
+        subtitle={`Modus: ${modeLabel(campaign.mode)} · Erstellt am ${formatDate(campaign.createdAt)}`}
         actions={
           <CampaignActions
             campaignId={campaign.id}
@@ -86,63 +207,109 @@ export default async function CampaignDetailPage({
       <Tabs defaultValue="übersicht">
         <TabsList>
           <TabsTrigger value="übersicht">Übersicht</TabsTrigger>
-          <TabsTrigger value="runden">Runden</TabsTrigger>
+          <TabsTrigger value="leads">
+            Leads {leadsCount > 0 && `(${leadsCount})`}
+          </TabsTrigger>
+          <TabsTrigger value="runden">
+            Runden {initialRuns.length > 0 && `(${initialRuns.length})`}
+          </TabsTrigger>
           <TabsTrigger value="einstellungen">Einstellungen</TabsTrigger>
         </TabsList>
 
+        {/* ── Übersicht ───────────────────────────────────────────── */}
         <TabsContent value="übersicht">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+            <StatCardWithHint
+              label="Gesamt-Leads"
+              value={leadsCount.toLocaleString("de-DE")}
+              icon={<Users />}
+              hint={`über ${initialRuns.length} ${initialRuns.length === 1 ? "Runde" : "Runden"}`}
+            />
+            <StatCardWithHint
+              label="Öffnungsrate"
+              value={fmtPercent(uniqueViewedCount, leadsCount)}
+              icon={<Eye />}
+              hint={`${uniqueViewedCount.toLocaleString("de-DE")} Leads geöffnet`}
+            />
+            <StatCardWithHint
+              label="Play-Rate"
+              value={fmtPercent(uniquePlayedCount, leadsCount)}
+              icon={<Play />}
+              hint={`${uniquePlayedCount.toLocaleString("de-DE")} Leads abgespielt`}
+            />
+            <StatCardWithHint
+              label="Watch-Time gesamt"
+              value={fmtDuration(summary.watchTimeSec)}
+              icon={<Timer />}
+              hint={
+                summary.playCount > 0
+                  ? `∅ ${fmtDuration(Math.round(summary.watchTimeSec / summary.playCount))} pro Play`
+                  : "noch keine Plays"
+              }
+            />
+            <StatCardWithHint
+              label="CTA-Rate"
+              value={fmtPercent(uniqueCtaCount, leadsCount)}
+              icon={<MousePointerClick />}
+              hint={`${uniqueCtaCount.toLocaleString("de-DE")} Leads geklickt`}
+            />
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <Card>
+            {/* Webcam-Vorschau */}
+            <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle>Gesamt-Leads</CardTitle>
+                <CardTitle>Webcam-Aufnahme</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-ink">
-                  {initialRuns.reduce((s, r) => s + (r.totalLeads ?? 0), 0)}
-                </div>
-                <p className="text-xs text-ink-muted mt-1">
-                  Über alle Runden dieser Kampagne
-                </p>
+                <WebcamPreview media={webcamMedia} />
               </CardContent>
             </Card>
+
+            {/* Analytics-Quick-Link */}
             <Card>
               <CardHeader>
-                <CardTitle>Oeffnungsquote</CardTitle>
+                <CardTitle>Mehr Details</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-ink">0%</div>
-                <p className="text-xs text-ink-muted mt-1">
-                  Wird nach erstem Versand berechnet.
+              <CardContent className="space-y-3">
+                <p className="text-sm text-ink-muted">
+                  Tiefgehende Analyse mit Zeitverlauf, Top-Leads und
+                  Event-Log finden Sie im Analytics-Bereich.
                 </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>CTA-Quote</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-ink">0%</div>
-                <p className="text-xs text-ink-muted mt-1">
-                  Klicks auf Call-to-Action.
-                </p>
+                <Button asChild variant="ghost" iconLeft={<BarChart3 className="size-4" />}>
+                  <Link href={`/analytics/kampagnen/${campaign.id}`}>
+                    Pro-Kampagne-Analytics öffnen
+                  </Link>
+                </Button>
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
 
-          {campaign.webcamMediaId && (
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle>Webcam-Vorschau</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="aspect-video w-full max-w-md rounded-squircle-md bg-surface-muted flex items-center justify-center text-ink-muted text-sm">
-                  Vorschau nicht verfuegbar
-                </div>
-              </CardContent>
-            </Card>
+        {/* ── Leads ───────────────────────────────────────────────── */}
+        <TabsContent value="leads">
+          {initialLeadRows.length === 0 ? (
+            <EmptyState
+              title="Noch keine Leads"
+              subtitle="Sobald Sie eine Runde mit einer Lead-Liste starten, erscheinen die Empfänger hier."
+              action={
+                <Button asChild iconLeft={<Plus className="size-4" />}>
+                  <Link href={`/kampagnen/${campaign.id}/runs/neu`}>
+                    Neue Runde
+                  </Link>
+                </Button>
+              }
+            />
+          ) : (
+            <CampaignLeadsTable
+              campaignId={campaign.id}
+              initial={initialLeadRows}
+              appUrl={appUrl}
+            />
           )}
         </TabsContent>
 
+        {/* ── Runden ─────────────────────────────────────────────── */}
         <TabsContent value="runden">
           <div className="flex justify-end mb-4">
             <Button asChild iconLeft={<Plus className="size-4" />}>
@@ -154,7 +321,7 @@ export default async function CampaignDetailPage({
           {initialRuns.length === 0 ? (
             <EmptyState
               title="Noch keine Runden"
-              subtitle="Starte eine Runde, um diese Kampagne an deine Lead-Liste zu schicken."
+              subtitle="Starten Sie eine Runde, um diese Kampagne an Ihre Lead-Liste zu schicken."
               action={
                 <Button asChild iconLeft={<Plus className="size-4" />}>
                   <Link href={`/kampagnen/${campaign.id}/runs/neu`}>
@@ -168,6 +335,7 @@ export default async function CampaignDetailPage({
           )}
         </TabsContent>
 
+        {/* ── Einstellungen ──────────────────────────────────────── */}
         <TabsContent value="einstellungen">
           <Card>
             <CardHeader>
@@ -265,5 +433,58 @@ export default async function CampaignDetailPage({
         </TabsContent>
       </Tabs>
     </>
+  );
+}
+
+/**
+ * Webcam-Vorschau: lädt das in der Kampagne hinterlegte Webcam-MediaItem
+ * und rendert einen abspielbaren `<video>`-Player. Fällt zurück auf eine
+ * informative Empty-State-Meldung statt einer leeren grauen Fläche.
+ */
+function WebcamPreview({
+  media,
+}: {
+  media: {
+    publicUrl: string;
+    name: string;
+    durationSec: number | null;
+  } | null;
+}) {
+  if (!media || !media.publicUrl) {
+    return (
+      <div className="aspect-video w-full rounded-squircle-md border border-dashed border-line bg-surface-soft flex flex-col items-center justify-center gap-2 text-center px-6">
+        <p className="text-sm font-semibold text-ink">Keine Webcam ausgewählt</p>
+        <p className="text-xs text-ink-muted max-w-sm">
+          Wählen Sie in den Kampagnen-Einstellungen eine Webcam-Aufnahme aus
+          oder nehmen Sie in der Mediathek eine neue auf.
+        </p>
+      </div>
+    );
+  }
+
+  // HLS-Playlist-URL → MP4-Fallback fürs <video>-Element, das HLS nativ
+  // (außer Safari) nicht abspielen kann.
+  const isHls = media.publicUrl.includes(".m3u8");
+  const videoSrc = isHls
+    ? media.publicUrl.replace(/playlist\.m3u8$/, "play_720p.mp4")
+    : media.publicUrl;
+
+  return (
+    <div className="space-y-2">
+      <video
+        src={videoSrc}
+        controls
+        preload="metadata"
+        className="aspect-video w-full rounded-squircle-md bg-ink border border-line"
+      />
+      <div className="flex items-center justify-between text-xs text-ink-muted">
+        <span className="truncate">{media.name}</span>
+        {media.durationSec ? (
+          <span className="tabular-nums">
+            {fmtDuration(media.durationSec)}
+          </span>
+        ) : null}
+      </div>
+    </div>
   );
 }

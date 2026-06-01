@@ -4,9 +4,9 @@ export const runtime = "nodejs";
 /**
  * POST /api/domains/:id/verify
  *
- * Triggert einen sofortigen Re-Check fuer eine Domain. Der naechste reguläre
- * Verifier-Tick wuerde innerhalb von 30s sowieso laufen — dieser Endpoint
- * gibt dem User eine "Jetzt pruefen"-Aktion fuer die UI.
+ * Triggert einen sofortigen Re-Check für eine Domain. Der nächste reguläre
+ * Verifier-Tick würde innerhalb von 30s sowieso laufen — dieser Endpoint
+ * gibt dem User eine "Jetzt prüfen"-Aktion für die UI.
  */
 
 import { NextRequest, NextResponse } from "next/server";

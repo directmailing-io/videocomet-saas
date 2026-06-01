@@ -3,16 +3,16 @@
 /**
  * Admin Domain Detail Drawer
  *
- * Right-slide Dialog (Radix) — zeigt fuer eine ausgewaehlte Custom-Domain
+ * Right-slide Dialog (Radix) — zeigt für eine ausgewählte Custom-Domain
  * alle Verwaltungs-Infos und Aktionen:
  *  - Kunden- und Status-Header
  *  - DNS-Instructions (CNAME/A + TXT) inkl. Copy-Buttons
  *  - Verify-Token (verschleiert + kopierbar)
  *  - lastError als rotes Callout
- *  - Aktionen: Force Recheck, Reset, Loeschen (mit Impact-Bestaetigung)
- *  - Check-History: letzte 20 DNS/TXT/Cert/Health-Log-Eintraege
+ *  - Aktionen: Force Recheck, Reset, Löschen (mit Impact-Bestätigung)
+ *  - Check-History: letzte 20 DNS/TXT/Cert/Health-Log-Einträge
  *
- * Lifecycle: Beim Oeffnen wird `/api/admin/domains/:id` gefetcht. Alle
+ * Lifecycle: Beim Öffnen wird `/api/admin/domains/:id` gefetcht. Alle
  * Mutationen rufen `onDomainMutated()` so dass die Tabelle aktualisiert.
  */
 
@@ -296,7 +296,7 @@ export function AdminDomainDetailDrawer({
         throw new Error(j.error ?? "Reset fehlgeschlagen.");
       }
       toast({
-        title: "Domain auf 'Ausstehend' zurueckgesetzt.",
+        title: "Domain auf 'Ausstehend' zurückgesetzt.",
         variant: "success",
       });
       await reloadDetail();
@@ -321,15 +321,15 @@ export function AdminDomainDetailDrawer({
       });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(j.error ?? "Loeschen fehlgeschlagen.");
+        throw new Error(j.error ?? "Löschen fehlgeschlagen.");
       }
-      toast({ title: "Domain geloescht.", variant: "success" });
+      toast({ title: "Domain gelöscht.", variant: "success" });
       setConfirmDelete(false);
       onDomainDeleted();
     } catch (err) {
       toast({
         title:
-          err instanceof Error ? err.message : "Loeschen fehlgeschlagen.",
+          err instanceof Error ? err.message : "Löschen fehlgeschlagen.",
         variant: "danger",
       });
     } finally {
@@ -384,7 +384,7 @@ export function AdminDomainDetailDrawer({
               </div>
               <DialogPrimitive.Close
                 className="rounded-full p-1.5 text-ink-muted opacity-70 transition-opacity hover:bg-line-soft hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                aria-label="Schliessen"
+                aria-label="Schließen"
               >
                 <X className="size-4" />
               </DialogPrimitive.Close>

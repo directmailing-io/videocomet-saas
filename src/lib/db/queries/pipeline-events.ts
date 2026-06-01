@@ -1,7 +1,7 @@
 /**
  * Pipeline-Event-Queries.
  *
- * Append-only Log fuer den Live-Log im Run-Detail-UI. Worker schreiben
+ * Append-only Log für den Live-Log im Run-Detail-UI. Worker schreiben
  * Stage-Start/Stop/Fehler-Events; das SSE-Stream-Endpoint liest sie und
  * pushed neue Events alle 2s in den Client.
  */
@@ -60,8 +60,8 @@ export interface ListPipelineEventsOptions {
 }
 
 /**
- * Listet Pipeline-Events fuer einen Run, mit Tenant-Guard via runs.userId.
- * Bei `sinceTs` werden nur Events mit `ts > sinceTs` zurueckgegeben (fuer den
+ * Listet Pipeline-Events für einen Run, mit Tenant-Guard via runs.userId.
+ * Bei `sinceTs` werden nur Events mit `ts > sinceTs` zurückgegeben (für den
  * SSE-Tick-Cursor). Default-Limit 200, Maximum 1000.
  */
 export async function listPipelineEvents(

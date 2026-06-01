@@ -75,7 +75,7 @@ export interface NewCampaignWizardProps {
     templates: WizardTemplate[];
     /** Optional — image/video media items the editor can pick from. */
     media?: MediathekItem[];
-    /** Optional — Custom-Domains des Users, fuer Step 4. */
+    /** Optional — Custom-Domains des Users, für Step 4. */
     domains?: WizardDomain[];
   };
 }

@@ -228,7 +228,7 @@ export function LeadsTable({ runId }: { runId: string }) {
                 active={sort === "status"}
                 onClick={() => setSort("status")}
               />
-              <TableHead className="text-right">Oeffnungen</TableHead>
+              <TableHead className="text-right">Öffnungen</TableHead>
               <TableHead className="text-right">Watch %</TableHead>
               <TableHead className="text-right">CTA</TableHead>
               <SortableHead
@@ -372,7 +372,7 @@ function RowActions({ lead }: { lead: LeadRow }) {
               href={`${lead.pageUrl}${lead.pageUrl.includes("?") ? "&" : "?"}preview=1`}
               target="_blank"
               rel="noreferrer"
-              title="Im Vorschau-Modus oeffnen (kein Tracking)"
+              title="Im Vorschau-Modus öffnen (kein Tracking)"
             >
               <ExternalLink className="size-4 text-ink-muted" />
               Landingpage öffnen (Vorschau)
@@ -381,7 +381,7 @@ function RowActions({ lead }: { lead: LeadRow }) {
         ) : (
           <DropdownMenuItem disabled>
             <ExternalLink className="size-4 text-ink-muted" />
-            Landingpage nicht verfuegbar
+            Landingpage nicht verfügbar
           </DropdownMenuItem>
         )}
         {lead.videoUrl ? (

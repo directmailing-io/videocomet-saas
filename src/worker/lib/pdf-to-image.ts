@@ -5,7 +5,7 @@
  * mit weniger Anti-Alias-Artefakten liefert — wichtig wenn das Bild im
  * Browser hochskaliert dargestellt wird.
  *
- * Hinweis zur Auflösung: 150 dpi ergibt ~1240 Pixel breit fuer ein
+ * Hinweis zur Auflösung: 150 dpi ergibt ~1240 Pixel breit für ein
  * Letter-Format-PDF. Das matched den 1280px-Viewport fast pixelgenau und
  * sieht auf einem 1080p-Screen scharf aus, ohne dass die Frame-Erzeugung
  * explodiert.

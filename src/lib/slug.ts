@@ -1,5 +1,5 @@
 /**
- * Slug-Engine fuer personalisierte Landingpage-URLs.
+ * Slug-Engine für personalisierte Landingpage-URLs.
  *
  * Drei Aufgaben in einem Modul:
  *  1. Basis-Slugify: Trim/Transliteration/Lowercase/Hyphen-Normalize
@@ -48,8 +48,8 @@ export function slugHexSuffix(): string {
 // ── Reserved-Slugs ─────────────────────────────────────────────────────────
 
 /**
- * Slugs die wir nicht vergeben duerfen, weil sie mit App-Routen kollidieren
- * wuerden wenn die Domain als <hostname>/<slug> verwendet wird (Custom-Domain).
+ * Slugs die wir nicht vergeben dürfen, weil sie mit App-Routen kollidieren
+ * würden wenn die Domain als <hostname>/<slug> verwendet wird (Custom-Domain).
  *
  * Pflicht: alle Top-Level-Pfade aus src/app/ + alle public files +
  * Tracking-Endpoints + Service-Pfade.
@@ -63,7 +63,7 @@ export const RESERVED_SLUGS = new Set<string>([
   "einstellungen", "analytics", "app",
   // Tracking / health
   "track", "healthz", "health", "ping",
-  // Reserved fuer kuenftige Features
+  // Reserved für kuenftige Features
   "settings", "billing", "support", "docs", "help",
 ]);
 
@@ -79,7 +79,7 @@ export function isReservedSlug(slug: string): boolean {
 export const DEFAULT_SLUG_TEMPLATE = "{firstName}-{lastName}";
 
 /**
- * Aliase fuer haeufige CSV-Feldnamen — so funktionieren Templates wie
+ * Aliase für häufige CSV-Feldnamen — so funktionieren Templates wie
  * `{firstName}-{lastName}` auch wenn das CSV "Vorname" / "Nachname" heißt.
  *
  * Lookup-Reihenfolge: erst exakter Match auf den Template-Key, dann der
@@ -202,7 +202,7 @@ export async function generateSlug(opts: GenerateSlugOptions): Promise<string> {
 
 /**
  * @deprecated Bevorzuge `generateSlug()` mit isAvailable-Check oder
- * `slugifyBasic()` fuer reines Normalisieren.
+ * `slugifyBasic()` für reines Normalisieren.
  *
  * Behaelt alte Signatur bei (mit-immer-Hex-Suffix) um existierende Aufrufer
  * (Landingpage-Templates, etc.) nicht zu brechen.

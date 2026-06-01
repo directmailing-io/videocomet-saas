@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 /**
  *  GET    /api/domains/:id  → detail inkl. Impact (affected campaigns/leads)
- *  DELETE /api/domains/:id  → loescht die Domain (Variante B: erlaubt mit
+ *  DELETE /api/domains/:id  → löscht die Domain (Variante B: erlaubt mit
  *                              Warnung clientseitig). Reisst Custom-Domain-
  *                              URLs der zugehoerigen Leads aktiv ab.
  */
@@ -63,7 +63,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
 
-  // Best-effort: Traefik-YAML loeschen, damit die Domain sofort nicht mehr
+  // Best-effort: Traefik-YAML löschen, damit die Domain sofort nicht mehr
   // routet (sonst wartet Traefik bis zum Watch-Reload).
   if (res.hostname) {
     await cleanupDeletedDomain(res.hostname);

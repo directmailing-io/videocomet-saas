@@ -208,8 +208,8 @@ export interface ReplaceImageInput {
   contentType?: string;
   /**
    * Optional Fallback: wenn die SHA-256 nicht matched (z.B. weil Google
-   * Docs das PNG beim Einfuegen re-encoded hat), wird stattdessen das
-   * erste Bild mit diesen Pixel-Dimensionen ersetzt. Sehr robust fuer
+   * Docs das PNG beim Einfügen re-encoded hat), wird stattdessen das
+   * erste Bild mit diesen Pixel-Dimensionen ersetzt. Sehr robust für
    * Marker-Bilder mit eindeutigen Sizes (400x400 QR, 640x360 Thumb).
    */
   matchDimensions?: { width: number; height: number };
@@ -246,7 +246,7 @@ export function replaceImageByHash(
       break;
     }
     // Fallback: Dimensions-Match. Google Docs reencoded das PNG beim
-    // Einfuegen, dadurch aendert sich die SHA. Aber die Pixel-Dimensions
+    // Einfügen, dadurch ändert sich die SHA. Aber die Pixel-Dimensions
     // bleiben (Marker QR 400x400, Thumb 640x360). Wenn der Caller
     // matchDimensions setzt UND das Bild diese Maße hat, ist das in
     // 99,9% der Faelle der Marker.

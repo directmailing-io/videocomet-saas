@@ -1,5 +1,5 @@
 /**
- * Traefik Dynamic-Config-Writer fuer Custom-Domains.
+ * Traefik Dynamic-Config-Writer für Custom-Domains.
  *
  * Schreibt eine YAML-Datei pro aktiver Custom-Domain in den File-Provider-
  * Folder von Coolify's Traefik (`/data/coolify/proxy/dynamic/` auf dem Host,
@@ -12,14 +12,14 @@
  *  - Jede Datei traegt einen Provenance-Header-Kommentar mit Timestamp +
  *    Domain-ID, damit ein Operator sofort sieht woher sie kommt
  *  - `listOwnedConfigs()` listet NUR unsere Dateien (Prefix-Filter), nie
- *    fremde — wir loeschen oder beruehren nichts anderes
+ *    fremde — wir löschen oder beruehren nichts anderes
  *  - Wenn der Mount-Ordner fehlt: KEIN auto-create, sondern Fehler werfen.
  *    Das verhindert, dass wir auf einer Box ohne Mount versehentlich Files
  *    irgendwo im Container-FS ablegen
  *
  * Traefik liest den Ordner mit `watch: true`, Reload binnen ~1s.
  *
- * Cert-Issuance laeuft danach automatisch via Let's-Encrypt HTTP-01 auf :80.
+ * Cert-Issuance läuft danach automatisch via Let's-Encrypt HTTP-01 auf :80.
  */
 
 import { promises as fs } from "node:fs";
@@ -53,7 +53,7 @@ function routerNameFor(hostname: string): string {
 }
 
 /**
- * Generiert das YAML-Snippet fuer eine Domain. HTTPS-Router + HTTP→HTTPS-
+ * Generiert das YAML-Snippet für eine Domain. HTTPS-Router + HTTP→HTTPS-
  * Redirect. Cert via letsencrypt resolver.
  */
 function generateYaml(domain: UserDomain): string {
@@ -63,8 +63,8 @@ function generateYaml(domain: UserDomain): string {
 # Domain ID: ${domain.id}
 # Hostname:  ${host}
 # Generated: ${new Date().toISOString()}
-# ACHTUNG:   Diese Datei wird vom VIDEOCOMET-Worker geschrieben/geloescht.
-#            Manuelle Aenderungen werden beim naechsten Sync ueberschrieben.
+# ACHTUNG:   Diese Datei wird vom VIDEOCOMET-Worker geschrieben/gelöscht.
+#            Manuelle Änderungen werden beim nächsten Sync überschrieben.
 
 http:
   routers:
@@ -114,7 +114,7 @@ async function ensureDirExists(): Promise<void> {
 }
 
 /**
- * Schreibt (oder ueberschreibt idempotent) die YAML-Datei fuer eine Domain.
+ * Schreibt (oder überschreibt idempotent) die YAML-Datei für eine Domain.
  * Schreibt erst nach <name>.tmp + rename — atomar, sodass Traefik niemals
  * eine halbe Datei sieht.
  */
@@ -131,7 +131,7 @@ export async function writeTraefikConfig(domain: UserDomain): Promise<string> {
 }
 
 /**
- * Loescht die YAML-Datei fuer eine Domain (z.B. wenn der Kunde sie entfernt).
+ * Loescht die YAML-Datei für eine Domain (z.B. wenn der Kunde sie entfernt).
  * Schweigend bei nicht vorhandener Datei.
  */
 export async function removeTraefikConfig(hostname: string): Promise<boolean> {
@@ -149,7 +149,7 @@ export async function removeTraefikConfig(hostname: string): Promise<boolean> {
 
 /**
  * Listet alle YAML-Dateien die WIR erzeugt haben (Prefix-Filter). Coolify-
- * eigene Dateien werden nie zurueckgegeben.
+ * eigene Dateien werden nie zurückgegeben.
  */
 export async function listOwnedConfigs(): Promise<string[]> {
   await ensureDirExists();
@@ -159,8 +159,8 @@ export async function listOwnedConfigs(): Promise<string[]> {
 }
 
 /**
- * Boot-Sync: schreibt alle aktiven Domains, loescht verwaiste Files
- * (Domain im DB geloescht, YAML aber noch da). Idempotent — kann gefahrlos
+ * Boot-Sync: schreibt alle aktiven Domains, löscht verwaiste Files
+ * (Domain im DB gelöscht, YAML aber noch da). Idempotent — kann gefahrlos
  * mehrfach laufen.
  */
 export async function syncTraefikConfigs(
@@ -192,8 +192,8 @@ export async function syncTraefikConfigs(
 
 /**
  * Liest den ACME-Storage von Traefik und gibt das Ablaufdatum des Certs
- * fuer einen bestimmten Hostname zurueck. Liefert NULL wenn kein Cert
- * vorhanden — z.B. weil Issuance noch laeuft oder fehlgeschlagen ist.
+ * für einen bestimmten Hostname zurück. Liefert NULL wenn kein Cert
+ * vorhanden — z.B. weil Issuance noch läuft oder fehlgeschlagen ist.
  */
 export async function readCertExpiry(hostname: string): Promise<Date | null> {
   const acmePath = process.env.TRAEFIK_ACME_PATH ?? "/traefik-dynamic/../acme.json";

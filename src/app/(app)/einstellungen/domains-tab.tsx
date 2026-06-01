@@ -3,8 +3,8 @@
 /**
  * Custom-Domains — Tab in /einstellungen.
  *
- * Listet alle Domains des Users (max 3), erlaubt das Hinzufuegen, Re-Check,
- * erneutes Oeffnen der DNS-Instruktionen und das Loeschen mit Impact-Anzeige
+ * Listet alle Domains des Users (max 3), erlaubt das Hinzufügen, Re-Check,
+ * erneutes Öffnen der DNS-Instruktionen und das Löschen mit Impact-Anzeige
  * (betroffene Kampagnen + Leads).
  */
 
@@ -136,21 +136,21 @@ export function DomainsTab() {
           error?: string;
         };
         toast({
-          title: "Pruefung fehlgeschlagen",
+          title: "Prüfung fehlgeschlagen",
           description: body.error ?? `HTTP ${res.status}`,
           variant: "danger",
         });
         return;
       }
       toast({
-        title: "Pruefung gestartet",
+        title: "Prüfung gestartet",
         description: d.hostname,
         variant: "success",
       });
       await fetchDomains();
     } catch {
       toast({
-        title: "Pruefung fehlgeschlagen",
+        title: "Prüfung fehlgeschlagen",
         description: "Verbindung zum Server fehlgeschlagen.",
         variant: "danger",
       });
@@ -169,7 +169,7 @@ export function DomainsTab() {
       const body = (await res.json()) as { impact?: ImpactPayload };
       if (body.impact) setDeleteImpact(body.impact);
     } catch {
-      // Impact ist optional — User kann trotzdem loeschen
+      // Impact ist optional — User kann trotzdem löschen
     }
   }
 
@@ -185,14 +185,14 @@ export function DomainsTab() {
           error?: string;
         };
         toast({
-          title: "Loeschen fehlgeschlagen",
+          title: "Löschen fehlgeschlagen",
           description: body.error ?? `HTTP ${res.status}`,
           variant: "danger",
         });
         return;
       }
       toast({
-        title: "Domain geloescht",
+        title: "Domain gelöscht",
         description: deleteTarget.hostname,
         variant: "success",
       });
@@ -201,7 +201,7 @@ export function DomainsTab() {
       await fetchDomains();
     } catch {
       toast({
-        title: "Loeschen fehlgeschlagen",
+        title: "Löschen fehlgeschlagen",
         description: "Verbindung zum Server fehlgeschlagen.",
         variant: "danger",
       });
@@ -249,7 +249,7 @@ export function DomainsTab() {
                   : undefined
               }
             >
-              Domain hinzufuegen
+              Domain hinzufügen
             </Button>
           </div>
         </div>
@@ -268,7 +268,7 @@ export function DomainsTab() {
                 onClick={openAdd}
                 iconLeft={<Plus className="size-4" />}
               >
-                Erste Domain hinzufuegen
+                Erste Domain hinzufügen
               </Button>
             }
           />
@@ -287,7 +287,7 @@ export function DomainsTab() {
             <Info className="size-4 shrink-0 text-ink-muted mt-px" />
             <p>
               Sie haben das Limit von {MAX_DOMAINS} Domains pro Konto erreicht.
-              Loeschen Sie eine bestehende Domain, um eine neue hinzuzufuegen.
+              Löschen Sie eine bestehende Domain, um eine neue hinzuzufuegen.
             </p>
           </div>
         )}
@@ -341,7 +341,7 @@ function DomainsTable({
         <TableRow>
           <TableHead>Domain</TableHead>
           <TableHead>Status</TableHead>
-          <TableHead>Letzte Pruefung</TableHead>
+          <TableHead>Letzte Prüfung</TableHead>
           <TableHead>SSL gueltig bis</TableHead>
           <TableHead className="text-right">Aktionen</TableHead>
         </TableRow>
@@ -410,9 +410,9 @@ function DomainsTable({
                     loading={isVerifying}
                     disabled={status === "active"}
                     iconLeft={<RefreshCw className="size-3.5" />}
-                    title="Status sofort pruefen"
+                    title="Status sofort prüfen"
                   >
-                    Pruefen
+                    Prüfen
                   </Button>
                   <Button
                     variant="ghost"
@@ -420,9 +420,9 @@ function DomainsTable({
                     onClick={() => onDelete(d)}
                     iconLeft={<Trash2 className="size-3.5" />}
                     className="text-danger hover:text-danger"
-                    title="Domain loeschen"
+                    title="Domain löschen"
                   >
-                    Loeschen
+                    Löschen
                   </Button>
                 </div>
               </TableCell>
@@ -464,11 +464,11 @@ function DeleteDialog({
     >
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>Domain wirklich loeschen?</DialogTitle>
+          <DialogTitle>Domain wirklich löschen?</DialogTitle>
           <DialogDescription>
             Die Domain <span className="font-mono">{target?.hostname}</span>{" "}
             wird sofort getrennt. Aktive Custom-URLs gehen ins Leere — die
-            personalisierten Landingpages sind dann nur noch ueber die
+            personalisierten Landingpages sind dann nur noch über die
             VIDEOCOMET-Standard-URL erreichbar.
           </DialogDescription>
         </DialogHeader>
@@ -496,7 +496,7 @@ function DeleteDialog({
             loading={deleting}
             iconLeft={!deleting ? <Trash2 className="size-4" /> : undefined}
           >
-            Endgueltig loeschen
+            Endgueltig löschen
           </Button>
         </DialogFooter>
       </DialogContent>
