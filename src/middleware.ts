@@ -125,9 +125,14 @@ export function middleware(req: NextRequest) {
   // Requests auf Kunden-Hosts werden auf /v/<slug>?_host=<host> rewritten.
   // /api/*, /_next/* etc. werden unverändert durchgelassen, damit
   // Tracking-Endpoint + statische Assets weiter funktionieren.
+  //
+  // Custom-LP-Edge-Case: wenn die Kampagne ein Custom-HTML-Template gepinnt
+  // hat, leitet /v/[slug]/page.tsx (Node-Runtime, kann DB) intern via 307
+  // auf /cv/<slug>?_host=<host> um. Damit DAS nicht erneut zum /v/-Rewrite
+  // wird, müssen wir `/cv/`-Pfade hier auch durchlassen.
   if (hostKind === "custom" && !isPassthroughPath(pathname)) {
-    // Schon ein /v/-Pfad? Dann lass durch — kann ein direkter Aufruf sein.
     if (pathname.startsWith("/v/")) return NextResponse.next();
+    if (pathname.startsWith("/cv/")) return NextResponse.next();
     const url = req.nextUrl.clone();
     const slug = pathname.replace(/^\/+/, "").split("/")[0];
     if (!slug) return NextResponse.next();

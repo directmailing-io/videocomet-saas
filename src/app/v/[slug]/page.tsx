@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
@@ -218,6 +218,26 @@ export default async function PublicLandingPage({
     lead = await getLeadBySlug(slug);
   }
   if (!lead) notFound();
+
+  // ── Custom-LP-Routing (egal ob Standard- oder Custom-Domain) ──────────
+  // Wenn die Kampagne ein Custom-HTML-Template gepinnt hat, geben wir
+  // den Request an den Sandbox-Renderer unter /cv/<slug>?_host=<host>
+  // weiter. /cv/* ist in der Middleware vom Custom-Domain-Rewrite
+  // ausgenommen, daher kein Loop. URL wird zu video.kunde.de/cv/<slug>?…
+  // — kosmetisch unschön aber funktional korrekt für v1.
+  const [customLpRow] = await db
+    .select({ customLpTemplateId: campaigns.customLpTemplateId })
+    .from(runs)
+    .innerJoin(campaigns, eq(campaigns.id, runs.campaignId))
+    .where(eq(runs.id, lead.runId))
+    .limit(1);
+  if (customLpRow?.customLpTemplateId) {
+    const params = new URLSearchParams();
+    if (hostParam) params.set("_host", hostParam);
+    if (isPreview) params.set("preview", "1");
+    const qs = params.toString();
+    redirect(`/cv/${slug}${qs ? `?${qs}` : ""}`);
+  }
 
   // If the lead is still being rendered (no slug-page artifacts yet), show
   // a calm "Wird erstellt" interstitial. We treat absence of videoUrl AND
