@@ -32,6 +32,7 @@
  */
 
 import type { CustomLpAnnotations } from "./types";
+import { getInlineBridgeSource } from "./bridge-inline";
 
 export interface RenderCustomLpArgs {
   /** Sanitised customer HTML (after sanitizer.ts). */
@@ -198,23 +199,39 @@ export function buildBaseHref(slug: string): string {
   return `/cv/${safeSlug}/`;
 }
 
-/** Returns the `<script>…</script>` snippet that bootstraps the bridge. */
+/**
+ * Returns the bridge bootstrap snippet — STEALTH version.
+ *
+ * Statt einem external `<script src="…bridge.js" defer>` betten wir den
+ * Bridge-Code direkt inline ein. Vorteile:
+ *
+ *  - **Unsichtbar im Network-Tab** — kein zweiter HTTP-Request, der Code
+ *    ist Teil des HTML-Body.
+ *  - **AdBlocker-resistent** — Filter-Listen blocken Requests, nicht
+ *    inline-Code. Selbst aggressive Listen wie EasyPrivacy lassen das
+ *    Tracking durch.
+ *  - **Faster** — keine zweite TCP-Roundtrip nötig bis Tracking startet.
+ *
+ * Der `trackingBridgeUrl`-Parameter wird IGNORIERT (für Kompatibilität).
+ * Endpoint ist auf `/_e` hard-coded in der Bridge selbst und wird über
+ * `getInlineBridgeSource()` reingepatched.
+ */
 export function buildBridgeSnippet(args: {
   slug: string;
   leadData: Record<string, string>;
   annotations: unknown;
-  trackingBridgeUrl: string;
+  trackingBridgeUrl?: string;
 }): string {
   const ctx = {
     slug: args.slug,
     lead: args.leadData,
     annotations: args.annotations ?? null,
   };
-  // The two-script pattern (state THEN bridge) ensures the bridge can read
-  // `window.__videocomet` synchronously on parse, even before defer kicks in.
+  // Two-script pattern: state-Dump FIRST damit die Bridge auf
+  // `window.__videocomet` direkt zugreift, danach die Bridge inline.
   return (
     `<script>window.__videocomet=${safeScriptJson(ctx)};</script>` +
-    `<script src="${htmlEscape(args.trackingBridgeUrl)}" defer></script>`
+    `<script>${getInlineBridgeSource()}</script>`
   );
 }
 
