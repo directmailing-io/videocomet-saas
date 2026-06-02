@@ -293,7 +293,7 @@ async function preflightRecovery(): Promise<void> {
         eq(leads.preflightStatus, "running"),
         eq(runs.status, "preflighting"),
         sql`${leads.removedAt} IS NULL`,
-        sql`${runs.preflightStartedAt} < ${fiveMinutesAgo}`,
+        sql`${runs.preflightStartedAt} < ${fiveMinutesAgo.toISOString()}`,
         sql`${leads.preflightAttempts} < 3`,
       ),
     );
