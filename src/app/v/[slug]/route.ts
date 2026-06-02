@@ -34,7 +34,11 @@ import { getDomainByHostname } from "@/lib/db/queries/user-domains";
 import { getCustomLpStorageEnv } from "@/lib/custom-lp/storage";
 import { bunnyFetch, BunnyApiError } from "@/lib/bunny/_fetch";
 
-const TRACKING_BRIDGE_URL = "/__videocomet-bridge.js";
+// Siehe Begründung in /cv/[slug]/route.ts — absolute URL umgeht das
+// Middleware-Rewrite auf lp/Custom-Domain.
+const TRACKING_BRIDGE_URL =
+  (process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ??
+    "https://app.videocomet.de") + "/__videocomet-bridge.js";
 
 /**
  * Hat die Run-Row, an der der Lead hängt, eine Custom-LP-Version gepinnt?

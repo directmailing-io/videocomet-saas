@@ -44,7 +44,16 @@ import { bunnyFetch, BunnyApiError } from "@/lib/bunny/_fetch";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const TRACKING_BRIDGE_URL = "/__videocomet-bridge.js";
+// Absolute URL — damit der Browser die Bridge IMMER von der App-Origin
+// holt, egal auf welchem Host die Landingpage liegt (lp.videocomet.de oder
+// einer Custom-Domain). Eine root-relative URL würde sonst auf
+// `lp.videocomet.de/__videocomet-bridge.js` zeigen — wird von der
+// Middleware aber zu `/cv/__videocomet-bridge.js` rewritet → 404 → kein
+// Tracking. Ein absolute URL umgeht das Rewrite sauber.
+const TRACKING_BRIDGE_URL =
+  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ??
+  "https://app.videocomet.de";
+const TRACKING_BRIDGE_SCRIPT = `${TRACKING_BRIDGE_URL}/__videocomet-bridge.js`;
 
 interface RouteContext {
   params: Promise<{ slug: string }>;
@@ -99,7 +108,7 @@ export async function GET(
       html: sanitised,
       leadData: context.leadData,
       slug,
-      trackingBridgeUrl: TRACKING_BRIDGE_URL,
+      trackingBridgeUrl: TRACKING_BRIDGE_SCRIPT,
       annotations: context.annotations,
       videoUrl: context.videoUrl,
       videoMp4Url: context.videoMp4Url,
