@@ -38,7 +38,18 @@ function loadBridgeSource(): string {
         "nicht finden — Source-Format hat sich geändert; Pattern updaten.",
     );
   }
-  return raw.replace(ENDPOINT_PATTERN, ENDPOINT_REPLACEMENT);
+  // Endpoint-Patch + HTML-Escape für `</script>`-Marker im Code.
+  // Hintergrund: HTML-Parser schließen ein <script>-Tag IMMER beim
+  // ersten `</script>`-String — auch wenn dieser in einem JS-Kommentar
+  // oder String steht. Unsere Bridge-Source hat einen Kommentar mit
+  // einem Beispiel-Tag `<script src="..."></script>` drin; ohne Escape
+  // bricht der HTML-Parser den inline-script vorzeitig ab und das
+  // restliche HTML rendert kaputt.
+  // `<\/script>` ist in JS-Strings identisch zu `</script>`, im HTML
+  // aber kein Tag-Ende.
+  return raw
+    .replace(ENDPOINT_PATTERN, ENDPOINT_REPLACEMENT)
+    .replace(/<\/script>/gi, "<\\/script>");
 }
 
 /**
