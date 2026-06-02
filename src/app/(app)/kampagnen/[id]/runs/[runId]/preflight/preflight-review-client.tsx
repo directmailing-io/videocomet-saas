@@ -603,12 +603,15 @@ export function PreflightReviewClient({
     const nextId = visibleIds[next];
     if (!nextId || nextId === focusedLeadId) return;
     setFocusedLeadId(nextId);
-    // Smooth Scroll der Card in den sichtbaren Bereich.
+    // DOM-Focus mit umsetzen — sonst kann ein anderer Tabstop noch den
+    // Browser-Fokus halten und Tasten-Events landen woanders.
     requestAnimationFrame(() => {
       const el = document.querySelector<HTMLDivElement>(
         `[data-lead-id="${nextId}"]`,
       );
-      el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      if (!el) return;
+      el.focus({ preventScroll: true });
+      el.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
   }
 

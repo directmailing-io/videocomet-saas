@@ -199,11 +199,11 @@ function LeadCardImpl({
   const showSkeleton = status === "pending";
   const hasScreenshot = Boolean(lead.preflightScreenshotUrl);
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      onSelectToggle(e);
-    }
+  // Space + Enter werden bewusst NICHT hier behandelt — das macht der
+  // globale useKeyboardShortcuts-Hook über `focusedLeadId`. Sonst hätten
+  // wir zwei Toggle-Aufrufe und die Auswahl würde sich selber aufheben.
+  function handleKeyDown(_e: React.KeyboardEvent<HTMLDivElement>) {
+    // intentionally empty
   }
 
   return (
@@ -222,7 +222,8 @@ function LeadCardImpl({
         severityTopBorder[sev],
         "hover:shadow-card hover:-translate-y-0.5",
         selected && "ring-2 ring-brand ring-offset-1 ring-offset-surface-soft",
-        focused && !selected && "ring-2 ring-brand/30",
+        focused && !selected && "ring-2 ring-brand ring-offset-1 ring-offset-surface-soft outline-none",
+        focused && selected && "ring-offset-2",
         lead.removedAt && "opacity-50",
       )}
     >

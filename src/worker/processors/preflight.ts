@@ -314,22 +314,29 @@ export async function processPreflightJob(
       .where(eq(leads.id, leadId));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // Wenn auch der echte Browser scheitert, fallen wir auf die Probe-
-    // Klassifizierung zurück (sie liefert dann den Grund — Bot-Block,
-    // TLS-Fehler etc.). Wenn die Probe selber OK war und nur das Bild
-    // nicht klappte, ist's `screenshot_unavailable`.
-    const fallbackStatus = probe.ok
-      ? "screenshot_unavailable"
-      : mapProbeStatusToDb(probe.status);
+    // Spezial-Marker aus dem Screenshot-Modul: erkannte Cloudflare-/
+    // Datadome-Challenge → bot_block, der spätere Lead-Rendering im
+    // Video würde dieselbe Wall zeigen.
+    let fallbackStatus: "screenshot_unavailable" | ReturnType<typeof mapProbeStatusToDb>;
+    if (message.includes("bot_challenge_detected")) {
+      fallbackStatus = "bot_block";
+    } else if (probe.ok) {
+      fallbackStatus = "screenshot_unavailable";
+    } else {
+      fallbackStatus = mapProbeStatusToDb(probe.status);
+    }
     await db
       .update(leads)
       .set({
         preflightStatus: fallbackStatus,
         preflightFinalUrl: probe.finalUrl,
         preflightHttpStatus: probe.httpStatus,
-        preflightErrorMessage: probe.ok
-          ? `screenshot: ${message}`
-          : probe.errorMessage ?? `screenshot: ${message}`,
+        preflightErrorMessage:
+          fallbackStatus === "bot_block"
+            ? "Cloudflare/Datadome-Challenge erkannt — Empfänger sähe Bot-Schutz statt Webseite."
+            : probe.ok
+              ? `screenshot: ${message}`
+              : probe.errorMessage ?? `screenshot: ${message}`,
         preflightDurationMs: probe.durationMs,
         preflightCompletedAt: new Date(),
       })

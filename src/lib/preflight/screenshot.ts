@@ -288,6 +288,53 @@ export async function captureLightScreenshot(
       console.log("[preflight] soft-timeout, capturing partial render");
     }
 
+    // ── Cloudflare-/Datadome-Challenge-Detection ─────────────────────────
+    // Manche Bot-Schutz-Seiten lassen Puppeteer durch die Connection durch,
+    // zeigen aber statt der echten Seite eine "Verifying you are human"-
+    // Challenge an. Würden wir das Bild als OK durchlassen, sähe der
+    // Empfänger im Video die Cloudflare-Wand — kein Akquise-Erfolg.
+    // Heuristik: Titel + sichtbare Text-Snippets prüfen.
+    try {
+      const challenge = await page.evaluate(() => {
+        const title = document.title.toLowerCase();
+        const body = (document.body?.innerText ?? "").toLowerCase();
+        const markers = [
+          "just a moment",
+          "attention required",
+          "verifying you are human",
+          "performing security verification",
+          "ddos protection by cloudflare",
+          "checking your browser",
+          "please wait while we verify",
+          "datadome",
+        ];
+        if (markers.some((m) => title.includes(m) || body.includes(m))) {
+          return true;
+        }
+        if (
+          document.querySelector(
+            "#challenge-running, #cf-please-wait, .cf-browser-verification, " +
+              ".cf-challenge, iframe[src*='challenges.cloudflare.com'], " +
+              "iframe[src*='datadome.co']",
+          )
+        ) {
+          return true;
+        }
+        return false;
+      });
+      if (challenge) {
+        throw new Error("bot_challenge_detected");
+      }
+    } catch (err) {
+      // Eval kann z.B. bei Page-Crash failen — wir reichen das hoch, der
+      // Processor mappt's auf screenshot_unavailable. Aber der spezifische
+      // Marker "bot_challenge_detected" wird im Processor zu `bot_block`.
+      if (err instanceof Error && err.message === "bot_challenge_detected") {
+        throw err;
+      }
+      // andere eval errors: best-effort weiter, vielleicht klappt Screenshot
+    }
+
     // `fullPage: false` — we ONLY want the 640×360 viewport (per spec).
     // `type: 'webp'` is supported in Chromium 86+; if a future Chromium
     // drops it the worker will throw with a clear message.
