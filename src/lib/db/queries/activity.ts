@@ -106,10 +106,10 @@ function buildBaseFilters(
   }
 
   if (filters.campaignIds && filters.campaignIds.length > 0) {
-    parts.push(sql`${campaigns.id} = ANY(${filters.campaignIds})`);
+    parts.push(inArray(campaigns.id, filters.campaignIds));
   }
   if (filters.runIds && filters.runIds.length > 0) {
-    parts.push(sql`${runs.id} = ANY(${filters.runIds})`);
+    parts.push(inArray(runs.id, filters.runIds));
   }
   if (filters.from) {
     // postgres.js akzeptiert keine Date-Instanzen in raw-SQL — explizit
@@ -120,7 +120,7 @@ function buildBaseFilters(
     parts.push(sql`${leadEvents.ts} <= ${filters.to.toISOString()}`);
   }
   if (filters.kinds && filters.kinds.length > 0) {
-    parts.push(sql`${leadEvents.kind} = ANY(${filters.kinds})`);
+    parts.push(inArray(leadEvents.kind, filters.kinds));
   }
   if (filters.search && filters.search.trim().length > 0) {
     const term = `%${filters.search.trim().toLowerCase()}%`;
@@ -521,10 +521,10 @@ export async function getScopedLeadIds(
       break;
   }
   if (filters.campaignIds && filters.campaignIds.length > 0) {
-    whereParts.push(sql`${campaigns.id} = ANY(${filters.campaignIds})`);
+    whereParts.push(inArray(campaigns.id, filters.campaignIds));
   }
   if (filters.runIds && filters.runIds.length > 0) {
-    whereParts.push(sql`${runs.id} = ANY(${filters.runIds})`);
+    whereParts.push(inArray(runs.id, filters.runIds));
   }
   const rows = await db
     .select({ id: leads.id })

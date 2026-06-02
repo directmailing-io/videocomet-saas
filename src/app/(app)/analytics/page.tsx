@@ -1,16 +1,34 @@
 import Link from "next/link";
-import { Eye, Play, Clock, MousePointerClick, Megaphone, Plus, ArrowRight } from "lucide-react";
+import {
+  Eye,
+  Play,
+  Clock,
+  Flame,
+  MousePointerClick,
+  Megaphone,
+  Plus,
+} from "lucide-react";
 import { requireUser } from "@/lib/auth-guard";
-import { listCampaignAggregates } from "@/lib/db/queries/analytics-summary";
-import { PageHeader } from "@/components/ui/page-header";
-import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CampaignBarChart, type CampaignBarItem } from "./_components/campaign-bar-chart";
-import { Sparkline } from "./_components/sparkline";
+import { listCampaignAggregates } from "@/lib/db/queries/analytics-summary";
 import {
-  fmtDate,
+  getFunnelData,
+  getHeroStats,
+  getTimeSeries,
+  getTopLeads,
+  listCampaignPerformance,
+  resolveRange,
+} from "./_components/analytics-data";
+import { RangePicker } from "./_components/range-picker";
+import { ExportButton } from "./_components/export-dialog";
+import { ShortcutsHelp } from "./_components/shortcuts-help";
+import { HeroStat } from "./_components/hero-stat";
+import { CampaignPerformanceList } from "./_components/campaign-performance-list";
+import { FunnelOverview } from "./_components/funnel-overview";
+import { ActivityTimeSeries } from "./_components/activity-timeseries";
+import { TopLeadsList } from "./_components/top-leads-list";
+import {
   fmtDurationVerbose,
   fmtInt,
   fmtPercent,
@@ -18,21 +36,55 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function AnalyticsOverviewPage() {
+type SearchParams = Record<string, string | string[] | undefined>;
+
+function pickStr(sp: SearchParams, key: string): string | null {
+  const v = sp[key];
+  if (Array.isArray(v)) return v[0] ?? null;
+  return v ?? null;
+}
+
+/**
+ * Analytics-Dashboard.
+ *
+ * Goal: in 5 seconds the operator sees how campaigns perform, which leads
+ * are hot, where the funnel leaks and when to follow up — all without a
+ * single tutorial. Strategic view; the real-time feed lives under
+ * `/aktivitaet`.
+ *
+ * Layout:
+ *   1. Sticky topbar  (range-picker + export)
+ *   2. 4 Hero-Stats   (Page-Views · Watch-Time · CTA-Rate · Hot Leads + Δ)
+ *   3. Two columns    (Kampagnen-Performance · Funnel + Drop-Off-Insight)
+ *   4. Time-Series    (Tag/Stunde-Toggle, 3 Serien)
+ *   5. Top-Leads      (Heat-List → click jumps into /aktivitaet drawer)
+ */
+export default async function AnalyticsOverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const sp = await searchParams;
   const { user } = await requireUser();
+
+  const range = resolveRange({
+    key: pickStr(sp, "range"),
+    from: pickStr(sp, "from"),
+    to: pickStr(sp, "to"),
+    bucket: pickStr(sp, "bucket"),
+  });
+  const compare = pickStr(sp, "compare") !== "0";
+
   const items = await listCampaignAggregates(user.id);
 
   if (items.length === 0) {
     return (
       <>
-        <PageHeader
-          title="Analytics"
-          subtitle="Vergleichen Sie Kampagnen-Performance und sehen Sie, wie Ihre personalisierten Videos wirken."
-        />
+        <Topbar />
         <EmptyState
           icon={<Megaphone />}
           title="Noch keine Kampagnen"
-          subtitle="Erstellen Sie Ihre erste Kampagne, um Analytics zu sehen."
+          subtitle="Erstellen Sie Ihre erste Kampagne, um Performance-Daten zu sehen."
           action={
             <Button asChild iconLeft={<Plus className="size-4" />}>
               <Link href="/kampagnen/neu">Erste Kampagne erstellen</Link>
@@ -43,179 +95,204 @@ export default async function AnalyticsOverviewPage() {
     );
   }
 
-  // Totals across all campaigns.
-  const totals = items.reduce(
-    (acc, c) => {
-      acc.views += c.viewCount;
-      acc.plays += c.playCount;
-      acc.ctas += c.ctaClickCount;
-      acc.watch += c.watchTimeSec;
-      return acc;
-    },
-    { views: 0, plays: 0, ctas: 0, watch: 0 },
-  );
+  const [hero, performance, funnel, timeseries, topLeads] = await Promise.all([
+    getHeroStats(user.id, range),
+    listCampaignPerformance(user.id, range),
+    getFunnelData(user.id, range),
+    getTimeSeries(user.id, range),
+    getTopLeads(user.id, range, null, 10),
+  ]);
 
-  // Bar-chart series: top 12 campaigns by total events to keep the chart
-  // readable on small screens. Sort by views+plays+ctas combined.
-  const barItems: CampaignBarItem[] = [...items]
-    .sort(
-      (a, b) =>
-        b.viewCount +
-        b.playCount +
-        b.ctaClickCount -
-        (a.viewCount + a.playCount + a.ctaClickCount),
-    )
-    .slice(0, 12)
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      views: c.viewCount,
-      plays: c.playCount,
-      ctas: c.ctaClickCount,
-      runs: c.runsCount,
-    }));
+  const sparkValues = timeseries.map(
+    (b) => b.pageViews + b.videoPlays + b.ctaClicks,
+  );
+  const sparkPV = timeseries.map((b) => b.pageViews);
+  const sparkCTA = timeseries.map((b) => b.ctaClicks);
+
+  // CTA-Rate as Pp delta — % minus % = absolute pp.
+  const ctaRateDeltaHint = compare
+    ? `Vorperiode: ${hero.prev.ctaRatePct.toFixed(1).replace(".", ",")} %`
+    : `Im Zeitraum: ${range.label}`;
 
   return (
     <>
-      <PageHeader
-        title="Analytics"
-        subtitle="Vergleichen Sie Kampagnen-Performance und sehen Sie, wie Ihre personalisierten Videos wirken."
-        actions={
-          <Button variant="ghost" asChild>
-            <Link href="/analytics/events">Event-Log öffnen</Link>
-          </Button>
-        }
-      />
+      <Topbar />
 
-      {/* KPI tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard
-          label="Σ Aufrufe"
-          value={fmtInt(totals.views)}
-          icon={<Eye />}
-        />
-        <StatCard
-          label="Σ Plays"
-          value={fmtInt(totals.plays)}
-          icon={<Play />}
-        />
-        <StatCard
-          label="Σ Watch-Time"
-          value={fmtDurationVerbose(totals.watch)}
-          icon={<Clock />}
-        />
-        <StatCard
-          label="Σ CTA-Klicks"
-          value={fmtInt(totals.ctas)}
-          icon={<MousePointerClick />}
-        />
+      <div className="mb-4 flex items-center justify-between gap-3 text-xs text-ink-muted">
+        <span className="tabular-nums">
+          Zeitraum: <span className="font-semibold text-ink">{range.label}</span>
+          {compare && (
+            <>
+              {" "}
+              · Vergleich aktiv
+            </>
+          )}
+        </span>
+        <span>Drücken Sie <kbd className="px-1 py-0.5 rounded-sm border border-line text-[10px] font-semibold">?</kbd> für Shortcuts</span>
       </div>
 
-      {/* Comparison chart */}
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Kampagnen-Vergleich</CardTitle>
-          <p className="text-sm text-ink-muted">
-            Aufrufe, Plays, CTA-Klicks und Runden je Kampagne.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <CampaignBarChart items={barItems} />
-        </CardContent>
-      </Card>
+      {/* Hero stats */}
+      <section
+        aria-label="Kennzahlen"
+        className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6"
+      >
+        <HeroStat
+          label="Page-Views"
+          value={fmtInt(hero.pageViews)}
+          prevValue={hero.prev.pageViews}
+          curValue={hero.pageViews}
+          spark={sparkPV}
+          showDelta={compare}
+          icon={<Eye />}
+          hint={`Vorperiode: ${fmtInt(hero.prev.pageViews)}`}
+        />
+        <HeroStat
+          label="Video-Watch-Time"
+          value={fmtDurationVerbose(hero.watchTimeSec)}
+          prevValue={hero.prev.watchTimeSec}
+          curValue={hero.watchTimeSec}
+          spark={sparkValues}
+          showDelta={compare}
+          icon={<Clock />}
+          hint={`Vorperiode: ${fmtDurationVerbose(hero.prev.watchTimeSec)}`}
+        />
+        <HeroStat
+          label="CTA-Rate"
+          value={`${hero.ctaRatePct.toFixed(1).replace(".", ",")}`}
+          unit="%"
+          prevValue={hero.prev.ctaRatePct}
+          curValue={hero.ctaRatePct}
+          spark={sparkCTA}
+          showDelta={compare}
+          icon={<MousePointerClick />}
+          hint={ctaRateDeltaHint}
+        />
+        <HeroStat
+          label="Heiße Leads"
+          value={fmtInt(hero.hotLeads)}
+          prevValue={hero.prev.hotLeads}
+          curValue={hero.hotLeads}
+          spark={sparkValues}
+          showDelta={compare}
+          icon={<Flame />}
+          hint={`Vorperiode: ${fmtInt(hero.prev.hotLeads)}`}
+        />
+      </section>
 
-      {/* Campaign list */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Kampagnen-Details</CardTitle>
-          <p className="text-sm text-ink-muted">
-            Trend der letzten 14 Tage und Conversion-Raten je Kampagne.
-          </p>
-        </CardHeader>
-        <CardContent className="px-0 pb-0">
-          <ul className="divide-y divide-line-soft">
-            {items.map((c) => {
-              const sparkValues = c.dailyCounts.map(
-                (d) => d.views + d.plays + d.ctas,
-              );
-              return (
-                <li key={c.id} className="px-6 py-4">
-                  <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
-                    {/* Name + meta */}
-                    <div className="lg:w-56 min-w-0">
-                      <Link
-                        href={`/analytics/kampagnen/${c.id}`}
-                        className="block text-sm font-semibold text-ink hover:text-brand-deep truncate"
-                      >
-                        {c.name}
-                      </Link>
-                      <p className="text-xs text-ink-muted mt-0.5">
-                        Erstellt am {fmtDate(c.createdAt)}
-                      </p>
-                    </div>
+      {/* Two-column: campaign performance + funnel */}
+      <section className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
+        <div className="lg:col-span-3 bg-surface border border-line rounded-squircle-md">
+          <SectionHeader
+            title="Kampagnen-Performance"
+            subtitle="Sortiert nach CTR im gewählten Zeitraum. Klick öffnet das Detail."
+          />
+          <CampaignPerformanceList items={performance} />
+        </div>
+        <div className="lg:col-span-2 bg-surface border border-line rounded-squircle-md flex flex-col">
+          <SectionHeader
+            title="Global-Funnel"
+            subtitle="Aggregiert über alle Kampagnen. Hervorhebung: größte Drop-Off-Stelle."
+          />
+          <FunnelOverview data={funnel} />
+        </div>
+      </section>
 
-                    {/* Metrics */}
-                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 flex-1 min-w-0">
-                      <MetricCell label="Leads" value={fmtInt(c.leadsCount)} />
-                      <MetricCell label="Aufrufe" value={fmtInt(c.viewCount)} />
-                      <MetricCell label="Plays" value={fmtInt(c.playCount)} />
-                      <MetricCell
-                        label="Watch-Time"
-                        value={fmtDurationVerbose(c.watchTimeSec)}
-                      />
-                      <MetricCell label="CTAs" value={fmtInt(c.ctaClickCount)} />
-                    </div>
+      {/* Time-series */}
+      <section
+        aria-label="Aktivität über Zeit"
+        className="bg-surface border border-line rounded-squircle-md mb-6"
+      >
+        <SectionHeader
+          title="Aktivität über Zeit"
+          subtitle={`Page-Views, Video-Plays und CTA-Klicks im Verlauf. Bucket: ${range.bucket === "hour" ? "stündlich" : "täglich"}.`}
+        />
+        <ActivityTimeSeries
+          data={timeseries}
+          defaultBucket={range.bucket}
+          showBucketToggle={range.key !== "today"}
+        />
+      </section>
 
-                    {/* Conversion */}
-                    <div className="flex flex-col gap-0.5 lg:w-40 text-xs">
-                      <div className="flex justify-between gap-3 text-ink-muted">
-                        <span>Aufrufe → Plays</span>
-                        <span className="text-ink font-semibold tabular-nums">
-                          {fmtPercent(c.playCount, c.viewCount)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between gap-3 text-ink-muted">
-                        <span>Plays → CTA</span>
-                        <span className="text-ink font-semibold tabular-nums">
-                          {fmtPercent(c.ctaClickCount, c.playCount)}
-                        </span>
-                      </div>
-                    </div>
+      {/* Top-Leads */}
+      <section
+        aria-label="Aktivste Leads"
+        className="bg-surface border border-line rounded-squircle-md mb-10"
+      >
+        <SectionHeader
+          title="Top-Leads im Zeitraum"
+          subtitle="Klick öffnet die Lead-Detail-Ansicht im Aktivitäts-Center."
+          right={
+            topLeads.length > 0 && (
+              <span className="text-xs text-ink-muted tabular-nums">
+                Σ {fmtInt(topLeads.reduce((acc, l) => acc + l.pageViews + l.videoPlays + l.ctaClicks, 0))} Aktionen
+              </span>
+            )
+          }
+        />
+        <TopLeadsList leads={topLeads} />
+      </section>
 
-                    {/* Sparkline + link */}
-                    <div className="flex items-center gap-4 lg:w-44 lg:justify-end">
-                      <Sparkline
-                        values={sparkValues}
-                        label={`Trend ${c.name} (14 Tage)`}
-                      />
-                      <Link
-                        href={`/analytics/kampagnen/${c.id}`}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-brand-deep hover:underline whitespace-nowrap"
-                      >
-                        Details
-                        <ArrowRight className="size-3.5" />
-                      </Link>
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </CardContent>
-      </Card>
+      {/* Quiet footer summary so the totals are still discoverable. */}
+      <p className="text-xs text-ink-muted text-center mb-2">
+        {items.length} Kampagne{items.length === 1 ? "" : "n"} ·{" "}
+        {fmtInt(hero.videoPlays)} Plays · {fmtInt(hero.ctaClicks)} CTA-Klicks ·{" "}
+        Conv. {fmtPercent(hero.ctaClicks, hero.videoPlays)}
+      </p>
     </>
   );
 }
 
-function MetricCell({ label, value }: { label: string; value: string }) {
+function Topbar() {
   return (
-    <div className="min-w-0">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
-        {label}
+    <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-1 pb-4 mb-4 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80 border-b border-line">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <h1 className="text-2xl font-bold tracking-tight text-ink leading-tight">
+            Analytics
+          </h1>
+          <p className="text-xs text-ink-muted leading-relaxed">
+            Strategischer Überblick. Echtzeit-Feed unter{" "}
+            <Link
+              href="/aktivitaet"
+              className="font-semibold text-brand-deep hover:underline"
+            >
+              Aktivität
+            </Link>
+            .
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <RangePicker />
+          <ExportButton />
+          <ShortcutsHelp />
+        </div>
       </div>
-      <div className="text-sm text-ink font-semibold tabular-nums truncate">
-        {value}
+    </div>
+  );
+}
+
+function SectionHeader({
+  title,
+  subtitle,
+  right,
+}: {
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-3 border-b border-line-soft">
+      <div className="min-w-0">
+        <h2 className="text-sm font-semibold tracking-tight text-ink">
+          {title}
+        </h2>
+        {subtitle && (
+          <p className="text-xs text-ink-muted leading-relaxed mt-0.5">
+            {subtitle}
+          </p>
+        )}
       </div>
+      {right && <div className="shrink-0">{right}</div>}
     </div>
   );
 }
