@@ -170,7 +170,7 @@ export interface LeadCardProps {
   selected: boolean;
   focused: boolean;
   onSelectToggle: (e: React.MouseEvent | React.KeyboardEvent) => void;
-  onOpen: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
   onRetryScreenshot: () => void;
 }
 
@@ -178,13 +178,17 @@ export interface LeadCardProps {
  * Eine einzelne Karte im Grid. Bewusst memoized — die Card-Komponente
  * darf nur re-rendern, wenn sich ihre Inputs ändern. Sonst macht das
  * SSE-Tick bei 500 Karten 500× Reconciliation.
+ *
+ * Interaktion:
+ *  - Linksklick / Space / Enter → Auswahl togglen
+ *  - Rechtsklick                 → Context-Menu (Parent öffnet es)
  */
 function LeadCardImpl({
   lead,
   selected,
   focused,
   onSelectToggle,
-  onOpen,
+  onContextMenu,
   onRetryScreenshot,
 }: LeadCardProps) {
   const sev = severityOf(lead.preflightStatus);
@@ -196,10 +200,7 @@ function LeadCardImpl({
   const hasScreenshot = Boolean(lead.preflightScreenshotUrl);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      onOpen();
-    } else if (e.key === " ") {
+    if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       onSelectToggle(e);
     }
@@ -211,7 +212,8 @@ function LeadCardImpl({
       tabIndex={focused ? 0 : -1}
       aria-selected={selected}
       aria-label={`${displayName(lead)} – ${STATUS_LABEL[status]}`}
-      onClick={onOpen}
+      onClick={onSelectToggle}
+      onContextMenu={onContextMenu}
       onKeyDown={handleKeyDown}
       className={cn(
         "group relative flex flex-col bg-surface border border-line rounded-squircle-sm overflow-hidden cursor-pointer transition-all duration-150",
@@ -344,14 +346,11 @@ function LeadCardImpl({
 }
 
 export const LeadCard = React.memo(LeadCardImpl, (prev, next) => {
-  // Karten neu rendern, wenn sich ihre relevanten Inputs ändern.
-  // Wir vermeiden vor allem unnötige Reconciliation bei SSE-Bursts,
-  // bei denen 99 % der Karten identisch bleiben.
   return (
     prev.selected === next.selected &&
     prev.focused === next.focused &&
     prev.lead === next.lead &&
-    prev.onOpen === next.onOpen &&
+    prev.onContextMenu === next.onContextMenu &&
     prev.onSelectToggle === next.onSelectToggle &&
     prev.onRetryScreenshot === next.onRetryScreenshot
   );

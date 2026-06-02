@@ -30,6 +30,7 @@ import {
   type SortKey,
 } from "./_components/filter-toolbar";
 import { Lightbox } from "./_components/lightbox";
+import { LeadContextMenu } from "./_components/lead-context-menu";
 import { BulkActionBar } from "./_components/bulk-action-bar";
 import { ConfirmModal } from "./_components/confirm-modal";
 import { useSelection } from "./_components/use-selection";
@@ -113,6 +114,11 @@ export function PreflightReviewClient({
   );
   const [searchQuery, setSearchQuery] = React.useState("");
   const [sort, setSort] = React.useState<SortKey>("problems_first");
+  const [ctxMenu, setCtxMenu] = React.useState<{
+    leadId: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [lightboxOpenLeadId, setLightboxOpenLeadId] = React.useState<
     string | null
   >(null);
@@ -342,6 +348,13 @@ export function PreflightReviewClient({
     await rejectLeads(ids);
     setBulkRemoveLoading(false);
   }, [selection, rejectLeads]);
+
+  const handleSingleRemove = React.useCallback(
+    async (leadId: string) => {
+      await rejectLeads([leadId]);
+    },
+    [rejectLeads],
+  );
 
   const handleRetryScreenshot = React.useCallback(
     async (leadId: string) => {
@@ -766,8 +779,11 @@ export function PreflightReviewClient({
               leads={visibleLeads}
               selected={selection.selected}
               focusedLeadId={focusedLeadId}
-              onLeadOpen={onLeadOpen}
               onSelectToggle={onSelectToggle}
+              onContextMenu={(leadId, e) => {
+                e.preventDefault();
+                setCtxMenu({ leadId, x: e.clientX, y: e.clientY });
+              }}
               onRetryScreenshot={handleRetryScreenshot}
             />
           )}
@@ -777,14 +793,14 @@ export function PreflightReviewClient({
         <div className="text-[11px] text-ink-muted flex items-center gap-2 pb-4">
           <Keyboard className="size-3.5" />
           <span>
+            <span className="font-mono font-semibold">Klick</span> auswählen ·{" "}
+            <span className="font-mono font-semibold">Rechtsklick</span> Menü ·{" "}
             <span className="font-mono font-semibold">R</span> entfernen ·{" "}
             <span className="font-mono font-semibold">K</span> behalten ·{" "}
-            <span className="font-mono font-semibold">Space</span> markieren ·{" "}
             <span className="font-mono font-semibold">⌘A</span> alles ·{" "}
             <span className="font-mono font-semibold">F</span> Problematische ·{" "}
             <span className="font-mono font-semibold">/</span> Suche ·{" "}
-            <span className="font-mono font-semibold">←/→</span> in Lightbox
-            blättern
+            <span className="font-mono font-semibold">←/→</span> in Detail-Ansicht
           </span>
         </div>
       </div>
@@ -808,6 +824,28 @@ export function PreflightReviewClient({
         onReject={onLightboxReject}
         onRetryScreenshot={handleRetryScreenshot}
       />
+
+      {/* Context-Menu (Rechtsklick auf Card) */}
+      {ctxMenu &&
+        (() => {
+          const lead = leads.find((l) => l.id === ctxMenu.leadId);
+          if (!lead) return null;
+          return (
+            <LeadContextMenu
+              lead={lead}
+              position={{ x: ctxMenu.x, y: ctxMenu.y }}
+              onClose={() => setCtxMenu(null)}
+              onOpenDetails={() => setLightboxOpenLeadId(lead.id)}
+              onRequestRemove={() => void handleSingleRemove(lead.id)}
+              onToast={(msg, variant) =>
+                toast({
+                  title: msg,
+                  variant: variant ?? "success",
+                })
+              }
+            />
+          );
+        })()}
 
       {/* Confirm-Modal */}
       <ConfirmModal

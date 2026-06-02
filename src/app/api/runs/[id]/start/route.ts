@@ -8,7 +8,11 @@ import { db } from "@/lib/db";
 import { campaigns, customLpTemplates, leads, runs } from "@/lib/db/schema";
 import { getRun, updateRun } from "@/lib/db/queries/runs";
 import { bulkInsertLeads, type BulkLeadRow } from "@/lib/db/queries/leads";
-import { enqueueForPreflight } from "@/lib/preflight/job-enqueue";
+import {
+  enqueueForPreflight,
+  enqueueApprovedLeadsForPhase2,
+} from "@/lib/preflight/job-enqueue";
+import { sql } from "drizzle-orm";
 
 /**
  * Looks up the active Custom-LP-Version-ID for a campaign at the moment a run
@@ -149,10 +153,71 @@ export async function POST(
     run.campaignId,
   );
 
-  // Status auf 'preflighting'. `preflightStartedAt` setzen, damit der Stuck-
-  // Recovery-Pass nachher das 5-Minuten-Fenster für stuck preflight-leads
-  // korrekt berechnen kann. `startedAt` (das Phase-2-Marker) bleibt NULL —
-  // wird erst beim Approval-Übergang gesetzt.
+  // Kampagnen-Modus laden. Bei `webcam-only` wird das Video nur aus dem
+  // Webcam-Clip rendert (kein Webseite-Screencast) — eine URL-Probe + Vorab-
+  // Screenshot wäre dann nutzlos, weil die Lead-URL gar nicht ins Video
+  // einfließt. In diesem Fall überspringen wir Phase 1 komplett.
+  const [campaignRow] = await db
+    .select({ mode: campaigns.mode })
+    .from(campaigns)
+    .where(eq(campaigns.id, run.campaignId))
+    .limit(1);
+  const skipPreflight = campaignRow?.mode === "webcam-only";
+
+  if (skipPreflight) {
+    // ── Direkter Phase-2-Pfad ────────────────────────────────────────────
+    // Alle Leads kriegen einen Auto-Approve-Stempel. preflight_status='ok'
+    // ist semantisch korrekt ("nichts zu prüfen — durchgewunken").
+    await db
+      .update(leads)
+      .set({
+        preflightStatus: "ok",
+        approvedAt: sql`NOW()`,
+        preflightCompletedAt: sql`NOW()`,
+      })
+      .where(eq(leads.runId, params.id));
+
+    await updateRun(params.id, auth.user.id, {
+      status: "approved",
+      startedAt: new Date(),
+      totalLeads: inserted,
+      approvedLeadCount: inserted,
+      customLpVersionId,
+    });
+
+    await db
+      .update(runs)
+      .set({
+        columnMapping: { mapping } as unknown as Record<string, string>,
+      })
+      .where(and(eq(runs.id, params.id), eq(runs.userId, auth.user.id)));
+
+    try {
+      await enqueueApprovedLeadsForPhase2(params.id, auth.user.id);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[runs:start] phase-2 enqueue failed:", err);
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Leads angelegt, aber die Job-Queue ist nicht erreichbar. Worker prüfen.",
+          totalLeads: inserted,
+        },
+        { status: 503 },
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      preflightSkipped: true,
+      totalLeads: inserted,
+      queuedForPreflight: 0,
+      alreadyDisqualified: 0,
+    });
+  }
+
+  // ── Phase-1-Pfad (Default für `with-presentation`) ─────────────────────
   await updateRun(params.id, auth.user.id, {
     status: "preflighting",
     preflightStartedAt: new Date(),
@@ -160,7 +225,6 @@ export async function POST(
     customLpVersionId,
   });
 
-  // Free the parsed-rows blob (they're now in `leads`).
   await db
     .update(runs)
     .set({
@@ -168,10 +232,6 @@ export async function POST(
     })
     .where(and(eq(runs.id, params.id), eq(runs.userId, auth.user.id)));
 
-  // Preflight-Enqueue: inline-Validation + Duplikat-Detection + Bulk-Add in
-  // `lead-preflight`. Wenn Redis weg ist, werfen wir einen 503, damit der
-  // User merkt dass die Phase 1 nicht losgelaufen ist. Der Run bleibt in
-  // `preflighting` — der nächste Worker-Boot-Recovery-Pass fängt das auf.
   let enqueueResult;
   try {
     enqueueResult = await enqueueForPreflight(
@@ -196,6 +256,7 @@ export async function POST(
 
   return NextResponse.json({
     ok: true,
+    preflightSkipped: false,
     totalLeads: enqueueResult.totalLeads,
     queuedForPreflight: enqueueResult.queuedForPreflight,
     alreadyDisqualified: enqueueResult.alreadyDisqualified,
