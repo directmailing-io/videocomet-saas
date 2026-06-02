@@ -249,21 +249,37 @@ export async function processPreflightJob(
   const signal = (job as unknown as { signal?: AbortSignal }).signal;
 
   // ── Step 4: URL probe ─────────────────────────────────────────────────
-  // HEAD/GET-Probe ist primär eine Klassifizierungs-Hilfe. Viele große
-  // B2B-Sites (Cloudflare/Akamai-geschützt) lehnen HEAD ohne Cookies pauschal
-  // ab — Puppeteer mit echtem User-Agent kommt aber durch. Wir kürzen daher
-  // NUR bei DNS-Errors ab (Domain existiert wirklich nicht — Screenshot
-  // hätte keine Chance). Alle anderen Probe-Fehler werden später als
-  // Diagnose-Hinweis verwendet, falls auch der Screenshot scheitert.
+  // Probe-Outcomes werden in zwei Klassen geteilt:
+  //
+  //  Hard-Reject (kein Screenshot, Status direkt persistieren):
+  //   - dns_error            (Domain existiert nicht)
+  //   - bot_block            (Cloudflare/Datadome/Akamai blocken auch Puppeteer
+  //                           — Versuch wäre nur ein 15s-Hang)
+  //   - tls_error            (HTTPS-Cert kaputt; Puppeteer würde ebenfalls
+  //                           scheitern)
+  //   - url_redirect_parking (Final-URL ist Parking-Domain)
+  //
+  //  Pass-Through (Screenshot trotzdem versuchen):
+  //   - url_dead             (HEAD lieferte 4xx/5xx — viele Sites blocken
+  //                           HEAD aber liefern auf GET via Browser sauberen
+  //                           Inhalt)
+  //   - slow                 (HEAD braucht lange — Browser sieht oft etwas)
+  //   - ok                   (offensichtlich)
   const probe = await probeUrl(websiteUrl, signal);
-  if (probe.status === "dns_error") {
+  const probeHardReject =
+    probe.status === "dns_error" ||
+    probe.status === "bot_block" ||
+    probe.status === "tls_error" ||
+    probe.status === "url_redirect_parking";
+
+  if (probeHardReject) {
     await db
       .update(leads)
       .set({
-        preflightStatus: "url_dead",
+        preflightStatus: mapProbeStatusToDb(probe.status),
         preflightFinalUrl: probe.finalUrl,
         preflightHttpStatus: probe.httpStatus,
-        preflightErrorMessage: probe.errorMessage ?? "dns_error",
+        preflightErrorMessage: probe.errorMessage,
         preflightDurationMs: probe.durationMs,
         preflightCompletedAt: new Date(),
       })
