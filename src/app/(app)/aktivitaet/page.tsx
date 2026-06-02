@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth-guard";
 import { ActivityCenter } from "./activity-center";
+import { AnalyticsSectionNav } from "../_components/analytics-section-nav";
 
 export const metadata: Metadata = {
   title: "Aktivität · VideoComet",
@@ -8,12 +9,12 @@ export const metadata: Metadata = {
     "Live-Übersicht aller Lead-Aktivitäten — Page-Views, Video-Plays und CTA-Klicks.",
 };
 
-/**
- * Top-Level-Aktivitäts-Center. Auth-Check via requireUser (redirected sonst
- * auf /login). Render-Logik komplett im Client — wir brauchen SSE, Drawer,
- * Tastatur-Bedienung, alles client-side.
- */
 export default async function AktivitaetPage() {
   await requireUser();
-  return <ActivityCenter scope="global" />;
+  return (
+    <div className="flex flex-col gap-4">
+      <AnalyticsSectionNav />
+      <ActivityCenter scope="global" />
+    </div>
+  );
 }

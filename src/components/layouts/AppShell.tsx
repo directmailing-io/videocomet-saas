@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Megaphone,
@@ -12,7 +13,6 @@ import {
   Menu,
   User as UserIcon,
   BarChart3,
-  Activity,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -35,7 +35,6 @@ import { cn, getInitials } from "@/lib/utils";
 export type AppNavKey =
   | "dashboard"
   | "campaigns"
-  | "activity"
   | "analytics"
   | "media"
   | "landingpages"
@@ -50,7 +49,6 @@ export interface AppShellUser {
 export interface AppShellProps {
   children: React.ReactNode;
   user: AppShellUser;
-  currentNav: AppNavKey;
   pageTitle?: string;
   breadcrumb?: React.ReactNode;
   headerActions?: React.ReactNode;
@@ -61,29 +59,45 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+  /** Zusätzliche Pfad-Präfixe die das Item ebenfalls als aktiv markieren. */
+  matchPrefixes?: string[];
 }
 
+// "Aktivität" und "Analytics" sind als ein Nav-Punkt zusammengeführt — beide
+// Routen highlighten denselben Eintrag, die Sub-Navigation innerhalb der Seite
+// schaltet zwischen Übersicht und Live-Feed.
 const NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { key: "campaigns", label: "Kampagnen", href: "/kampagnen", icon: Megaphone },
-  { key: "activity", label: "Aktivität", href: "/aktivitaet", icon: Activity },
-  { key: "analytics", label: "Analytics", href: "/analytics", icon: BarChart3 },
+  {
+    key: "analytics",
+    label: "Analytics",
+    href: "/analytics",
+    icon: BarChart3,
+    matchPrefixes: ["/aktivitaet"],
+  },
   { key: "media", label: "Mediathek", href: "/mediathek", icon: Library },
   { key: "landingpages", label: "Landingpages", href: "/landingpages", icon: LayoutTemplate },
   { key: "settings", label: "Einstellungen", href: "/einstellungen", icon: Settings },
 ];
 
-function NavList({
-  current,
-  onSelect,
-}: {
-  current: AppNavKey;
-  onSelect?: () => void;
-}) {
+function isNavActive(item: NavItem, pathname: string): boolean {
+  if (pathname === item.href || pathname.startsWith(item.href + "/")) return true;
+  if (item.matchPrefixes) {
+    return item.matchPrefixes.some(
+      (p) => pathname === p || pathname.startsWith(p + "/"),
+    );
+  }
+  return false;
+}
+
+function NavList({ onSelect }: { onSelect?: () => void }) {
+  const pathname = usePathname() ?? "/dashboard";
   return (
     <nav className="flex flex-col gap-0.5 px-3">
-      {NAV.map(({ key, label, href, icon: Icon }) => {
-        const active = key === current;
+      {NAV.map((item) => {
+        const { key, label, href, icon: Icon } = item;
+        const active = isNavActive(item, pathname);
         return (
           <Link
             key={key}
@@ -161,12 +175,10 @@ function UserMenu({ user }: { user: AppShellUser }) {
 }
 
 function SidebarInner({
-  current,
   user,
   onSelect,
   brand,
 }: {
-  current: AppNavKey;
   user: AppShellUser;
   onSelect?: () => void;
   brand?: React.ReactNode;
@@ -174,11 +186,11 @@ function SidebarInner({
   return (
     <div className="flex h-full w-full flex-col bg-surface">
       <div className="flex h-16 items-center gap-3 px-5 border-b border-line">
-        <Logo variant="horizontal" height={24} />
+        <Logo variant="horizontal" height={36} />
       </div>
       {brand && <div className="px-5 py-3">{brand}</div>}
       <div className="flex-1 overflow-y-auto py-4">
-        <NavList current={current} onSelect={onSelect} />
+        <NavList onSelect={onSelect} />
       </div>
       <div className="border-t border-line p-3">
         <UserMenu user={user} />
@@ -190,19 +202,20 @@ function SidebarInner({
 export function AppShell({
   children,
   user,
-  currentNav,
   pageTitle,
   breadcrumb,
   headerActions,
 }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const currentLabel = NAV.find((n) => n.key === currentNav)?.label ?? "";
+  const pathname = usePathname() ?? "/dashboard";
+  const currentLabel =
+    NAV.find((n) => isNavActive(n, pathname))?.label ?? "";
 
   return (
     <div className="flex min-h-screen bg-surface-soft">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-[240px] md:shrink-0 md:border-r md:border-line md:bg-surface md:sticky md:top-0 md:h-screen">
-        <SidebarInner current={currentNav} user={user} />
+        <SidebarInner user={user} />
       </aside>
 
       <div className="flex flex-1 min-w-0 flex-col">
@@ -226,7 +239,6 @@ export function AppShell({
             >
               <DialogTitle className="sr-only">Navigation</DialogTitle>
               <SidebarInner
-                current={currentNav}
                 user={user}
                 onSelect={() => setMobileOpen(false)}
               />

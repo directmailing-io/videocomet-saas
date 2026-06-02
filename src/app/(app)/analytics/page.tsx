@@ -23,6 +23,7 @@ import {
 import { RangePicker } from "./_components/range-picker";
 import { ExportButton } from "./_components/export-dialog";
 import { ShortcutsHelp } from "./_components/shortcuts-help";
+import { AnalyticsSectionNav } from "../_components/analytics-section-nav";
 import { HeroStat } from "./_components/hero-stat";
 import { CampaignPerformanceList } from "./_components/campaign-performance-list";
 import { FunnelOverview } from "./_components/funnel-overview";
@@ -245,20 +246,16 @@ export default async function AnalyticsOverviewPage({
 function Topbar() {
   return (
     <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-1 pb-4 mb-4 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80 border-b border-line">
+      <div className="mb-3">
+        <AnalyticsSectionNav />
+      </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <h1 className="text-2xl font-bold tracking-tight text-ink leading-tight">
             Analytics
           </h1>
           <p className="text-xs text-ink-muted leading-relaxed">
-            Strategischer Überblick. Echtzeit-Feed unter{" "}
-            <Link
-              href="/aktivitaet"
-              className="font-semibold text-brand-deep hover:underline"
-            >
-              Aktivität
-            </Link>
-            .
+            Strategischer Überblick. Der Live-Feed liegt im Tab daneben.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
