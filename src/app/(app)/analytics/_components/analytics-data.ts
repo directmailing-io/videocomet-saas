@@ -723,7 +723,16 @@ export async function getTopLeads(
     .innerJoin(campaigns, eq(campaigns.id, runs.campaignId))
     .where(and(...baseConds))
     .groupBy(leads.id, leads.data, campaigns.id, campaigns.name, runs.id, runs.name)
-    .orderBy(sql`score DESC, MAX(${leadEvents.ts}) DESC`)
+    // Postgres erkennt SELECT-Aliase wie `score` in ORDER BY nicht zuverlässig
+    // wenn der Alias ein Composite-Ausdruck ist — also den vollen Ausdruck
+    // hier wiederholen.
+    .orderBy(
+      sql`(
+        COUNT(*) FILTER (WHERE ${leadEvents.kind} = 'cta_click')::int * 100
+        + COUNT(*) FILTER (WHERE ${leadEvents.kind} = 'video_play')::int * 10
+        + COUNT(*) FILTER (WHERE ${leadEvents.kind} = 'page_view')::int * 1
+      ) DESC, MAX(${leadEvents.ts}) DESC`,
+    )
     .limit(limit);
 
   return rows.map((r) => {
