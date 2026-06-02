@@ -69,6 +69,10 @@ async function stuckLeadRecovery(): Promise<void> {
       and(
         eq(leads.status, "pending"),
         eq(runs.status, "generating"),
+        // KRITISCH: vom User aussortierte Leads NIE wieder einqueuen.
+        // Ohne diesen Filter holt die Recovery alle 2 min auch die im
+        // Preflight rejecteten Leads zurück in die Pipeline.
+        sql`${leads.removedAt} IS NULL`,
       ),
     )
     .limit(2000);
@@ -127,6 +131,7 @@ async function stuckLeadRecovery(): Promise<void> {
         inArray(leads.status, ["rendering", "uploading"]),
         lt(leads.startedAt, fiveMinutesAgo),
         eq(runs.status, "generating"),
+        sql`${leads.removedAt} IS NULL`,
         lt(leads.attempts, 3),
       ),
     );
@@ -141,6 +146,7 @@ async function stuckLeadRecovery(): Promise<void> {
         inArray(leads.status, ["rendering", "uploading"]),
         lt(leads.startedAt, fiveMinutesAgo),
         eq(runs.status, "generating"),
+        sql`${leads.removedAt} IS NULL`,
         sql`${leads.attempts} >= 3`,
       ),
     );

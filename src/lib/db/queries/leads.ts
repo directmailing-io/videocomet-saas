@@ -75,7 +75,15 @@ export async function listLeadsByRun(runId: string, userId: string): Promise<Lea
     .select({ lead: leads })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
-    .where(and(eq(leads.runId, runId), eq(runs.userId, userId)))
+    .where(
+      and(
+        eq(leads.runId, runId),
+        eq(runs.userId, userId),
+        // Im Preflight rejected → in Run-Detail, CSV-Export und PDF-Bundle
+        // unsichtbar. Audit-Trail bleibt in der DB.
+        isNull(leads.removedAt),
+      ),
+    )
     .orderBy(asc(leads.rowIndex));
   return rows.map((r) => r.lead);
 }
@@ -91,7 +99,13 @@ export async function countByStatus(
     })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
-    .where(and(eq(leads.runId, runId), eq(runs.userId, userId)))
+    .where(
+      and(
+        eq(leads.runId, runId),
+        eq(runs.userId, userId),
+        isNull(leads.removedAt),
+      ),
+    )
     .groupBy(leads.status);
 
   const result: Record<string, number> = {
