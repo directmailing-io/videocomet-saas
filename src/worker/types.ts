@@ -77,3 +77,16 @@ export const PIPELINE_STAGES = [
 ] as const;
 
 export type PipelineStage = (typeof PIPELINE_STAGES)[number];
+
+/**
+ * Phase-1 Preflight job payload — one job per Lead. The processor in
+ * `processors/preflight.ts` consumes this, runs a quick URL-probe + light
+ * screenshot, and writes the result into the lead row. Kept separate from
+ * `LeadJobData` so the BullMQ queue / worker types stay narrow.
+ */
+export interface PreflightJobData {
+  leadId: string;
+  runId: string;
+  userId: string;
+  campaignId: string;
+}

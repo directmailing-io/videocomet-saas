@@ -38,6 +38,9 @@ export interface RunRow {
   status:
     | "draft"
     | "mapping"
+    | "preflighting"
+    | "awaiting_approval"
+    | "approved"
     | "generating"
     | "completed"
     | "failed"
@@ -57,7 +60,13 @@ interface RunsTableProps {
 
 type FinalStatus = "completed" | "failed" | "cancelled" | "draft";
 
-const ACTIVE_STATUSES = new Set<RunRow["status"]>(["mapping", "generating"]);
+const ACTIVE_STATUSES = new Set<RunRow["status"]>([
+  "mapping",
+  "preflighting",
+  "awaiting_approval",
+  "approved",
+  "generating",
+]);
 const POLL_INTERVAL_MS = 5000;
 
 function isFinal(status: RunRow["status"]): status is FinalStatus {
@@ -83,6 +92,12 @@ function statusLabel(status: RunRow["status"]): string {
       return "Entwurf";
     case "mapping":
       return "Mapping";
+    case "preflighting":
+      return "Prüft Leads ...";
+    case "awaiting_approval":
+      return "Freigabe ausstehend";
+    case "approved":
+      return "Freigegeben";
     case "generating":
       return "Wird erzeugt ...";
     case "completed":
@@ -101,8 +116,11 @@ function statusVariant(
     case "completed":
       return "success";
     case "generating":
+    case "approved":
       return "brand";
     case "mapping":
+    case "preflighting":
+    case "awaiting_approval":
       return "warn";
     case "failed":
       return "danger";
@@ -116,7 +134,7 @@ function statusVariant(
 function StatusBadge({ status }: { status: RunRow["status"] }) {
   const variant = statusVariant(status);
   const label = statusLabel(status);
-  if (status === "generating") {
+  if (status === "generating" || status === "preflighting") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold leading-5 whitespace-nowrap bg-brand-soft text-brand-deep">
         <span className="relative flex size-1.5">

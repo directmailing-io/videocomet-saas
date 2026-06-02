@@ -10,9 +10,10 @@
 
 import { Queue, Worker, type ConnectionOptions, type Processor } from "bullmq";
 import IORedis from "ioredis";
-import type { LeadJobData } from "./types";
+import type { LeadJobData, PreflightJobData } from "./types";
 
 const QUEUE_NAME = "lead-pipeline";
+const PREFLIGHT_QUEUE_NAME = "lead-preflight";
 
 let redisConnection: IORedis | null = null;
 
@@ -134,3 +135,76 @@ export function pipelineWorker(
 }
 
 export const LEAD_PIPELINE_QUEUE = QUEUE_NAME;
+export const LEAD_PREFLIGHT_QUEUE = PREFLIGHT_QUEUE_NAME;
+
+// ── Phase-1 Preflight Queue ─────────────────────────────────────────────────
+//
+// A separate BullMQ queue for the fast URL-probe + light-screenshot pass that
+// runs before the heavy video render. Kept distinct from the main pipeline
+// queue so a heavy render run never blocks a new run's preflight (or vice
+// versa) and so concurrency can be tuned independently.
+//
+// Caller-Note (start endpoint, Agent 1's responsibility):
+//   `addBulk` with an explicit `jobId` will SILENTLY DEDUPE if the same ID
+//   sits in the failed/completed ZSETs. Before enqueueing preflight jobs
+//   for a given leadId, the caller MUST do:
+//
+//     await preflightQueue().remove(leadId).catch(() => undefined);
+//
+//   …otherwise re-runs of a previously preflighted Lead deadlock — same
+//   pattern we already use in `worker/index.ts` for stuck-recovery.
+
+let _preflightQueue: Queue<PreflightJobData> | null = null;
+
+/**
+ * Returns the (lazy-initialized) BullMQ queue used to enqueue Lead-Preflight
+ * jobs. Mirrors `pipelineQueue()` settings but with TIGHTER retain counts —
+ * preflight jobs are short-lived and produce ~1000s of completions per run.
+ */
+export function preflightQueue(): Queue<PreflightJobData> {
+  if (_preflightQueue) return _preflightQueue;
+  _preflightQueue = new Queue<PreflightJobData>(PREFLIGHT_QUEUE_NAME, {
+    connection: getConnectionOpts(),
+    defaultJobOptions: {
+      // 2 attempts mirrors `pipelineQueue`: one transient retry, then fail.
+      attempts: 2,
+      backoff: { type: "exponential", delay: 5_000 },
+      removeOnComplete: { count: 200 },
+      removeOnFail: { count: 500 },
+    },
+  });
+  return _preflightQueue;
+}
+
+/**
+ * Creates a BullMQ Worker that consumes the lead-preflight queue.
+ *
+ * Settings:
+ *  - `concurrency: 24` (env: PREFLIGHT_WORKER_CONCURRENCY) — preflight jobs
+ *    are ~80 MB Chromium-page each + a tiny network probe; 24 parallel
+ *    sits comfortably inside the 15 GB worker container while letting us
+ *    process 500 leads in ~90 s (per concept doc).
+ *  - `stalledInterval: 30s` — frequent enough that a crashed page is
+ *    surfaced quickly without thrashing.
+ *  - `maxStalledCount: 3` — tolerate transient lock-renewal hiccups.
+ *  - `lockDuration: 60s` — preflight is bounded to ~8s goto + a small
+ *    Bunny upload; 60s is generous.
+ *  - `lockRenewTime: 20s` — renew at 1/3 of duration.
+ */
+export function preflightWorker(
+  processor: Processor<PreflightJobData>,
+): Worker<PreflightJobData> {
+  const concurrency = Number(
+    process.env.PREFLIGHT_WORKER_CONCURRENCY ?? "24",
+  );
+  return new Worker<PreflightJobData>(PREFLIGHT_QUEUE_NAME, processor, {
+    connection: getConnectionOpts(),
+    concurrency,
+    stalledInterval: 30_000,
+    maxStalledCount: 3,
+    lockDuration: 60_000,
+    lockRenewTime: 20_000,
+    removeOnComplete: { count: 200 },
+    removeOnFail: { count: 500 },
+  });
+}

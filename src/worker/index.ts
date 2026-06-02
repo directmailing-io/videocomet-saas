@@ -32,6 +32,11 @@ import {
 } from "./lib/heartbeat";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
+import {
+  enqueueApprovedLeadsForPhase2,
+  requeuePreflightLeads,
+} from "@/lib/preflight/job-enqueue";
+import { PREFLIGHT_TERMINAL_STATUSES } from "@/lib/preflight/types";
 import type { LeadJobData } from "./types";
 import type { Job } from "bullmq";
 
@@ -198,6 +203,239 @@ async function stuckLeadRecovery(): Promise<void> {
   }
 }
 
+/**
+ * Preflight-Recovery: gleiche Idee wie stuckLeadRecovery() für Phase 1.
+ *
+ *  (A) Orphaned-pending-Recovery
+ *      Leads mit `preflight_status='pending'` in Runs mit `status='preflighting'`.
+ *      Diese können durch Worker-Crash zwischen DB-Insert und Queue-Enqueue
+ *      entstehen, oder durch eine kurze Redis-Unavailability beim
+ *      `/api/runs/[id]/start`-Call.
+ *
+ *  (B) Stuck-running-Recovery
+ *      Leads mit `preflight_status='running'` deren preflight_started_at
+ *      des parent Runs >5 min in der Vergangenheit liegt UND attempts < 3.
+ *      Zurück auf 'pending', re-enqueue.
+ *
+ *  (C) Exhausted
+ *      attempts >= 3 → terminal `unknown_error`, kein Re-enqueue.
+ *
+ *  (D) Run-Finalization
+ *      Für jeden Run in `preflighting`: wenn ALLE Leads (nicht-removed) in
+ *      einem terminalen preflight-Status sind → `runs.status='awaiting_approval'`
+ *      + `preflight_completed_at=NOW()`.
+ *
+ * Race-Hinweis: dieses Recovery läuft alle 2 min und ist idempotent.
+ * Mehrere Worker-Instanzen führen denselben Pass aus; durch jobId-Dedup
+ * + WHERE-Filter auf alten Stati gibt es keine Korruption.
+ */
+async function preflightRecovery(): Promise<void> {
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+  // ── (A) Orphaned-pending in `preflighting`-Runs ───────────────────────
+  const orphanedPending = await db
+    .select({
+      id: leads.id,
+      runId: leads.runId,
+      userId: runs.userId,
+      campaignId: runs.campaignId,
+    })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        eq(leads.preflightStatus, "pending"),
+        eq(runs.status, "preflighting"),
+        sql`${leads.removedAt} IS NULL`,
+      ),
+    )
+    .limit(2000);
+
+  if (orphanedPending.length > 0) {
+    try {
+      await requeuePreflightLeads(
+        orphanedPending.map((o) => ({
+          leadId: o.id,
+          runId: o.runId,
+          userId: o.userId,
+          campaignId: o.campaignId,
+        })),
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        `[worker:${WORKER_ID}] preflight-orphan-recovery: re-enqueued ${orphanedPending.length} pending leads`,
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[worker:${WORKER_ID}] preflight-orphan-recovery enqueue failed:`,
+        err,
+      );
+    }
+  }
+
+  // ── (B) Stuck-running > 5 min, attempts < 3 ───────────────────────────
+  // Wir nutzen `runs.preflight_started_at` als "5min-Stuck-Boundary": ein
+  // Run der vor mehr als 5 min angefangen hat UND in dessen Leads noch
+  // running-Stati sind, hat einen Stale-Job.
+  const stuckRunning = await db
+    .select({
+      id: leads.id,
+      runId: leads.runId,
+      userId: runs.userId,
+      campaignId: runs.campaignId,
+      attempts: leads.preflightAttempts,
+    })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        eq(leads.preflightStatus, "running"),
+        eq(runs.status, "preflighting"),
+        sql`${leads.removedAt} IS NULL`,
+        sql`${runs.preflightStartedAt} < ${fiveMinutesAgo}`,
+        sql`${leads.preflightAttempts} < 3`,
+      ),
+    );
+
+  // ── (C) Exhausted: attempts >= 3 → terminal unknown_error ──────────────
+  const exhausted = await db
+    .select({ id: leads.id })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        eq(leads.preflightStatus, "running"),
+        eq(runs.status, "preflighting"),
+        sql`${leads.removedAt} IS NULL`,
+        sql`${leads.preflightAttempts} >= 3`,
+      ),
+    );
+  if (exhausted.length > 0) {
+    const exIds = exhausted.map((e) => e.id);
+    await db
+      .update(leads)
+      .set({
+        preflightStatus: "unknown_error",
+        preflightCompletedAt: new Date(),
+        preflightErrorMessage: sql`COALESCE(${leads.preflightErrorMessage}, 'preflight exceeded max retries (3) — likely a bad URL or unrecoverable error')`,
+      })
+      .where(inArray(leads.id, exIds));
+    // eslint-disable-next-line no-console
+    console.log(
+      `[worker:${WORKER_ID}] preflight-recovery: marked ${exhausted.length} exhausted leads as unknown_error`,
+    );
+  }
+
+  if (stuckRunning.length > 0) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[worker:${WORKER_ID}] preflight-stuck-recovery: found ${stuckRunning.length} leads running >5min, requeueing`,
+    );
+    const ids = stuckRunning.map((s) => s.id);
+    // Zurück auf pending — Worker setzt beim Re-Pickup wieder running.
+    await db
+      .update(leads)
+      .set({
+        preflightStatus: "pending",
+        preflightErrorMessage: sql`COALESCE(${leads.preflightErrorMessage}, 'preflight recovered from stuck running state')`,
+      })
+      .where(inArray(leads.id, ids));
+
+    try {
+      await requeuePreflightLeads(
+        stuckRunning.map((s) => ({
+          leadId: s.id,
+          runId: s.runId,
+          userId: s.userId,
+          campaignId: s.campaignId,
+        })),
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[worker:${WORKER_ID}] preflight-stuck-recovery enqueue failed:`,
+        err,
+      );
+    }
+  }
+
+  // ── (D) Run-Finalization: alle Leads terminal → awaiting_approval ─────
+  // Idempotent via WHERE-Filter auf status='preflighting'.
+  try {
+    await db.execute(sql`
+      UPDATE ${runs}
+      SET status = 'awaiting_approval',
+          preflight_completed_at = COALESCE(${runs.preflightCompletedAt}, NOW())
+      WHERE ${runs.id} IN (
+        SELECT r.id
+        FROM ${runs} r
+        WHERE r.status = 'preflighting'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM ${leads} l
+            WHERE l.run_id = r.id
+              AND l.removed_at IS NULL
+              AND l.preflight_status NOT IN (${sql.join(
+                PREFLIGHT_TERMINAL_STATUSES.map((s) => sql`${s}`),
+                sql`, `,
+              )})
+          )
+          AND EXISTS (
+            SELECT 1 FROM ${leads} l2
+            WHERE l2.run_id = r.id AND l2.removed_at IS NULL
+          )
+      )
+    `);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[worker:${WORKER_ID}] preflight-run-finalization failed:`,
+      err,
+    );
+  }
+
+  // ── (E) Approved-Run-Watcher: triggert Phase-2-Enqueue ────────────────
+  // Agent 1's `/preflight/approve`-Endpoint setzt nur runs.status='approved'
+  // und liefert die Response zurück. Den eigentlichen Übergang nach
+  // 'generating' + das Bulk-Enqueue in `lead-pipeline` machen wir hier —
+  // genau so wie es Agent 1 im Kommentar seines Routes dokumentiert hat.
+  //
+  // Idempotenz: `enqueueApprovedLeadsForPhase2` macht das Status-Update
+  // mit `WHERE status='approved'`. Mehrfache Recovery-Pässe sind sicher;
+  // nur der erste Pass schreibt + enqueued.
+  try {
+    const approvedRuns = await db
+      .select({ id: runs.id, userId: runs.userId })
+      .from(runs)
+      .where(eq(runs.status, "approved"))
+      .limit(100);
+    for (const r of approvedRuns) {
+      try {
+        const result = await enqueueApprovedLeadsForPhase2(r.id, r.userId);
+        if (result.transitioned) {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[worker:${WORKER_ID}] approved-run-watcher: enqueued ${result.queued} leads for run=${r.id}`,
+          );
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[worker:${WORKER_ID}] approved-run-watcher failed for run=${r.id}:`,
+          err,
+        );
+      }
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[worker:${WORKER_ID}] approved-run-watcher query failed:`,
+      err,
+    );
+  }
+}
+
 const WORKER_ID = `${hostname()}-${randomUUID().slice(0, 8)}`;
 
 function log(level: "info" | "warn" | "error", msg: string, extra?: unknown): void {
@@ -223,6 +461,20 @@ async function main(): Promise<void> {
     });
   }, 120_000);
   recoveryTimer.unref();
+
+  // Preflight-Recovery: orphaned-pending / stuck-running / exhausted /
+  // run-finalization für die Phase-1-Pipeline. Eigenständige Timer-Schleife,
+  // damit ein Fehler im Preflight-Recovery den klassischen Pipeline-Recovery
+  // nicht mitreißt (und vice versa).
+  await preflightRecovery().catch((err) => {
+    log("error", "initial preflight-recovery failed:", err);
+  });
+  const preflightRecoveryTimer = setInterval(() => {
+    preflightRecovery().catch((err) => {
+      log("error", "periodic preflight-recovery failed:", err);
+    });
+  }, 120_000);
+  preflightRecoveryTimer.unref();
 
   // Custom-Domain-Verifier: läuft alle 30s, checkt pending/verifying/
   // issuing_cert Domains gegen DNS+TXT und schreibt Traefik-YAMLs nach
@@ -309,6 +561,25 @@ async function main(): Promise<void> {
     log("error", "screenshot worker error:", err.message);
   });
 
+  // Preflight-Worker mit-booten. Agent 2 liefert `bootPreflightWorker()` aus
+  // `src/worker/preflight-worker-setup.ts` — der Return ist ein BullMQ-
+  // Worker, dessen `.close()` wir im Shutdown aufrufen. Wir umschließen den
+  // Boot mit try/catch, damit ein kaputter Preflight-Worker NICHT den
+  // bestehenden Pipeline-Worker mitreißt (siehe Coolify-Restart-Risiko).
+  const { bootPreflightWorker } = await import("./preflight-worker-setup");
+  let preflightWorkerShutdown: (() => Promise<void> | void) | null = null;
+  try {
+    const handle = bootPreflightWorker();
+    preflightWorkerShutdown = () => handle.close();
+    log("info", "preflight worker booted.");
+  } catch (err) {
+    log(
+      "warn",
+      "preflight worker not booted (boot failed):",
+      (err as Error)?.message ?? err,
+    );
+  }
+
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {
     if (shuttingDown) return;
@@ -338,6 +609,13 @@ async function main(): Promise<void> {
       stopDomainMonitor();
     } catch (err) {
       log("error", "domain monitor stop failed:", err);
+    }
+    if (preflightWorkerShutdown) {
+      try {
+        await preflightWorkerShutdown();
+      } catch (err) {
+        log("error", "preflight worker stop failed:", err);
+      }
     }
     stopHeartbeat();
     log("info", "bye.");

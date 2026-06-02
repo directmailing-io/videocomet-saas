@@ -1,8 +1,21 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, jsonb, pgEnum, index, unique } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, boolean, integer, smallint, jsonb, pgEnum, index, unique, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 // ── Enums ───────────────────────────────────────────────────────────────────
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
-export const runStatusEnum = pgEnum("run_status", ["draft", "mapping", "generating", "completed", "failed", "cancelled"]);
+// Migration 0006 erweitert die Postgres-ENUM um drei Werte (preflighting,
+// awaiting_approval, approved). Reihenfolge muss zur Postgres-ENUM-Reihenfolge
+// passen (alte Werte zuerst, neue ans Ende).
+export const runStatusEnum = pgEnum("run_status", [
+  "draft",
+  "mapping",
+  "generating",
+  "completed",
+  "failed",
+  "cancelled",
+  "preflighting",
+  "awaiting_approval",
+  "approved",
+]);
 export const leadStatusEnum = pgEnum("lead_status", ["pending", "rendering", "uploading", "completed", "failed"]);
 export const mediaTypeEnum = pgEnum("media_type", ["webcam", "image", "video", "logo"]);
 
@@ -155,6 +168,28 @@ export const runs = pgTable("runs", {
    */
   customLpVersionId: uuid("custom_lp_version_id"),
 
+  // ── Preflight (Phase 1) ──────────────────────────────────────────────
+  // Lifecycle-Marker für die Lead-Quality-Check-Phase. NULL solange der
+  // Run noch nicht durch die Preflight-Pipeline gelaufen ist.
+  preflightStartedAt: timestamp("preflight_started_at", { withTimezone: true }),
+  preflightCompletedAt: timestamp("preflight_completed_at", { withTimezone: true }),
+  /**
+   * Optional: Wenn gesetzt, kann ein späterer Cron alle ok-Leads nach
+   * Ablauf dieses Zeitpunkts automatisch approven. NULL = manuelle
+   * Freigabe (Default, Sicherheit zuerst).
+   */
+  autoApproveAfter: timestamp("auto_approve_after", { withTimezone: true }),
+  approvedLeadCount: integer("approved_lead_count").notNull().default(0),
+  rejectedLeadCount: integer("rejected_lead_count").notNull().default(0),
+  preflightFailedCount: integer("preflight_failed_count").notNull().default(0),
+  /**
+   * Audit-Marker für den 7-Tage-Bunny-Cleanup. Wenn gesetzt, wurden alle
+   * Preflight-Screenshots dieses Runs bereits aus Bunny entfernt; die DB-
+   * URLs in `leads.preflight_screenshot_*` zeigen ins Leere. Spalte kommt
+   * aus Migration 0007.
+   */
+  preflightPurgedAt: timestamp("preflight_purged_at", { withTimezone: true }),
+
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -193,6 +228,35 @@ export const leads = pgTable("leads", {
   // jeder Stage gesetzt und am Ende der Pipeline (Erfolg ODER Fehler) wieder
   // auf NULL gesetzt, damit Stuck-Recovery erkennt wo ein Job zuletzt hing.
   currentStage: text("current_stage"),
+
+  // ── Preflight (Phase 1) ────────────────────────────────────────────────
+  // Werte: pending | running | ok | url_dead | url_redirect | missing_field
+  //        | duplicate | tls_error | slow | bot_block | screenshot_unavailable
+  //        | unknown_error
+  preflightStatus: text("preflight_status").notNull().default("pending"),
+  preflightScreenshotUrl: text("preflight_screenshot_url"),
+  /** Bunny-Object-Key des Screenshots (für späteres Bulk-Delete). */
+  preflightScreenshotKey: text("preflight_screenshot_key"),
+  /** Endgültige URL nach Redirect-Chain (für Phase-2-Re-Check). */
+  preflightFinalUrl: text("preflight_final_url"),
+  preflightHttpStatus: smallint("preflight_http_status"),
+  preflightErrorMessage: text("preflight_error_message"),
+  preflightDurationMs: integer("preflight_duration_ms"),
+  preflightAttempts: smallint("preflight_attempts").notNull().default(0),
+  preflightCompletedAt: timestamp("preflight_completed_at", { withTimezone: true }),
+  /**
+   * Wenn dieser Lead als Duplikat eines anderen Leads im selben Run erkannt
+   * wurde, zeigt die FK auf das "Original" (erstes Vorkommen). Self-Ref ist
+   * über AnyPgColumn aufgelöst, weil Drizzle den Tabellen-Type erst nach
+   * dem Closure auflöst.
+   */
+  duplicateOfLeadId: uuid("duplicate_of_lead_id").references((): AnyPgColumn => leads.id, { onDelete: "set null" }),
+  /** Vom User im Grid (oder per Auto-Approve-Cron) freigegeben. */
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  /** Soft-Delete-Marker. */
+  removedAt: timestamp("removed_at", { withTimezone: true }),
+  /** user_rejected | auto_failed | duplicate */
+  removedReason: text("removed_reason"),
 
   // ── Denormalized Tracking-Aggregate ────────────────────────────────────
   // Aggregiert aus lead_events bei jedem insert (siehe queries/lead-events).

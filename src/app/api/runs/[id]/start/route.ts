@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { campaigns, customLpTemplates, leads, runs } from "@/lib/db/schema";
 import { getRun, updateRun } from "@/lib/db/queries/runs";
 import { bulkInsertLeads, type BulkLeadRow } from "@/lib/db/queries/leads";
-import { pipelineQueue } from "@/worker/queue";
+import { enqueueForPreflight } from "@/lib/preflight/job-enqueue";
 
 /**
  * Looks up the active Custom-LP-Version-ID for a campaign at the moment a run
@@ -47,12 +47,28 @@ interface StoredColumnMapping {
 /**
  * POST /api/runs/[id]/start
  *
+ * NEUE SEMANTIK (Lead-Quality-Check / Preflight-Phase):
+ *
  *   1. Loads the run + parsed-rows + mapping blob.
  *   2. For each parsed row: applies the mapping (placeholder → original
  *      column value) to produce the lead's `data` payload — original
  *      columns are kept too so the export later still has everything.
- *   3. Bulk-inserts leads, flips run.status to 'generating' and enqueues a
- *      pipeline job per lead.
+ *   3. Bulk-inserts leads. Flips run.status to **'preflighting'** (statt
+ *      direkt 'generating'). Snapshot der aktiven Custom-LP-Version bleibt
+ *      bestehen, weil sie pro Run immutable sein soll — der User darf an
+ *      seinem Template feilen, ohne dass laufende Runs es mitbekommen.
+ *   4. Ruft `enqueueForPreflight()` auf:
+ *        - inline-validation (Pflichtfelder, URL-Format, Email-Format)
+ *        - duplicate-detection (host + email)
+ *        - inline-disqualifizierte Leads bekommen direkt einen terminalen
+ *          `preflight_status` OHNE Worker-Job
+ *        - alle übrigen Leads landen in der `lead-preflight`-Queue
+ *   5. Returns `{ ok, totalLeads, queuedForPreflight, alreadyDisqualified }`.
+ *
+ * Phase 2 (das alte `lead-pipeline` enqueue) wird hier NICHT mehr getriggert.
+ * Sie startet erst, wenn der Operator über `/api/runs/[id]/preflight/approve`
+ * den Run freigibt — siehe `enqueueApprovedLeadsForPhase2()` im
+ * `job-enqueue.ts`-Helper.
  */
 export async function POST(
   _req: NextRequest,
@@ -81,7 +97,16 @@ export async function POST(
       { status: 400 },
     );
   }
-  if (run.status === "generating") {
+  // Guard: ein Run, der bereits in einem aktiven Pipeline-Status ist, darf
+  // nicht doppelt gestartet werden. `preflighting`, `awaiting_approval`,
+  // `approved` und `generating` sind alle "läuft schon".
+  const activeStatuses: Array<typeof run.status> = [
+    "preflighting",
+    "awaiting_approval",
+    "approved",
+    "generating",
+  ];
+  if (activeStatuses.includes(run.status)) {
     return NextResponse.json(
       { error: "Runde läuft bereits." },
       { status: 409 },
@@ -118,23 +143,19 @@ export async function POST(
 
   const inserted = await bulkInsertLeads(params.id, bulkRows);
 
-  // Fetch the freshly inserted lead-ids so we can enqueue jobs in order.
-  const leadRows = await db
-    .select({ id: leads.id, rowIndex: leads.rowIndex })
-    .from(leads)
-    .where(eq(leads.runId, params.id));
-  // Sort by rowIndex for predictable enqueue order.
-  leadRows.sort((a, b) => a.rowIndex - b.rowIndex);
-
   // Snapshot the campaign's active Custom-LP version onto the run, so future
   // template edits do not silently change what THIS run delivers.
   const customLpVersionId = await resolveActiveCustomLpVersionId(
     run.campaignId,
   );
 
+  // Status auf 'preflighting'. `preflightStartedAt` setzen, damit der Stuck-
+  // Recovery-Pass nachher das 5-Minuten-Fenster für stuck preflight-leads
+  // korrekt berechnen kann. `startedAt` (das Phase-2-Marker) bleibt NULL —
+  // wird erst beim Approval-Übergang gesetzt.
   await updateRun(params.id, auth.user.id, {
-    status: "generating",
-    startedAt: new Date(),
+    status: "preflighting",
+    preflightStartedAt: new Date(),
     totalLeads: inserted,
     customLpVersionId,
   });
@@ -147,38 +168,36 @@ export async function POST(
     })
     .where(and(eq(runs.id, params.id), eq(runs.userId, auth.user.id)));
 
-  // Enqueue jobs (best-effort: if Redis is down we still return — the run
-  // can be re-started by an admin / via a worker requeue script).
+  // Preflight-Enqueue: inline-Validation + Duplikat-Detection + Bulk-Add in
+  // `lead-preflight`. Wenn Redis weg ist, werfen wir einen 503, damit der
+  // User merkt dass die Phase 1 nicht losgelaufen ist. Der Run bleibt in
+  // `preflighting` — der nächste Worker-Boot-Recovery-Pass fängt das auf.
+  let enqueueResult;
   try {
-    const queue = pipelineQueue();
-    // jobId = leadId verhindert BullMQ-Duplikate falls dieser Endpoint
-    // versehentlich zweimal getriggert wird ODER stuck-recovery + manueller
-    // re-enqueue gleichzeitig laufen.
-    await queue.addBulk(
-      leadRows.map((lr) => ({
-        name: "lead-pipeline",
-        data: {
-          leadId: lr.id,
-          runId: params.id,
-          userId: auth.user.id,
-          campaignId: run.campaignId,
-        },
-        opts: { jobId: lr.id },
-      })),
+    enqueueResult = await enqueueForPreflight(
+      params.id,
+      auth.user.id,
+      run.campaignId,
     );
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error("[runs:start] enqueue failed:", err);
+    console.error("[runs:start] preflight enqueue failed:", err);
     return NextResponse.json(
       {
         ok: false,
         error:
-          "Leads angelegt, aber die Job-Queue ist nicht erreichbar. Bitte Worker prüfen.",
+          "Leads angelegt, aber die Preflight-Queue ist nicht erreichbar. " +
+          "Bitte Worker prüfen — der Recovery-Pass holt den Run beim nächsten Boot ab.",
         totalLeads: inserted,
       },
       { status: 503 },
     );
   }
 
-  return NextResponse.json({ ok: true, totalLeads: inserted });
+  return NextResponse.json({
+    ok: true,
+    totalLeads: enqueueResult.totalLeads,
+    queuedForPreflight: enqueueResult.queuedForPreflight,
+    alreadyDisqualified: enqueueResult.alreadyDisqualified,
+  });
 }
