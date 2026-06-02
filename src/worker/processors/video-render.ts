@@ -476,6 +476,15 @@ async function renderSegmentsBase(opts: {
             });
           }
         }
+      } else if (seg.kind === "slide") {
+        const { renderSlideToMp4 } = await import("../lib/slide-renderer");
+        await renderSlideToMp4({
+          slide: seg,
+          leadData: opts.leadData ?? {},
+          durationMs,
+          outputDir: join(opts.outDir, `slide-${i}`),
+          outputPath: partPath,
+        });
       } else {
         // image / video not yet rendered in v1 — black clip placeholder.
         console.warn(

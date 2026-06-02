@@ -1,16 +1,26 @@
 "use client";
 
 import * as React from "react";
-import { AlignCenter, AlignLeft, AlignRight, Bold, Italic } from "lucide-react";
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Bold,
+  Italic,
+  Sparkles,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import type { TextSegment } from "@/lib/segments/types";
+import type { Segment, TextSegment } from "@/lib/segments/types";
+import { textSegmentToSlide } from "@/lib/segments/defaults";
 
 interface SegmentEditorTextProps {
   segment: TextSegment;
   onChange: (segment: TextSegment) => void;
+  /** Optional: erlaubt es, die Folie in eine freie Folie zu konvertieren. */
+  onConvertToSlide?: (slide: Segment) => void;
 }
 
 const PLACEHOLDERS: { token: string; label: string }[] = [
@@ -19,7 +29,11 @@ const PLACEHOLDERS: { token: string; label: string }[] = [
   { token: "{{company}}", label: "Firma" },
 ];
 
-export function SegmentEditorText({ segment, onChange }: SegmentEditorTextProps) {
+export function SegmentEditorText({
+  segment,
+  onChange,
+  onConvertToSlide,
+}: SegmentEditorTextProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   const insertPlaceholder = (token: string) => {
@@ -44,6 +58,25 @@ export function SegmentEditorText({ segment, onChange }: SegmentEditorTextProps)
 
   return (
     <div className="space-y-5">
+      {onConvertToSlide && (
+        <div className="flex items-start gap-3 rounded-squircle-sm border border-brand/30 bg-brand-soft/60 p-3">
+          <Sparkles className="mt-0.5 size-4 shrink-0 text-brand-deep" />
+          <div className="flex-1 text-xs text-ink-soft">
+            <strong className="text-ink">In freie Folie umwandeln</strong> —
+            mehr Schriftarten, mehrere Layer, Bilder, Formen, Platzhalter
+            überall. Diese Folie bleibt mit allen Inhalten erhalten.
+          </div>
+          <Button
+            type="button"
+            variant="subtle"
+            size="sm"
+            onClick={() => onConvertToSlide(textSegmentToSlide(segment))}
+            iconLeft={<Sparkles className="size-3.5" />}
+          >
+            Umwandeln
+          </Button>
+        </div>
+      )}
       <div>
         <Label htmlFor={`text-${segment.id}`}>Text-Inhalt</Label>
         <Textarea

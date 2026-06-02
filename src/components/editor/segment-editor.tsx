@@ -5,6 +5,7 @@ import {
   FileText,
   Globe,
   Image as ImageIcon,
+  Sparkles,
   Trash2,
   Type as TypeIcon,
   Video as VideoIcon,
@@ -16,6 +17,7 @@ import type {
   ImageSegment,
   Segment,
   SegmentKind,
+  SlideSegment,
   TextSegment,
   VideoSegment,
   WebsiteSegment,
@@ -26,6 +28,7 @@ import { SegmentEditorImage } from "./segment-editor-image";
 import { SegmentEditorVideo } from "./segment-editor-video";
 import { SegmentEditorWebsite } from "./segment-editor-website";
 import { SegmentEditorGDocs } from "./segment-editor-gdocs";
+import { SegmentEditorSlide } from "./segment-editor-slide";
 
 export interface SegmentEditorMediaItem {
   id: string;
@@ -54,6 +57,7 @@ const KIND_META: Record<SegmentKind, { label: string; Icon: React.ComponentType<
   video: { label: "Video", Icon: VideoIcon },
   website: { label: "Website", Icon: Globe },
   gdocs: { label: "Google Docs", Icon: FileText },
+  slide: { label: "Freie Folie", Icon: Sparkles },
 };
 
 export function SegmentEditor({
@@ -136,6 +140,7 @@ function SegmentBody({
         <SegmentEditorText
           segment={segment}
           onChange={(s: TextSegment) => onChange(s)}
+          onConvertToSlide={(s) => onChange(s)}
         />
       );
     case "image":
@@ -166,6 +171,14 @@ function SegmentBody({
         <SegmentEditorGDocs
           segment={segment}
           onChange={(s: GDocsSegment) => onChange(s)}
+        />
+      );
+    case "slide":
+      return (
+        <SegmentEditorSlide
+          segment={segment}
+          onChange={(s: SlideSegment) => onChange(s)}
+          mediaItems={mediaItems}
         />
       );
     default: {

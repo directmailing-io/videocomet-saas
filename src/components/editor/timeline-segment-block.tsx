@@ -7,6 +7,7 @@ import {
   Video,
   Globe,
   FileText,
+  Sparkles,
   ChevronLeft,
   ChevronRight,
   GripVertical,
@@ -58,6 +59,13 @@ const KIND_STYLES: Record<
     text: "text-blue-900",
     label: "Google Docs",
     icon: FileText,
+  },
+  slide: {
+    bg: "bg-fuchsia-200",
+    border: "border-fuchsia-300",
+    text: "text-fuchsia-900",
+    label: "Freie Folie",
+    icon: Sparkles,
   },
 };
 

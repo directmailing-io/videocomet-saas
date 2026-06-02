@@ -386,6 +386,56 @@ export async function imageSeqToMp4(input: ImageSeqToMp4Input): Promise<void> {
 }
 
 /**
+ * Loops a single PNG/JPG into an MP4 of the requested duration. Used by the
+ * slide-renderer to turn the Puppeteer-Screenshot into a video clip.
+ */
+export async function renderImageToMp4(opts: {
+  imagePath: string;
+  durationMs: number;
+  outputPath: string;
+  fps?: number;
+  width?: number;
+  height?: number;
+}): Promise<void> {
+  const fps = opts.fps ?? 30;
+  const w = opts.width ?? 1280;
+  const h = opts.height ?? 720;
+  const durationSec = Math.max(0.2, opts.durationMs / 1000);
+  await runFfmpeg([
+    "-y",
+    "-loop",
+    "1",
+    "-framerate",
+    String(fps),
+    "-t",
+    durationSec.toFixed(3),
+    "-i",
+    opts.imagePath,
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=channel_layout=stereo:sample_rate=44100",
+    "-shortest",
+    "-vf",
+    `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "23",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-shortest",
+    "-movflags",
+    "+faststart",
+    opts.outputPath,
+  ]);
+}
+
+/**
  * Generates a black silent video clip of the requested duration. Used as a
  * placeholder when the base video stream is not yet implemented (v1
  * webcam-only mode does not need a presentation track).

@@ -47,3 +47,29 @@
 @layer utilities {
   .text-balance { text-wrap: balance; }
 }
+
+/* Tiptap (Slide-Editor) */
+.vc-tiptap p { margin: 0 0 0.2em; }
+.vc-tiptap p:last-child { margin-bottom: 0; }
+.vc-tiptap strong { font-weight: 700; }
+.vc-tiptap em { font-style: italic; }
+.vc-tiptap u { text-decoration: underline; }
+.vc-placeholder {
+  display: inline-block;
+  background: #f3eeff;
+  color: #6d4ee0;
+  border: 1px solid #d8c8fb;
+  border-radius: 999px;
+  padding: 0 7px;
+  margin: 0 1px;
+  font-size: 0.85em;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+  user-select: all;
+}
+.vc-placeholder.ProseMirror-selectednode {
+  background: #AA8CF5;
+  color: #fff;
+  border-color: #7c5ce8;
+}

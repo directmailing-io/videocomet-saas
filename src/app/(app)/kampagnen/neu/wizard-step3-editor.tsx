@@ -61,6 +61,13 @@ interface AddCard {
 
 const ADD_CARDS: AddCard[] = [
   {
+    kind: "slide",
+    icon: Sparkles,
+    title: "Freie Folie",
+    description:
+      "Multi-Layer mit Bildern, Formen und Text — alle Google-Fonts, Platzhalter überall, frei platzierbar.",
+  },
+  {
     kind: "website",
     icon: Globe,
     title: "Website",
@@ -87,7 +94,7 @@ const ADD_CARDS: AddCard[] = [
   {
     kind: "text",
     icon: Type,
-    title: "Text",
+    title: "Text (klassisch)",
     description: "Schlanke Textfolie mit Farbe, Größe und Variablen.",
   },
 ];

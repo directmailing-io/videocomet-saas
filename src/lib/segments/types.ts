@@ -9,7 +9,13 @@
  * und Keyframe-Animationen frame-genau steuerbar bleiben.
  */
 
-export type SegmentKind = "text" | "image" | "video" | "website" | "gdocs";
+export type SegmentKind =
+  | "text"
+  | "image"
+  | "video"
+  | "website"
+  | "gdocs"
+  | "slide";
 
 export type TextAlign = "left" | "center" | "right";
 export type FontWeight = "400" | "600" | "700";
@@ -119,13 +125,89 @@ export interface GDocsSegment extends SegmentBase {
   scrollFrames?: ScrollFrame[];
 }
 
+// ── Freier Folien-Editor (kind: "slide") ────────────────────────────────────
+//
+// Eine Slide-Folie besteht aus einer Liste von Layers über einem Hintergrund.
+// Der Bühnen-Bezugsrahmen ist konstant 1280×720 (matches Render-Pipeline).
+// Z-Index ergibt sich aus der Array-Reihenfolge: layers[0] zuunterst.
+
+export const SLIDE_STAGE_WIDTH = 1280;
+export const SLIDE_STAGE_HEIGHT = 720;
+
+export interface SlideBackgroundColor {
+  type: "color";
+  color: string;
+}
+export interface SlideBackgroundImage {
+  type: "image";
+  mediaId: string;
+  publicUrl: string;
+  fit: "cover" | "contain";
+}
+export type SlideBackground = SlideBackgroundColor | SlideBackgroundImage;
+
+interface LayerBase {
+  /** Stabile UUID. */
+  id: string;
+  /** Linke obere Ecke in Stage-Pixeln (Stage 1280×720). */
+  x: number;
+  y: number;
+  /** Breite/Höhe in Stage-Pixeln. */
+  w: number;
+  h: number;
+  /** Rotation in Grad, im Uhrzeigersinn. */
+  rot: number;
+  /** Opazität 0..1. */
+  opacity: number;
+  /** Optional sperren — kann im Editor nicht selektiert werden. */
+  locked?: boolean;
+  /** Optional ausblenden im Editor und Render. */
+  hidden?: boolean;
+}
+
+export interface TextLayer extends LayerBase {
+  kind: "text";
+  /** Tiptap-HTML mit <span data-placeholder="key"> Nodes. */
+  contentHtml: string;
+  /** Vertikale Ausrichtung im Container. */
+  vAlign: "top" | "middle" | "bottom";
+}
+
+export interface ImageLayer extends LayerBase {
+  kind: "image";
+  mediaId: string;
+  publicUrl: string;
+  fit: "cover" | "contain";
+}
+
+export type LayerShape = "rect" | "ellipse";
+export interface ShapeLayer extends LayerBase {
+  kind: "shape";
+  shape: LayerShape;
+  fill: string;
+  stroke: string | null;
+  strokeWidth: number;
+  /** Border-Radius in Pixeln (nur rect). */
+  cornerRadius: number;
+}
+
+export type Layer = TextLayer | ImageLayer | ShapeLayer;
+export type LayerKind = Layer["kind"];
+
+export interface SlideSegment extends SegmentBase {
+  kind: "slide";
+  background: SlideBackground;
+  layers: Layer[];
+}
+
 /** Diskriminierte Union aller Segment-Varianten. */
 export type Segment =
   | TextSegment
   | ImageSegment
   | VideoSegment
   | WebsiteSegment
-  | GDocsSegment;
+  | GDocsSegment
+  | SlideSegment;
 
 // ── Type Guards ──────────────────────────────────────────────────────────────
 
@@ -147,4 +229,18 @@ export function isWebsiteSegment(s: Segment): s is WebsiteSegment {
 
 export function isGDocsSegment(s: Segment): s is GDocsSegment {
   return s.kind === "gdocs";
+}
+
+export function isSlideSegment(s: Segment): s is SlideSegment {
+  return s.kind === "slide";
+}
+
+export function isTextLayer(l: Layer): l is TextLayer {
+  return l.kind === "text";
+}
+export function isImageLayer(l: Layer): l is ImageLayer {
+  return l.kind === "image";
+}
+export function isShapeLayer(l: Layer): l is ShapeLayer {
+  return l.kind === "shape";
 }

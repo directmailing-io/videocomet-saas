@@ -7,13 +7,20 @@
 
 import type {
   GDocsSegment,
+  ImageLayer,
   ImageSegment,
+  Layer,
+  LayerKind,
   Segment,
   SegmentKind,
+  ShapeLayer,
+  SlideSegment,
+  TextLayer,
   TextSegment,
   VideoSegment,
   WebsiteSegment,
 } from "./types";
+import { SLIDE_STAGE_HEIGHT, SLIDE_STAGE_WIDTH } from "./types";
 
 /** Standard-Dauer pro Segment in Millisekunden (5 Sekunden). */
 export const DEFAULT_SEGMENT_DURATION_MS = 5000;
@@ -25,6 +32,7 @@ export const SEGMENT_KIND_LABELS: Record<SegmentKind, string> = {
   video: "Video",
   website: "Website",
   gdocs: "Google Docs",
+  slide: "Freie Folie",
 };
 
 export interface CreateSegmentOptions {
@@ -128,6 +136,133 @@ export function createGDocsSegment(opts?: CreateSegmentOptions): GDocsSegment {
   };
 }
 
+export function createTextLayer(overrides?: Partial<TextLayer>): TextLayer {
+  return {
+    id: newId(),
+    kind: "text",
+    x: 160,
+    y: 280,
+    w: 960,
+    h: 160,
+    rot: 0,
+    opacity: 1,
+    contentHtml:
+      "<p>Hallo <span data-placeholder=\"firstName\">{{firstName}}</span></p>",
+    vAlign: "middle",
+    ...overrides,
+  };
+}
+
+export function createImageLayer(
+  mediaId: string,
+  publicUrl: string,
+  overrides?: Partial<ImageLayer>,
+): ImageLayer {
+  return {
+    id: newId(),
+    kind: "image",
+    x: 320,
+    y: 160,
+    w: 640,
+    h: 400,
+    rot: 0,
+    opacity: 1,
+    mediaId,
+    publicUrl,
+    fit: "cover",
+    ...overrides,
+  };
+}
+
+export function createShapeLayer(
+  shape: "rect" | "ellipse",
+  overrides?: Partial<ShapeLayer>,
+): ShapeLayer {
+  return {
+    id: newId(),
+    kind: "shape",
+    x: 400,
+    y: 200,
+    w: 480,
+    h: 320,
+    rot: 0,
+    opacity: 1,
+    shape,
+    fill: "#AA8CF5",
+    stroke: null,
+    strokeWidth: 0,
+    cornerRadius: shape === "rect" ? 16 : 0,
+    ...overrides,
+  };
+}
+
+export function createLayer(
+  kind: LayerKind,
+  args?: { mediaId?: string; publicUrl?: string; shape?: "rect" | "ellipse" },
+): Layer {
+  if (kind === "text") return createTextLayer();
+  if (kind === "image") {
+    return createImageLayer(args?.mediaId ?? "", args?.publicUrl ?? "");
+  }
+  return createShapeLayer(args?.shape ?? "rect");
+}
+
+export function createSlideSegment(opts?: CreateSegmentOptions): SlideSegment {
+  return {
+    ...baseFields("slide", opts),
+    kind: "slide",
+    background: { type: "color", color: "#FAFAFA" },
+    layers: [createTextLayer()],
+  };
+}
+
+/** Konvertiert ein altes TextSegment in eine freie Folie (1 Text-Layer). */
+export function textSegmentToSlide(seg: TextSegment): SlideSegment {
+  const fontWeightCss = seg.fontWeight;
+  const align = seg.textAlign;
+  const italicTag = seg.italic ? "<em>" : "";
+  const italicEnd = seg.italic ? "</em>" : "";
+  // Escape HTML special chars in the original raw text
+  const escaped = seg.text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  // Replace {{key}} with <span data-placeholder="key">{{key}}</span>
+  const withPlaceholders = escaped.replace(
+    /\{\{\s*([\w-]+)\s*\}\}/g,
+    (_m, key: string) =>
+      `<span data-placeholder="${key}">{{${key}}}</span>`,
+  );
+  // Newlines -> <br> within a single paragraph; preserve textAlign + size + color
+  const html =
+    `<p style="text-align:${align};font-size:${seg.fontSize}px;font-weight:${fontWeightCss};color:${seg.textColor}">` +
+    italicTag +
+    withPlaceholders.replace(/\n/g, "<br>") +
+    italicEnd +
+    `</p>`;
+  return {
+    id: seg.id,
+    kind: "slide",
+    durationMs: seg.durationMs,
+    label: seg.label,
+    background: { type: "color", color: seg.bgColor },
+    layers: [
+      {
+        id: newId(),
+        kind: "text",
+        x: 40,
+        y: 40,
+        w: SLIDE_STAGE_WIDTH - 80,
+        h: SLIDE_STAGE_HEIGHT - 80,
+        rot: 0,
+        opacity: 1,
+        contentHtml: html,
+        vAlign: "middle",
+      },
+    ],
+  };
+}
+
 /**
  * Erstellt eine neue Segment-Instance mit sinnvollen Defaults für den
  * gewählten Typ.
@@ -147,6 +282,8 @@ export function createSegment(
       return createWebsiteSegment(opts);
     case "gdocs":
       return createGDocsSegment(opts);
+    case "slide":
+      return createSlideSegment(opts);
     default: {
       // Erschöpfungs-Check: kompiliert nur, wenn alle Varianten behandelt sind.
       const _exhaustive: never = kind;
