@@ -114,11 +114,24 @@ export function describeKind(kind: ActivityKind, payload?: Record<string, unknow
     case "video_play":
       return "Video gestartet";
     case "video_progress": {
-      const pct =
-        payload && typeof payload.percent === "number"
-          ? Math.round(payload.percent as number)
+      // Bridge schickt `{ atSec, duration }` — Prozent berechnen wir hier
+      // serverseitig nicht, sondern aus den beiden Feldern.
+      const atSec =
+        payload && typeof payload.atSec === "number"
+          ? (payload.atSec as number)
           : null;
-      return pct !== null ? `Video gesehen ${pct} %` : "Video fortgeschritten";
+      const duration =
+        payload && typeof payload.duration === "number"
+          ? (payload.duration as number)
+          : null;
+      if (atSec !== null && duration && duration > 0) {
+        const pct = Math.min(100, Math.round((atSec / duration) * 100));
+        return `Video gesehen ${pct} %`;
+      }
+      if (atSec !== null) {
+        return `Video bei ${atSec}s`;
+      }
+      return "Video fortgeschritten";
     }
     case "video_ended":
       return "Video komplett gesehen";
@@ -134,11 +147,18 @@ export function describeKind(kind: ActivityKind, payload?: Record<string, unknow
     case "cta_hover":
       return "CTA überflogen";
     case "scroll_depth": {
-      const pct =
-        payload && typeof payload.percent === "number"
-          ? Math.round(payload.percent as number)
-          : null;
-      return pct !== null ? `${pct} % gescrollt` : "Tief gescrollt";
+      // Bridge schickt das Bucket-Maximum als `maxPct` (10/20/30/…/100).
+      // Kompatibilität: ältere Bridge-Versionen sendeten evtl. `percent`.
+      const raw =
+        payload && typeof payload.maxPct === "number"
+          ? (payload.maxPct as number)
+          : payload && typeof payload.percent === "number"
+            ? (payload.percent as number)
+            : null;
+      if (raw !== null) {
+        return `${Math.round(raw)} % gescrollt`;
+      }
+      return "Tief gescrollt";
     }
     case "time_on_page": {
       const sec =
