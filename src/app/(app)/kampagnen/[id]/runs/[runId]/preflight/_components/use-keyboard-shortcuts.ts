@@ -46,7 +46,9 @@ function normalizeKey(e: KeyboardEvent): string | null {
     e.key === "Escape" ||
     e.key === "Enter" ||
     e.key === "ArrowLeft" ||
-    e.key === "ArrowRight"
+    e.key === "ArrowRight" ||
+    e.key === "ArrowUp" ||
+    e.key === "ArrowDown"
   ) {
     return e.key;
   }

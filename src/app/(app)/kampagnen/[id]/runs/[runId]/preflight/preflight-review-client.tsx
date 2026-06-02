@@ -555,7 +555,62 @@ export function PreflightReviewClient({
       if (lightboxOpenLeadId) return;
       if (focusedLeadId) setLightboxOpenLeadId(focusedLeadId);
     },
+    ArrowLeft: () => {
+      if (lightboxOpenLeadId) return; // Lightbox hat eigenes Blättern
+      moveFocus(-1);
+    },
+    ArrowRight: () => {
+      if (lightboxOpenLeadId) return;
+      moveFocus(1);
+    },
+    ArrowUp: () => {
+      if (lightboxOpenLeadId) return;
+      moveFocus(-getGridColumnCount());
+    },
+    ArrowDown: () => {
+      if (lightboxOpenLeadId) return;
+      moveFocus(getGridColumnCount());
+    },
   });
+
+  /**
+   * Berechnet die aktuelle Spaltenanzahl im Grid aus dem live gerenderten
+   * CSS — robust gegen Viewport-Resize ohne dass wir die Breakpoints
+   * hardcoden müssen.
+   */
+  function getGridColumnCount(): number {
+    const grid = document.querySelector<HTMLDivElement>(
+      '[role="grid"][aria-label="Lead-Quality-Check-Grid"]',
+    );
+    if (!grid) return 1;
+    const cols = window
+      .getComputedStyle(grid)
+      .gridTemplateColumns.split(" ")
+      .filter(Boolean).length;
+    return Math.max(1, cols);
+  }
+
+  function moveFocus(delta: number): void {
+    if (visibleIds.length === 0) return;
+    const currentIndex = focusedLeadId
+      ? visibleIds.indexOf(focusedLeadId)
+      : -1;
+    const startIndex = currentIndex < 0 ? 0 : currentIndex;
+    const next = Math.max(
+      0,
+      Math.min(visibleIds.length - 1, startIndex + delta),
+    );
+    const nextId = visibleIds[next];
+    if (!nextId || nextId === focusedLeadId) return;
+    setFocusedLeadId(nextId);
+    // Smooth Scroll der Card in den sichtbaren Bereich.
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLDivElement>(
+        `[data-lead-id="${nextId}"]`,
+      );
+      el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+  }
 
   // ── Render ──────────────────────────────────────────────────────
   const phase1Running =
@@ -793,14 +848,16 @@ export function PreflightReviewClient({
         <div className="text-[11px] text-ink-muted flex items-center gap-2 pb-4">
           <Keyboard className="size-3.5" />
           <span>
-            <span className="font-mono font-semibold">Klick</span> auswählen ·{" "}
+            <span className="font-mono font-semibold">←↑↓→</span> navigieren ·{" "}
+            <span className="font-mono font-semibold">Space</span> auswählen ·{" "}
+            <span className="font-mono font-semibold">Enter</span> Details ·{" "}
+            <span className="font-mono font-semibold">Klick</span> Auswahl ·{" "}
             <span className="font-mono font-semibold">Rechtsklick</span> Menü ·{" "}
             <span className="font-mono font-semibold">R</span> entfernen ·{" "}
             <span className="font-mono font-semibold">K</span> behalten ·{" "}
             <span className="font-mono font-semibold">⌘A</span> alles ·{" "}
             <span className="font-mono font-semibold">F</span> Problematische ·{" "}
-            <span className="font-mono font-semibold">/</span> Suche ·{" "}
-            <span className="font-mono font-semibold">←/→</span> in Detail-Ansicht
+            <span className="font-mono font-semibold">/</span> Suche
           </span>
         </div>
       </div>

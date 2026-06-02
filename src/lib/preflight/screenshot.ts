@@ -37,7 +37,14 @@ import puppeteer, {
 
 const VIEWPORT_WIDTH = 640;
 const VIEWPORT_HEIGHT = 360;
-const GOTO_TIMEOUT_MS = 8_000;
+// `networkidle2` ist für B2B-Webseiten mit Tracker-Salat (Analytics,
+// Hotjar, Chat-Widgets) zu strikt — viele erreichen nie "idle". Wir
+// benutzen `domcontentloaded` (Layout ist da) und nehmen den Screenshot
+// auch bei Soft-Timeout. Phase 2 (Video-Render) verwendet eigene,
+// fortgeschrittenere CDP-Mechanik — Phase 1 muss nur ein gutes Vorschau-
+// bild liefern, nicht pixel-perfekt sein.
+const GOTO_TIMEOUT_MS = 15_000;
+const SETTLE_DELAY_MS = 800;
 const SCREENSHOT_QUALITY = 60;
 
 /**
@@ -223,9 +230,17 @@ export async function captureLightScreenshot(
       pageCrashed = true;
     });
 
+    // Navigations-Strategie: wir warten primär auf `domcontentloaded`
+    // (Layout ist sichtbar, das reicht für einen Vorschau-Screenshot).
+    // Wenn die Seite über das Timeout-Fenster hinaus auflädt, machen wir
+    // trotzdem ein Screenshot des aktuellen Zustands — solange die Page
+    // nicht gecrasht ist. Damit fangen wir die typischen B2B-Seiten ab,
+    // die wegen Trackern nie "networkidle2" erreichen aber visuell
+    // längst nutzbar sind.
+    let navigationFailed = false;
     try {
       await page.goto(url, {
-        waitUntil: "networkidle2",
+        waitUntil: "domcontentloaded",
         timeout: GOTO_TIMEOUT_MS,
       });
     } catch (err) {
@@ -236,24 +251,42 @@ export async function captureLightScreenshot(
         throw new Error("screenshot_aborted");
       }
       const message = err instanceof Error ? err.message : String(err);
-      // Puppeteer marks goto-timeouts with "TimeoutError" and a "Navigation
-      // timeout of …" message. Match either.
-      if (
+      const isTimeout =
         err instanceof Error &&
-        (err.name === "TimeoutError" || /timeout/i.test(message))
-      ) {
-        throw new Error("screenshot_timeout");
+        (err.name === "TimeoutError" || /timeout/i.test(message));
+      const isHardNetError =
+        /net::ERR_NAME_NOT_RESOLVED|net::ERR_CONNECTION_REFUSED|net::ERR_ABORTED|net::ERR_CERT_/i.test(
+          message,
+        );
+      // Hard-Network-Errors → wir können nichts rendern.
+      if (isHardNetError) {
+        throw new Error(`screenshot_crashed: ${message}`);
       }
-      // ProtocolError, net::ERR_*, etc. — surface as generic crash so the
-      // processor can map to `screenshot_unavailable`.
-      throw new Error(`screenshot_crashed: ${message}`);
+      // Bei Soft-Timeout versuchen wir trotzdem Screenshot zu machen.
+      // Wenn dabei nochmal alles failt, bubblen wir den Fehler oben raus.
+      if (isTimeout) {
+        navigationFailed = true;
+      } else {
+        throw new Error(`screenshot_crashed: ${message}`);
+      }
     }
 
     if (pageCrashed) {
       throw new Error("screenshot_crashed");
     }
 
+    // Kurze Settle-Pause damit Above-The-Fold-Inhalte rendern können,
+    // bevor wir das Bild knipsen.
+    await new Promise((r) => setTimeout(r, SETTLE_DELAY_MS));
+
     await dismissCookieBanner(page);
+
+    // Marker damit `navigationFailed` als "benutzt" markiert wird — auch
+    // im Erfolgs-Pfad führt er nur zu Logging, nicht zu einem Throw.
+    if (navigationFailed) {
+      // eslint-disable-next-line no-console
+      console.log("[preflight] soft-timeout, capturing partial render");
+    }
 
     // `fullPage: false` — we ONLY want the 640×360 viewport (per spec).
     // `type: 'webp'` is supported in Chromium 86+; if a future Chromium

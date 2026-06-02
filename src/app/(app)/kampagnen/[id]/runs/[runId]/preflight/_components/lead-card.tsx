@@ -209,6 +209,7 @@ function LeadCardImpl({
   return (
     <div
       role="gridcell"
+      data-lead-id={lead.id}
       tabIndex={focused ? 0 : -1}
       aria-selected={selected}
       aria-label={`${displayName(lead)} – ${STATUS_LABEL[status]}`}
