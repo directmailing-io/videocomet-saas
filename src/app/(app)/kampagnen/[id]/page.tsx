@@ -59,6 +59,7 @@ import {
   CampaignLeadsTable,
   type CampaignLeadRowSerialized,
 } from "./campaign-leads-table";
+import { ActivityCenter } from "@/app/(app)/aktivitaet/activity-center";
 
 function formatDate(d: Date | null): string {
   if (!d) return "";
@@ -213,6 +214,7 @@ export default async function CampaignDetailPage({
           <TabsTrigger value="runden">
             Runden {initialRuns.length > 0 && `(${initialRuns.length})`}
           </TabsTrigger>
+          <TabsTrigger value="aktivität">Aktivität</TabsTrigger>
           <TabsTrigger value="einstellungen">Einstellungen</TabsTrigger>
         </TabsList>
 
@@ -333,6 +335,16 @@ export default async function CampaignDetailPage({
           ) : (
             <RunsTable campaignId={campaign.id} initialRuns={initialRuns} />
           )}
+        </TabsContent>
+
+        {/* ── Aktivität ──────────────────────────────────────────── */}
+        <TabsContent value="aktivität">
+          <ActivityCenter
+            scope="campaign"
+            campaignId={campaign.id}
+            campaignName={campaign.name}
+            embedded
+          />
         </TabsContent>
 
         {/* ── Einstellungen ──────────────────────────────────────── */}

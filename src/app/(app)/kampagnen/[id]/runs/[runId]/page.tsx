@@ -8,7 +8,9 @@ import { listLeadsByRun, countByStatus } from "@/lib/db/queries/leads";
 import { getUserDomain } from "@/lib/db/queries/user-domains";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { LiveTable } from "./live-table";
+import { ActivityCenter } from "@/app/(app)/aktivitaet/activity-center";
 
 export default async function RunDetailPage({
   params,
@@ -88,21 +90,41 @@ export default async function RunDetailPage({
         }
       />
 
-      <LiveTable
-        runId={runId}
-        campaignId={campaign.id}
-        pdfEnabled={campaign.pdfEnabled}
-        initialRun={{
-          id: run.id,
-          name: run.name,
-          status: run.status,
-          totalLeads: run.totalLeads,
-          startedAt: run.startedAt ? run.startedAt.toISOString() : null,
-          completedAt: run.completedAt ? run.completedAt.toISOString() : null,
-        }}
-        initialCounts={counts}
-        initialLeads={initialLeads}
-      />
+      <Tabs defaultValue="übersicht">
+        <TabsList>
+          <TabsTrigger value="übersicht">Übersicht</TabsTrigger>
+          <TabsTrigger value="aktivität">Aktivität</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="übersicht">
+          <LiveTable
+            runId={runId}
+            campaignId={campaign.id}
+            pdfEnabled={campaign.pdfEnabled}
+            initialRun={{
+              id: run.id,
+              name: run.name,
+              status: run.status,
+              totalLeads: run.totalLeads,
+              startedAt: run.startedAt ? run.startedAt.toISOString() : null,
+              completedAt: run.completedAt ? run.completedAt.toISOString() : null,
+            }}
+            initialCounts={counts}
+            initialLeads={initialLeads}
+          />
+        </TabsContent>
+
+        <TabsContent value="aktivität">
+          <ActivityCenter
+            scope="run"
+            campaignId={campaign.id}
+            campaignName={campaign.name}
+            runId={run.id}
+            runName={run.name}
+            embedded
+          />
+        </TabsContent>
+      </Tabs>
     </>
   );
 }

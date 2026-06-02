@@ -12,6 +12,7 @@ import {
   Menu,
   User as UserIcon,
   BarChart3,
+  Activity,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -34,6 +35,7 @@ import { cn, getInitials } from "@/lib/utils";
 export type AppNavKey =
   | "dashboard"
   | "campaigns"
+  | "activity"
   | "analytics"
   | "media"
   | "landingpages"
@@ -64,6 +66,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { key: "campaigns", label: "Kampagnen", href: "/kampagnen", icon: Megaphone },
+  { key: "activity", label: "Aktivität", href: "/aktivitaet", icon: Activity },
   { key: "analytics", label: "Analytics", href: "/analytics", icon: BarChart3 },
   { key: "media", label: "Mediathek", href: "/mediathek", icon: Library },
   { key: "landingpages", label: "Landingpages", href: "/landingpages", icon: LayoutTemplate },

@@ -20,7 +20,18 @@ export type LeadEventKind =
   | "video_play"
   | "video_progress"
   | "video_ended"
-  | "cta_click";
+  | "cta_click"
+  // ── Activity-Center (additive, alle fire-and-forget aus der Bridge) ────
+  | "scroll_depth"
+  | "time_on_page"
+  | "video_mute"
+  | "video_unmute"
+  | "link_click"
+  | "cta_hover"
+  // ── Section-Visibility (Bridge feuert das schon, war historisch nicht
+  //    in der Whitelist). Additive Aufnahme, damit der track-Endpoint
+  //    nicht weiterhin 400 zurückgibt.
+  | "section_view";
 
 export const LEAD_EVENT_KINDS: readonly LeadEventKind[] = [
   "page_view",
@@ -28,6 +39,13 @@ export const LEAD_EVENT_KINDS: readonly LeadEventKind[] = [
   "video_progress",
   "video_ended",
   "cta_click",
+  "scroll_depth",
+  "time_on_page",
+  "video_mute",
+  "video_unmute",
+  "link_click",
+  "cta_hover",
+  "section_view",
 ] as const;
 
 export function isLeadEventKind(value: unknown): value is LeadEventKind {

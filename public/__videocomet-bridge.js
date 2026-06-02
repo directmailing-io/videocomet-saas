@@ -198,6 +198,10 @@
    * Attach play / progress / ended trackers to one <video> element.
    * Progress events are throttled to PROGRESS_INTERVAL_SEC and we always
    * emit a final video_ended with the absolute current position.
+   *
+   * Also wires mute/unmute via the `volumechange` event — fires only on
+   * EDGE transitions (muted→unmuted, unmuted→muted), not every volume
+   * tick. Payload contains the video position at the time of the change.
    */
   function bindVideo(el) {
     try {
@@ -205,6 +209,8 @@
       el.__vcVideoBound = true;
       var lastProgressSec = 0;
       var playFired = false;
+      // Track muted-state edges so we don't spam events on volume slides.
+      var wasMuted = !!el.muted;
 
       el.addEventListener(
         "play",
@@ -242,6 +248,21 @@
             sendEvent("video_ended", {
               atSec: Math.floor(el.currentTime || 0),
               duration: Math.floor(el.duration || 0) || null,
+            });
+          } catch (e) {}
+        },
+        { passive: true },
+      );
+
+      el.addEventListener(
+        "volumechange",
+        function () {
+          try {
+            var nowMuted = !!el.muted;
+            if (nowMuted === wasMuted) return;
+            wasMuted = nowMuted;
+            sendEvent(nowMuted ? "video_mute" : "video_unmute", {
+              at: Math.floor(el.currentTime || 0),
             });
           } catch (e) {}
         },
@@ -319,6 +340,273 @@
     }
   }
 
+  // ─── Scroll depth ──────────────────────────────────────────────────────
+  /**
+   * Tracks the deepest scroll point as a percentage of the document height.
+   * Fires at most once per 10% step (10/20/.../100). Anchored on the bottom
+   * of the visible viewport so a short doc on a tall screen still hits 100.
+   */
+  function bindScrollDepth() {
+    try {
+      var fired = {};
+      var maxPct = 0;
+      var pending = false;
+
+      function compute() {
+        try {
+          var doc = document.documentElement || {};
+          var body = document.body || {};
+          var scrollTop = window.pageYOffset || doc.scrollTop || body.scrollTop || 0;
+          var viewport = window.innerHeight || doc.clientHeight || 0;
+          var fullHeight = Math.max(
+            body.scrollHeight || 0,
+            doc.scrollHeight || 0,
+            body.offsetHeight || 0,
+            doc.offsetHeight || 0,
+            viewport,
+          );
+          if (fullHeight <= 0) return;
+          var pct = Math.round(((scrollTop + viewport) / fullHeight) * 100);
+          if (pct < 0) pct = 0;
+          if (pct > 100) pct = 100;
+          // Round down to a 10-step bucket.
+          var bucket = Math.floor(pct / 10) * 10;
+          if (bucket > maxPct && bucket > 0 && !fired[bucket]) {
+            fired[bucket] = true;
+            maxPct = bucket;
+            sendEvent("scroll_depth", { maxPct: bucket });
+          }
+        } catch (e) {}
+      }
+
+      function onScroll() {
+        if (pending) return;
+        pending = true;
+        // rAF coalesces bursts into one compute per frame.
+        var raf = window.requestAnimationFrame || function (cb) { return setTimeout(cb, 16); };
+        raf(function () {
+          pending = false;
+          compute();
+        });
+      }
+      window.addEventListener("scroll", onScroll, { passive: true });
+      // Initial measure so a short page that fits in the viewport on load
+      // still emits a 100% event.
+      compute();
+    } catch (e) {
+      /* swallow */
+    }
+  }
+
+  // ─── Time on page ──────────────────────────────────────────────────────
+  /**
+   * Periodic + final time-on-page tracker. Sends an update every 15s and
+   * a final update on visibilitychange→hidden / pagehide. Uses sendBeacon
+   * for the final flush so the event survives navigation.
+   *
+   * Counts only foreground time — when the tab is hidden, the timer is
+   * paused so we don't credit a user for closing the laptop on the LP.
+   */
+  function bindTimeOnPage() {
+    try {
+      var INTERVAL_SEC = 15;
+      var totalSec = 0;
+      var lastTickAt = Date.now();
+      var visible =
+        typeof document.visibilityState === "string"
+          ? document.visibilityState !== "hidden"
+          : true;
+      var lastSentSec = 0;
+      var timer = null;
+      var finalSent = false;
+
+      function bumpForeground() {
+        var now = Date.now();
+        if (visible) {
+          totalSec += Math.max(0, Math.floor((now - lastTickAt) / 1000));
+        }
+        lastTickAt = now;
+      }
+
+      function tick() {
+        bumpForeground();
+        if (totalSec > lastSentSec) {
+          lastSentSec = totalSec;
+          sendEvent("time_on_page", { seconds: totalSec });
+        }
+      }
+
+      function start() {
+        if (timer != null) return;
+        lastTickAt = Date.now();
+        timer = setInterval(tick, INTERVAL_SEC * 1000);
+      }
+      function stop() {
+        if (timer != null) {
+          clearInterval(timer);
+          timer = null;
+        }
+      }
+
+      function onVisibility() {
+        try {
+          bumpForeground();
+          var nowVisible =
+            typeof document.visibilityState === "string"
+              ? document.visibilityState !== "hidden"
+              : true;
+          if (nowVisible && !visible) {
+            visible = true;
+            lastTickAt = Date.now();
+            start();
+          } else if (!nowVisible && visible) {
+            visible = false;
+            stop();
+            // Flush the accumulated time on background.
+            if (totalSec > lastSentSec) {
+              lastSentSec = totalSec;
+              sendEvent("time_on_page", { seconds: totalSec });
+            }
+          }
+        } catch (e) {}
+      }
+
+      function flushFinal() {
+        if (finalSent) return;
+        finalSent = true;
+        try {
+          bumpForeground();
+          // Always send the absolute total so the server can take MAX().
+          sendEvent("time_on_page", { seconds: totalSec, final: true });
+        } catch (e) {}
+        stop();
+      }
+
+      document.addEventListener("visibilitychange", onVisibility, false);
+      window.addEventListener("pagehide", flushFinal, false);
+      // Some browsers fire `beforeunload` more reliably than `pagehide`.
+      window.addEventListener("beforeunload", flushFinal, false);
+      start();
+    } catch (e) {
+      /* swallow */
+    }
+  }
+
+  // ─── Link clicks (non-CTA) ─────────────────────────────────────────────
+  /**
+   * Capture-phase listener on the document for any <a>-click that ISN'T
+   * already a CTA. We avoid double-tracking by skipping elements marked
+   * with __vcCtaBound (set by `bindCtas`).
+   */
+  function bindLinkClicks() {
+    try {
+      document.addEventListener(
+        "click",
+        function (ev) {
+          try {
+            var target = ev.target;
+            var a = null;
+            while (target && target !== document) {
+              if (target.tagName === "A") {
+                a = target;
+                break;
+              }
+              target = target.parentNode;
+            }
+            if (!a) return;
+            if (a.__vcCtaBound) return; // already a CTA, skip.
+            var href = "";
+            var text = "";
+            try {
+              href = a.getAttribute("href") || "";
+            } catch (e) {}
+            try {
+              text = (a.textContent || "").trim().slice(0, 120);
+            } catch (e) {}
+            if (!href) return;
+            sendEvent("link_click", { href: href, text: text });
+          } catch (e) {}
+        },
+        true,
+      );
+    } catch (e) {
+      /* swallow */
+    }
+  }
+
+  // ─── CTA hover ─────────────────────────────────────────────────────────
+  /**
+   * "Near-miss" signal — the cursor sat on a CTA for >800ms but no click
+   * fired. Reset on every mouseleave or click. One event per hover-burst
+   * per element. Skipped on touch-only devices (no mouseenter semantics).
+   */
+  function bindCtaHover() {
+    try {
+      var HOVER_THRESHOLD_MS = 800;
+      var elements = [];
+      function collect(selector, position) {
+        if (!selector || typeof selector !== "string") return;
+        $$(selector).forEach(function (el) {
+          if (!el || el.__vcHoverBound) return;
+          el.__vcHoverBound = true;
+          elements.push({ el: el, position: position });
+        });
+      }
+      if (typeof ANNO.primaryCta === "string") collect(ANNO.primaryCta, "primary");
+      if (typeof ANNO.secondaryCta === "string") collect(ANNO.secondaryCta, "secondary");
+      collect("[data-vc-cta]", "convention");
+
+      elements.forEach(function (entry) {
+        var el = entry.el;
+        var enterAt = 0;
+        var timeoutId = null;
+        var clicked = false;
+
+        function clear() {
+          if (timeoutId != null) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+        }
+
+        el.addEventListener("mouseenter", function () {
+          try {
+            enterAt = Date.now();
+            clicked = false;
+            clear();
+            timeoutId = setTimeout(function () {
+              // Threshold reached without a click. We still send the
+              // event; the actual hover may continue but we only fire
+              // once per hover-burst.
+              try {
+                if (clicked) return;
+                var label = "";
+                try {
+                  label = (el.textContent || "").trim().slice(0, 120);
+                } catch (e) {}
+                sendEvent("cta_hover", {
+                  label: label,
+                  durationMs: Date.now() - enterAt,
+                  position: entry.position,
+                });
+              } catch (e) {}
+              timeoutId = null;
+            }, HOVER_THRESHOLD_MS);
+          } catch (e) {}
+        });
+        el.addEventListener("mouseleave", function () {
+          clear();
+        });
+        el.addEventListener("click", function () {
+          clicked = true;
+          clear();
+        });
+      });
+    } catch (e) {
+      /* swallow */
+    }
+  }
+
   // ─── Init ──────────────────────────────────────────────────────────────
   ready(function () {
     try {
@@ -340,6 +628,18 @@
     } catch (e) {}
     try {
       bindSections();
+    } catch (e) {}
+    try {
+      bindScrollDepth();
+    } catch (e) {}
+    try {
+      bindTimeOnPage();
+    } catch (e) {}
+    try {
+      bindLinkClicks();
+    } catch (e) {}
+    try {
+      bindCtaHover();
     } catch (e) {}
   });
 })();
