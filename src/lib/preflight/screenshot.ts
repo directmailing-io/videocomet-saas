@@ -30,10 +30,35 @@
  *     until process restart.
  */
 
-import puppeteer, {
-  type Browser,
-  type Page,
-} from "puppeteer-core";
+import puppeteerCore, { type Browser, type Page } from "puppeteer-core";
+import { addExtra } from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+
+// puppeteer-extra ist ein Wrapper über (hier) puppeteer-core und akzeptiert
+// Plugins. Stealth-Plugin tarnt die typischen Headless-Marker (`navigator.
+// webdriver`, fehlende `chrome.app`, Plugin-Liste leer, etc.) — damit
+// kommen wir an Cloudflare/Akamai/Imperva-Bot-Checks vorbei, die sonst
+// pauschal rejecten würden.
+const puppeteer = addExtra(puppeteerCore);
+puppeteer.use(StealthPlugin());
+
+// Realistischer Chrome-User-Agent + Sec-CH-UA-Headers. Wird beim Page-
+// Setup pro Context appliziert.
+const REAL_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
+  "AppleWebKit/537.36 (KHTML, like Gecko) " +
+  "Chrome/130.0.0.0 Safari/537.36";
+const REAL_HEADERS: Record<string, string> = {
+  "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9," +
+    "image/avif,image/webp,image/apng,*/*;q=0.8",
+  "Upgrade-Insecure-Requests": "1",
+  "sec-ch-ua":
+    '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"macOS"',
+};
 
 const VIEWPORT_WIDTH = 640;
 const VIEWPORT_HEIGHT = 360;
@@ -73,6 +98,10 @@ function chromiumPath(): string {
 }
 
 async function launchBrowser(): Promise<Browser> {
+  // Die `--disable-blink-features=AutomationControlled`-Fahne unterdrückt
+  // den `navigator.webdriver=true`-Marker — der bekannteste Headless-Tell.
+  // Plus Lang- und Feature-Hints damit die Page nicht sofort "headless"
+  // erkennt.
   const browser = await puppeteer.launch({
     executablePath: chromiumPath(),
     headless: true,
@@ -83,13 +112,17 @@ async function launchBrowser(): Promise<Browser> {
       "--disable-gpu",
       "--disable-extensions",
       "--hide-scrollbars",
-      "--disable-features=TranslateUI",
+      "--disable-features=TranslateUI,IsolateOrigins,site-per-process",
+      "--disable-blink-features=AutomationControlled",
+      "--lang=de-DE,de",
+      "--accept-lang=de-DE,de;q=0.9,en;q=0.8",
     ],
     defaultViewport: {
       width: VIEWPORT_WIDTH,
       height: VIEWPORT_HEIGHT,
       deviceScaleFactor: 1,
     },
+    ignoreDefaultArgs: ["--enable-automation"],
   });
 
   browser.on("disconnected", () => {
@@ -218,6 +251,14 @@ export async function captureLightScreenshot(
       height: VIEWPORT_HEIGHT,
       deviceScaleFactor: 1,
     });
+
+    // Tarn-Schicht: realistischer Chrome-User-Agent + zugehörige
+    // Sec-CH-UA-/Accept-Language-Headers. Das Stealth-Plugin patcht zwar
+    // navigator.userAgent intern, aber CDP-Methoden wie setUserAgent
+    // setzen den UA auch auf Netzwerk-Ebene — wichtig für Server-side
+    // Bot-Checks die nur den HTTP-Header sehen.
+    await page.setUserAgent(REAL_USER_AGENT);
+    await page.setExtraHTTPHeaders(REAL_HEADERS);
 
     // Disable cache so adjacent leads don't see stale renders, and ignore
     // background download/upload of giant assets (they don't change the
