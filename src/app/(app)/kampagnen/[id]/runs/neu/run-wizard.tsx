@@ -177,7 +177,11 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
         setError(sj?.error ?? "Runde konnte nicht gestartet werden.");
         return;
       }
-      router.push(`/kampagnen/${campaignId}/runs/${runId}`);
+      // Direkt zur Pre-Flight-Review — Phase 1 (URL-Probe + Screenshot)
+      // läuft im Hintergrund, der User soll seine Ankunft auf der Review-
+      // Seite verbringen statt auf der Run-Detail-Seite (die ohnehin nur
+      // zur Preflight-Seite redirected solange `awaiting_approval`).
+      router.push(`/kampagnen/${campaignId}/runs/${runId}/preflight`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Start fehlgeschlagen.");
     } finally {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth-guard";
 import { getCampaign } from "@/lib/db/queries/campaigns";
@@ -25,6 +25,14 @@ export default async function RunDetailPage({
     if (run.campaignId !== campaign.id) notFound();
   } catch {
     notFound();
+  }
+
+  // Pre-Flight-Phase: wenn der Run noch im Quality-Check ist (Phase 1 läuft
+  // oder wartet auf Freigabe), gehört der User auf die Preflight-Review-
+  // Seite. Sonst sieht er hier nur "Wartet"-Status für alle Leads und denkt
+  // das System hängt — der Worker wartet aber auf seine Approval-Entscheidung.
+  if (run.status === "preflighting" || run.status === "awaiting_approval") {
+    redirect(`/kampagnen/${id}/runs/${runId}/preflight`);
   }
 
   const [leads, counts] = await Promise.all([
