@@ -129,24 +129,26 @@ export interface DuplicateInput {
 /**
  * Sucht innerhalb eines Lead-Batches nach Duplikaten.
  *
- * Strategie:
- *   1. Normalisiere host + email pro Lead.
- *   2. Lege zwei Lookup-Maps an (host → firstLeadId, email → firstLeadId).
- *   3. Jeder Lead, dessen host ODER email bereits in der Map ist, wird als
- *      Duplikat markiert auf das **erste** Vorkommen.
+ * Strategie — bewusst KONSERVATIV, um den B2B-Outreach-Fall nicht zu
+ * sabotieren, in dem ein Kunde mehrere Ansprechpartner derselben Firma
+ * kontaktiert (8-15 Leads pro Domain sind normal):
+ *
+ *   1. Gleiche Email     → echtes Duplikat (Email ist eindeutig pro Person).
+ *   2. Gleiche Person (Vor+Nachname) AUF derselben Domain → echtes
+ *      Duplikat (gleiche Zeile zweimal in der CSV).
+ *
+ *   Domain ALLEINE ist KEIN Duplikat-Kriterium — Marie@firma.de und
+ *   Max@firma.de sind zwei verschiedene Menschen.
  *
  * Returns: Map<duplicateLeadId, originalLeadId>. Originale (erste
  * Vorkommen) erscheinen NICHT als Schlüssel.
- *
- * Reihenfolge ist die Input-Reihenfolge — bei CSV-Upload entspricht das der
- * rowIndex-Sortierung und damit dem deterministisch ersten Lead.
  */
 export function findDuplicates(
   leads: DuplicateInput[],
 ): Map<string, string> {
   const dupes = new Map<string, string>();
-  const hostFirstSeen = new Map<string, string>();
   const emailFirstSeen = new Map<string, string>();
+  const personHostFirstSeen = new Map<string, string>();
 
   for (const lead of leads) {
     const websiteUrl = pick(lead.data, [
@@ -164,23 +166,32 @@ export function findDuplicates(
       "e-mail",
       "mail",
     ]);
+    const firstName = pick(lead.data, ["firstName", "Vorname", "first_name"]);
+    const lastName = pick(lead.data, ["lastName", "Nachname", "last_name"]);
 
     const host = websiteUrl ? normalizeHost(websiteUrl) : null;
     const email = emailRaw ? normalizeEmail(emailRaw) : null;
+    const personKey =
+      firstName && lastName && host
+        ? `${firstName.toLowerCase().trim()}|${lastName
+            .toLowerCase()
+            .trim()}|${host}`
+        : null;
 
-    // Match against email first — exakter als Host, der bei Multi-Tenant-
-    // Hostern (z.B. wix.com) zu false positives führen kann.
+    // 1. Email ist die definitive Match-Quelle.
     if (email && emailFirstSeen.has(email)) {
       dupes.set(lead.id, emailFirstSeen.get(email)!);
       continue;
     }
-    if (host && hostFirstSeen.has(host)) {
-      dupes.set(lead.id, hostFirstSeen.get(host)!);
+
+    // 2. Gleiche Person+Domain → wahrscheinlich doppelte CSV-Zeile.
+    if (personKey && personHostFirstSeen.has(personKey)) {
+      dupes.set(lead.id, personHostFirstSeen.get(personKey)!);
       continue;
     }
 
     if (email) emailFirstSeen.set(email, lead.id);
-    if (host) hostFirstSeen.set(host, lead.id);
+    if (personKey) personHostFirstSeen.set(personKey, lead.id);
   }
 
   return dupes;

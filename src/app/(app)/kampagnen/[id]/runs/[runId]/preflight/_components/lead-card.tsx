@@ -244,25 +244,14 @@ function LeadCardImpl({
             className="absolute inset-0 size-full object-cover"
           />
         ) : (
-          // Terminal-Status ohne Screenshot → AlertTriangle + Retry
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center bg-surface-muted">
-            <AlertTriangle className="size-5 text-warn" />
-            <span className="text-[11px] font-medium text-ink leading-tight">
-              Screenshot fehlgeschlagen
-            </span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRetryScreenshot();
-              }}
-              aria-label="Screenshot erneut versuchen"
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-deep hover:text-brand-800 transition-colors"
-            >
-              <RotateCcw className="size-3" />
-              Neu versuchen
-            </button>
-          </div>
+          // Terminal-Status ohne Screenshot. Inhalt + Retry-Sichtbarkeit
+          // hängen am genauen Status — nicht jeder Fehler verdient den
+          // Tonfall "Bitte erneut versuchen" (URL ist tot → kein Retry).
+          <FallbackBody
+            status={status}
+            onRetryScreenshot={onRetryScreenshot}
+            errorMessage={lead.preflightErrorMessage}
+          />
         )}
 
         {/* Status-Pill (nur bei Problem / nicht-ok) */}
@@ -341,6 +330,111 @@ function LeadCardImpl({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Inhalt + Tonfall des Fallback-Bildbereichs sind status-spezifisch.
+ * Nur `screenshot_unavailable` lädt zum Retry ein — andere Fehler haben
+ * eine eindeutige Ursache (URL tot, TLS-Cert kaputt, Bot-Block), bei der
+ * ein Retry praktisch nichts ändert.
+ */
+function FallbackBody({
+  status,
+  errorMessage,
+  onRetryScreenshot,
+}: {
+  status: PreflightStatus;
+  errorMessage: string | null;
+  onRetryScreenshot: () => void;
+}) {
+  const config = (() => {
+    switch (status) {
+      case "url_dead":
+        return {
+          title: "Webseite nicht erreichbar",
+          sub: errorMessage ?? "Die URL liefert keine Antwort.",
+          retry: false,
+        };
+      case "tls_error":
+        return {
+          title: "TLS-Zertifikat ungültig",
+          sub: errorMessage ?? "HTTPS-Verbindung fehlgeschlagen.",
+          retry: false,
+        };
+      case "url_redirect":
+        return {
+          title: "Weiterleitung erkannt",
+          sub: errorMessage ?? "Domain leitet auf andere Seite um.",
+          retry: false,
+        };
+      case "bot_block":
+        return {
+          title: "Bot-Schutz aktiv",
+          sub: errorMessage ?? "Webseite blockiert automatisierte Zugriffe.",
+          retry: false,
+        };
+      case "slow":
+        return {
+          title: "Webseite zu langsam",
+          sub: errorMessage ?? "Ladezeit über 8 Sekunden.",
+          retry: false,
+        };
+      case "missing_field":
+        return {
+          title: "Daten unvollständig",
+          sub: errorMessage ?? "Pflichtfelder fehlen oder URL kaputt.",
+          retry: false,
+        };
+      case "duplicate":
+        return {
+          title: "Duplikat",
+          sub: "Diese Person wurde bereits in dieser Liste gefunden.",
+          retry: false,
+        };
+      case "screenshot_unavailable":
+        return {
+          title: "Screenshot fehlgeschlagen",
+          sub: errorMessage ?? null,
+          retry: true,
+        };
+      default:
+        return {
+          title: "Unbekannter Fehler",
+          sub: errorMessage ?? null,
+          retry: false,
+        };
+    }
+  })();
+
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center bg-surface-muted">
+      <AlertTriangle className="size-5 text-warn" />
+      <div className="space-y-0.5">
+        <div className="text-[11px] font-semibold text-ink leading-tight">
+          {config.title}
+        </div>
+        {config.sub && (
+          <div className="text-[10px] text-ink-muted leading-tight line-clamp-2 max-w-[180px]">
+            {config.sub}
+          </div>
+        )}
+      </div>
+      {config.retry && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRetryScreenshot();
+          }}
+          aria-label="Screenshot erneut versuchen"
+          className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-deep hover:text-brand-800 transition-colors"
+        >
+          <RotateCcw className="size-3" />
+          Neu versuchen
+        </button>
+      )}
     </div>
   );
 }
