@@ -249,16 +249,21 @@ export async function processPreflightJob(
   const signal = (job as unknown as { signal?: AbortSignal }).signal;
 
   // ── Step 4: URL probe ─────────────────────────────────────────────────
+  // HEAD/GET-Probe ist primär eine Klassifizierungs-Hilfe. Viele große
+  // B2B-Sites (Cloudflare/Akamai-geschützt) lehnen HEAD ohne Cookies pauschal
+  // ab — Puppeteer mit echtem User-Agent kommt aber durch. Wir kürzen daher
+  // NUR bei DNS-Errors ab (Domain existiert wirklich nicht — Screenshot
+  // hätte keine Chance). Alle anderen Probe-Fehler werden später als
+  // Diagnose-Hinweis verwendet, falls auch der Screenshot scheitert.
   const probe = await probeUrl(websiteUrl, signal);
-
-  if (!probe.ok) {
+  if (probe.status === "dns_error") {
     await db
       .update(leads)
       .set({
-        preflightStatus: mapProbeStatusToDb(probe.status),
+        preflightStatus: "url_dead",
         preflightFinalUrl: probe.finalUrl,
         preflightHttpStatus: probe.httpStatus,
-        preflightErrorMessage: probe.errorMessage,
+        preflightErrorMessage: probe.errorMessage ?? "dns_error",
         preflightDurationMs: probe.durationMs,
         preflightCompletedAt: new Date(),
       })
@@ -293,17 +298,22 @@ export async function processPreflightJob(
       .where(eq(leads.id, leadId));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // The screenshot module throws Errors with stable `message` prefixes:
-    //   "screenshot_timeout" | "screenshot_crashed" | "screenshot_aborted"
-    // Anything else is unexpected — but we still degrade to a terminal
-    // status so the run can complete review-mode.
+    // Wenn auch der echte Browser scheitert, fallen wir auf die Probe-
+    // Klassifizierung zurück (sie liefert dann den Grund — Bot-Block,
+    // TLS-Fehler etc.). Wenn die Probe selber OK war und nur das Bild
+    // nicht klappte, ist's `screenshot_unavailable`.
+    const fallbackStatus = probe.ok
+      ? "screenshot_unavailable"
+      : mapProbeStatusToDb(probe.status);
     await db
       .update(leads)
       .set({
-        preflightStatus: "screenshot_unavailable",
+        preflightStatus: fallbackStatus,
         preflightFinalUrl: probe.finalUrl,
         preflightHttpStatus: probe.httpStatus,
-        preflightErrorMessage: `screenshot: ${message}`,
+        preflightErrorMessage: probe.ok
+          ? `screenshot: ${message}`
+          : probe.errorMessage ?? `screenshot: ${message}`,
         preflightDurationMs: probe.durationMs,
         preflightCompletedAt: new Date(),
       })
