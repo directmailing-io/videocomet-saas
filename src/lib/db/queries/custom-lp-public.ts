@@ -32,6 +32,12 @@ import {
 export interface CustomLpPublicContext {
   leadId: string;
   leadData: Record<string, string>;
+  /** HLS-Playlist-URL (Safari nativ, andere via HLS.js). */
+  videoUrl: string | null;
+  /** MP4-Fallback aus dem gleichen Bunny-Pfad — broad-compat. */
+  videoMp4Url: string | null;
+  /** Poster für den HTML5-Video-Player (vor Play). */
+  thumbnailUrl: string | null;
   versionId: string;
   storagePath: string;
   entryHtml: string;
@@ -50,6 +56,8 @@ export async function getCustomLpContextBySlug(
     .select({
       leadId: leads.id,
       leadData: leads.data,
+      videoUrl: leads.videoUrl,
+      thumbnailUrl: leads.thumbnailUrl,
       customLpTemplateId: campaigns.customLpTemplateId,
       pinnedVersionId: runs.customLpVersionId,
       activeVersionId: customLpTemplates.activeVersionId,
@@ -85,6 +93,8 @@ export async function getCustomLpContextBySlugAndDomain(
     .select({
       leadId: leads.id,
       leadData: leads.data,
+      videoUrl: leads.videoUrl,
+      thumbnailUrl: leads.thumbnailUrl,
       customLpTemplateId: campaigns.customLpTemplateId,
       pinnedVersionId: runs.customLpVersionId,
       activeVersionId: customLpTemplates.activeVersionId,
@@ -112,6 +122,8 @@ async function materialise(
     | {
         leadId: string;
         leadData: Record<string, string>;
+        videoUrl: string | null;
+        thumbnailUrl: string | null;
         customLpTemplateId: string | null;
         pinnedVersionId: string | null;
         activeVersionId: string | null;
@@ -138,9 +150,20 @@ async function materialise(
 
   if (!version) return null;
 
+  // Bunny-Stream-Konvention: aus .../playlist.m3u8 wird .../play_720p.mp4.
+  // Das ist der gleiche Pfad, nur das progressive MP4-File statt der HLS-
+  // Variante — kompatibel mit allen Browsern ohne HLS.js. Wir liefern beide
+  // aus damit Templates mit nativer HLS-Unterstützung (Safari) den ersten
+  // Source nehmen können.
+  const videoMp4Url =
+    row.videoUrl?.replace(/playlist\.m3u8($|\?)/, "play_720p.mp4$1") ?? null;
+
   return {
     leadId: row.leadId,
     leadData: row.leadData,
+    videoUrl: row.videoUrl,
+    videoMp4Url,
+    thumbnailUrl: row.thumbnailUrl,
     versionId: version.id,
     storagePath: version.storagePath,
     entryHtml: version.entryHtml,

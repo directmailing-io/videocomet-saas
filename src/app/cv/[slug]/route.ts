@@ -101,6 +101,9 @@ export async function GET(
       slug,
       trackingBridgeUrl: TRACKING_BRIDGE_URL,
       annotations: context.annotations,
+      videoUrl: context.videoUrl,
+      videoMp4Url: context.videoMp4Url,
+      thumbnailUrl: context.thumbnailUrl,
     });
   } catch (err) {
     // eslint-disable-next-line no-console

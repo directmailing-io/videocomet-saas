@@ -44,6 +44,12 @@ export interface RenderCustomLpArgs {
   trackingBridgeUrl: string;
   /** Element annotations set in the customer's element picker. */
   annotations: CustomLpAnnotations | Record<string, unknown> | null;
+  /** HLS-Playlist-URL des Lead-Videos. */
+  videoUrl?: string | null;
+  /** MP4-Fallback (Bunny `play_720p.mp4`) für broad-compat. */
+  videoMp4Url?: string | null;
+  /** Thumbnail-URL fürs Poster-Attribut. */
+  thumbnailUrl?: string | null;
 }
 
 /** HTML-escape minimum needed to prevent breaking attributes/text nodes. */
@@ -213,6 +219,114 @@ export function buildBridgeSnippet(args: {
 }
 
 /**
+ * Sucht `<video>`-Tags, deren `src` (oder erstes `<source src>`) leer ist,
+ * und schreibt die Lead-Video-URLs hinein. Sonst bleibt das Template-Tag
+ * unangetastet — Kunden mit hartkodierter Video-Source werden nicht
+ * überschrieben.
+ *
+ * Wir suchen Video-Elemente die EINES dieser Kriterien erfüllen:
+ *  - `data-vc-video` Attribut (Konvention aus dem Starter-Kit)
+ *  - Vorfahre mit `data-vc-video="primary"` (Konvention im Finestsites-Template)
+ *  - Erstes `<video>`-Element im Body (Fallback)
+ *
+ * Implementation: simple Regex-Pass mit zwei Layern — finde alle <video>...
+ * </video>-Blöcke und entscheide pro Block via Kontext (vorhergehende ~400
+ * Zeichen) ob es ein „unser" Video ist.
+ */
+function injectVideoSources(
+  html: string,
+  args: {
+    videoUrl: string | null;
+    videoMp4Url: string | null;
+    thumbnailUrl: string | null;
+  },
+): string {
+  const mp4 = args.videoMp4Url ?? args.videoUrl ?? null;
+  if (!mp4) return html; // Nichts zu injizieren.
+
+  const videoBlockRe = /<video\b([^>]*)>([\s\S]*?)<\/video\s*>/gi;
+  let result = "";
+  let lastIdx = 0;
+  let match: RegExpExecArray | null;
+  let injectedOnce = false;
+
+  while ((match = videoBlockRe.exec(html)) !== null) {
+    const [full, attrs, inner] = match;
+    const blockStart = match.index;
+
+    // Heuristik: nur "leere" Videos überschreiben — sonst riskieren wir,
+    // dass der Kunde sein eigenes Video hartkodiert hat und wir es
+    // ungewollt austauschen.
+    const hasNonEmptySrcAttr =
+      /\bsrc\s*=\s*("[^"]*\.[^"]*"|'[^']*\.[^']*')/i.test(attrs);
+    const hasNonEmptySource =
+      /<source\b[^>]*\bsrc\s*=\s*("[^"]*\.[^"]*"|'[^']*\.[^']*')/i.test(inner);
+    if (hasNonEmptySrcAttr || hasNonEmptySource) {
+      result += html.slice(lastIdx, blockStart + full.length);
+      lastIdx = blockStart + full.length;
+      continue;
+    }
+
+    // Check Marker im Block selbst ODER in den nähesten 400 Zeichen
+    // davor (Wrapper mit data-vc-video).
+    const contextBefore = html.slice(Math.max(0, blockStart - 400), blockStart);
+    const isMarked =
+      /\bdata-vc-video\b/i.test(attrs) ||
+      /\bdata-vc-video\s*=\s*("primary"|'primary')/i.test(contextBefore);
+    if (!isMarked && injectedOnce) {
+      // Kein Marker UND wir haben schon das erste Video gefüllt → in Ruhe lassen.
+      result += html.slice(lastIdx, blockStart + full.length);
+      lastIdx = blockStart + full.length;
+      continue;
+    }
+
+    // ── Re-build the <video> tag with src + poster injected. ──────────
+    let newAttrs = attrs;
+    // poster setzen wenn leer oder fehlend.
+    if (args.thumbnailUrl) {
+      if (/\bposter\s*=\s*("[^"]*"|'[^']*')/i.test(newAttrs)) {
+        newAttrs = newAttrs.replace(
+          /\bposter\s*=\s*("[^"]*"|'[^']*')/i,
+          `poster="${htmlEscape(args.thumbnailUrl)}"`,
+        );
+      } else {
+        newAttrs = ` poster="${htmlEscape(args.thumbnailUrl)}"` + newAttrs;
+      }
+    }
+
+    // Inner: leere <source>-Tags ersetzen, sonst eine frische <source>
+    // an den Anfang.
+    let newInner = inner;
+    const emptySourceRe =
+      /<source\b([^>]*?)\bsrc\s*=\s*(""|'')([^>]*)>/i;
+    if (emptySourceRe.test(newInner)) {
+      newInner = newInner.replace(
+        emptySourceRe,
+        `<source$1src="${htmlEscape(mp4)}"$3>`,
+      );
+    } else {
+      newInner =
+        `<source src="${htmlEscape(mp4)}" type="video/mp4" />` + newInner;
+      // Wenn HLS-Variante existiert UND vom mp4 verschieden, auch HLS
+      // anbieten (Safari kann nativ).
+      if (args.videoUrl && args.videoUrl !== mp4) {
+        newInner =
+          `<source src="${htmlEscape(args.videoUrl)}" type="application/vnd.apple.mpegurl" />` +
+          newInner;
+      }
+    }
+
+    const rebuilt = `<video${newAttrs}>${newInner}</video>`;
+    result += html.slice(lastIdx, blockStart) + rebuilt;
+    lastIdx = blockStart + full.length;
+    injectedOnce = true;
+  }
+
+  result += html.slice(lastIdx);
+  return result;
+}
+
+/**
  * Public entry point — combines all rewrite steps. Idempotent up to
  * placeholder values: calling this twice with the same input produces
  * identical output.
@@ -223,12 +337,19 @@ export function renderCustomLp(args: RenderCustomLpArgs): string {
   // 1. Placeholder substitution (skips script/style content).
   let out = substitutePlaceholders(args.html, args.leadData);
 
-  // 2. `<base href>` at the top of <head>. Doing this AFTER placeholder
+  // 2. Video-Inject: leere <video src> mit der Lead-Video-URL füllen.
+  out = injectVideoSources(out, {
+    videoUrl: args.videoUrl ?? null,
+    videoMp4Url: args.videoMp4Url ?? null,
+    thumbnailUrl: args.thumbnailUrl ?? null,
+  });
+
+  // 3. `<base href>` at the top of <head>. Doing this AFTER placeholder
   //    substitution avoids the (tiny) risk of a `{{…}}` inside an injected
   //    snippet being processed.
   out = injectIntoHead(out, `<base href="${htmlEscape(baseHref)}">`);
 
-  // 3. Tracking-bridge bootstrap right before </body>.
+  // 4. Tracking-bridge bootstrap right before </body>.
   out = injectBeforeBodyEnd(
     out,
     buildBridgeSnippet({
