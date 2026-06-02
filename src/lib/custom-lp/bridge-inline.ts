@@ -27,7 +27,7 @@ const BRIDGE_PATH_PARTS = ["public", "__videocomet-bridge.js"];
  */
 const ENDPOINT_PATTERN =
   /var\s+TRACK_ENDPOINT\s*=\s*"https?:\/\/[^"]+\/api\/track\/event"\s*;/;
-const ENDPOINT_REPLACEMENT = 'var TRACK_ENDPOINT = "/_e";';
+const ENDPOINT_REPLACEMENT = 'var TRACK_ENDPOINT = "/c";';
 
 function loadBridgeSource(): string {
   const path = join(process.cwd(), ...BRIDGE_PATH_PARTS);

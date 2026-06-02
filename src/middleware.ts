@@ -54,7 +54,9 @@ function isPassthroughPath(pathname: string): boolean {
     // Stealth-Tracking-Endpoint. Wird auf lp.videocomet.de und Custom-
     // Domains direkt zur App durchgereicht — first-party-Tracking ohne
     // CORS-Trigger und ohne AdBlocker-Match auf /api/track/event.
-    pathname === "/_e" ||
+    // (Folder darf NICHT mit `_` beginnen — Next.js behandelt `_*` als
+    // private und kompiliert die Route gar nicht.)
+    pathname === "/c" ||
     pathname === "/favicon.ico" ||
     pathname === "/robots.txt" ||
     pathname === "/sitemap.xml"

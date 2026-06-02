@@ -7,7 +7,7 @@
  *     URL `https://app.videocomet.de/api/track/event` — cross-origin,
  *     plus offensichtlicher Pfad „track/event" den AdBlocker-Filter-
  *     Listen pauschal blocken.
- *   - Jetzt: die Bridge POSTet zu `/_e` (relativ). Same-origin → kein
+ *   - Jetzt: die Bridge POSTet zu `/c` (relativ). Same-origin → kein
  *     CORS, kein Preflight, und der Pfad sieht aus wie irgendein
  *     statisches Asset, nicht wie ein Tracking-Endpoint.
  *
