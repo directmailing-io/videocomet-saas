@@ -24,6 +24,14 @@ function formatBytes(bytes: number | null): string {
   return `${bytes} B`;
 }
 
+function formatDuration(sec: number | null): string | null {
+  if (!sec || sec <= 0) return null;
+  const total = Math.round(sec);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 function formatDate(d: Date | null): string {
   if (!d) return "";
   try {
@@ -59,13 +67,28 @@ function MediaGrid({ items }: { items: MediaItem[] }) {
       {items.map((m) => (
         <Card key={m.id} hover>
           <CardContent className="p-3">
-            <div className="aspect-square rounded-squircle-sm bg-surface-muted mb-3 flex items-center justify-center overflow-hidden">
+            <div className="relative aspect-square rounded-squircle-sm bg-surface-muted mb-3 flex items-center justify-center overflow-hidden">
               {m.type === "image" || m.type === "logo" ? (
                 <img
                   src={m.publicUrl}
                   alt={m.name}
                   className="w-full h-full object-cover"
                 />
+              ) : m.type === "video" || m.type === "webcam" ? (
+                <>
+                  <video
+                    src={m.publicUrl}
+                    controls
+                    preload="metadata"
+                    playsInline
+                    className="w-full h-full object-cover bg-black"
+                  />
+                  {formatDuration(m.durationSec) && (
+                    <span className="pointer-events-none absolute top-2 right-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white tabular-nums">
+                      {formatDuration(m.durationSec)}
+                    </span>
+                  )}
+                </>
               ) : (
                 typeIcon(m.type)
               )}
