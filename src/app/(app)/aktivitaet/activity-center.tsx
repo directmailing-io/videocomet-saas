@@ -710,7 +710,9 @@ function ActivityTopbar({
             ? `${counts.total.toLocaleString("de-DE")} Events · ${counts.uniqueLeads.toLocaleString(
                 "de-DE",
               )} Leads`
-            : "Lädt Übersicht…"}
+            : streamState === "connecting"
+              ? "Lädt Übersicht…"
+              : "0 Events · 0 Leads"}
         </p>
       </div>
       <div className="flex items-center gap-2 shrink-0 flex-wrap">
