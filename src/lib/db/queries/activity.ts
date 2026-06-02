@@ -112,10 +112,12 @@ function buildBaseFilters(
     parts.push(sql`${runs.id} = ANY(${filters.runIds})`);
   }
   if (filters.from) {
-    parts.push(sql`${leadEvents.ts} >= ${filters.from}`);
+    // postgres.js akzeptiert keine Date-Instanzen in raw-SQL — explizit
+    // auf ISO-String casten (gleicher Workaround wie im Preflight-Recovery).
+    parts.push(sql`${leadEvents.ts} >= ${filters.from.toISOString()}`);
   }
   if (filters.to) {
-    parts.push(sql`${leadEvents.ts} <= ${filters.to}`);
+    parts.push(sql`${leadEvents.ts} <= ${filters.to.toISOString()}`);
   }
   if (filters.kinds && filters.kinds.length > 0) {
     parts.push(sql`${leadEvents.kind} = ANY(${filters.kinds})`);
@@ -206,9 +208,10 @@ export async function getActivityFeed(
     const cur = decodeCursor(filters.cursor);
     if (cur) {
       // Keyset condition: (ts, eventId) strictly LESS than the cursor.
+      // ISO-String statt Date — siehe buildBaseFilters-Workaround oben.
       whereParts.push(sql`(
-        ${leadEvents.ts} < ${new Date(cur.ts)}
-        OR (${leadEvents.ts} = ${new Date(cur.ts)} AND ${leadEvents.id} < ${cur.eventId})
+        ${leadEvents.ts} < ${cur.ts}
+        OR (${leadEvents.ts} = ${cur.ts} AND ${leadEvents.id} < ${cur.eventId})
       )`);
     }
   }
