@@ -254,20 +254,10 @@
         { passive: true },
       );
 
-      el.addEventListener(
-        "volumechange",
-        function () {
-          try {
-            var nowMuted = !!el.muted;
-            if (nowMuted === wasMuted) return;
-            wasMuted = nowMuted;
-            sendEvent(nowMuted ? "video_mute" : "video_unmute", {
-              at: Math.floor(el.currentTime || 0),
-            });
-          } catch (e) {}
-        },
-        { passive: true },
-      );
+      // volumechange / video_mute / video_unmute bewusst deaktiviert —
+      // Operator-Entscheidung "nur relevante Events tracken".
+      // wasMuted-Variable bleibt zur Backward-Kompat im Closure-Scope.
+      void wasMuted;
     } catch (e) {
       /* swallow */
     }
@@ -608,6 +598,19 @@
   }
 
   // ─── Init ──────────────────────────────────────────────────────────────
+  // Aktive Tracker (per Operator-Entscheidung):
+  //   - page_view                              (Landingpage-Öffnung)
+  //   - video_play / video_progress / video_ended (Video-Engagement)
+  //   - cta_click                              (Button-Konversion)
+  //
+  // Bewusst DEAKTIVIERT (Datensparsamkeit + Übersicht im Feed):
+  //   - bindSections / section_view
+  //   - bindScrollDepth / scroll_depth
+  //   - bindTimeOnPage / time_on_page
+  //   - bindLinkClicks / link_click (non-CTA links)
+  //   - bindCtaHover / cta_hover
+  //   - video_mute / video_unmute (innerhalb bindVideos — siehe weiter oben)
+  // Die zugehörigen Funktionen bleiben im Source als optional reaktivierbar.
   ready(function () {
     try {
       sendEvent("page_view", {
@@ -625,21 +628,6 @@
     } catch (e) {}
     try {
       bindVideos();
-    } catch (e) {}
-    try {
-      bindSections();
-    } catch (e) {}
-    try {
-      bindScrollDepth();
-    } catch (e) {}
-    try {
-      bindTimeOnPage();
-    } catch (e) {}
-    try {
-      bindLinkClicks();
-    } catch (e) {}
-    try {
-      bindCtaHover();
     } catch (e) {}
   });
 })();

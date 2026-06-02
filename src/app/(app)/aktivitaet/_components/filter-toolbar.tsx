@@ -31,15 +31,18 @@ const DATE_PRESETS: Array<{ key: DateRangeKey; label: string }> = [
   { key: "30d", label: "30 Tage" },
 ];
 
+// Bewusst nur die 4 für die Akquise-Auswertung relevanten Event-Arten —
+// alle übrigen (scroll_depth, time_on_page, link_click, cta_hover,
+// video_mute/unmute, section_view) werden von der Bridge nicht mehr
+// gesendet. Bestehende Events in der DB bleiben filterbar wenn man die
+// URL `?kind=scroll_depth` direkt setzt; im UI tauchen sie aber nicht
+// mehr als Chip auf.
 const KIND_CHIPS: Array<{ key: KindFilter; label: string }> = [
   { key: "all", label: "Alle" },
-  { key: "page_view", label: "Page-Views" },
+  { key: "page_view", label: "Landingpage geöffnet" },
   { key: "video_play", label: "Video gestartet" },
   { key: "video_progress", label: "Video gesehen" },
-  { key: "video_ended", label: "Video beendet" },
   { key: "cta_click", label: "CTA-Klicks" },
-  { key: "link_click", label: "Link-Klicks" },
-  { key: "scroll_depth", label: "Scroll" },
 ];
 
 export interface FilterToolbarProps {
