@@ -61,7 +61,17 @@ export function useActivityStream({
 
     let cancelled = false;
     let es: EventSource | null = null;
-    setState("connecting");
+    // Debounced error-state: EventSource feuert `error` auch bei transienten
+    // Reconnects. Wir setzen state="error" NUR wenn nach 3s kein open kam.
+    let errorTimeout: ReturnType<typeof setTimeout> | null = null;
+    const clearErrorTimeout = () => {
+      if (errorTimeout) {
+        clearTimeout(errorTimeout);
+        errorTimeout = null;
+      }
+    };
+
+    setState((prev) => (prev === "live" ? "live" : "connecting"));
 
     try {
       const url = `/api/activity/stream${queryString ? `?${queryString}` : ""}`;
@@ -69,17 +79,27 @@ export function useActivityStream({
 
       es.addEventListener("open", () => {
         if (cancelled) return;
+        clearErrorTimeout();
         setState("live");
       });
 
       es.addEventListener("error", () => {
         if (cancelled) return;
-        // EventSource versucht selbständig zu rebinden — wir markieren das nur.
-        setState("error");
+        // Setze state NICHT sofort auf "error" — EventSource versucht
+        // selbständig zu rebinden. Erst nach 3s ohne open ist es echt tot.
+        if (errorTimeout) return;
+        errorTimeout = setTimeout(() => {
+          if (cancelled) return;
+          setState("error");
+          errorTimeout = null;
+        }, 3000);
       });
 
       es.addEventListener("append", (ev) => {
         if (cancelled) return;
+        // Append-event ist ein impliziter Heartbeat — Stream lebt.
+        clearErrorTimeout();
+        if (state !== "live") setState("live");
         try {
           const row = JSON.parse((ev as MessageEvent).data) as ActivityFeedRow;
           onAppendRef.current?.(row);
@@ -90,6 +110,7 @@ export function useActivityStream({
 
       es.addEventListener("counts", (ev) => {
         if (cancelled) return;
+        clearErrorTimeout();
         try {
           const counts = JSON.parse((ev as MessageEvent).data) as ActivityCounts;
           onCountsRef.current?.(counts);
@@ -106,9 +127,12 @@ export function useActivityStream({
 
     return () => {
       cancelled = true;
+      clearErrorTimeout();
       es?.close();
-      setState("off");
+      // KEIN setState("off") — Filter-Wechsel soll nicht "Getrennt" zeigen.
+      // Der nächste Effect-Run setzt sofort wieder "connecting".
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryString, enabled, bumper]);
 
   const reconnect = React.useCallback(() => {
