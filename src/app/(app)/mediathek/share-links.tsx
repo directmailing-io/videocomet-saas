@@ -31,6 +31,7 @@ import {
   DialogContent,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTrigger,
 } from "@/components/ui/dialog";
@@ -267,7 +268,7 @@ function CreateLinkDialog({
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <DialogFooter>
               <Button
                 variant="ghost"
                 onClick={() => setOpen(false)}
@@ -278,7 +279,7 @@ function CreateLinkDialog({
               <Button onClick={handleCreate} loading={submitting}>
                 Link erstellen
               </Button>
-            </div>
+            </DialogFooter>
           </>
         )}
       </DialogContent>
@@ -339,35 +340,58 @@ function CreatedLinkPanel({
         </DialogDescription>
       </DialogHeader>
 
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 rounded-squircle-md border border-line bg-surface px-3 py-2">
-          <code className="flex-1 truncate text-sm text-ink">{url}</code>
-          <Button size="sm" variant="ghost" onClick={copy}
-            iconLeft={copied ? <Check className="size-4 text-ok" /> : <Copy className="size-4" />}>
-            {copied ? "Kopiert" : "Kopieren"}
-          </Button>
+      <div className="space-y-3">
+        {/* Link-Zeile */}
+        <div className="space-y-1.5">
+          <Label>Link</Label>
+          <div className="flex items-center gap-2">
+            <code
+              className="flex-1 min-w-0 truncate rounded-squircle-sm border border-line bg-surface-soft px-3 py-2 text-xs text-ink"
+              title={url}
+            >
+              {url}
+            </code>
+            <Button
+              size="sm"
+              variant="subtle"
+              onClick={copy}
+              iconLeft={
+                copied ? (
+                  <Check className="size-3.5 text-ok" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )
+              }
+            >
+              {copied ? "Kopiert" : "Kopieren"}
+            </Button>
+          </div>
         </div>
 
-        <div className="flex flex-col items-center justify-center gap-2 rounded-squircle-md border border-line bg-surface-soft p-6">
-          {qrDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={qrDataUrl}
-              alt="QR-Code für den Aufnahmelink"
-              className="size-56 rounded-squircle-sm bg-white shadow-sm"
-            />
-          ) : (
-            <div className="size-56 animate-pulse rounded-squircle-sm bg-line" />
-          )}
-          <p className="text-xs text-ink-muted text-center">
-            Mit dem Handy scannen, um direkt die Aufnahme-Seite zu öffnen.
-          </p>
+        {/* QR-Code */}
+        <div className="space-y-1.5">
+          <Label>QR-Code</Label>
+          <div className="flex flex-col items-center justify-center gap-3 rounded-squircle-sm border border-line bg-surface-soft p-5">
+            {qrDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={qrDataUrl}
+                alt="QR-Code für den Aufnahmelink"
+                className="size-48 rounded-squircle-sm bg-white p-2 shadow-sm"
+              />
+            ) : (
+              <div className="size-48 animate-pulse rounded-squircle-sm bg-line" />
+            )}
+            <p className="text-xs text-ink-muted text-center max-w-[26ch]">
+              Mit dem Handy scannen, um direkt die Aufnahme-Seite zu öffnen.
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="flex justify-end pt-2">
+      <DialogFooter>
         <Button onClick={onClose}>Fertig</Button>
-      </div>
+      </DialogFooter>
     </>
   );
 }
