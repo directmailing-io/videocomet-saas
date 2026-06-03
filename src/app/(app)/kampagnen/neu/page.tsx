@@ -55,6 +55,7 @@ export default async function NeuePage() {
 
   return (
     <NewCampaignWizard
+      userId={user.id}
       initialData={{
         webcams: webcams.map((w) => ({
           id: w.id,

@@ -1,34 +1,36 @@
 "use client";
 
 /**
- * preview-player — 16:9 live preview of a campaign editor timeline.
+ * preview-player — 16:9 Live-Vorschau der Kampagnen-Timeline (Editor-Step 3).
  *
- * What it does:
- *   Takes the same Segment list and PiP settings that drive the worker render
- *   pipeline and plays them back in the browser so the user can iterate on
- *   timing/composition without round-tripping through FFmpeg.
+ * State-Machine (kurz):
+ *   playheadMs              authoritativer Timeline-Cursor in ms
+ *   playing                 true → echte Wiedergabe (video.play()) läuft
+ *   ─────────────────────────────────────────────────────────────────────
+ *   PLAY              setzt playing=true. Effekt unten ruft .play() auf
+ *                     allen Media-Elementen + startet RAF-Tick (+delta).
+ *   PAUSE             setzt playing=false. Effekt ruft .pause() + stoppt RAF.
+ *   SEEK              Slider-Drag: setzt currentTime hart auf beiden Videos,
+ *                     setzt playheadMs neu. Falls playing → erneut .play().
+ *   SEGMENT-CHANGE    Aktive Folie ändert sich (Cut). React rendert neue
+ *                     <video src=…>. onLoadedMetadata setzt currentTime auf
+ *                     den Offset innerhalb der Folie und ruft .play() falls
+ *                     playing. Davor zeigen wir den Loader.
+ *   DRIFT             RAF prüft alle ~250ms |video.currentTime - playhead|.
+ *                     >150ms → harter Seek. Sonst lassen wir das Video laufen
+ *                     (echte 30/60 fps).
+ *   VISIBILITY        Tab versteckt → pausieren, sonst würde RAF sowieso
+ *                     gethrottlet und der Sync-Loop driften.
  *
- * Layout:
- *   16:9 stage = active segment (text/image/video/website/gdocs)
- *   PiP overlay = the recorded webcam clip, positioned + shaped per props
- *   Controls    = play/pause + time readout + scrubber
- *
- * Playback model:
- *   We own a single `currentTimeMs` integer in state that ranges
- *   [0, totalDurationMs]. While `playing`, a requestAnimationFrame loop
- *   advances it by the wall-clock delta since the previous frame so playback
- *   stays correct even when the tab is throttled. The webcam video element
- *   and any active VideoSegment have their `.currentTime` driven from the
- *   same clock — they don't run their own playback, they just follow.
- *
- * Why follow-mode for media elements:
- *   Letting HTMLMediaElement play itself would desynchronise from the timeline
- *   the moment a user scrubs, switches segments, or pauses. Driving currentTime
- *   from a single authoritative clock keeps the segment cuts frame-accurate.
+ * Warum echte Wiedergabe statt Scrubbing?
+ *   Chromium dekodiert beim Setzen von .currentTime nur an I-Frames sauber.
+ *   60×/s currentTime zu schreiben (alter Scrub-Modus) flackerte sichtbar.
+ *   .play() lässt den Decoder selbst zwischen Keyframes interpolieren →
+ *   weiche Wiedergabe ohne Frame-Stutter.
  */
 
 import * as React from "react";
-import { Play, Pause } from "lucide-react";
+import { Play, Pause, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Segment } from "@/lib/segments/types";
 import {
@@ -48,7 +50,17 @@ export interface PreviewPlayerProps {
 }
 
 /* ------------------------------------------------------------------ */
-/* Time formatting                                                    */
+/* Konstanten                                                          */
+/* ------------------------------------------------------------------ */
+
+/** Ab dieser Drift in Sek. wird hart geseekt statt weiter laufen zu lassen. */
+const DRIFT_THRESHOLD_SEC = 0.15;
+
+/** Drift-Check Intervall in ms (nicht jeden Frame, sonst stottert es). */
+const DRIFT_CHECK_INTERVAL_MS = 250;
+
+/* ------------------------------------------------------------------ */
+/* Formatierung                                                       */
 /* ------------------------------------------------------------------ */
 
 function formatTime(ms: number): string {
@@ -63,7 +75,7 @@ function formatTime(ms: number): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* PiP geometry                                                       */
+/* PiP-Geometrie                                                      */
 /* ------------------------------------------------------------------ */
 
 function pipPositionClass(pos: "bottom-left" | "bottom-right"): string {
@@ -78,7 +90,36 @@ function pipShapeClass(shape: "square" | "rounded" | "circle"): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* Component                                                          */
+/* Hilfsfunktionen Segmente                                            */
+/* ------------------------------------------------------------------ */
+
+/** Liefert die Start-Position (ms) eines Segments im Timeline-Verlauf. */
+function getSegmentStartMs(segments: Segment[], index: number): number {
+  let acc = 0;
+  for (let i = 0; i < index && i < segments.length; i++) {
+    acc += Math.max(0, segments[i].durationMs | 0);
+  }
+  return acc;
+}
+
+/**
+ * Sucht das nächste Video-Segment ab `fromIndex` (inkl.) und gibt dessen URL
+ * zurück — wird zum Preloaden in einem Hidden-<video> benutzt, damit der
+ * nächste Cut nicht 200ms schwarz wird.
+ */
+function findNextVideoUrl(
+  segments: Segment[],
+  fromIndex: number,
+): string | null {
+  for (let i = fromIndex; i < segments.length; i++) {
+    const s = segments[i];
+    if (s.kind === "video" && s.publicUrl) return s.publicUrl;
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Komponente                                                          */
 /* ------------------------------------------------------------------ */
 
 export function PreviewPlayer({
@@ -94,65 +135,262 @@ export function PreviewPlayer({
     [segments],
   );
 
-  const [currentTimeMs, setCurrentTimeMs] = React.useState(0);
+  const [playheadMs, setPlayheadMs] = React.useState(0);
   const [playing, setPlaying] = React.useState(false);
-  const [webcamReady, setWebcamReady] = React.useState(false);
+  /** True, sobald das aktive Video-Segment `canplay` gefeuert hat. */
+  const [stageVideoReady, setStageVideoReady] = React.useState(true);
 
-  // refs used by the requestAnimationFrame loop
-  const rafRef = React.useRef<number | null>(null);
+  // ── Refs ────────────────────────────────────────────────────────────
+  /** Letzter timestamp aus rAF — für Delta-Berechnung. */
   const lastTickRef = React.useRef<number | null>(null);
+  /** rAF-Handle, damit wir bei Pause/Unmount abbrechen können. */
+  const rafRef = React.useRef<number | null>(null);
+  /** playing in einer Ref, damit der RAF-Closure aktuelle Werte sieht. */
   const playingRef = React.useRef(false);
+  /** playhead in einer Ref — wir aktualisieren ihn pro Tick. */
+  const playheadRef = React.useRef(0);
+  /** Total in einer Ref für End-Detection im rAF. */
   const totalRef = React.useRef(totalDurationMs);
+  /** Letzter Drift-Check Timestamp. */
+  const lastDriftCheckRef = React.useRef(0);
+
+  /** Aktives Bühnen-Video (kind === "video"). */
+  const stageVideoRef = React.useRef<HTMLVideoElement | null>(null);
+  /** Webcam-PiP-Video. */
+  const webcamRef = React.useRef<HTMLVideoElement | null>(null);
+
+  // ── Aktive Folie + Offsets ──────────────────────────────────────────
+  const active = React.useMemo(
+    () => getActiveSegment(segments, playheadMs),
+    [segments, playheadMs],
+  );
+  const activeIndex = active?.index ?? -1;
+  const isVideoSegment = active?.segment.kind === "video";
+  const stageVideoSrc =
+    active && active.segment.kind === "video" ? active.segment.publicUrl : null;
+  const stageTrimStartMs =
+    active && active.segment.kind === "video"
+      ? (active.segment.trimStartMs ?? 0)
+      : 0;
+
+  /** URL des NÄCHSTEN Video-Segments (nach dem aktuellen) → Preload-Hint. */
+  const nextVideoUrl = React.useMemo(
+    () =>
+      activeIndex >= 0 ? findNextVideoUrl(segments, activeIndex + 1) : null,
+    [segments, activeIndex],
+  );
+
+  // Refs synchron halten
+  React.useEffect(() => {
+    playheadRef.current = playheadMs;
+  }, [playheadMs]);
   React.useEffect(() => {
     totalRef.current = totalDurationMs;
   }, [totalDurationMs]);
 
-  // Refs for media follow-mode
-  const webcamRef = React.useRef<HTMLVideoElement | null>(null);
-  const segmentVideoRef = React.useRef<HTMLVideoElement | null>(null);
+  // Bei neuem Video-Segment: Loader anzeigen, bis canplay zurückkommt.
+  React.useEffect(() => {
+    if (isVideoSegment && stageVideoSrc) {
+      setStageVideoReady(false);
+    } else {
+      setStageVideoReady(true);
+    }
+  }, [activeIndex, stageVideoSrc, isVideoSegment]);
 
-  // Clamp/reset playhead when the timeline shape changes.
+  // Clamp/Reset bei Timeline-Änderung
   React.useEffect(() => {
     if (totalDurationMs <= 0) {
-      setCurrentTimeMs(0);
+      setPlayheadMs(0);
       setPlaying(false);
       return;
     }
-    setCurrentTimeMs((prev) => (prev > totalDurationMs ? totalDurationMs : prev));
-    // Only re-run when the timeline shape changes.
+    setPlayheadMs((prev) => (prev > totalDurationMs ? totalDurationMs : prev));
+    // Nur bei Längenänderung neu auswerten.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalDurationMs]);
 
   /* ------------------------------------------------------------------ */
-  /* RAF playback loop                                                  */
+  /* Drift-Check + lokale Seek-Helfer                                   */
+  /* ------------------------------------------------------------------ */
+
+  /** Start-Offset (ms) der aktiven Folie in der Timeline — wird zum
+   *  Umrechnen von playheadMs in den segmentlokalen Offset gebraucht. */
+  const activeStartMs = React.useMemo(
+    () => (activeIndex >= 0 ? getSegmentStartMs(segments, activeIndex) : 0),
+    [segments, activeIndex],
+  );
+
+  /**
+   * Berechnet die Soll-`currentTime` des Bühnen-Videos relativ zur Quelle.
+   * Nimmt den AKTUELLEN playMs entgegen (nicht aus dem closure), damit der
+   * Drift-Check während der rAF-Schleife mit dem aktuellen Cursor rechnet.
+   */
+  const computeStageTargetSec = React.useCallback(
+    (playMs: number): number | null => {
+      if (!active || active.segment.kind !== "video") return null;
+      const segLocalMs = Math.max(0, playMs - activeStartMs);
+      const trim = active.segment.trimStartMs ?? 0;
+      return (segLocalMs + trim) / 1000;
+    },
+    [active, activeStartMs],
+  );
+
+  /**
+   * Berechnet die Soll-`currentTime` der Webcam-Spur (immer am globalen
+   * Playhead, geclamped auf die Webcam-Dauer falls bekannt).
+   */
+  const computeWebcamTargetSec = React.useCallback(
+    (playMs: number): number => {
+      const target = playMs / 1000;
+      if (
+        typeof webcamDurationSec === "number" &&
+        webcamDurationSec > 0 &&
+        target > webcamDurationSec - 0.05
+      ) {
+        return Math.max(0, webcamDurationSec - 0.05);
+      }
+      return target;
+    },
+    [webcamDurationSec],
+  );
+
+  /** Setzt currentTime auf beiden Spuren OHNE play()/pause() zu verändern. */
+  const hardSeekAll = React.useCallback(
+    (playMs: number) => {
+      const webEl = webcamRef.current;
+      if (webEl) {
+        const t = computeWebcamTargetSec(playMs);
+        try {
+          if (Math.abs(webEl.currentTime - t) > 0.02) webEl.currentTime = t;
+        } catch {
+          /* ignore */
+        }
+      }
+      const stEl = stageVideoRef.current;
+      if (stEl && isVideoSegment) {
+        const t = computeStageTargetSec(playMs);
+        if (t !== null) {
+          try {
+            if (Math.abs(stEl.currentTime - t) > 0.02) stEl.currentTime = t;
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    },
+    [computeStageTargetSec, computeWebcamTargetSec, isVideoSegment],
+  );
+
+  /** Ruft play() oder pause() auf beiden Spuren auf. */
+  const setMediaPlayback = React.useCallback(
+    (shouldPlay: boolean) => {
+      const stEl = stageVideoRef.current;
+      const webEl = webcamRef.current;
+
+      if (shouldPlay) {
+        // Webcam muss gemutet sein, sonst blockiert Autoplay-Policy.
+        if (webEl) {
+          webEl.muted = true;
+          // play() liefert ein Promise, das bei abgebrochenem play()
+          // (z.B. wenn unmittelbar gepaust wird) rejected — wir ignorieren das.
+          webEl.play().catch(() => {});
+        }
+        if (stEl && isVideoSegment) {
+          stEl.muted = true;
+          stEl.play().catch(() => {});
+        }
+      } else {
+        if (webEl && !webEl.paused) {
+          try {
+            webEl.pause();
+          } catch {
+            /* ignore */
+          }
+        }
+        if (stEl && !stEl.paused) {
+          try {
+            stEl.pause();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    },
+    [isVideoSegment],
+  );
+
+  /* ------------------------------------------------------------------ */
+  /* Wiedergabe-Loop                                                     */
   /* ------------------------------------------------------------------ */
 
   React.useEffect(() => {
     playingRef.current = playing;
+
     if (!playing) {
       lastTickRef.current = null;
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
+      setMediaPlayback(false);
       return;
     }
 
+    // Bei Start: Soll-Positionen einmalig setzen + .play() auslösen.
+    // Drift-Timer auf "jetzt" zurücksetzen, sonst feuert er sofort.
+    hardSeekAll(playheadRef.current);
+    setMediaPlayback(true);
+    lastDriftCheckRef.current = performance.now();
+
     const step = (now: number) => {
       if (!playingRef.current) return;
+
       const last = lastTickRef.current;
       if (last !== null) {
         const delta = now - last;
-        setCurrentTimeMs((prev) => {
-          const next = prev + delta;
-          if (next >= totalRef.current) {
-            // Reached the end → pause + snap to 0
-            playingRef.current = false;
-            setPlaying(false);
-            return 0;
+        const nextMs = playheadRef.current + delta;
+
+        if (nextMs >= totalRef.current) {
+          // Ende der Timeline erreicht → pausieren + zurück auf Start.
+          playingRef.current = false;
+          setPlaying(false);
+          setPlayheadMs(0);
+          return;
+        }
+        playheadRef.current = nextMs;
+        // React-State weniger oft updaten als rAF feuert wäre ideal,
+        // aber wir brauchen es für die Folien-Wechsel-Detection.
+        setPlayheadMs(nextMs);
+
+        // Drift-Check (max alle DRIFT_CHECK_INTERVAL_MS).
+        if (now - lastDriftCheckRef.current > DRIFT_CHECK_INTERVAL_MS) {
+          lastDriftCheckRef.current = now;
+          const webEl = webcamRef.current;
+          if (webEl && !webEl.paused) {
+            const target = computeWebcamTargetSec(nextMs);
+            if (Math.abs(webEl.currentTime - target) > DRIFT_THRESHOLD_SEC) {
+              try {
+                webEl.currentTime = target;
+              } catch {
+                /* ignore */
+              }
+            }
           }
-          return next;
-        });
+          const stEl = stageVideoRef.current;
+          if (stEl && isVideoSegment && !stEl.paused) {
+            const target = computeStageTargetSec(nextMs);
+            if (
+              target !== null &&
+              Math.abs(stEl.currentTime - target) > DRIFT_THRESHOLD_SEC
+            ) {
+              try {
+                stEl.currentTime = target;
+              } catch {
+                /* ignore */
+              }
+            }
+          }
+        }
       }
       lastTickRef.current = now;
       rafRef.current = requestAnimationFrame(step);
@@ -166,77 +404,136 @@ export function PreviewPlayer({
       }
       lastTickRef.current = null;
     };
+    // Wir hängen nur an `playing`. Die Drift-/Seek-Helfer sind Refs-basiert
+    // genug, dass uns ihre Identitäts-Wechsel nicht stören.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
   /* ------------------------------------------------------------------ */
-  /* Active segment + media follow-mode                                 */
+  /* Tab-Visibility: bei Hide pausieren                                  */
   /* ------------------------------------------------------------------ */
 
-  const active = React.useMemo(
-    () => getActiveSegment(segments, currentTimeMs),
-    [segments, currentTimeMs],
-  );
-
-  // Sync webcam clip currentTime to the global clock. Clamp to its duration.
   React.useEffect(() => {
-    const el = webcamRef.current;
-    if (!el || !webcamReady) return;
-    const targetSec = currentTimeMs / 1000;
-    const dur =
-      typeof webcamDurationSec === "number" && webcamDurationSec > 0
-        ? webcamDurationSec
-        : Number.isFinite(el.duration)
-          ? el.duration
-          : null;
-    const clamped =
-      dur !== null && dur > 0
-        ? Math.min(targetSec, Math.max(0, dur - 0.05))
-        : targetSec;
-    // Avoid hammering currentTime with sub-frame changes that would cause flicker.
-    if (Math.abs(el.currentTime - clamped) > 0.05) {
+    function onVisibility() {
+      if (document.hidden && playingRef.current) {
+        setPlaying(false);
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  /* ------------------------------------------------------------------ */
+  /* Folien-Wechsel: nach loadedmetadata Position setzen + ggf. play()   */
+  /* ------------------------------------------------------------------ */
+
+  // Wenn das aktive Segment KEIN Video ist, müssen wir trotzdem die Webcam
+  // auf Stand halten (sie läuft ja über alle Folien weiter, weil sie an
+  // playheadMs hängt und nicht segmentlokal ist).
+  // Ist es ein Video, übernimmt onLoadedMetadata weiter unten.
+
+  // Bei nicht-Video-Folien: Webcam-currentTime einmal angleichen, damit nach
+  // mehreren rein-textuellen Folien die Drift nicht akkumuliert.
+  React.useEffect(() => {
+    if (isVideoSegment) return;
+    const webEl = webcamRef.current;
+    if (!webEl) return;
+    const target = computeWebcamTargetSec(playheadMs);
+    if (Math.abs(webEl.currentTime - target) > DRIFT_THRESHOLD_SEC) {
       try {
-        el.currentTime = clamped;
+        webEl.currentTime = target;
       } catch {
         /* ignore */
       }
     }
-  }, [currentTimeMs, webcamDurationSec, webcamReady]);
-
-  // Sync the active VideoSegment's currentTime, taking trimStartMs into account.
-  React.useEffect(() => {
-    if (!active) return;
-    if (active.segment.kind !== "video") return;
-    const el = segmentVideoRef.current;
-    if (!el) return;
-    const trimStart = active.segment.trimStartMs ?? 0;
-    const targetSec = (active.segmentTimeMs + trimStart) / 1000;
-    const dur = Number.isFinite(el.duration) ? el.duration : null;
-    const clamped =
-      dur !== null && dur > 0
-        ? Math.min(targetSec, Math.max(0, dur - 0.05))
-        : targetSec;
-    if (Math.abs(el.currentTime - clamped) > 0.05) {
+    // Auch hier: bei laufender Wiedergabe sicherstellen, dass Webcam läuft.
+    if (playing && webEl.paused) {
+      webEl.muted = true;
+      webEl.play().catch(() => {});
+    } else if (!playing && !webEl.paused) {
       try {
-        el.currentTime = clamped;
+        webEl.pause();
       } catch {
         /* ignore */
       }
     }
-  }, [active, currentTimeMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIndex, isVideoSegment]);
 
   /* ------------------------------------------------------------------ */
-  /* Handlers                                                           */
+  /* Event-Handler                                                      */
   /* ------------------------------------------------------------------ */
 
   function togglePlay() {
     if (totalDurationMs <= 0) return;
+    // Wenn am Ende: vor dem Play auf 0 springen.
+    if (playheadMs >= totalDurationMs) {
+      playheadRef.current = 0;
+      setPlayheadMs(0);
+    }
     setPlaying((p) => !p);
   }
 
   function onScrub(e: React.ChangeEvent<HTMLInputElement>) {
     const v = Number(e.target.value);
     if (!Number.isFinite(v)) return;
-    setCurrentTimeMs(Math.max(0, Math.min(totalDurationMs, v)));
+    const clamped = Math.max(0, Math.min(totalDurationMs, v));
+    playheadRef.current = clamped;
+    setPlayheadMs(clamped);
+    // Beide Spuren auf neue Position bringen — egal ob playing oder nicht.
+    hardSeekAll(clamped);
+    // Bei laufender Wiedergabe: nach dem Seek wieder anschieben.
+    if (playingRef.current) {
+      setMediaPlayback(true);
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Video-Event-Handler für das BÜHNEN-Video                            */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * onLoadedMetadata feuert nach jeder neuen src — d.h. bei jedem Folien-
+   * Wechsel auf ein neues Video. Wir setzen currentTime auf den korrekten
+   * Offset (trimStart + lokaler Folien-Offset) und starten ggf. play().
+   */
+  function onStageVideoLoadedMetadata() {
+    const el = stageVideoRef.current;
+    if (!el) return;
+    const target = computeStageTargetSec(playheadRef.current);
+    if (target !== null) {
+      try {
+        el.currentTime = target;
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  function onStageVideoCanPlay() {
+    setStageVideoReady(true);
+    if (playingRef.current) {
+      const el = stageVideoRef.current;
+      if (el) {
+        el.muted = true;
+        el.play().catch(() => {});
+      }
+    }
+  }
+
+  function onWebcamLoadedMetadata() {
+    const el = webcamRef.current;
+    if (!el) return;
+    const target = computeWebcamTargetSec(playheadRef.current);
+    try {
+      el.currentTime = target;
+    } catch {
+      /* ignore */
+    }
+    if (playingRef.current) {
+      el.muted = true;
+      el.play().catch(() => {});
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -248,12 +545,14 @@ export function PreviewPlayer({
   const pipShapeCls = pipShapeClass(pipShape);
   const progressPct =
     totalDurationMs > 0
-      ? Math.max(0, Math.min(100, (currentTimeMs / totalDurationMs) * 100))
+      ? Math.max(0, Math.min(100, (playheadMs / totalDurationMs) * 100))
       : 0;
+
+  const showLoader = isVideoSegment && !stageVideoReady;
 
   return (
     <div className="w-full max-w-[800px]">
-      {/* Stage */}
+      {/* Bühne */}
       <div className="relative aspect-video w-full overflow-hidden rounded-squircle-md bg-ink shadow-card">
         {!hasContent ? (
           <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
@@ -263,16 +562,41 @@ export function PreviewPlayer({
           </div>
         ) : active ? (
           <PreviewSegmentRender
+            // Key auf den Segment-Wechsel — erzwingt frisches <video>-Element,
+            // damit src nicht "weiterläuft" wenn die nächste Folie wieder
+            // ein Video ist (sonst hängt der alte currentTime/play-State an).
+            key={`seg-${active.index}-${active.segment.id}`}
             segment={active.segment}
             segmentTimeMs={active.segmentTimeMs}
             sampleData={sampleData}
-            videoRef={
-              active.segment.kind === "video" ? segmentVideoRef : undefined
-            }
+            videoRef={isVideoSegment ? stageVideoRef : undefined}
+            onVideoLoadedMetadata={onStageVideoLoadedMetadata}
+            onVideoCanPlay={onStageVideoCanPlay}
           />
         ) : null}
 
-        {/* Webcam PiP overlay — 25% of the stage width */}
+        {/* Loader-Overlay solange ein Video lädt/seekt. */}
+        {showLoader && (
+          <div className="absolute inset-0 flex items-center justify-center bg-ink/40 backdrop-blur-[1px]">
+            <Loader2 className="size-7 animate-spin text-white/90" />
+          </div>
+        )}
+
+        {/* Hidden Preload des NÄCHSTEN Video-Segments, damit der Cut nicht
+            200ms schwarz wird. Browser hält die Daten dann im Cache. */}
+        {nextVideoUrl && nextVideoUrl !== stageVideoSrc && (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video
+            src={nextVideoUrl}
+            preload="auto"
+            muted
+            playsInline
+            className="hidden"
+            aria-hidden="true"
+          />
+        )}
+
+        {/* Webcam-PiP-Overlay — 25% der Bühnenbreite */}
         {webcamUrl && (
           <div
             className={cn(
@@ -294,7 +618,7 @@ export function PreviewPlayer({
               playsInline
               preload="auto"
               className="h-full w-full object-cover"
-              onLoadedMetadata={() => setWebcamReady(true)}
+              onLoadedMetadata={onWebcamLoadedMetadata}
             />
           </div>
         )}
@@ -322,7 +646,7 @@ export function PreviewPlayer({
         </button>
 
         <span className="font-mono text-xs tabular-nums text-ink-muted">
-          {formatTime(currentTimeMs)} / {formatTime(totalDurationMs)}
+          {formatTime(playheadMs)} / {formatTime(totalDurationMs)}
         </span>
 
         <input
@@ -330,7 +654,7 @@ export function PreviewPlayer({
           min={0}
           max={Math.max(0, totalDurationMs)}
           step={10}
-          value={Math.min(currentTimeMs, totalDurationMs)}
+          value={Math.min(playheadMs, totalDurationMs)}
           onChange={onScrub}
           disabled={!hasContent}
           aria-label="Vorschau scrubben"

@@ -1,7 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Check, FileArchive, Globe, LayoutTemplate, Sparkles } from "lucide-react";
+import Link from "next/link";
+import {
+  AlertTriangle,
+  Check,
+  FileArchive,
+  Globe,
+  LayoutTemplate,
+  Plus,
+  Sparkles,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -307,10 +317,24 @@ export function WizardStep4Landingpage({
         </p>
 
         {templates.length === 0 && customTemplates.length === 0 ? (
+          // Kein Template vorhanden → klare Anweisung + Direkt-Link in den
+          // Landingpage-Editor. Der Wizard-Fortschritt wird vom parallel
+          // laufenden Draft-Save (Agent C) erhalten, der User kommt also
+          // zurück ohne Datenverlust.
           <EmptyState
             icon={<LayoutTemplate />}
-            title="Noch keine Vorlagen"
-            subtitle="Legen Sie im Bereich Landingpages eine Vorlage an, bevor Sie sie hier auswählen können."
+            title="Noch keine Landingpage-Vorlage"
+            subtitle="Sie benoetigen mindestens eine Landingpage-Vorlage, bevor Sie diese Kampagne fortsetzen koennen. Erstellen Sie jetzt eine — Ihr Wizard-Fortschritt bleibt erhalten."
+            action={
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button asChild iconLeft={<Plus className="size-4" />}>
+                  <Link href="/landingpages/neu">Landingpage erstellen</Link>
+                </Button>
+                <Button asChild variant="ghost">
+                  <Link href="/landingpages">Zur Landingpage-Uebersicht</Link>
+                </Button>
+              </div>
+            }
           />
         ) : (
           <div className="space-y-6">
@@ -331,10 +355,10 @@ export function WizardStep4Landingpage({
                       <button
                         key={tpl.id}
                         type="button"
-                        onClick={() => {
-                          onChange(tpl.id);
-                          onCustomChange(null);
-                        }}
+                        // onChange im Container nullt customLpTemplateId
+                        // bereits atomar — kein separater onCustomChange-Call
+                        // notwendig (vermeidet Stale-Closure-Bug).
+                        onClick={() => onChange(tpl.id)}
                         className={cn(
                           "text-left rounded-squircle-md border transition-all relative",
                           active
@@ -385,25 +409,54 @@ export function WizardStep4Landingpage({
                   {customTemplates.map((tpl) => {
                     const active = tpl.id === customValue;
                     const disabled = !tpl.hasActiveVersion;
+                    // Custom-Template ohne aktive Version → eigene Card mit
+                    // klarem Hinweis + Link zum LP-Editor. NICHT klickbar,
+                    // damit der Wizard nicht still haengen bleibt.
+                    if (disabled) {
+                      return (
+                        <div
+                          key={tpl.id}
+                          className="text-left rounded-squircle-md border border-warn/40 bg-warn/5 p-3 relative"
+                        >
+                          <div className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-center justify-center bg-gradient-to-br from-warn/10 to-surface-muted border border-warn/20 text-warn">
+                            <AlertTriangle className="size-10 opacity-80" />
+                          </div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-sm font-semibold text-ink truncate flex-1">
+                              {tpl.name}
+                            </p>
+                            <Badge variant="warn">Keine Version</Badge>
+                          </div>
+                          <p className="text-xs text-ink-muted mb-3 leading-relaxed">
+                            Diese Vorlage hat noch keine aktive Version.
+                            Laden Sie zuerst ein ZIP hoch oder aktivieren Sie
+                            eine bestehende Version.
+                          </p>
+                          <Button
+                            asChild
+                            variant="ghost"
+                            size="sm"
+                            className="w-full"
+                          >
+                            <Link href={`/landingpages/custom/${tpl.id}`}>
+                              Im Editor oeffnen
+                            </Link>
+                          </Button>
+                        </div>
+                      );
+                    }
                     return (
                       <button
                         key={tpl.id}
                         type="button"
-                        disabled={disabled}
-                        onClick={() => {
-                          if (disabled) return;
-                          onCustomChange(tpl.id);
-                          // Klar machen, dass Custom-LP gewählt ist —
-                          // Block-Auswahl bleibt im State, wird aber beim
-                          // Save NICHT gesendet (s. Wizard-Container).
-                        }}
+                        // Atomic State-Update im Container nullt
+                        // landingPageTemplateId — kein zusaetzlicher Call hier.
+                        onClick={() => onCustomChange(tpl.id)}
                         className={cn(
                           "text-left rounded-squircle-md border transition-all relative",
                           active
                             ? "border-brand ring-2 ring-brand/30"
                             : "border-line hover:border-brand/50",
-                          disabled &&
-                            "opacity-60 cursor-not-allowed bg-surface-muted",
                         )}
                       >
                         {active && (
@@ -423,11 +476,9 @@ export function WizardStep4Landingpage({
                               <Badge variant="brand">Custom HTML</Badge>
                             </div>
                             <p className="text-xs text-ink-muted">
-                              {tpl.hasActiveVersion
-                                ? `${tpl.versionCount} Version${
-                                    tpl.versionCount === 1 ? "" : "en"
-                                  }`
-                                : "Noch keine Version – bitte zuerst ZIP hochladen"}
+                              {`${tpl.versionCount} Version${
+                                tpl.versionCount === 1 ? "" : "en"
+                              }`}
                             </p>
                           </CardContent>
                         </Card>

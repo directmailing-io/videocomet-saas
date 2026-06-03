@@ -210,9 +210,13 @@ function RenderImage({ segment }: { segment: ImageSegment }) {
 function RenderVideo({
   segment,
   videoRef,
+  onLoadedMetadata,
+  onCanPlay,
 }: {
   segment: VideoSegment;
   videoRef?: React.RefObject<HTMLVideoElement>;
+  onLoadedMetadata?: React.ReactEventHandler<HTMLVideoElement>;
+  onCanPlay?: React.ReactEventHandler<HTMLVideoElement>;
 }) {
   if (!segment.publicUrl) {
     return (
@@ -247,6 +251,8 @@ function RenderVideo({
             playsInline
             preload="auto"
             className="absolute inset-0 h-full w-full object-contain"
+            onLoadedMetadata={onLoadedMetadata}
+            onCanPlay={onCanPlay}
           />
         </div>
       </div>
@@ -263,6 +269,8 @@ function RenderVideo({
         playsInline
         preload="auto"
         className="h-full w-full object-contain"
+        onLoadedMetadata={onLoadedMetadata}
+        onCanPlay={onCanPlay}
       />
     </div>
   );
@@ -329,6 +337,10 @@ export interface PreviewSegmentRenderProps {
    * against the global scrubber state. Only set for VideoSegment.
    */
   videoRef?: React.RefObject<HTMLVideoElement>;
+  /** Bei VideoSegment: weitergereicht an das <video>-Element. */
+  onVideoLoadedMetadata?: React.ReactEventHandler<HTMLVideoElement>;
+  /** Bei VideoSegment: weitergereicht an das <video>-Element. */
+  onVideoCanPlay?: React.ReactEventHandler<HTMLVideoElement>;
 }
 
 export function PreviewSegmentRender({
@@ -336,6 +348,8 @@ export function PreviewSegmentRender({
   segmentTimeMs: _segmentTimeMs,
   sampleData,
   videoRef,
+  onVideoLoadedMetadata,
+  onVideoCanPlay,
 }: PreviewSegmentRenderProps): React.ReactElement | null {
   switch (segment.kind) {
     case "text":
@@ -343,12 +357,21 @@ export function PreviewSegmentRender({
     case "image":
       return <RenderImage segment={segment} />;
     case "video":
-      return <RenderVideo segment={segment} videoRef={videoRef} />;
+      return (
+        <RenderVideo
+          segment={segment}
+          videoRef={videoRef}
+          onLoadedMetadata={onVideoLoadedMetadata}
+          onCanPlay={onVideoCanPlay}
+        />
+      );
     case "website":
       return <RenderWebsite segment={segment} />;
     case "gdocs":
       return <RenderGDocs segment={segment} />;
+    case "slide":
+      // Slide-Editor wird in dieser Vorschau (Step 3 klassisch) nicht
+      // gerendert — der eigene Editor-Pfad rendert SlideSegments separat.
+      return null;
   }
-  // Exhaustive: all union members handled above. TS will flag missing cases.
-  return null;
 }

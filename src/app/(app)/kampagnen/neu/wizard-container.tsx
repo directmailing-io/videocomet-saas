@@ -13,6 +13,8 @@ import { WizardStep3Editor } from "./wizard-step3-editor";
 import { WizardStep4Landingpage } from "./wizard-step4-landingpage";
 import { WizardStep5Pdf } from "./wizard-step5-pdf";
 import { WizardStep6Summary } from "./wizard-step6-summary";
+import { useWizardDraft } from "./use-wizard-draft";
+import { DraftRestoreBanner, DraftStatusPill } from "./wizard-draft-ui";
 
 export interface WizardWebcam {
   id: string;
@@ -84,6 +86,12 @@ export interface MediathekItem {
 }
 
 export interface NewCampaignWizardProps {
+  /**
+   * Account-ID des eingeloggten Nutzers. Wird als Scope für den
+   * localStorage-Draft-Key (`vc:wizard:draft:<userId>`) verwendet, damit
+   * auf geteilten Browsern Drafts nicht zwischen Accounts durchsickern.
+   */
+  userId: string;
   initialData: {
     webcams: WizardWebcam[];
     templates: WizardTemplate[];
@@ -113,7 +121,7 @@ const STEPS = [
  */
 const EDITOR_STEP_INDEX = 2;
 
-export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
+export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProps) {
   const router = useRouter();
   const [step, setStep] = React.useState(0);
   const [submitting, setSubmitting] = React.useState(false);
@@ -143,6 +151,21 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
   const update = React.useCallback((patch: Partial<WizardState>) => {
     setState((s) => ({ ...s, ...patch }));
   }, []);
+
+  // ── Draft-Persistenz (Auto-Save) ────────────────────────────────────────
+  //
+  // Hält den Wizard-Fortschritt in localStorage am Leben, damit ein Wechsel
+  // nach `/landingpages/neu` oder ein versehentlicher Tab-Close den User
+  // nicht ALLES verlieren lässt. Siehe `./use-wizard-draft.ts` für Details
+  // (Debounce, Schema-Drift-Handling, Quota-Fallback in sessionStorage).
+  const draftIO = React.useMemo(
+    () => ({ setState, setStep }),
+    [],
+  );
+  const draft = useWizardDraft(
+    { userId, state, step },
+    draftIO,
+  );
 
   // Skip editor step if mode is webcam-only
   const totalSteps = STEPS.length;
@@ -195,6 +218,9 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
         return;
       }
       const data = (await res.json()) as { campaign?: { id: string } };
+      // Finaler Save war erfolgreich → Draft entsorgen, damit der nächste
+      // Wizard-Besuch frisch beginnt.
+      draft.clearDraft();
       if (data.campaign?.id) {
         // Jump straight to the campaign so the user can create a first run.
         router.push(`/kampagnen/${data.campaign.id}`);
@@ -230,6 +256,14 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
         title="Neue Kampagne"
         subtitle={`Schritt ${step + 1} von ${totalSteps}: ${STEPS[step]}`}
       />
+
+      {draft.existingDraft && (
+        <DraftRestoreBanner
+          draft={draft.existingDraft}
+          onRestore={draft.restoreDraft}
+          onDiscard={draft.discardDraft}
+        />
+      )}
 
       <ol className="flex items-center gap-2 mb-8 overflow-x-auto pb-2">
         {STEPS.map((label, idx) => {
@@ -306,17 +340,29 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
           <WizardStep4Landingpage
             templates={initialData.templates}
             value={state.landingPageTemplateId}
+            // Block-Auswahl: setzt Block-ID UND nullt Custom-ID atomar
+            // in einem einzigen State-Update (sonst gibt es Stale-Closure-Bugs
+            // mit doppeltem `update()` aus der Step-Komponente heraus).
             onChange={(id) =>
               update({ landingPageTemplateId: id, customLpTemplateId: null })
             }
             customTemplates={initialData.customTemplates ?? []}
             customValue={state.customLpTemplateId}
-            onCustomChange={(id) =>
-              update({
-                customLpTemplateId: id,
-                landingPageTemplateId: id ? null : state.landingPageTemplateId,
-              })
-            }
+            // Custom-Auswahl: id !== null heisst „User wählt Custom-LP" →
+            // Block-ID muss raus. id === null heisst „User deselektiert Custom"
+            // → Block-ID bleibt unverändert (deshalb functional setter, damit
+            // wir den aktuellen Wert lesen statt einen stale-captured).
+            onCustomChange={(id) => {
+              if (id === null) {
+                setState((s) => ({ ...s, customLpTemplateId: null }));
+              } else {
+                setState((s) => ({
+                  ...s,
+                  customLpTemplateId: id,
+                  landingPageTemplateId: null,
+                }));
+              }
+            }}
             availableDomains={initialData.domains ?? []}
             domainId={state.domainId}
             onDomainChange={(id) => update({ domainId: id })}
@@ -349,7 +395,7 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
         )}
       </div>
 
-      <div className="flex items-center justify-between mt-8 pt-6 border-t border-line">
+      <div className="flex items-center justify-between mt-8 pt-6 border-t border-line gap-3">
         <Button
           variant="ghost"
           onClick={back}
@@ -358,24 +404,32 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
         >
           Zurück
         </Button>
-        {step < totalSteps - 1 ? (
-          <Button
-            onClick={next}
-            disabled={!canProceed}
-            iconRight={<ArrowRight className="size-4" />}
-          >
-            Weiter
-          </Button>
-        ) : (
-          <Button
-            onClick={handleSave}
-            disabled={!canProceed || submitting}
-            loading={submitting}
-            iconRight={<Check className="size-4" />}
-          >
-            Kampagne speichern
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {/* Auto-Save-Status (subtil): „Entwurf gespeichert · vor 3 Sek." */}
+          <DraftStatusPill
+            status={draft.status}
+            lastSavedAt={draft.lastSavedAt}
+            className="hidden sm:inline-flex"
+          />
+          {step < totalSteps - 1 ? (
+            <Button
+              onClick={next}
+              disabled={!canProceed}
+              iconRight={<ArrowRight className="size-4" />}
+            >
+              Weiter
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSave}
+              disabled={!canProceed || submitting}
+              loading={submitting}
+              iconRight={<Check className="size-4" />}
+            >
+              Kampagne speichern
+            </Button>
+          )}
+        </div>
       </div>
     </>
   );
