@@ -164,6 +164,51 @@ export function PreflightReviewClient({
     void Promise.all([loadLeads(), loadStatus()]);
   }, [loadLeads, loadStatus]);
 
+  // Wenn die Status-Aggregation sagt "kein pending, kein running" aber die
+  // Lead-Liste lokal noch Karten als running/pending führt, ist das ein
+  // Sync-Lag (SSE-Tick verpasst, Worker hat batch-update gefahren, …).
+  // Sicherheits-Refetch — sofort + nach 1.5s nochmal, falls der erste
+  // Roundtrip mit der Lead-DB noch race-läuft.
+  const reconcileRef = React.useRef(0);
+  React.useEffect(() => {
+    if (loadingState !== "ready") return;
+    if (counts.pending !== 0 || counts.running !== 0) return;
+    const stuck = leads.some(
+      (l) =>
+        !l.removedAt &&
+        (l.preflightStatus === "pending" || l.preflightStatus === "running"),
+    );
+    if (!stuck) return;
+    if (reconcileRef.current >= 2) return;
+    reconcileRef.current += 1;
+    const t = window.setTimeout(() => {
+      void loadLeads();
+    }, reconcileRef.current === 1 ? 50 : 1500);
+    return () => window.clearTimeout(t);
+  }, [counts.pending, counts.running, leads, loadingState, loadLeads]);
+
+  // Wenn der Run "awaiting_approval" / "approved" erreicht hat (also Phase 1
+  // sicher fertig ist), einmal die Leads sauber nachladen — die SSE-Ticks
+  // sind nicht garantiert flussdicht, aber der Server-Snapshot ist.
+  const lastSyncedRunStatusRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (lastSyncedRunStatusRef.current === runStatus) return;
+    lastSyncedRunStatusRef.current = runStatus;
+    if (runStatus === "awaiting_approval" || runStatus === "approved") {
+      void loadLeads();
+    }
+  }, [runStatus, loadLeads]);
+
+  // Wenn der User vom Tab zurückkommt: aktuellen Snapshot holen.
+  React.useEffect(() => {
+    function onVisibility() {
+      if (document.visibilityState !== "visible") return;
+      void Promise.all([loadLeads(), loadStatus()]);
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [loadLeads, loadStatus]);
+
   // ── SSE: Live-Updates ────────────────────────────────────────────
   const phase1AwaitingToastShownRef = React.useRef(false);
 
@@ -388,13 +433,18 @@ export function PreflightReviewClient({
     [runId, toast],
   );
 
-  const handleApprove = React.useCallback(async () => {
+  const handleApprove = React.useCallback(async (
+    options?: { approveAlsoProblematic?: boolean },
+  ) => {
     setConfirmLoading(true);
     try {
       const res = await fetch(`/api/runs/${runId}/preflight/approve`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ rejectedLeadIds: [] }),
+        body: JSON.stringify({
+          rejectedLeadIds: [],
+          approveAlsoProblematic: options?.approveAlsoProblematic ?? false,
+        }),
       });
       if (res.status === 409) {
         toast({
@@ -691,16 +741,45 @@ export function PreflightReviewClient({
             </div>
 
             <div className="flex items-center gap-2">
-              {loadingState === "error" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  iconLeft={<RefreshCcw className="size-4" />}
-                  onClick={() => void loadLeads()}
-                >
-                  Erneut laden
-                </Button>
-              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                iconLeft={<RefreshCcw className="size-4" />}
+                onClick={() => void Promise.all([loadLeads(), loadStatus()])}
+                title="Status & Leads neu laden"
+              >
+                Aktualisieren
+              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Pre-Flight überspringen: ALLE Leads (auch problematische) gehen direkt in die Vollproduktion. Sicher?",
+                        )
+                      ) {
+                        void handleApprove({ approveAlsoProblematic: true });
+                      }
+                    }}
+                    disabled={
+                      counts.total === 0 ||
+                      runStatus === "approved" ||
+                      runStatus === "generating" ||
+                      runStatus === "completed" ||
+                      confirmLoading
+                    }
+                  >
+                    Pre-Flight überspringen
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Phase 2 sofort starten — überspringt die Qualitätsprüfung
+                  und nimmt auch problematische Leads mit.
+                </TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

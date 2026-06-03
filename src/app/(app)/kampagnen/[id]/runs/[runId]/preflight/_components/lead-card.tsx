@@ -195,9 +195,13 @@ function LeadCardImpl({
   const problematic = isProblematic(lead.preflightStatus);
   const status = lead.preflightStatus;
 
-  const showSpinner = status === "running";
-  const showSkeleton = status === "pending";
   const hasScreenshot = Boolean(lead.preflightScreenshotUrl);
+  // Wenn der Screenshot schon da ist, ist das Bild die Wahrheit — auch wenn
+  // der Status-State noch "running" trägt (z.B. weil ein SSE-Tick fehlte
+  // oder ein optimistisches Update nicht aufgelöst wurde). Sonst hängt die
+  // Karte für immer im Spinner-Limbo obwohl alles fertig ist.
+  const showSpinner = status === "running" && !hasScreenshot;
+  const showSkeleton = status === "pending" && !hasScreenshot;
 
   // Space + Enter werden bewusst NICHT hier behandelt — das macht der
   // globale useKeyboardShortcuts-Hook über `focusedLeadId`. Sonst hätten
@@ -268,7 +272,7 @@ function LeadCardImpl({
             </Badge>
           </div>
         )}
-        {status === "running" && (
+        {status === "running" && !hasScreenshot && (
           <div className="absolute top-2 left-2">
             <Badge variant="brand" className="shadow-card">
               <Loader2 className="size-3 animate-spin" />
