@@ -25,6 +25,12 @@ import {
   AlertCircle,
   CheckCircle2,
   Mic,
+  HandMetal,
+  Smile,
+  Sparkles,
+  Timer,
+  Users,
+  Wallpaper,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -125,6 +131,8 @@ export function GuestRecorder({
   const [elapsed, setElapsed] = React.useState(0);
   const [audioLevel, setAudioLevel] = React.useState(0);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [previewReady, setPreviewReady] = React.useState(false);
+  const [previewError, setPreviewError] = React.useState(false);
   const [uploadProgress, setUploadProgress] = React.useState(0);
   const [hasStream, setHasStream] = React.useState(false);
 
@@ -298,9 +306,18 @@ export function GuestRecorder({
         setState("ready");
         return;
       }
+      // Letzten previewUrl freigeben damit kein Leak entsteht.
+      if (previewUrl) {
+        try { URL.revokeObjectURL(previewUrl); } catch { /* ignore */ }
+      }
       const url = URL.createObjectURL(blob);
       setPreviewUrl(url);
+      setPreviewReady(false);
+      setPreviewError(false);
       setState("review");
+      // Live-Stream abschalten — Privacy + Kamera-LED aus.
+      stopStream();
+      stopAudioMeter();
     };
 
     try {
@@ -339,9 +356,11 @@ export function GuestRecorder({
 
   async function reRecord() {
     if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
+      try { URL.revokeObjectURL(previewUrl); } catch { /* ignore */ }
       setPreviewUrl(null);
     }
+    setPreviewReady(false);
+    setPreviewError(false);
     setElapsed(0);
     setRecordError(null);
     setState("ready");
@@ -349,6 +368,22 @@ export function GuestRecorder({
       await initCamera();
     }
   }
+
+  // Sobald previewUrl gesetzt UND das Review-<video> gemountet ist, explizit
+  // load() rufen. Chrome+Firefox brauchen das bei blob:-URLs damit der erste
+  // Frame zuverlässig erscheint (Posters/preload="auto" greifen nicht).
+  React.useEffect(() => {
+    if (state !== "review" || !previewUrl) return;
+    const el = reviewVideoRef.current;
+    if (!el) return;
+    setPreviewReady(false);
+    setPreviewError(false);
+    try { el.load(); } catch { /* ignore */ }
+    // iOS Safari: ein lautloser play() innerhalb User-Geste setzt den
+    // ersten Frame. Wir machen es muted + paused — User klickt selbst Play.
+    el.muted = false;
+    el.currentTime = 0;
+  }, [previewUrl, state]);
 
   async function submit() {
     if (!previewUrl || chunksRef.current.length === 0) return;
@@ -450,93 +485,137 @@ export function GuestRecorder({
     );
   }
 
+  // ── Render-Helper ────────────────────────────────────────────────────────
+
+  const showLiveStage =
+    state === "ready" && hasStream
+    || state === "recording";
+  const showReviewStage =
+    state === "review" || state === "sending" || state === "send_error";
+  const showInitialTips = state === "ready" && !hasStream;
+
   return (
-    <div className="space-y-4">
-      {/* Live-/Review-/Sending-Video */}
-      <div className="relative aspect-video w-full overflow-hidden rounded-squircle-xl bg-ink shadow-lift">
-        {state === "review" || state === "sending" || state === "send_error" ? (
+    <div className="space-y-5">
+      {/* Initial-Tips (vor Kamera-Aktivierung) — KEIN Video-Frame */}
+      {showInitialTips && (
+        <TipsCard />
+      )}
+
+      {/* Live-Bühne (Stream sichtbar) — mit dezenter Kreis-Hilfe wie im
+          Kampagnen-Recorder, damit das Gesicht im späteren PiP-Kreis landet. */}
+      {showLiveStage && (
+        <div className="space-y-3">
+          <div className="relative aspect-video w-full overflow-hidden rounded-squircle-xl bg-ink shadow-lift">
+            <video
+              ref={liveVideoRef}
+              className="h-full w-full object-cover"
+              autoPlay
+              muted
+              playsInline
+            />
+
+            {state === "recording" && (
+              <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
+                <span className="inline-block size-2 animate-pulse rounded-full bg-danger" />
+                REC
+                <span className="font-mono tabular-nums">{formatTime(elapsed)}</span>
+                <span className="text-white/60">/ {formatTime(maxDurationSec)}</span>
+              </div>
+            )}
+
+            {/* Composition guide: dezenter Kreis als Rahmen-Hilfe */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 aspect-square h-full rounded-full border border-white/35"
+              style={{
+                boxShadow:
+                  "0 0 0 1px rgba(0,0,0,0.08), inset 0 0 0 1px rgba(0,0,0,0.06)",
+              }}
+            />
+          </div>
+
+          {state === "recording" && (
+            <>
+              <div
+                className="h-1.5 w-full rounded-full bg-line overflow-hidden"
+                aria-label="Mikrofon-Pegel"
+              >
+                <div
+                  className={cn(
+                    "h-full transition-all duration-100",
+                    audioLevel > 0.6 ? "bg-ok" : audioLevel > 0.15 ? "bg-brand" : "bg-line-soft",
+                  )}
+                  style={{ width: `${Math.round(audioLevel * 100)}%` }}
+                />
+              </div>
+
+              <div className="flex items-baseline justify-center gap-3 font-mono tabular-nums">
+                <span className="text-2xl font-bold text-ink">{formatTime(elapsed)}</span>
+                <span className="text-sm text-ink-muted">/ {formatTime(maxDurationSec)}</span>
+                <span className={cn(
+                  "text-xs font-semibold",
+                  remaining <= 10 ? "text-danger" : "text-ink-muted",
+                )}>
+                  {overTime ? "Maximum erreicht" : `noch ${formatTime(remaining)}`}
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Review-Bühne (aufgenommenes Video) */}
+      {showReviewStage && (
+        <div className="relative aspect-video w-full overflow-hidden rounded-squircle-xl bg-ink shadow-lift">
           <video
             ref={reviewVideoRef}
             src={previewUrl ?? undefined}
             controls
+            controlsList="nodownload"
             preload="auto"
             playsInline
-            className="h-full w-full object-contain bg-ink"
-          />
-        ) : (
-          <video
-            ref={liveVideoRef}
-            className="h-full w-full object-cover"
-            autoPlay
-            muted
-            playsInline
-          />
-        )}
-
-        {/* REC-Badge */}
-        {state === "recording" && (
-          <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
-            <span className="inline-block size-2 animate-pulse rounded-full bg-danger" />
-            REC
-            <span className="font-mono tabular-nums">{formatTime(elapsed)}</span>
-            <span className="text-white/60">/ {formatTime(maxDurationSec)}</span>
-          </div>
-        )}
-
-        {/* Sending-Overlay */}
-        {state === "sending" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/70 text-white">
-            <span className="inline-block size-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            <span className="text-sm font-semibold">
-              Wird gesendet … {uploadProgress}%
-            </span>
-            <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-brand transition-all"
-                style={{ width: `${uploadProgress}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* "Bitte Aufnahme starten"-Hint vor User-Geste */}
-        {state === "ready" && !hasStream && !permError && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
-            <Mic className="size-10 opacity-80" />
-            <p className="text-sm font-medium opacity-80">
-              Bereit, wenn du es bist
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Audio-Pegel (nur sichtbar während recording) */}
-      {state === "recording" && (
-        <div
-          className="h-1.5 w-full rounded-full bg-line overflow-hidden"
-          aria-label="Mikrofon-Pegel"
-        >
-          <div
+            onLoadedData={() => setPreviewReady(true)}
+            onCanPlay={() => setPreviewReady(true)}
+            onError={() => setPreviewError(true)}
             className={cn(
-              "h-full transition-all duration-100",
-              audioLevel > 0.6 ? "bg-ok" : audioLevel > 0.15 ? "bg-brand" : "bg-line-soft",
+              "h-full w-full object-contain bg-ink",
+              previewReady ? "opacity-100" : "opacity-0 transition-opacity",
             )}
-            style={{ width: `${Math.round(audioLevel * 100)}%` }}
           />
-        </div>
-      )}
 
-      {/* Countdown / Hinweise */}
-      {state === "recording" && (
-        <div className="flex items-baseline justify-center gap-3 font-mono tabular-nums">
-          <span className="text-2xl font-bold text-ink">{formatTime(elapsed)}</span>
-          <span className="text-sm text-ink-muted">/ {formatTime(maxDurationSec)}</span>
-          <span className={cn(
-            "text-xs font-semibold",
-            remaining <= 10 ? "text-danger" : "text-ink-muted",
-          )}>
-            {overTime ? "Maximum erreicht" : `noch ${formatTime(remaining)}`}
-          </span>
+          {!previewReady && !previewError && state === "review" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/95 text-white">
+              <span className="inline-block size-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              <span className="text-sm font-medium">Vorschau wird vorbereitet …</span>
+            </div>
+          )}
+
+          {previewError && state === "review" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/95 text-white text-center px-6">
+              <AlertCircle className="size-8 text-danger" />
+              <span className="text-sm font-medium">
+                Vorschau konnte nicht geladen werden.
+              </span>
+              <span className="text-xs text-white/70">
+                Du kannst trotzdem absenden — oder neu aufnehmen.
+              </span>
+            </div>
+          )}
+
+          {state === "sending" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/80 text-white">
+              <span className="inline-block size-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              <span className="text-sm font-semibold">
+                Wird gesendet … {uploadProgress}%
+              </span>
+              <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-brand transition-all"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -626,6 +705,80 @@ export function GuestRecorder({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── TipsCard ───────────────────────────────────────────────────────────────
+// Vor der Aufnahme erscheinen Hinweise, die einen Empfänger des fertigen
+// Videos nicht abschrecken sollen. Bewusst direkt, keine Marketing-Texte.
+
+const TIPS: Array<{
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  body: string;
+}> = [
+  {
+    icon: HandMetal,
+    title: "Hände entspannt unten lassen",
+    body: "Im fertigen Video läuft im Hintergrund oft eine Website, ein Dokument oder eine Folie. Wenn deine Hände oben sind während etwas scrollt oder wechselt, wirkt es seltsam.",
+  },
+  {
+    icon: Mic,
+    title: "Klar sprechen, aber bleib du selbst",
+    body: "Lieber freie Worte als ein Skript runterlesen. Authentisch unperfekt schlägt jeden perfekten Roboter-Ton.",
+  },
+  {
+    icon: Smile,
+    title: "Freundlich wirken, kurz lächeln",
+    body: "Ein offenes Gesicht, kurze einfache Sätze. Niemand mag steife Sales-Sprache.",
+  },
+  {
+    icon: Users,
+    title: "Stell dir EINEN Lead vor",
+    body: "Sprich, als ob du diese eine bestimmte Person ansprichst — dadurch wirkt das Video persönlich, nicht massenhaft.",
+  },
+  {
+    icon: Timer,
+    title: "So kurz wie möglich halten",
+    body: "Ehrlich: keiner schaut sich ein minutenlanges Akquise-Video an. 20–40 Sekunden reichen meistens.",
+  },
+  {
+    icon: Wallpaper,
+    title: "Ruhiger Hintergrund, neutrale Kleidung",
+    body: "Eine rote Wand mit knallbuntem Hemd lenkt ab. Cleaner Hintergrund + ruhige Farben — kein Reibungspunkt.",
+  },
+];
+
+function TipsCard() {
+  return (
+    <div className="rounded-squircle-xl border border-line bg-surface p-5 sm:p-6 space-y-4 shadow-sm">
+      <div className="flex items-center gap-2">
+        <Sparkles className="size-4 text-brand-deep" />
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink">
+          Worauf es ankommt
+        </h2>
+      </div>
+      <ul className="grid sm:grid-cols-2 gap-3">
+        {TIPS.map(({ icon: Icon, title, body }) => (
+          <li
+            key={title}
+            className="flex gap-3 rounded-squircle-md bg-surface-soft p-3"
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-deep">
+              <Icon className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink leading-snug">
+                {title}
+              </p>
+              <p className="text-xs text-ink-muted leading-relaxed mt-0.5">
+                {body}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
