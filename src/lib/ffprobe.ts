@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 
 const FFPROBE_PATH = process.env.FFPROBE_PATH ?? "ffprobe";
+const FFMPEG_PATH = process.env.FFMPEG_PATH ?? "ffmpeg";
 
 function runFfprobe(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -37,6 +38,50 @@ function runFfprobe(args: string[]): Promise<string> {
       else reject(new Error(`ffprobe exit ${code}: ${stderr.trim()}`));
     });
   });
+}
+
+/**
+ * Letzter Fallback: ffmpeg im null-mux-Modus über die Datei laufen lassen
+ * und die finale `time=HH:MM:SS.ss`-Zeile im stderr parsen. Funktioniert
+ * auch bei MediaRecorder-WebMs ohne brauchbare Container- oder Stream-
+ * Duration. Kostet O(Dauer) Sekunden CPU — bei 6-30s Webcams völlig ok.
+ */
+function runFfmpegNullProbe(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(
+      FFMPEG_PATH,
+      ["-i", filePath, "-map", "0:v:0", "-c", "copy", "-f", "null", "-"],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let stderr = "";
+    proc.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    proc.on("error", reject);
+    proc.on("close", () => {
+      // ffmpeg liefert exit-code != 0 wenn z.B. kein Audio-Stream — wir
+      // wollen trotzdem den stderr-Output.
+      resolve(stderr);
+    });
+  });
+}
+
+function parseFfmpegTimeLine(stderr: string): number | null {
+  // ffmpeg gibt im stderr Zeilen wie:
+  //   frame=  191 fps=… time=00:00:06.37 bitrate=… speed=…
+  // Wir nehmen den höchsten time=… Wert aus allen Treffern.
+  const re = /time=(\d{2}):(\d{2}):(\d{2})\.(\d{1,3})/g;
+  let max = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(stderr))) {
+    const h = parseInt(m[1], 10);
+    const min = parseInt(m[2], 10);
+    const s = parseInt(m[3], 10);
+    const frac = parseInt(m[4].padEnd(3, "0"), 10) / 1000;
+    const total = h * 3600 + min * 60 + s + frac;
+    if (total > max) max = total;
+  }
+  return max > 0 ? max : null;
 }
 
 function parseDurationSec(raw: string): number | null {
@@ -74,8 +119,8 @@ export async function probeVideoDuration(
     );
   }
   try {
-    // Versuch 2: Stream-Level + count_packets — funktioniert auch bei WebMs
-    // ohne Container-Duration (Chrome's MediaRecorder).
+    // Versuch 2: Stream-Level + count_packets — funktioniert auch bei vielen
+    // WebMs ohne Container-Duration.
     const slow = await runFfprobe([
       "-v",
       "error",
@@ -88,10 +133,28 @@ export async function probeVideoDuration(
       "default=noprint_wrappers=1:nokey=1",
       filePath,
     ]);
-    return parseDurationSec(slow);
+    const slowDur = parseDurationSec(slow);
+    if (slowDur !== null) return slowDur;
   } catch (err) {
     console.warn(
       "[ffprobe] slow-path failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+  try {
+    // Versuch 3 (Last-Resort): ffmpeg im null-mux-Modus durchspielen und
+    // den höchsten `time=…`-Wert aus dem stderr-Stream extrahieren. Greift
+    // bei MediaRecorder-WebMs ohne brauchbare Stream-Duration. O(file
+    // length) CPU, aber unschlagbar zuverlässig.
+    const stderr = await runFfmpegNullProbe(filePath);
+    const lastResort = parseFfmpegTimeLine(stderr);
+    if (lastResort !== null && lastResort > 0.1 && lastResort <= 7200) {
+      return lastResort;
+    }
+    return null;
+  } catch (err) {
+    console.warn(
+      "[ffprobe] null-mux fallback failed:",
       err instanceof Error ? err.message : err,
     );
     return null;
