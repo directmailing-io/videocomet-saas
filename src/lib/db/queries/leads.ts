@@ -45,8 +45,25 @@ export async function updateLeadStatus(
   return row;
 }
 
-export async function getLeadBySlug(slug: string): Promise<Lead | null> {
-  const [row] = await db.select().from(leads).where(eq(leads.slug, slug)).limit(1);
+/**
+ * Resolves a slug on the platform default domain (`app.videocomet.de`).
+ *
+ * TENANT-SAFETY: only matches leads with `domain_id IS NULL`. Leads pinned
+ * to a customer Custom-Domain MUST NOT be reachable via the default-domain
+ * URL — otherwise a slug collision between User-A's Custom-Domain lead and
+ * User-B's default-domain lead leaks A's lead to anyone hitting
+ * `app.videocomet.de/v/<slug>` (cross-tenant data leak).
+ *
+ * Custom-Domain lookups go through `getLeadBySlugAndDomain` instead.
+ */
+export async function getLeadBySlugForDefaultDomain(
+  slug: string,
+): Promise<Lead | null> {
+  const [row] = await db
+    .select()
+    .from(leads)
+    .where(and(eq(leads.slug, slug), isNull(leads.domainId)))
+    .limit(1);
   return row ?? null;
 }
 
@@ -56,7 +73,9 @@ export async function getLeadBySlug(slug: string): Promise<Lead | null> {
  * is only unique within `(domain_id, slug)`, not globally.
  *
  * Returns null if no lead matches OR the matched lead doesn't belong to
- * the given domain.
+ * the given domain. The `eq(leads.domainId, domainId)` filter also makes
+ * sure a default-domain lead (`domainId IS NULL`) can never be served
+ * through a Custom-Domain hit.
  */
 export async function getLeadBySlugAndDomain(
   slug: string,

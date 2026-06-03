@@ -458,7 +458,10 @@ export const webcamShareLinks = pgTable("webcam_share_links", {
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
-  slugUq: unique("webcam_share_links_slug_uq").on(t.slug),
+  // Slug ist pro User eindeutig (Migration 0010). Crypto-random 14 Zeichen
+  // → Kollisionen ZWISCHEN Usern sind faktisch ausgeschlossen, deshalb
+  // reicht der per-Tenant-Scope.
+  userSlugUq: unique("webcam_share_links_user_slug_uq").on(t.userId, t.slug),
   userIdx: index("webcam_share_links_user_idx").on(t.userId),
   userNumericUq: unique("webcam_share_links_user_numeric_uq").on(t.userId, t.numericId),
 }));

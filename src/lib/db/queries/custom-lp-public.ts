@@ -18,7 +18,7 @@
  *   3. NULL → 404
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   campaigns,
@@ -45,11 +45,15 @@ export interface CustomLpPublicContext {
 }
 
 /**
- * Resolve the Custom-LP context for a slug served on `lp.videocomet.de`
- * (no custom-domain scope). The slug must be globally unique — leads
- * without a Custom-Domain pin live in the global slug namespace.
+ * Resolve the Custom-LP context for a slug served on the platform default
+ * host (`lp.videocomet.de` / `app.videocomet.de`).
+ *
+ * TENANT-SAFETY: only matches leads with `domain_id IS NULL`. Leads pinned
+ * to a customer Custom-Domain MUST stay scoped to that domain — otherwise
+ * a cross-tenant slug collision (same slug on default domain vs. custom
+ * domain) would leak the wrong tenant's Custom-LP to a default-host visit.
  */
-export async function getCustomLpContextBySlug(
+export async function getCustomLpContextBySlugForDefaultDomain(
   slug: string,
 ): Promise<CustomLpPublicContext | null> {
   const row = await db
@@ -69,7 +73,7 @@ export async function getCustomLpContextBySlug(
       customLpTemplates,
       eq(customLpTemplates.id, campaigns.customLpTemplateId),
     )
-    .where(eq(leads.slug, slug))
+    .where(and(eq(leads.slug, slug), isNull(leads.domainId)))
     .limit(1);
 
   return materialise(row[0]);

@@ -22,7 +22,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import {
-  getCustomLpContextBySlug,
+  getCustomLpContextBySlugForDefaultDomain,
   getCustomLpContextBySlugAndDomain,
   type CustomLpPublicContext,
 } from "@/lib/db/queries/custom-lp-public";
@@ -86,16 +86,24 @@ export async function GET(
   const relativePath = assetPath.join("/");
 
   // Resolve lead → version (same as the HTML route).
+  // TENANT-SAFETY: gleiche Default-vs-Custom-Domain-Aufteilung wie beim
+  // HTML-Renderer — ein Custom-Domain-Lead darf nicht durch eine Default-
+  // Domain-Asset-URL erreichbar sein.
   const hostParam = req.nextUrl.searchParams.get("_host");
   let context: CustomLpPublicContext | null;
   if (hostParam) {
     const domain = await getDomainByHostname(hostParam);
     if (!domain || domain.status !== "active") {
+      // eslint-disable-next-line no-console
+      console.warn("[cv/asset] unknown or inactive _host param", {
+        hostParam,
+        slug,
+      });
       return errorResponse(404);
     }
     context = await getCustomLpContextBySlugAndDomain(slug, domain.id);
   } else {
-    context = await getCustomLpContextBySlug(slug);
+    context = await getCustomLpContextBySlugForDefaultDomain(slug);
   }
   if (!context) return errorResponse(404);
 

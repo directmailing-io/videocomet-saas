@@ -19,14 +19,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { campaigns, leads, runs } from "@/lib/db/schema";
+import { leads, runs } from "@/lib/db/schema";
 import { buildCustomLpCspHeader } from "@/lib/custom-lp/csp";
 import { renderCustomLp } from "@/lib/custom-lp/renderer";
 import { sanitizeIndexHtml } from "@/lib/custom-lp/sanitizer";
 import {
-  getCustomLpContextBySlug,
+  getCustomLpContextBySlugForDefaultDomain,
   getCustomLpContextBySlugAndDomain,
   type CustomLpPublicContext,
 } from "@/lib/db/queries/custom-lp-public";
@@ -44,20 +44,33 @@ const TRACKING_BRIDGE_URL =
  * Hat die Run-Row, an der der Lead hängt, eine Custom-LP-Version gepinnt?
  * Single-Join über leads → runs für den Schnelltest BEVOR wir den
  * Custom-LP-Pfad nehmen.
+ *
+ * TENANT-SAFETY: muss tenant-aware lookups durchführen. Auf der Default-
+ * Domain darf nur ein Lead mit `domain_id IS NULL` matchen; auf einer
+ * Custom-Domain nur ein Lead mit exakt dieser `domain_id`. Sonst kann
+ * der Schnelltest einen Custom-LP-Pin für einen fremden Tenant melden
+ * und damit den Cross-Tenant-Leak triggern.
  */
-async function hasCustomLpPin(slug: string): Promise<boolean> {
+async function hasCustomLpPin(
+  slug: string,
+  domainId: string | null,
+): Promise<boolean> {
+  const slugCondition = domainId
+    ? and(eq(leads.slug, slug), eq(leads.domainId, domainId))
+    : and(eq(leads.slug, slug), isNull(leads.domainId));
   const [row] = await db
     .select({ pinnedVersionId: runs.customLpVersionId })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
-    .where(eq(leads.slug, slug))
+    .where(slugCondition)
     .limit(1);
   return Boolean(row?.pinnedVersionId);
 }
 
 /**
  * Holt den vollen Custom-LP-Kontext (Lead-Daten + Storage-Pfad + Annotations)
- * — entweder global oder via Custom-Domain-Scope falls `_host` gesetzt.
+ * — entweder default-domain-scoped oder via Custom-Domain-Scope falls
+ * `_host` gesetzt.
  */
 async function loadCustomLpContext(
   slug: string,
@@ -68,7 +81,7 @@ async function loadCustomLpContext(
     if (!domain || domain.status !== "active") return null;
     return getCustomLpContextBySlugAndDomain(slug, domain.id);
   }
-  return getCustomLpContextBySlug(slug);
+  return getCustomLpContextBySlugForDefaultDomain(slug);
 }
 
 async function fetchFromBunnyStorage(remotePath: string): Promise<Buffer> {
@@ -203,9 +216,30 @@ export async function GET(
   const { slug } = await ctx.params;
   const hostParam = req.nextUrl.searchParams.get("_host");
 
-  if (await hasCustomLpPin(slug)) {
+  // Resolve the domain ONCE — both the pin-check and the context load need
+  // the same tenant-scope. Without hostParam wir bleiben auf der Default-
+  // Domain (domain_id IS NULL).
+  let domainId: string | null = null;
+  if (hostParam) {
+    const domain = await getDomainByHostname(hostParam);
+    if (!domain || domain.status !== "active") {
+      // Wenn _host gesetzt ist, der aber zu keiner aktiven Custom-Domain
+      // gehört, lehnen wir ab — kein silenter Fallback auf die Default-
+      // Domain (das wäre genau der Tenant-Leak, den wir verhindern wollen).
+      // eslint-disable-next-line no-console
+      console.warn("[v] unknown or inactive _host param", { hostParam, slug });
+      return errorPage(404, "Seite nicht gefunden");
+    }
+    domainId = domain.id;
+  }
+
+  if (await hasCustomLpPin(slug, domainId)) {
     const context = await loadCustomLpContext(slug, hostParam);
     if (context) return renderCustomLpResponseInline(slug, context);
+    // hasCustomLpPin sagte ja, der Context-Load liefert aber nichts → der
+    // Lead existiert, hat aber kein bzw. ein anderes Custom-LP-Template
+    // gebunden. Defensiv weiter zum Block-LP-Pfad, der den gleichen
+    // tenant-aware Lookup nochmal macht.
   }
 
   return proxyBlockLp(req, slug);

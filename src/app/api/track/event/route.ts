@@ -35,6 +35,7 @@ import {
   type LeadEventKind,
 } from "@/lib/db/queries/lead-events";
 import { getClientIp } from "@/lib/tracking";
+import { getDomainByHostname } from "@/lib/db/queries/user-domains";
 
 const MAX_PAYLOAD_BYTES = 2048;
 const RATE_LIMIT_MAX = 60;
@@ -56,24 +57,64 @@ function corsResponse(status: number, body?: BodyInit | null): Response {
 // Cheap in-memory cache so the same slug doesn't hammer the DB during a
 // landingpage's tracking burst. Hit rate is high because each visitor fires
 // 1 page_view + N progress events all against the same slug.
+//
+// Cache-Key ist `${domainId ?? "DEFAULT"}::${slug}` — sonst würde User A's
+// `franz-mustermann` auf Default-Domain den Cache-Eintrag für User B's
+// Lead auf seiner Custom-Domain überlagern.
 const SLUG_CACHE_TTL_MS = 60_000;
 const slugCache = new Map<string, { leadId: string | null; expiresAt: number }>();
 
-async function resolveSlugToLeadId(slug: string): Promise<string | null> {
+async function resolveSlugToLeadId(
+  slug: string,
+  domainId: string | null,
+): Promise<string | null> {
   const now = Date.now();
-  const cached = slugCache.get(slug);
+  const cacheKey = `${domainId ?? "DEFAULT"}::${slug}`;
+  const cached = slugCache.get(cacheKey);
   if (cached && cached.expiresAt > now) return cached.leadId;
 
-  const leadId = await getLeadIdBySlug(slug);
-  slugCache.set(slug, { leadId, expiresAt: now + SLUG_CACHE_TTL_MS });
-  // Soft-evict expired entries on each insert so the map can't grow forever
-  // under attack. Cheap O(n) sweep — n stays small in practice (<10k slugs).
+  const leadId = await getLeadIdBySlug(slug, domainId);
+  slugCache.set(cacheKey, { leadId, expiresAt: now + SLUG_CACHE_TTL_MS });
   if (slugCache.size > 5000) {
     Array.from(slugCache.entries()).forEach(([k, v]) => {
       if (v.expiresAt <= now) slugCache.delete(k);
     });
   }
   return leadId;
+}
+
+/**
+ * Leitet den `domainId`-Tenant-Scope für eine Tracking-Anfrage aus den
+ * Request-Headern ab.
+ *
+ *   - Origin/Referer = App-Host (`app.videocomet.de`) → null (Default-Domain)
+ *   - Andere Hostnames → `getDomainByHostname` Lookup. Unbekannt = null
+ *     (sicherer Default: treffe nur Default-Domain-Leads).
+ *
+ * Das hat zur Folge, dass ein angreifender Caller, der mit einem
+ * gefälschten/leeren Origin POSTet, NIE Events auf Custom-Domain-Leads
+ * injizieren kann. Maximum Blast-Radius: Default-Domain.
+ */
+async function resolveDomainScope(req: NextRequest): Promise<string | null> {
+  const headerHost = req.headers.get("origin") ?? req.headers.get("referer");
+  if (!headerHost) return null;
+  let host: string;
+  try {
+    host = new URL(headerHost).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  const appUrl = process.env.APP_URL ?? "https://app.videocomet.de";
+  let appHost: string;
+  try {
+    appHost = new URL(appUrl).hostname.toLowerCase();
+  } catch {
+    appHost = "app.videocomet.de";
+  }
+  if (host === appHost) return null;
+  const domain = await getDomainByHostname(host);
+  if (!domain) return null;
+  return domain.id;
 }
 
 // ── Hash helpers ────────────────────────────────────────────────────────────
@@ -183,9 +224,15 @@ export async function POST(req: NextRequest): Promise<Response> {
   const { allowed } = await checkRateLimit(sessionId);
   if (!allowed) return corsResponse(429);
 
+  // Domain-Scope aus dem Origin/Referer-Header ableiten — Voraussetzung für
+  // einen tenant-sicheren Slug-Lookup. Ohne diesen Schritt würden Events
+  // zwischen Tenants gemischt (User A's Slug = User B's Slug auf
+  // unterschiedlichen Domains).
+  const domainScope = await resolveDomainScope(req);
+
   // Resolve slug → leadId (cached 60s). We silently 204 for unknown slugs so
   // probes for non-existent slugs don't leak a "is this slug taken?" oracle.
-  const leadId = await resolveSlugToLeadId(parsed.slug);
+  const leadId = await resolveSlugToLeadId(parsed.slug, domainScope);
   if (!leadId) return corsResponse(204);
 
   // Fire and forget: kick off the insert+aggregate without awaiting, so the

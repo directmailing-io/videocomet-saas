@@ -11,7 +11,7 @@
  * traffic and far simpler than running a periodic cron.
  */
 
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { leadEvents, leads, runs } from "@/lib/db/schema";
 
@@ -180,15 +180,32 @@ export interface LeadAnalytics {
 const EVENT_LIST_LIMIT = 500;
 
 /**
- * Lookup the lead's id by slug. Returns null if no lead matches. Public
- * tracking endpoint uses this to resolve the lead before recording an event.
- * Cached in-memory for 60s in the route layer.
+ * Lookup the lead's id by slug, **tenant-scoped via Domain**. Returns null
+ * if no lead matches.
+ *
+ * SICHERHEIT: NIE ohne `domainId`-Filter abfragen, sonst leakt die
+ * Tracking-Pipeline Events zwischen Tenants (User A's Slug `franz-mustermann`
+ * würde sich nicht von User B's auf einer anderen Domain unterscheiden).
+ *
+ *   - `domainId = null`  → Lead muss auf der App-Default-Domain laufen
+ *     (`leads.domain_id IS NULL`).
+ *   - `domainId = "<uuid>"` → Lead muss exakt zu dieser Custom-Domain
+ *     gehören.
+ *
+ * Cached in-memory für 60s in der Route-Layer mit zusammengesetztem Key.
  */
-export async function getLeadIdBySlug(slug: string): Promise<string | null> {
+export async function getLeadIdBySlug(
+  slug: string,
+  domainId: string | null,
+): Promise<string | null> {
   const [row] = await db
     .select({ id: leads.id })
     .from(leads)
-    .where(eq(leads.slug, slug))
+    .where(
+      domainId === null
+        ? and(eq(leads.slug, slug), isNull(leads.domainId))
+        : and(eq(leads.slug, slug), eq(leads.domainId, domainId)),
+    )
     .limit(1);
   return row?.id ?? null;
 }

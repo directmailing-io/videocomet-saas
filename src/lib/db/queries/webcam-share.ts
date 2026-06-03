@@ -121,7 +121,13 @@ export async function createShareLink(
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
       // Bei Slug- ODER numeric_id-Kollision (Race): nächsten Versuch.
+      // Constraint-Name ist seit Migration 0010 `webcam_share_links_user_slug_uq`
+      // (Scope: pro User). Der alte Name `…_slug_uq` bleibt im Match drin,
+      // damit ein etwaiger Race direkt nach Deploy auf nicht-migrierten
+      // DBs (unwahrscheinlich, aber denkbar während Rollout) ebenfalls
+      // retried wird.
       if (
+        msg.includes("webcam_share_links_user_slug_uq") ||
         msg.includes("webcam_share_links_slug_uq") ||
         msg.includes("webcam_share_links_user_numeric_uq") ||
         msg.includes("duplicate key") ||

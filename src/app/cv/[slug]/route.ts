@@ -33,7 +33,7 @@ import { buildCustomLpCspHeader } from "@/lib/custom-lp/csp";
 import { renderCustomLp } from "@/lib/custom-lp/renderer";
 import { sanitizeIndexHtml } from "@/lib/custom-lp/sanitizer";
 import {
-  getCustomLpContextBySlug,
+  getCustomLpContextBySlugForDefaultDomain,
   getCustomLpContextBySlugAndDomain,
   type CustomLpPublicContext,
 } from "@/lib/db/queries/custom-lp-public";
@@ -74,11 +74,17 @@ export async function GET(
   if (hostParam) {
     const domain = await getDomainByHostname(hostParam);
     if (!domain || domain.status !== "active") {
+      // eslint-disable-next-line no-console
+      console.warn("[cv] unknown or inactive _host param", { hostParam, slug });
       return renderErrorPage(404, "Seite nicht gefunden");
     }
     context = await getCustomLpContextBySlugAndDomain(slug, domain.id);
   } else {
-    context = await getCustomLpContextBySlug(slug);
+    // TENANT-SAFETY: ohne _host laufen wir auf der Default-Domain — der
+    // Lookup muss `domain_id IS NULL` erzwingen, sonst kann ein gleichnamiger
+    // Custom-Domain-Slug des Tenants A an einen Visitor von B ausgespielt
+    // werden.
+    context = await getCustomLpContextBySlugForDefaultDomain(slug);
   }
   if (!context) {
     return renderErrorPage(404, "Seite nicht gefunden");

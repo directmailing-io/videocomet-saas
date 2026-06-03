@@ -9,7 +9,7 @@ import {
   runs,
 } from "@/lib/db/schema";
 import {
-  getLeadBySlug,
+  getLeadBySlugForDefaultDomain,
   getLeadBySlugAndDomain,
 } from "@/lib/db/queries/leads";
 import { getDomainByHostname } from "@/lib/db/queries/user-domains";
@@ -206,16 +206,31 @@ export default async function PublicLandingPage({
   // ueber einen Kunden-Host kam. Dann müssen wir den Lead innerhalb der
   // Domain aufloesen, NICHT global — sonst kann ein gleichnamiger Slug auf
   // einer anderen Custom-Domain (oder app.videocomet.de) falsch matchen.
+  //
+  // TENANT-SAFETY: ohne _host (Default-Domain) dürfen NUR Leads mit
+  // `domain_id IS NULL` aufgelöst werden. Ein Lead, der einer Custom-Domain
+  // zugewiesen ist, darf NICHT über `app.videocomet.de/v/<slug>` erreichbar
+  // sein — sonst kann der Slug eines Kundens fremde Lead-Daten ausliefern.
   const hostParam = typeof sp?._host === "string" ? sp._host : null;
   let isCustomDomain = false;
-  let lead: Awaited<ReturnType<typeof getLeadBySlug>> = null;
+  let lead: Awaited<ReturnType<typeof getLeadBySlugForDefaultDomain>> = null;
   if (hostParam) {
     const domain = await getDomainByHostname(hostParam);
     if (!domain || domain.status !== "active") notFound();
     isCustomDomain = true;
     lead = await getLeadBySlugAndDomain(slug, domain.id);
+    // Defensive Konsistenz-Prüfung: getLeadBySlugAndDomain filtert bereits
+    // auf domainId, aber wir loggen falls ein Drift erkannt wird.
+    if (lead && lead.domainId !== domain.id) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[lp-block] lead found but wrong domain context",
+        { slug, expectedDomainId: domain.id, leadDomainId: lead.domainId },
+      );
+      notFound();
+    }
   } else {
-    lead = await getLeadBySlug(slug);
+    lead = await getLeadBySlugForDefaultDomain(slug);
   }
   if (!lead) notFound();
 
