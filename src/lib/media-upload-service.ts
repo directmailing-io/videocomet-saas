@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import { uploadVideo, getVideo } from "@/lib/bunny/stream";
 import { uploadFile } from "@/lib/bunny/storage";
 import { slugify } from "@/lib/utils";
+import { probeVideoBufferDuration } from "@/lib/ffprobe";
 
 export type MediaKind = "webcam" | "image" | "video" | "logo";
 
@@ -130,11 +131,38 @@ export async function uploadMediaFile(
     contentType: mime,
   });
 
+  // KRITISCH für Webcam-Uploads: echte Dauer probe, sonst landet
+  // mediaItems.durationSec = NULL → Render-Worker fällt auf 30s-Fallback
+  // zurück → finales Video kann LÄNGER als die Webcam werden (Prod-Bug
+  // 2026-06-03: 6s-Webcam → 22s-Video). Bei image/logo überspringen wir
+  // den Probe — kein Video, keine Dauer.
+  let durationSec: number | null = null;
+  if (kind === "webcam") {
+    try {
+      const probed = await probeVideoBufferDuration(buffer, safeExt || "webm");
+      if (probed !== null) {
+        durationSec = Math.round(probed * 1000) / 1000;
+        console.log(
+          `[media-upload] webcam duration probed=${durationSec}s remotePath=${result.remotePath}`,
+        );
+      } else {
+        console.warn(
+          `[media-upload] webcam duration probe FAILED — durationSec stays NULL, worker will fallback. remotePath=${result.remotePath}`,
+        );
+      }
+    } catch (err) {
+      console.warn(
+        "[media-upload] ffprobe-Aufruf gescheitert:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   console.log(`[media-upload] storage-upload ok remotePath=${result.remotePath}`);
 
   return {
     publicUrl: result.url,
-    durationSec: null,
+    durationSec,
     bytes,
     storagePath: result.remotePath,
   };

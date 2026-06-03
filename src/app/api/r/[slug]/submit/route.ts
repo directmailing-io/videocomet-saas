@@ -32,6 +32,7 @@ import {
 } from "@/lib/db/queries/webcam-share";
 import { deleteFile, uploadFile } from "@/lib/bunny/storage";
 import { getBunnyStorageEnv } from "@/lib/bunny/env";
+import { probeVideoBufferDuration } from "@/lib/ffprobe";
 
 const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 const ALLOWED_MIMES = ["video/webm", "video/mp4"] as const;
@@ -152,6 +153,18 @@ export async function POST(
     ? `Gast-Aufnahme ${linkIdTag} · ${link.title.trim()}`
     : `Gast-Aufnahme ${linkIdTag} · ${displayDate}`;
 
+  // Dauer messen — sonst kann ein Run mit dieser Aufnahme später ein
+  // Video erzeugen, das länger ist als die Webcam (Worker-Fallback 30s).
+  let probedDurationSec: number | null = null;
+  try {
+    probedDurationSec = await probeVideoBufferDuration(buffer, ext);
+  } catch (err) {
+    console.warn(
+      "[api/r/submit] ffprobe failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   let createdMediaId: string | null = null;
   try {
     const media = await createMediaItem(link.userId, {
@@ -159,7 +172,7 @@ export async function POST(
       name: baseName,
       filename: `${mediaItemId}.${ext}`,
       publicUrl: uploaded.url,
-      durationSec: null,
+      durationSec: probedDurationSec,
       bytes: buffer.byteLength,
     });
     createdMediaId = media.id;

@@ -29,6 +29,7 @@ import {
   generateBlackClip,
   imageSeqToMp4,
   renderTextSegment,
+  trimVideoToDuration,
   type PipPosition,
   type PipShape,
 } from "../lib/ffmpeg";
@@ -280,7 +281,6 @@ async function renderPresentationBase(opts: {
 export async function runVideoRender(
   input: VideoRenderInput,
 ): Promise<VideoRenderOutput> {
-  const duration = input.defaultDurationSec ?? 30;
   const finalPath = join(input.outDir, "final.mp4");
 
   // Materialise the webcam source on disk first.
@@ -297,6 +297,28 @@ export async function runVideoRender(
     await fetchToFile(input.webcamSourceUrl, raw);
     await compressVideo({ inputPath: raw, outputPath: webcamLocal });
   }
+
+  // KRITISCH: die wahre Webcam-Dauer aus der normalisierten Source messen.
+  // Wenn `defaultDurationSec` aus der DB NULL ist, fiel der alte Code auf
+  // 30s zurück — Segmente wurden auf 30s aufgebaut, das finale Video war
+  // länger als die Webcam (Prod-Bug 2026-06-03: 6s-Webcam → 22s-Output).
+  // Wir messen JETZT immer aus der Quelle und nehmen den kleineren von
+  // (DB-Wert, gemessen). Floor 0.5s damit ein Mess-Glitch nicht das ganze
+  // Render killt.
+  const { probeVideoDuration } = await import("../../lib/ffprobe");
+  const probedSec = await probeVideoDuration(webcamLocal);
+  const dbSec = input.defaultDurationSec ?? null;
+  const candidates = [probedSec, dbSec].filter(
+    (v): v is number => typeof v === "number" && v > 0,
+  );
+  const webcamSec =
+    candidates.length > 0
+      ? Math.max(0.5, Math.min(...candidates))
+      : input.defaultDurationSec ?? 30;
+  console.log(
+    `[render] webcam duration probed=${probedSec ?? "n/a"} db=${dbSec ?? "n/a"} → effective=${webcamSec}s`,
+  );
+  const duration = webcamSec;
 
   if (input.mode === "webcam-only") {
     // Webcam IS the final clip.
@@ -335,6 +357,23 @@ export async function runVideoRender(
     durationSec: duration,
   });
 
+  // Final-Trim als Safety-Net: auch wenn composePip's -t schon greift,
+  // re-probe wir das Output. Wenn es trotz allem zu lang ist (Codec-
+  // Glitch, falsche concat-Dauer …) trimmen wir hart auf `duration`.
+  const finalProbed = await probeVideoDuration(finalPath);
+  if (finalProbed !== null && finalProbed > duration + 0.5) {
+    console.warn(
+      `[render] final video ${finalProbed}s exceeds cap ${duration}s → trimming`,
+    );
+    const trimmedPath = join(input.outDir, "final-trimmed.mp4");
+    await trimVideoToDuration({
+      inputPath: finalPath,
+      outputPath: trimmedPath,
+      durationSec: duration,
+    });
+    return { videoFilePath: trimmedPath, durationSec: duration };
+  }
+
   return { videoFilePath: finalPath, durationSec: duration };
 }
 
@@ -355,11 +394,33 @@ async function renderSegmentsBase(opts: {
   fallbackWebsite: string | null;
   totalDurationSec: number;
 }): Promise<void> {
+  // Hart auf die Webcam-Dauer clampen: Segmente, die nicht mehr in das
+  // Webcam-Budget passen, werden komplett verworfen — das letzte Segment
+  // das noch passt wird gekürzt. Schützt vor falsch konfigurierten
+  // Wizard-State und vor zu-langen-Slides.
+  const totalBudgetMs = Math.max(200, Math.round(opts.totalDurationSec * 1000));
+  const clampedSegments: Array<{ seg: Segment; durationMs: number }> = [];
+  let consumedMs = 0;
+  for (const seg of opts.segments) {
+    if (consumedMs >= totalBudgetMs) break;
+    const requested = Math.max(200, seg.durationMs);
+    const remaining = totalBudgetMs - consumedMs;
+    const granted = Math.min(requested, remaining);
+    if (granted < 200) break;
+    clampedSegments.push({ seg, durationMs: granted });
+    consumedMs += granted;
+  }
+  if (clampedSegments.length !== opts.segments.length) {
+    console.warn(
+      `[render] segments clamped: ${opts.segments.length} → ${clampedSegments.length} (budget=${opts.totalDurationSec}s)`,
+    );
+  }
+
   const parts: string[] = [];
-  for (let i = 0; i < opts.segments.length; i++) {
-    const seg = opts.segments[i];
+  for (let i = 0; i < clampedSegments.length; i++) {
+    const { seg, durationMs: clampedMs } = clampedSegments[i];
     const partPath = join(opts.outDir, `seg-${i}.mp4`);
-    const durationMs = Math.max(200, seg.durationMs);
+    const durationMs = clampedMs;
 
     try {
       if (seg.kind === "text") {
@@ -527,5 +588,6 @@ async function renderSegmentsBase(opts: {
     inputPaths: parts,
     outputPath: opts.basePath,
     workDir: opts.outDir,
+    maxDurationSec: opts.totalDurationSec,
   });
 }

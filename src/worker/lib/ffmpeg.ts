@@ -600,12 +600,18 @@ export interface ConcatClipsInput {
  * is fast (no re-encode) and works when all inputs share codec parameters.
  * Since every segment is produced by renderTextSegment / renderBlackClip
  * with identical libx264/aac settings, this is safe.
+ *
+ * Wenn `maxDurationSec` gesetzt ist, wird das Output mit `-t` gekappt —
+ * Safety-Net gegen drift (Segmente die geringfügig länger als ihr
+ * deklarierter durationMs sind durch I-Frame-Alignment).
  */
-export async function concatClips(input: ConcatClipsInput): Promise<void> {
+export async function concatClips(input: ConcatClipsInput & {
+  maxDurationSec?: number;
+}): Promise<void> {
   const listPath = `${input.workDir.replace(/\/$/, "")}/concat-list.txt`;
   const lines = input.inputPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n");
   await (await import("node:fs/promises")).writeFile(listPath, lines, "utf-8");
-  await runFfmpeg([
+  const args: string[] = [
     "-y",
     "-f",
     "concat",
@@ -613,8 +619,36 @@ export async function concatClips(input: ConcatClipsInput): Promise<void> {
     "0",
     "-i",
     listPath,
+  ];
+  if (typeof input.maxDurationSec === "number" && input.maxDurationSec > 0) {
+    args.push("-t", input.maxDurationSec.toFixed(3));
+  }
+  args.push("-c", "copy", input.outputPath);
+  await runFfmpeg(args);
+}
+
+/**
+ * Trim ein MP4 auf eine exakte Dauer. Re-encode-frei via `-c copy` —
+ * das schneidet am nächsten Keyframe ab. Für ein finales Safety-Net
+ * "Output darf NIE länger als Webcam sein" reicht das. Wenn frame-genau
+ * gewünscht wäre, müssten wir libx264 re-encoden — dafür sind die paar
+ * Hundert ms am Ende nicht teuer genug.
+ */
+export async function trimVideoToDuration(input: {
+  inputPath: string;
+  outputPath: string;
+  durationSec: number;
+}): Promise<void> {
+  await runFfmpeg([
+    "-y",
+    "-i",
+    input.inputPath,
+    "-t",
+    input.durationSec.toFixed(3),
     "-c",
     "copy",
+    "-movflags",
+    "+faststart",
     input.outputPath,
   ]);
 }
