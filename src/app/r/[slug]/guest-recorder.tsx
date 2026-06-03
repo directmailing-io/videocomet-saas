@@ -9,11 +9,23 @@
  *    aber kein Eingabefeld; alles läuft anonym
  *  - Upload-Limit ist 100 MB (Mediathek erlaubt 500 MB)
  *  - max-duration-sec Timer ist hier nicht optional, sondern Pflicht
- *  - State-Sequenz: loading → ready → recording → review → sending → done
+ *
+ * Architektur-Entscheidungen (gleich wie components/ui/webcam-recorder.tsx,
+ * weil die dortige Version battle-tested ist):
+ *  - Das <video ref={liveVideoRef}> ist IMMER im DOM gemountet, nicht
+ *    bedingt versteckt. Sonst ist liveVideoRef.current beim ersten
+ *    initCamera() null → srcObject-Assignment scheitert still → schwarzer
+ *    Player. Sichtbarkeit wird per CSS umgeschaltet.
+ *  - Der Stream wird per useEffect [hasStream] ans Video angehängt, nicht
+ *    synchron im initCamera-Body. So ist garantiert, dass das Element
+ *    nach dem Re-Render schon existiert.
+ *  - Review-Phase: explizit video.load() + Loading-Overlay bis canplay/
+ *    loadeddata, plus Error-Fallback. Chrome+Firefox brauchen load() bei
+ *    blob:-URLs damit der erste Frame erscheint.
  *
  * iOS-Safari-Hinweise:
  *  - <video playsInline muted> + autoplay erforderlich, sonst kein Preview
- *  - getUserMedia braucht User-Geste (Klick auf "Aufnahme starten")
+ *  - getUserMedia braucht User-Geste (Klick auf "Kamera aktivieren")
  */
 
 import * as React from "react";
@@ -25,12 +37,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Mic,
-  HandMetal,
-  Smile,
-  Sparkles,
-  Timer,
-  Users,
-  Wallpaper,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -131,10 +137,13 @@ export function GuestRecorder({
   const [elapsed, setElapsed] = React.useState(0);
   const [audioLevel, setAudioLevel] = React.useState(0);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
-  const [previewReady, setPreviewReady] = React.useState(false);
-  const [previewError, setPreviewError] = React.useState(false);
+  const [previewLoadState, setPreviewLoadState] = React.useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [previewReloadKey, setPreviewReloadKey] = React.useState(0);
   const [uploadProgress, setUploadProgress] = React.useState(0);
   const [hasStream, setHasStream] = React.useState(false);
+  const [initializing, setInitializing] = React.useState(false);
 
   const remaining = Math.max(0, maxDurationSec - elapsed);
   const overTime = elapsed >= maxDurationSec;
@@ -208,6 +217,7 @@ export function GuestRecorder({
   const initCamera = React.useCallback(async () => {
     setPermError(null);
     setRecordError(null);
+    setInitializing(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -220,12 +230,23 @@ export function GuestRecorder({
         audio: true,
       });
       streamRef.current = stream;
-      setHasStream(true);
+      // setHasStream triggert ein Re-Render — der useEffect unten hängt
+      // dann den Stream ans (jetzt sicher gemountete) <video> an.
+      // Wir versuchen es zusätzlich SYNCHRON: wenn das Element bereits im
+      // DOM ist (was bei unserem "immer-mounten"-Setup der Fall ist), ist
+      // das die schnellere Variante und der Preview erscheint sofort.
+      const vt = stream.getVideoTracks()[0];
+      if (vt) {
+        const s = vt.getSettings();
+        console.log(
+          `[guest-recorder] video track: ${s.width}x${s.height} @${s.frameRate}fps`,
+        );
+      }
       if (liveVideoRef.current) {
         liveVideoRef.current.srcObject = stream;
-        // iOS Safari verlangt explizit play() nach srcObject.
         liveVideoRef.current.play().catch(() => {});
       }
+      setHasStream(true);
       startAudioMeter(stream);
     } catch (err) {
       console.error("[guest-recorder] getUserMedia failed:", err);
@@ -242,8 +263,25 @@ export function GuestRecorder({
       }
       setPermError(msg);
       setState("permission_error");
+    } finally {
+      setInitializing(false);
     }
   }, [startAudioMeter]);
+
+  // Stream-Anhängen als Belt-and-Suspenders: falls der synchrone Versuch
+  // in initCamera scheitert (z.B. weil das Element gerade erst gemountet
+  // wird), greift dieser Effekt nach dem Re-Render und setzt srcObject.
+  React.useEffect(() => {
+    if (!hasStream) return;
+    const el = liveVideoRef.current;
+    const stream = streamRef.current;
+    if (!el || !stream) return;
+    if (el.srcObject !== stream) {
+      el.srcObject = stream;
+    }
+    // iOS Safari verlangt explizit play() nach srcObject-Wechsel.
+    el.play().catch(() => {});
+  }, [hasStream, state]);
 
   React.useEffect(() => {
     return () => {
@@ -254,7 +292,9 @@ export function GuestRecorder({
         try { recorderRef.current.stop(); } catch { /* ignore */ }
       }
       recorderRef.current = null;
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      if (previewUrl) {
+        try { URL.revokeObjectURL(previewUrl); } catch { /* ignore */ }
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -312,8 +352,7 @@ export function GuestRecorder({
       }
       const url = URL.createObjectURL(blob);
       setPreviewUrl(url);
-      setPreviewReady(false);
-      setPreviewError(false);
+      setPreviewLoadState("loading");
       setState("review");
       // Live-Stream abschalten — Privacy + Kamera-LED aus.
       stopStream();
@@ -359,8 +398,7 @@ export function GuestRecorder({
       try { URL.revokeObjectURL(previewUrl); } catch { /* ignore */ }
       setPreviewUrl(null);
     }
-    setPreviewReady(false);
-    setPreviewError(false);
+    setPreviewLoadState("loading");
     setElapsed(0);
     setRecordError(null);
     setState("ready");
@@ -371,19 +409,14 @@ export function GuestRecorder({
 
   // Sobald previewUrl gesetzt UND das Review-<video> gemountet ist, explizit
   // load() rufen. Chrome+Firefox brauchen das bei blob:-URLs damit der erste
-  // Frame zuverlässig erscheint (Posters/preload="auto" greifen nicht).
+  // Frame zuverlässig erscheint (poster/preload="auto" greifen nicht).
   React.useEffect(() => {
     if (state !== "review" || !previewUrl) return;
     const el = reviewVideoRef.current;
     if (!el) return;
-    setPreviewReady(false);
-    setPreviewError(false);
+    setPreviewLoadState("loading");
     try { el.load(); } catch { /* ignore */ }
-    // iOS Safari: ein lautloser play() innerhalb User-Geste setzt den
-    // ersten Frame. Wir machen es muted + paused — User klickt selbst Play.
-    el.muted = false;
-    el.currentTime = 0;
-  }, [previewUrl, state]);
+  }, [previewUrl, state, previewReloadKey]);
 
   async function submit() {
     if (!previewUrl || chunksRef.current.length === 0) return;
@@ -486,136 +519,173 @@ export function GuestRecorder({
   }
 
   // ── Render-Helper ────────────────────────────────────────────────────────
-
+  // Sichtbarkeits-Logik: das Live-<video> ist IMMER gemountet (siehe oben:
+  // ref-null-Bug). Wir steuern Sichtbarkeit per CSS-Klassen.
   const showLiveStage =
-    state === "ready" && hasStream
-    || state === "recording";
+    state === "ready" || state === "recording";
   const showReviewStage =
     state === "review" || state === "sending" || state === "send_error";
-  const showInitialTips = state === "ready" && !hasStream;
 
   return (
     <div className="space-y-5">
-      {/* Initial-Tips (vor Kamera-Aktivierung) — KEIN Video-Frame */}
-      {showInitialTips && (
-        <TipsCard />
-      )}
-
-      {/* Live-Bühne (Stream sichtbar) — mit dezenter Kreis-Hilfe wie im
-          Kampagnen-Recorder, damit das Gesicht im späteren PiP-Kreis landet. */}
-      {showLiveStage && (
-        <div className="space-y-3">
-          <div className="relative aspect-video w-full overflow-hidden rounded-squircle-xl bg-ink shadow-lift">
-            <video
-              ref={liveVideoRef}
-              className="h-full w-full object-cover"
-              autoPlay
-              muted
-              playsInline
-            />
-
-            {state === "recording" && (
-              <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
-                <span className="inline-block size-2 animate-pulse rounded-full bg-danger" />
-                REC
-                <span className="font-mono tabular-nums">{formatTime(elapsed)}</span>
-                <span className="text-white/60">/ {formatTime(maxDurationSec)}</span>
-              </div>
-            )}
-
-            {/* Composition guide: dezenter Kreis als Rahmen-Hilfe */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 aspect-square h-full rounded-full border border-white/35"
-              style={{
-                boxShadow:
-                  "0 0 0 1px rgba(0,0,0,0.08), inset 0 0 0 1px rgba(0,0,0,0.06)",
-              }}
-            />
-          </div>
-
-          {state === "recording" && (
-            <>
-              <div
-                className="h-1.5 w-full rounded-full bg-line overflow-hidden"
-                aria-label="Mikrofon-Pegel"
-              >
-                <div
-                  className={cn(
-                    "h-full transition-all duration-100",
-                    audioLevel > 0.6 ? "bg-ok" : audioLevel > 0.15 ? "bg-brand" : "bg-line-soft",
-                  )}
-                  style={{ width: `${Math.round(audioLevel * 100)}%` }}
-                />
-              </div>
-
-              <div className="flex items-baseline justify-center gap-3 font-mono tabular-nums">
-                <span className="text-2xl font-bold text-ink">{formatTime(elapsed)}</span>
-                <span className="text-sm text-ink-muted">/ {formatTime(maxDurationSec)}</span>
-                <span className={cn(
-                  "text-xs font-semibold",
-                  remaining <= 10 ? "text-danger" : "text-ink-muted",
-                )}>
-                  {overTime ? "Maximum erreicht" : `noch ${formatTime(remaining)}`}
-                </span>
-              </div>
-            </>
+      {/* Video-Bühne: gleichzeitiges Mounting von Live + Review.
+          Sichtbarkeit per CSS, damit refs nie null sind, wenn wir sie
+          synchron in initCamera()/load() ansprechen. */}
+      <div className="relative aspect-video w-full overflow-hidden rounded-squircle-xl bg-ink shadow-lift">
+        {/* Live-Video: immer im DOM, per Klasse sichtbar/unsichtbar */}
+        <video
+          ref={liveVideoRef}
+          className={cn(
+            "h-full w-full object-cover",
+            showLiveStage ? "block" : "hidden",
           )}
-        </div>
-      )}
+          autoPlay
+          muted
+          playsInline
+        />
 
-      {/* Review-Bühne (aufgenommenes Video) */}
-      {showReviewStage && (
-        <div className="relative aspect-video w-full overflow-hidden rounded-squircle-xl bg-ink shadow-lift">
+        {/* Review-Video: wird gemountet sobald previewUrl da ist; bleibt
+            danach gemountet (auch im send_error-State), damit der User
+            das Video nochmal abspielen kann. */}
+        {previewUrl && (
           <video
+            key={`${previewUrl}-${previewReloadKey}`}
             ref={reviewVideoRef}
-            src={previewUrl ?? undefined}
+            src={previewUrl}
             controls
             controlsList="nodownload"
             preload="auto"
             playsInline
-            onLoadedData={() => setPreviewReady(true)}
-            onCanPlay={() => setPreviewReady(true)}
-            onError={() => setPreviewError(true)}
+            muted
+            onLoadedData={() => setPreviewLoadState("ready")}
+            onCanPlay={() => setPreviewLoadState("ready")}
+            onError={() => setPreviewLoadState("error")}
             className={cn(
-              "h-full w-full object-contain bg-ink",
-              previewReady ? "opacity-100" : "opacity-0 transition-opacity",
+              "absolute inset-0 h-full w-full object-contain bg-ink",
+              showReviewStage ? "block" : "hidden",
             )}
           />
+        )}
 
-          {!previewReady && !previewError && state === "review" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/95 text-white">
-              <span className="inline-block size-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              <span className="text-sm font-medium">Vorschau wird vorbereitet …</span>
-            </div>
-          )}
+        {/* Placeholder vor Kamera-Aktivierung */}
+        {state === "ready" && !hasStream && !initializing && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/95 text-white text-center px-6">
+            <Mic className="size-10 text-white/70" />
+            <span className="text-sm font-medium">
+              Klicke unten auf <span className="font-semibold">„Kamera + Mikrofon aktivieren"</span>,
+              um zu starten.
+            </span>
+            <span className="text-xs text-white/60 max-w-xs">
+              Dein Browser fragt nach Erlaubnis — das ist normal.
+            </span>
+          </div>
+        )}
 
-          {previewError && state === "review" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/95 text-white text-center px-6">
-              <AlertCircle className="size-8 text-danger" />
-              <span className="text-sm font-medium">
-                Vorschau konnte nicht geladen werden.
-              </span>
-              <span className="text-xs text-white/70">
-                Du kannst trotzdem absenden — oder neu aufnehmen.
-              </span>
-            </div>
-          )}
+        {state === "ready" && !hasStream && initializing && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/95 text-white">
+            <span className="inline-block size-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            <span className="text-sm font-medium">Kamera wird initialisiert …</span>
+          </div>
+        )}
 
-          {state === "sending" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/80 text-white">
-              <span className="inline-block size-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              <span className="text-sm font-semibold">
-                Wird gesendet … {uploadProgress}%
-              </span>
-              <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-brand transition-all"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
+        {/* REC-Badge */}
+        {state === "recording" && (
+          <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
+            <span className="inline-block size-2 animate-pulse rounded-full bg-danger" />
+            REC
+            <span className="font-mono tabular-nums">{formatTime(elapsed)}</span>
+            <span className="text-white/60">/ {formatTime(maxDurationSec)}</span>
+          </div>
+        )}
+
+        {/* Composition-Kreis (dezent) — nur im Live-Modus, nicht im Review */}
+        {showLiveStage && hasStream && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 aspect-square h-full rounded-full border border-white/35"
+            style={{
+              boxShadow:
+                "0 0 0 1px rgba(0,0,0,0.08), inset 0 0 0 1px rgba(0,0,0,0.06)",
+            }}
+          />
+        )}
+
+        {/* Review-Loading-Overlay */}
+        {showReviewStage && state === "review" && previewLoadState === "loading" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/85 text-white pointer-events-none">
+            <span className="inline-block size-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            <span className="text-xs font-medium">Vorschau wird vorbereitet …</span>
+          </div>
+        )}
+
+        {/* Review-Error-Fallback */}
+        {showReviewStage && state === "review" && previewLoadState === "error" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/90 p-4 text-center text-white">
+            <AlertCircle className="size-7 text-danger" />
+            <span className="text-sm font-semibold">
+              Vorschau konnte nicht geladen werden
+            </span>
+            <span className="text-xs text-white/70 max-w-xs">
+              Du kannst trotzdem absenden — oder eine neue Aufnahme machen.
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="subtle"
+              onClick={() => {
+                setPreviewLoadState("loading");
+                setPreviewReloadKey((k) => k + 1);
+              }}
+              iconLeft={<RotateCcw className="size-3.5" />}
+            >
+              Erneut laden
+            </Button>
+          </div>
+        )}
+
+        {/* Sending-Overlay */}
+        {state === "sending" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/85 text-white">
+            <span className="inline-block size-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            <span className="text-sm font-semibold">
+              Wird gesendet … {uploadProgress}%
+            </span>
+            <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-brand transition-all"
+                style={{ width: `${uploadProgress}%` }}
+              />
             </div>
-          )}
+          </div>
+        )}
+      </div>
+
+      {/* Aufnahme-Status-Leiste (nur live) */}
+      {state === "recording" && (
+        <div className="space-y-3">
+          <div
+            className="h-1.5 w-full rounded-full bg-line overflow-hidden"
+            aria-label="Mikrofon-Pegel"
+          >
+            <div
+              className={cn(
+                "h-full transition-all duration-100",
+                audioLevel > 0.6 ? "bg-ok" : audioLevel > 0.15 ? "bg-brand" : "bg-line-soft",
+              )}
+              style={{ width: `${Math.round(audioLevel * 100)}%` }}
+            />
+          </div>
+
+          <div className="flex items-baseline justify-center gap-3 font-mono tabular-nums">
+            <span className="text-2xl font-bold text-ink">{formatTime(elapsed)}</span>
+            <span className="text-sm text-ink-muted">/ {formatTime(maxDurationSec)}</span>
+            <span className={cn(
+              "text-xs font-semibold",
+              remaining <= 10 ? "text-danger" : "text-ink-muted",
+            )}>
+              {overTime ? "Maximum erreicht" : `noch ${formatTime(remaining)}`}
+            </span>
+          </div>
         </div>
       )}
 
@@ -632,6 +702,7 @@ export function GuestRecorder({
             type="button"
             size="lg"
             onClick={handleStartFlow}
+            loading={initializing}
             iconLeft={<Mic className="size-4" />}
           >
             Kamera + Mikrofon aktivieren
@@ -705,80 +776,6 @@ export function GuestRecorder({
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-// ── TipsCard ───────────────────────────────────────────────────────────────
-// Vor der Aufnahme erscheinen Hinweise, die einen Empfänger des fertigen
-// Videos nicht abschrecken sollen. Bewusst direkt, keine Marketing-Texte.
-
-const TIPS: Array<{
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  body: string;
-}> = [
-  {
-    icon: HandMetal,
-    title: "Hände entspannt unten lassen",
-    body: "Im fertigen Video läuft im Hintergrund oft eine Website, ein Dokument oder eine Folie. Wenn deine Hände oben sind während etwas scrollt oder wechselt, wirkt es seltsam.",
-  },
-  {
-    icon: Mic,
-    title: "Klar sprechen, aber bleib du selbst",
-    body: "Lieber freie Worte als ein Skript runterlesen. Authentisch unperfekt schlägt jeden perfekten Roboter-Ton.",
-  },
-  {
-    icon: Smile,
-    title: "Freundlich wirken, kurz lächeln",
-    body: "Ein offenes Gesicht, kurze einfache Sätze. Niemand mag steife Sales-Sprache.",
-  },
-  {
-    icon: Users,
-    title: "Stell dir EINEN Lead vor",
-    body: "Sprich, als ob du diese eine bestimmte Person ansprichst — dadurch wirkt das Video persönlich, nicht massenhaft.",
-  },
-  {
-    icon: Timer,
-    title: "So kurz wie möglich halten",
-    body: "Ehrlich: keiner schaut sich ein minutenlanges Akquise-Video an. 20–40 Sekunden reichen meistens.",
-  },
-  {
-    icon: Wallpaper,
-    title: "Ruhiger Hintergrund, neutrale Kleidung",
-    body: "Eine rote Wand mit knallbuntem Hemd lenkt ab. Cleaner Hintergrund + ruhige Farben — kein Reibungspunkt.",
-  },
-];
-
-function TipsCard() {
-  return (
-    <div className="rounded-squircle-xl border border-line bg-surface p-5 sm:p-6 space-y-4 shadow-sm">
-      <div className="flex items-center gap-2">
-        <Sparkles className="size-4 text-brand-deep" />
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink">
-          Worauf es ankommt
-        </h2>
-      </div>
-      <ul className="grid sm:grid-cols-2 gap-3">
-        {TIPS.map(({ icon: Icon, title, body }) => (
-          <li
-            key={title}
-            className="flex gap-3 rounded-squircle-md bg-surface-soft p-3"
-          >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-deep">
-              <Icon className="size-4" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-ink leading-snug">
-                {title}
-              </p>
-              <p className="text-xs text-ink-muted leading-relaxed mt-0.5">
-                {body}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
