@@ -1,7 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { Video, Check, Upload, RotateCcw } from "lucide-react";
+import {
+  Video,
+  Check,
+  Upload,
+  RotateCcw,
+  Loader2,
+  Play,
+  AlertCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -142,47 +150,14 @@ export function WizardStep1Webcam({
       </p>
 
       {selected ? (
-        <div className="rounded-squircle-md border border-line bg-surface p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand-deep">
-              <Check className="size-3.5" />
-              Ausgewählt
-            </span>
-            <span className="text-sm font-semibold text-ink truncate">
-              {selected.name}
-            </span>
-            <span className="text-xs text-ink-muted">
-              {durationLabel(selected.durationSec)}
-            </span>
-          </div>
-          <video
-            key={selected.id}
-            src={selected.publicUrl}
-            controls
-            className="w-full max-w-[480px] rounded-squircle-sm bg-ink"
-          />
-          <div className="flex flex-wrap gap-2 mt-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={openPicker}
-              iconLeft={<RotateCcw className="size-4" />}
-            >
-              Andere wählen
-            </Button>
-            <Button
-              size="sm"
-              variant="subtle"
-              onClick={() => {
-                setUploadError(null);
-                setRecordOpen(true);
-              }}
-              iconLeft={<Video className="size-4" />}
-            >
-              Neu aufnehmen
-            </Button>
-          </div>
-        </div>
+        <SelectedWebcamPreview
+          webcam={selected}
+          onPickOther={openPicker}
+          onReRecord={() => {
+            setUploadError(null);
+            setRecordOpen(true);
+          }}
+        />
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -223,41 +198,14 @@ export function WizardStep1Webcam({
             />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-              {webcams.map((w) => {
-                const active = w.id === value;
-                return (
-                  <button
-                    key={w.id}
-                    type="button"
-                    onClick={() => onChange(w.id)}
-                    className={cn(
-                      "text-left rounded-squircle-md border transition-all duration-200 ease-spring",
-                      active
-                        ? "border-brand ring-2 ring-brand/30"
-                        : "border-line hover:border-brand/50",
-                    )}
-                  >
-                    <Card className="border-0 shadow-none">
-                      <CardContent className="p-3">
-                        <div className="aspect-video rounded-squircle-sm bg-ink mb-2 overflow-hidden flex items-center justify-center text-white/50 text-xs">
-                          <video
-                            src={w.publicUrl}
-                            preload="metadata"
-                            muted
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <p className="text-sm font-semibold text-ink truncate">
-                          {w.name}
-                        </p>
-                        <p className="text-xs text-ink-muted">
-                          {durationLabel(w.durationSec)}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  </button>
-                );
-              })}
+              {webcams.map((w) => (
+                <WebcamThumb
+                  key={w.id}
+                  webcam={w}
+                  active={w.id === value}
+                  onSelect={() => onChange(w.id)}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -307,42 +255,17 @@ export function WizardStep1Webcam({
             />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
-              {webcams.map((w) => {
-                const active = w.id === value;
-                return (
-                  <button
-                    key={w.id}
-                    type="button"
-                    onClick={() => {
-                      onChange(w.id);
-                      setPickerOpen(false);
-                    }}
-                    className={cn(
-                      "text-left rounded-squircle-md border transition-all duration-200 ease-spring",
-                      active
-                        ? "border-brand ring-2 ring-brand/30"
-                        : "border-line hover:border-brand/50",
-                    )}
-                  >
-                    <CardContent className="p-3">
-                      <div className="aspect-video rounded-squircle-sm bg-ink mb-2 overflow-hidden">
-                        <video
-                          src={w.publicUrl}
-                          preload="metadata"
-                          muted
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <p className="text-sm font-semibold text-ink truncate">
-                        {w.name}
-                      </p>
-                      <p className="text-xs text-ink-muted">
-                        {durationLabel(w.durationSec)}
-                      </p>
-                    </CardContent>
-                  </button>
-                );
-              })}
+              {webcams.map((w) => (
+                <WebcamThumb
+                  key={w.id}
+                  webcam={w}
+                  active={w.id === value}
+                  onSelect={() => {
+                    onChange(w.id);
+                    setPickerOpen(false);
+                  }}
+                />
+              ))}
             </div>
           )}
         </DialogContent>
@@ -385,5 +308,228 @@ export function WizardStep1Webcam({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Sub-Components                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * SelectedWebcamPreview — die große Vorschau, die nach Auswahl einer Webcam
+ * angezeigt wird. Anders als die alte Variante:
+ *   - controls + preload="metadata" + playsInline → spielt zuverlässig ab
+ *     (auch in Safari/iOS und kurz nach dem Upload, wenn Bunny Edge noch warm
+ *     wird)
+ *   - explizite Lade- und Fehlerzustände, damit der Nutzer nicht denkt,
+ *     der Player sei kaputt
+ *   - „Erneut versuchen" wenn das CDN den Range-Request mal versemmelt
+ */
+function SelectedWebcamPreview({
+  webcam,
+  onPickOther,
+  onReRecord,
+}: {
+  webcam: Webcam;
+  onPickOther: () => void;
+  onReRecord: () => void;
+}) {
+  const [loadState, setLoadState] = React.useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [reloadKey, setReloadKey] = React.useState(0);
+
+  // Wenn sich die Auswahl ändert (anderes Video), zurück in den Lade-Status.
+  React.useEffect(() => {
+    setLoadState("loading");
+  }, [webcam.id]);
+
+  return (
+    <div className="rounded-squircle-md border border-line bg-surface p-4">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand-deep">
+          <Check className="size-3.5" />
+          Ausgewählt
+        </span>
+        <span className="text-sm font-semibold text-ink truncate">
+          {webcam.name}
+        </span>
+        <span className="text-xs text-ink-muted">
+          {durationLabel(webcam.durationSec)}
+        </span>
+        {webcam.durationSec == null && loadState !== "error" && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted">
+            <Loader2 className="size-3 animate-spin" />
+            Dauer wird ermittelt
+          </span>
+        )}
+      </div>
+
+      <div className="relative w-full max-w-[480px] aspect-video overflow-hidden rounded-squircle-sm bg-ink">
+        <video
+          key={`${webcam.id}-${reloadKey}`}
+          src={webcam.publicUrl}
+          controls
+          controlsList="nodownload"
+          preload="metadata"
+          playsInline
+          className="h-full w-full object-contain bg-ink"
+          onLoadedMetadata={() => setLoadState("ready")}
+          onLoadedData={() => setLoadState("ready")}
+          onError={() => setLoadState("error")}
+        />
+        {loadState === "loading" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/60 text-white pointer-events-none">
+            <Loader2 className="size-5 animate-spin" />
+            <span className="text-xs font-medium">Vorschau wird geladen …</span>
+          </div>
+        )}
+        {loadState === "error" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/85 p-4 text-center text-white">
+            <AlertCircle className="size-6" />
+            <span className="text-sm font-semibold">
+              Vorschau konnte nicht geladen werden
+            </span>
+            <span className="text-[11px] text-white/70 max-w-xs">
+              Das Video wurde gespeichert. Klick „Erneut laden" — das CDN
+              braucht manchmal ein paar Sekunden.
+            </span>
+            <Button
+              size="sm"
+              variant="subtle"
+              onClick={() => {
+                setLoadState("loading");
+                setReloadKey((k) => k + 1);
+              }}
+              iconLeft={<RotateCcw className="size-3.5" />}
+            >
+              Erneut laden
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-2 mt-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onPickOther}
+          iconLeft={<RotateCcw className="size-4" />}
+        >
+          Andere wählen
+        </Button>
+        <Button
+          size="sm"
+          variant="subtle"
+          onClick={onReRecord}
+          iconLeft={<Video className="size-4" />}
+        >
+          Neu aufnehmen
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * WebcamThumb — Grid-Tile in der Mediathek-Übersicht / im Picker-Dialog.
+ *
+ * Lade-Logik:
+ *   Statt das <video> direkt mit preload="metadata" zu rendern (was bei vielen
+ *   Bunny-Range-Requests parallel zum Stocken führen kann), zeigen wir erst
+ *   ein dunkles Tile mit Play-Icon. Erst beim Hover wird das Video tatsächlich
+ *   geladen — das ist genug, damit der Nutzer eine visuelle Bestätigung sieht,
+ *   dass das Video „da ist", ohne dass der ganze Grid um Bandbreite kämpft.
+ */
+function WebcamThumb({
+  webcam,
+  active,
+  onSelect,
+}: {
+  webcam: Webcam;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const [loadState, setLoadState] = React.useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
+
+  function startLoad() {
+    if (loadState !== "idle") return;
+    setLoadState("loading");
+    const el = videoRef.current;
+    if (el && !el.src) {
+      el.src = webcam.publicUrl;
+      try {
+        el.load();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      onMouseEnter={startLoad}
+      onFocus={startLoad}
+      title={`${webcam.name} (${durationLabel(webcam.durationSec)})`}
+      className={cn(
+        "text-left rounded-squircle-md border transition-all duration-200 ease-spring",
+        active
+          ? "border-brand ring-2 ring-brand/30"
+          : "border-line hover:border-brand/50",
+      )}
+    >
+      <Card className="border-0 shadow-none bg-transparent">
+        <CardContent className="p-3">
+          <div className="relative aspect-video rounded-squircle-sm bg-ink mb-2 overflow-hidden flex items-center justify-center">
+            <video
+              ref={videoRef}
+              preload="none"
+              muted
+              playsInline
+              className={cn(
+                "w-full h-full object-cover transition-opacity",
+                loadState === "ready" ? "opacity-100" : "opacity-0",
+              )}
+              onLoadedData={() => setLoadState("ready")}
+              onError={() => setLoadState("error")}
+            />
+            {loadState !== "ready" && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-white/70">
+                {loadState === "loading" ? (
+                  <Loader2 className="size-5 animate-spin" />
+                ) : loadState === "error" ? (
+                  <AlertCircle className="size-5 text-warn" />
+                ) : (
+                  <Play className="size-6 fill-current" />
+                )}
+                <span className="text-[10px] font-medium">
+                  {loadState === "loading"
+                    ? "Lädt …"
+                    : loadState === "error"
+                    ? "nicht verfügbar"
+                    : "Webcam"}
+                </span>
+              </div>
+            )}
+            {active && (
+              <span className="absolute right-1.5 top-1.5 inline-flex size-5 items-center justify-center rounded-full bg-brand text-white shadow">
+                <Check className="size-3" />
+              </span>
+            )}
+          </div>
+          <p className="text-sm font-semibold text-ink truncate">
+            {webcam.name}
+          </p>
+          <p className="text-xs text-ink-muted">
+            {durationLabel(webcam.durationSec)}
+          </p>
+        </CardContent>
+      </Card>
+    </button>
   );
 }

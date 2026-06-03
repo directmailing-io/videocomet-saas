@@ -33,8 +33,7 @@ export function SlideCanvas({
   const containerRef = React.useRef<HTMLDivElement>(null);
   const layerRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
   const [scale, setScale] = React.useState(1);
-  // Force re-render of Moveable when layers change so it picks up new position
-  const [, force] = React.useReducer((x: number) => x + 1, 0);
+  const [target, setTarget] = React.useState<HTMLDivElement | null>(null);
 
   React.useLayoutEffect(() => {
     if (!containerRef.current) return;
@@ -49,9 +48,33 @@ export function SlideCanvas({
     return () => ro.disconnect();
   }, []);
 
-  const target = selectedLayerId
-    ? layerRefs.current.get(selectedLayerId) ?? null
-    : null;
+  // Stable per-Layer ref-callbacks. Inline-Arrows in bindRef hatten React
+  // dazu gebracht jeden Render mit (null,el) zu rufen — wenn die Callback
+  // ein setState/force auslöste war das ein Render-Loop.
+  const bindRefsCache = React.useRef<
+    Map<string, (el: HTMLDivElement | null) => void>
+  >(new Map());
+  const getBindRef = React.useCallback((id: string) => {
+    const cached = bindRefsCache.current.get(id);
+    if (cached) return cached;
+    const cb = (el: HTMLDivElement | null) => {
+      if (el) layerRefs.current.set(id, el);
+      else layerRefs.current.delete(id);
+    };
+    bindRefsCache.current.set(id, cb);
+    return cb;
+  }, []);
+
+  // Target-Element fürs Moveable nach Layout-Commit lesen, NIE synchron im
+  // Render (Ref ist im ersten Render eines neuen Layers noch leer).
+  React.useLayoutEffect(() => {
+    if (!selectedLayerId) {
+      setTarget(null);
+      return;
+    }
+    const el = layerRefs.current.get(selectedLayerId) ?? null;
+    setTarget(el);
+  }, [selectedLayerId, slide.layers]);
 
   const selectedLayer = selectedLayerId
     ? slide.layers.find((l) => l.id === selectedLayerId) ?? null
@@ -102,11 +125,7 @@ export function SlideCanvas({
                 previewData={previewData}
                 selected={layer.id === selectedLayerId}
                 onSelect={() => onSelectLayer(layer.id)}
-                bindRef={(el) => {
-                  if (el) layerRefs.current.set(layer.id, el);
-                  else layerRefs.current.delete(layer.id);
-                  force();
-                }}
+                bindRef={getBindRef(layer.id)}
               />
             );
           })}

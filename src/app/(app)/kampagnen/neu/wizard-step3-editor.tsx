@@ -230,25 +230,36 @@ export function WizardStep3Editor({
   const selectedSegment = segments.find((s) => s.id === selectedId) ?? null;
 
   // Wenn keine Webcam-Dauer bekannt: Großer Hinweis und kein Editor.
+  // (Tritt bei alten Mediathek-Einträgen oder zu schnellem Klicken nach
+  //  einem frischen Upload auf, bevor die Dauer-Probe abgeschlossen ist.)
   if (webcamDurationMs == null) {
     return (
       <div className="space-y-6">
         <div>
           <h2 className="text-lg font-semibold text-ink mb-1">Editor</h2>
           <p className="text-sm text-ink-muted">
-            Baue deine Videopräsentation aus einzelnen Segmenten auf.
+            Du siehst diesen Schritt, weil du Modus
+            <span className="font-semibold text-ink"> „Mit Präsentation"</span>{" "}
+            ausgewählt hast.
           </p>
         </div>
         <Card className="p-10 text-center">
           <span className="inline-flex size-12 items-center justify-center rounded-full bg-brand-soft text-brand-deep mb-4">
-            <VideoIcon className="size-6" />
+            {webcamUrl ? (
+              <span className="inline-block size-5 animate-spin rounded-full border-2 border-brand-deep border-t-transparent" />
+            ) : (
+              <VideoIcon className="size-6" />
+            )}
           </span>
           <h3 className="text-base font-semibold text-ink mb-2">
-            Wähle erst ein Webcam-Video
+            {webcamUrl
+              ? "Webcam-Dauer wird ermittelt …"
+              : "Wähle erst ein Webcam-Video"}
           </h3>
           <p className="text-sm text-ink-muted max-w-md mx-auto">
-            Die Dauer der Webcam-Aufnahme bestimmt die maximale Gesamtlänge
-            deiner Segmente. Geh zurück zu Schritt 2 und wähle ein Video.
+            {webcamUrl
+              ? "Wir prüfen kurz, wie lange deine Aufnahme ist — das dauert nur einen Moment. Danach kannst du Segmente hinzufügen."
+              : "Die Dauer der Webcam-Aufnahme bestimmt die maximale Gesamtlänge deiner Segmente. Geh zurück zu Schritt 1 und wähle ein Video."}
           </p>
         </Card>
       </div>
@@ -272,6 +283,10 @@ export function WizardStep3Editor({
           <p className="text-sm text-ink-muted max-w-xl">
             Baue deine Videopräsentation. Reihenfolge, Dauer auf
             Millisekunde, PiP-Position und Form lassen sich frei anpassen.
+            <span className="block mt-1 text-[11px] text-ink-muted/80">
+              Dieser Schritt erscheint nur, weil im Modus-Step „Mit
+              Präsentation" gewählt ist.
+            </span>
           </p>
         </div>
         <DurationPill

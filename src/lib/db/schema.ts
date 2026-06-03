@@ -425,6 +425,37 @@ export const customLpVersions = pgTable("custom_lp_versions", {
   uniqueVersionPerTemplate: unique("custom_lp_versions_tpl_ver_uq").on(t.templateId, t.version),
 }));
 
+// ── Webcam-Share-Links (Gast-Aufnahme via Link) ─────────────────────────────
+// Ein eingeloggter User generiert einen Share-Link. Wer den Link öffnet,
+// landet auf einer auth-freien Aufnahme-Seite (`/r/<slug>`) und kann GENAU
+// EINMAL ein Webcam-Video aufnehmen, das nach Absenden automatisch in die
+// Mediathek des Owners landet.
+//
+// Idempotenz:
+//   - `used_at IS NULL`  → Slot offen
+//   - `used_at IS NOT NULL` → bereits verwendet, weitere Submits → 409
+//   - `revoked_at`       → manuell vom Owner gesperrt
+//   - `expires_at`       → optionaler Ablauf
+//
+// Slug-Format: 12–16 Zeichen URL-safe (nanoid-Style), global eindeutig.
+export const webcamShareLinks = pgTable("webcam_share_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull(),
+  /** Optionale Notiz „Wofür ist dieser Link?". */
+  title: text("title"),
+  /** Maximale Aufnahmedauer in Sekunden (Default 120s). */
+  maxDurationSec: integer("max_duration_sec").notNull().default(120),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  mediaItemId: uuid("media_item_id").references(() => mediaItems.id, { onDelete: "set null" }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  slugUq: unique("webcam_share_links_slug_uq").on(t.slug),
+  userIdx: index("webcam_share_links_user_idx").on(t.userId),
+}));
+
 // Verifikations- / Cert-Health-Historie pro Domain — für Admin-Diagnose.
 export const domainCheckLog = pgTable("domain_check_log", {
   id: uuid("id").primaryKey().defaultRandom(),

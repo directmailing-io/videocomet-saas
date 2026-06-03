@@ -1,6 +1,7 @@
 import { Library, FileVideo, Image as ImageIcon, Film } from "lucide-react";
 import { requireUser } from "@/lib/auth-guard";
 import { listUserMedia, type MediaItem } from "@/lib/db/queries/media";
+import { listShareLinksForUser } from "@/lib/db/queries/webcam-share";
 import { PageHeader } from "@/components/ui/page-header";
 import {
   Card,
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, Eye, Trash2 } from "lucide-react";
 import { UploadDialogTrigger } from "./upload-zone";
+import { ShareLinksSection, type ShareLinkRow } from "./share-links";
 
 function formatBytes(bytes: number | null): string {
   if (!bytes) return "0 KB";
@@ -135,11 +137,46 @@ function MediaGrid({ items }: { items: MediaItem[] }) {
 
 export default async function MediathekPage() {
   const { user } = await requireUser();
-  const all = await listUserMedia(user.id);
+  const [all, shareLinks] = await Promise.all([
+    listUserMedia(user.id),
+    listShareLinksForUser(user.id),
+  ]);
   const webcams = all.filter((m) => m.type === "webcam");
   const images = all.filter((m) => m.type === "image");
   const videos = all.filter((m) => m.type === "video");
   const logos = all.filter((m) => m.type === "logo");
+
+  // Owner-Anzeigename für die Vorschau im Dialog: Firma > Vor+Nachname > Email.
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  const ownerDisplayName =
+    fullName || user.email.split("@")[0];
+  const appOrigin = (process.env.APP_URL ?? "https://app.videocomet.de").replace(
+    /\/+$/,
+    "",
+  );
+
+  // Wir serialisieren die rohen DB-Rows in einen client-safen Shape
+  // (Dates → ISO-Strings, Status berechnet).
+  const now = Date.now();
+  const initialLinks: ShareLinkRow[] = shareLinks.map((l) => {
+    let status: ShareLinkRow["status"] = "open";
+    if (l.revokedAt) status = "revoked";
+    else if (l.usedAt) status = "used";
+    else if (l.expiresAt && l.expiresAt.getTime() <= now) status = "expired";
+    return {
+      id: l.id,
+      slug: l.slug,
+      title: l.title,
+      maxDurationSec: l.maxDurationSec,
+      expiresAt: l.expiresAt ? l.expiresAt.toISOString() : null,
+      usedAt: l.usedAt ? l.usedAt.toISOString() : null,
+      mediaItemId: l.mediaItemId,
+      revokedAt: l.revokedAt ? l.revokedAt.toISOString() : null,
+      createdAt: l.createdAt.toISOString(),
+      status,
+      url: `${appOrigin}/r/${l.slug}`,
+    };
+  });
 
   return (
     <>
@@ -156,6 +193,9 @@ export default async function MediathekPage() {
           <TabsTrigger value="bilder">Bilder ({images.length})</TabsTrigger>
           <TabsTrigger value="videos">Videos ({videos.length})</TabsTrigger>
           <TabsTrigger value="logos">Logos ({logos.length})</TabsTrigger>
+          <TabsTrigger value="share">
+            Aufnahme-Links ({initialLinks.length})
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="alle">
@@ -172,6 +212,13 @@ export default async function MediathekPage() {
         </TabsContent>
         <TabsContent value="logos">
           <MediaGrid items={logos} />
+        </TabsContent>
+        <TabsContent value="share">
+          <ShareLinksSection
+            ownerDisplayName={ownerDisplayName}
+            appOrigin={appOrigin}
+            initial={initialLinks}
+          />
         </TabsContent>
       </Tabs>
     </>

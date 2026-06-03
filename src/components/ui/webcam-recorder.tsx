@@ -43,7 +43,12 @@ export interface RecordedMedia {
   durationSec: number | null;
 }
 
-type RecorderState = "preview" | "recording" | "uploading" | "review";
+type RecorderState =
+  | "preview"
+  | "recording"
+  | "uploading"
+  | "verifying"
+  | "review";
 
 export interface WebcamRecorderProps {
   /** Called when the user clicks "Verwenden" — receives the already-uploaded media. */
@@ -81,6 +86,32 @@ function pickMimeType(): string {
   return "video/webm";
 }
 
+/**
+ * Bunny Edge Storage kann unmittelbar nach dem PUT ein paar hundert
+ * Millisekunden brauchen, bis das File via CDN ausgeliefert wird. Wir pingen
+ * die URL mit HEAD, retrying bis maxAttempts. Gibt true zurück, sobald ein
+ * Status 200 kommt. Fehlschläge sind nicht hart — der <video>-Tag versucht
+ * es eh nochmal.
+ */
+async function verifyAvailability(
+  url: string,
+  maxAttempts = 6,
+  delayMs = 500,
+): Promise<boolean> {
+  for (let i = 0; i < maxAttempts; i += 1) {
+    try {
+      const r = await fetch(url, { method: "HEAD", cache: "no-store" });
+      if (r.ok) return true;
+    } catch {
+      /* network hiccup → retry */
+    }
+    if (i < maxAttempts - 1) {
+      await new Promise((res) => setTimeout(res, delayMs));
+    }
+  }
+  return false;
+}
+
 function formatTime(seconds: number): string {
   const safe = Math.max(0, Math.floor(seconds));
   const mm = Math.floor(safe / 60).toString().padStart(2, "0");
@@ -113,6 +144,13 @@ export function WebcamRecorder({
   const [reviewMedia, setReviewMedia] = React.useState<RecordedMedia | null>(null);
   const [confirming, setConfirming] = React.useState(false);
   const [hasStream, setHasStream] = React.useState(false);
+  // Status der Wiedergabe in der Review-Phase, damit wir dem Nutzer klar zeigen
+  // können, ob das Video schon laden konnte (sonst denkt er, „der Player ist
+  // kaputt"). Ein silent retry über reviewReloadKey hilft gegen Bunny-Edge-
+  // Cache-Misses unmittelbar nach dem Upload.
+  const [reviewLoadState, setReviewLoadState] =
+    React.useState<"loading" | "ready" | "error">("loading");
+  const [reviewReloadKey, setReviewReloadKey] = React.useState(0);
 
   const stopStream = React.useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -263,8 +301,18 @@ export function WebcamRecorder({
     try {
       const media = await uploadBlob(blob, elapsed);
       console.log(`[webcam-recorder] uploaded media id=${media.id} url=${media.publicUrl} duration=${media.durationSec ?? "n/a"}`);
+      // Kurze Verifikations-Phase: prüfen, dass Bunny Edge das frische File
+      // auch wirklich ausliefert (HEAD). Damit verschwindet das „der Player
+      // ist schwarz und ruckelt"-Erlebnis direkt nach dem Upload.
       setReviewMedia(media);
-      setState("review");
+      setState("verifying");
+      setReviewLoadState("loading");
+      void verifyAvailability(media.publicUrl).then((ok) => {
+        if (!ok) {
+          console.warn("[webcam-recorder] HEAD verify failed, switching to review anyway");
+        }
+        setState("review");
+      });
     } catch (e) {
       console.error("[webcam-recorder] upload failed:", e);
       setRecordError(
@@ -454,21 +502,59 @@ export function WebcamRecorder({
 
           <div className="relative aspect-video w-full overflow-hidden rounded-squircle-md bg-ink">
             {state === "review" && reviewMedia ? (
-              <video
-                ref={reviewVideoRef}
-                src={reviewMedia.publicUrl}
-                controls
-                preload="auto"
-                playsInline
-                autoPlay
-                muted
-                className="h-full w-full object-contain bg-ink"
-              />
+              <>
+                <video
+                  key={`${reviewMedia.id}-${reviewReloadKey}`}
+                  ref={reviewVideoRef}
+                  src={reviewMedia.publicUrl}
+                  controls
+                  controlsList="nodownload"
+                  preload="auto"
+                  playsInline
+                  muted
+                  className="h-full w-full object-contain bg-ink"
+                  onLoadedData={() => setReviewLoadState("ready")}
+                  onCanPlay={() => setReviewLoadState("ready")}
+                  onError={() => setReviewLoadState("error")}
+                />
+                {reviewLoadState === "loading" && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/70 text-white pointer-events-none">
+                    <span className="inline-block size-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <span className="text-xs font-medium">
+                      Vorschau wird geladen …
+                    </span>
+                  </div>
+                )}
+                {reviewLoadState === "error" && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/85 p-4 text-center text-white">
+                    <AlertCircle className="size-7" />
+                    <span className="text-sm font-semibold">
+                      Vorschau konnte nicht geladen werden
+                    </span>
+                    <span className="text-xs text-white/70 max-w-xs">
+                      Das Video ist gespeichert — manchmal braucht das CDN ein
+                      paar Sekunden, bis es ausgeliefert wird.
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="subtle"
+                      onClick={() => {
+                        setReviewLoadState("loading");
+                        setReviewReloadKey((k) => k + 1);
+                      }}
+                      iconLeft={<RotateCcw className="size-3.5" />}
+                    >
+                      Erneut versuchen
+                    </Button>
+                  </div>
+                )}
+              </>
             ) : state === "uploading" ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
                 <span className="inline-block size-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 <span className="text-sm font-semibold">
-                  Aufnahme wird verarbeitet … {uploadProgress}%
+                  Aufnahme wird hochgeladen … {uploadProgress}%
                 </span>
                 <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
                   <div
@@ -476,6 +562,20 @@ export function WebcamRecorder({
                     style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
+                <span className="text-[11px] text-white/70 max-w-xs text-center leading-relaxed">
+                  Wir speichern dein Video auf unseren Servern, damit es in
+                  den nächsten Schritten zuverlässig abspielbar ist.
+                </span>
+              </div>
+            ) : state === "verifying" ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
+                <span className="inline-block size-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span className="text-sm font-semibold">
+                  Vorschau wird vorbereitet …
+                </span>
+                <span className="text-[11px] text-white/70 max-w-xs text-center leading-relaxed">
+                  Wir prüfen, dass das Video auf dem CDN angekommen ist.
+                </span>
               </div>
             ) : (
               <video
@@ -547,6 +647,12 @@ export function WebcamRecorder({
             {state === "uploading" && (
               <Button type="button" variant="ghost" disabled>
                 Aufnahme wird hochgeladen …
+              </Button>
+            )}
+
+            {state === "verifying" && (
+              <Button type="button" variant="ghost" disabled>
+                Vorschau wird vorbereitet …
               </Button>
             )}
 

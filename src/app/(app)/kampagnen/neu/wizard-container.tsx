@@ -105,6 +105,14 @@ const STEPS = [
   "Zusammenfassung",
 ];
 
+/**
+ * Editor-Step (Index 2) wird nur gezeigt, wenn der Modus „with-presentation"
+ * gewählt ist. Wir behalten ihn als sichtbaren-aber-disabled Schritt in der
+ * Progress-Anzeige, damit es für den Nutzer keine plötzlichen „der Wizard ist
+ * jetzt anders lang"-Sprünge gibt.
+ */
+const EDITOR_STEP_INDEX = 2;
+
 export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
   const router = useRouter();
   const [step, setStep] = React.useState(0);
@@ -227,22 +235,30 @@ export function NewCampaignWizard({ initialData }: NewCampaignWizardProps) {
         {STEPS.map((label, idx) => {
           const isActive = idx === step;
           const isDone = idx < step;
+          const isEditorSkipped = idx === EDITOR_STEP_INDEX && skipEditor;
           return (
             <li key={label} className="flex items-center gap-2 shrink-0">
               <span
                 className={cn(
                   "flex size-7 items-center justify-center rounded-full text-xs font-semibold border transition-colors",
                   isActive && "bg-brand text-white border-brand",
-                  isDone && "bg-brand-soft text-brand-deep border-brand-soft",
-                  !isActive && !isDone && "bg-surface text-ink-muted border-line",
+                  isDone && !isEditorSkipped && "bg-brand-soft text-brand-deep border-brand-soft",
+                  !isActive && !isDone && !isEditorSkipped && "bg-surface text-ink-muted border-line",
+                  isEditorSkipped && "bg-surface-soft text-ink-muted border-dashed border-line",
                 )}
+                title={
+                  isEditorSkipped
+                    ? "Editor wird übersprungen (Modus: Nur Webcam)"
+                    : undefined
+                }
               >
-                {isDone ? <Check className="size-3.5" /> : idx + 1}
+                {isEditorSkipped ? "—" : isDone ? <Check className="size-3.5" /> : idx + 1}
               </span>
               <span
                 className={cn(
                   "text-xs font-medium",
                   isActive ? "text-ink" : "text-ink-muted",
+                  isEditorSkipped && "line-through",
                 )}
               >
                 {label}

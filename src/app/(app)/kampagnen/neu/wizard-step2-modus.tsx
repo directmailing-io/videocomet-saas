@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Video, LayoutTemplate, Check } from "lucide-react";
+import { Video, LayoutTemplate, Check, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type CampaignMode = "webcam-only" | "with-presentation";
@@ -15,6 +15,8 @@ const OPTIONS: {
   value: CampaignMode;
   title: string;
   description: string;
+  /** Mini-Hinweis, was als nächstes passiert — verhindert „Editor öffnet sich aus dem Nichts". */
+  nextStepHint: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
   {
@@ -22,13 +24,15 @@ const OPTIONS: {
     title: "Nur Webcam",
     description:
       "Dein Webcam-Video wird unverändert als Outreach-Video an alle Empfänger gesendet.",
+    nextStepHint: "Nächster Schritt: Landingpage.",
     icon: Video,
   },
   {
     value: "with-presentation",
-    title: "Mit Videopraesentation",
+    title: "Mit Videopräsentation",
     description:
       "Du kombinierst dein Webcam-Video mit Folien, Websites, Bildern und weiteren Segmenten.",
+    nextStepHint: "Nächster Schritt: Editor (Segmente bauen).",
     icon: LayoutTemplate,
   },
 ];
@@ -70,6 +74,15 @@ export function WizardStep2Modus({ value, onChange }: WizardStep2Props) {
               </h3>
               <p className="text-sm text-ink-muted leading-relaxed">
                 {opt.description}
+              </p>
+              <p
+                className={cn(
+                  "mt-3 inline-flex items-center gap-1.5 text-[11px] font-medium",
+                  active ? "text-brand-deep" : "text-ink-muted",
+                )}
+              >
+                <Info className="size-3" />
+                {opt.nextStepHint}
               </p>
             </button>
           );
