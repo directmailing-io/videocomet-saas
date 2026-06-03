@@ -186,15 +186,26 @@ async function proxyBlockLp(
   req: NextRequest,
   slug: string,
 ): Promise<Response> {
-  const target = new URL(req.url);
-  target.pathname = `/lp-block/${slug}`;
-  // hostParam + alle anderen Query-Params durchreichen.
+  // Direkt-Fetch über localhost:3000 — die public URL hochzuziehen funktioniert
+  // im Container nicht (Traefik-Loop produziert "wrong version number" TLS-
+  // Fehler). Innerhalb des Containers ist der Next.js-Server unter
+  // http://127.0.0.1:3000 erreichbar.
+  const externalUrl = new URL(req.url);
+  const target = new URL(`http://127.0.0.1:3000/lp-block/${slug}`);
+  externalUrl.searchParams.forEach((value, key) => {
+    target.searchParams.set(key, value);
+  });
+  // Public-Host als Header durchreichen, damit die LP-Page den richtigen
+  // Origin-Kontext kennt (für Tracking-Bridge, etc.).
   const upstream = await fetch(target.toString(), {
     method: "GET",
     headers: {
       cookie: req.headers.get("cookie") ?? "",
       "user-agent": req.headers.get("user-agent") ?? "",
       accept: "text/html",
+      host: req.headers.get("host") ?? "app.videocomet.de",
+      "x-forwarded-host": req.headers.get("host") ?? "app.videocomet.de",
+      "x-forwarded-proto": "https",
     },
     redirect: "manual",
     cache: "no-store",
