@@ -15,10 +15,33 @@
  * Idempotent: Items mit gesetzter Dauer werden übersprungen.
  */
 
+import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../src/lib/db";
 import { mediaItems } from "../src/lib/db/schema";
-import { probeRemoteVideoDuration } from "../src/lib/ffprobe";
+import { probeVideoDuration } from "../src/lib/ffprobe";
+
+/**
+ * Lädt eine Bunny-CDN-URL mit Referer (Hotlink-Protection) und gibt einen
+ * lokalen Dateipfad zurück. Caller muss aufräumen.
+ */
+async function downloadToTmp(url: string): Promise<string> {
+  const referer = process.env.APP_URL ?? "https://app.videocomet.de";
+  const res = await fetch(url, {
+    headers: { Referer: referer, Origin: referer },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  const dir = join(tmpdir(), "videocomet-backfill");
+  await mkdir(dir, { recursive: true });
+  const ext = url.match(/\.(webm|mp4|mov)(?:\?|$)/i)?.[1] ?? "webm";
+  const path = join(dir, `${randomUUID()}.${ext}`);
+  await writeFile(path, buf);
+  return path;
+}
 
 async function main() {
   const targets = await db
@@ -34,8 +57,10 @@ async function main() {
   let ok = 0;
   let fail = 0;
   for (const item of targets) {
+    let localPath: string | null = null;
     try {
-      const sec = await probeRemoteVideoDuration(item.publicUrl);
+      localPath = await downloadToTmp(item.publicUrl);
+      const sec = await probeVideoDuration(localPath);
       if (sec === null) {
         console.warn(`[backfill] probe-FAIL id=${item.id} name=${item.name}`);
         fail += 1;
@@ -56,6 +81,10 @@ async function main() {
         err instanceof Error ? err.message : err,
       );
       fail += 1;
+    } finally {
+      if (localPath) {
+        try { await unlink(localPath); } catch { /* ignore */ }
+      }
     }
   }
   console.log(`[backfill] done — ok=${ok} fail=${fail}`);
