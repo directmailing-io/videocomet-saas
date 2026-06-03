@@ -155,9 +155,11 @@ export async function POST(
 
   // Dauer messen — sonst kann ein Run mit dieser Aufnahme später ein
   // Video erzeugen, das länger ist als die Webcam (Worker-Fallback 30s).
+  // mediaItems.durationSec ist integer → auf Sekunden runden.
   let probedDurationSec: number | null = null;
   try {
-    probedDurationSec = await probeVideoBufferDuration(buffer, ext);
+    const probedRaw = await probeVideoBufferDuration(buffer, ext);
+    if (probedRaw !== null) probedDurationSec = Math.round(probedRaw);
   } catch (err) {
     console.warn(
       "[api/r/submit] ffprobe failed:",

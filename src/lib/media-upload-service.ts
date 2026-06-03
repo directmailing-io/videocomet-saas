@@ -141,7 +141,9 @@ export async function uploadMediaFile(
     try {
       const probed = await probeVideoBufferDuration(buffer, safeExt || "webm");
       if (probed !== null) {
-        durationSec = Math.round(probed * 1000) / 1000;
+        // Column ist integer — auf ganze Sekunden runden (so verhält sich
+        // auch der Stream-Pfad in pollStreamDuration).
+        durationSec = Math.round(probed);
         console.log(
           `[media-upload] webcam duration probed=${durationSec}s remotePath=${result.remotePath}`,
         );

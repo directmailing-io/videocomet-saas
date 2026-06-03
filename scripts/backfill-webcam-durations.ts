@@ -66,7 +66,7 @@ async function main() {
         fail += 1;
         continue;
       }
-      const rounded = Math.round(sec * 1000) / 1000;
+      const rounded = Math.round(sec);
       await db
         .update(mediaItems)
         .set({ durationSec: rounded })
