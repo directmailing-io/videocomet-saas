@@ -44,6 +44,8 @@ import { cn } from "@/lib/utils";
 export interface ShareLinkRow {
   id: string;
   slug: string;
+  /** Pro-User-fortlaufende Nummer, im UI als "#003" angezeigt. */
+  numericId: number;
   title: string | null;
   maxDurationSec: number;
   expiresAt: string | null;
@@ -53,6 +55,10 @@ export interface ShareLinkRow {
   createdAt: string;
   status: "open" | "used" | "expired" | "revoked";
   url: string;
+}
+
+function formatLinkIdTag(numericId: number): string {
+  return `#${String(numericId).padStart(3, "0")}`;
 }
 
 interface ShareLinksProps {
@@ -131,6 +137,7 @@ function CreateLinkDialog({
   const [createdLink, setCreatedLink] = React.useState<{
     slug: string;
     url: string;
+    numericId: number;
   } | null>(null);
 
   function reset() {
@@ -166,8 +173,16 @@ function CreateLinkDialog({
         };
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
-      const body = (await res.json()) as { slug: string; url: string };
-      setCreatedLink({ slug: body.slug, url: body.url });
+      const body = (await res.json()) as {
+        slug: string;
+        url: string;
+        numericId: number;
+      };
+      setCreatedLink({
+        slug: body.slug,
+        url: body.url,
+        numericId: body.numericId,
+      });
       router.refresh();
     } catch (err) {
       toast({
@@ -197,6 +212,7 @@ function CreateLinkDialog({
         {createdLink ? (
           <CreatedLinkPanel
             url={createdLink.url}
+            numericId={createdLink.numericId}
             onClose={() => {
               setOpen(false);
               reset();
@@ -291,9 +307,11 @@ function CreateLinkDialog({
 
 function CreatedLinkPanel({
   url,
+  numericId,
   onClose,
 }: {
   url: string;
+  numericId: number;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -333,10 +351,19 @@ function CreatedLinkPanel({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Aufnahmelink ist bereit</DialogTitle>
+        <DialogTitle className="flex items-center gap-2">
+          <span>Aufnahmelink ist bereit</span>
+          <span className="inline-flex items-center rounded-full bg-brand-soft px-2 py-0.5 text-xs font-bold text-brand-deep tabular-nums">
+            {formatLinkIdTag(numericId)}
+          </span>
+        </DialogTitle>
         <DialogDescription>
-          Teile den Link oder den QR-Code mit der Person, die für dich
-          aufnehmen soll.
+          Teile den Link oder den QR-Code. Das eintreffende Video erscheint in
+          deiner Mediathek mit dem Namen{" "}
+          <span className="font-mono text-ink">
+            Gast-Aufnahme {formatLinkIdTag(numericId)}
+          </span>
+          {" "}— so weißt du, welcher Link dazu gehört.
         </DialogDescription>
       </DialogHeader>
 
@@ -462,10 +489,17 @@ function ShareLinksList({ initial }: { initial: ShareLinkRow[] }) {
             l.status === "open" ? "border-line" : "border-line-soft",
           )}
         >
-          <LinkIcon className={cn(
-            "size-5 shrink-0",
-            l.status === "open" ? "text-brand" : "text-ink-muted",
-          )} />
+          <span
+            className={cn(
+              "inline-flex shrink-0 items-center justify-center rounded-full px-2 py-1 text-[11px] font-bold tabular-nums",
+              l.status === "open"
+                ? "bg-brand-soft text-brand-deep"
+                : "bg-surface-muted text-ink-muted",
+            )}
+            title={`Link-ID ${formatLinkIdTag(l.numericId)}`}
+          >
+            {formatLinkIdTag(l.numericId)}
+          </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-semibold text-ink truncate">

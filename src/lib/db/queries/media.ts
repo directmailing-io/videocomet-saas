@@ -51,3 +51,23 @@ export async function getMediaItem(id: string, userId: string): Promise<MediaIte
   if (!row) throw new Error("Not found");
   return row;
 }
+
+/**
+ * Benennt ein Media-Item um. Validiert Ownership über (id, userId).
+ * Liefert true wenn das Update einen Treffer hatte.
+ */
+export async function renameMediaItem(
+  id: string,
+  userId: string,
+  newName: string,
+): Promise<MediaItem | null> {
+  const trimmed = newName.trim();
+  if (!trimmed) throw new Error("name-empty");
+  if (trimmed.length > 200) throw new Error("name-too-long");
+  const result = await db
+    .update(mediaItems)
+    .set({ name: trimmed })
+    .where(and(eq(mediaItems.id, id), eq(mediaItems.userId, userId)))
+    .returning();
+  return result[0] ?? null;
+}

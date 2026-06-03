@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(
     {
       slug: result.link.slug,
+      numericId: result.link.numericId,
       url: `${APP_URL}/r/${result.link.slug}`,
       link: result.link,
     },

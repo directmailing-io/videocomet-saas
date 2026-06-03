@@ -442,6 +442,12 @@ export const webcamShareLinks = pgTable("webcam_share_links", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   slug: text("slug").notNull(),
+  /**
+   * Pro-User-fortlaufende ID (1, 2, 3, …). Wird im UI als "#003" angezeigt
+   * und im Namen des resultierenden Media-Items vermerkt, damit Owner
+   * Link ↔ Video manuell zuordnen können.
+   */
+  numericId: integer("numeric_id").notNull(),
   /** Optionale Notiz „Wofür ist dieser Link?". */
   title: text("title"),
   /** Maximale Aufnahmedauer in Sekunden (Default 120s). */
@@ -454,6 +460,7 @@ export const webcamShareLinks = pgTable("webcam_share_links", {
 }, (t) => ({
   slugUq: unique("webcam_share_links_slug_uq").on(t.slug),
   userIdx: index("webcam_share_links_user_idx").on(t.userId),
+  userNumericUq: unique("webcam_share_links_user_numeric_uq").on(t.userId, t.numericId),
 }));
 
 // Verifikations- / Cert-Health-Historie pro Domain — für Admin-Diagnose.

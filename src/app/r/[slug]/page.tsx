@@ -36,7 +36,8 @@ export default async function GuestRecordingPage({
   return (
     <main className="min-h-screen flex flex-col bg-surface-soft">
       <section className="flex-1 mx-auto w-full max-w-2xl px-5 py-10 sm:py-14 space-y-6">
-        {/* Headline — zentriert, schlicht */}
+        {/* Headline — zentriert, schlicht. #ID dezent darunter, damit Owner
+            beim Debuggen die Korrelation zur Mediathek hat. */}
         <header className="text-center space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
             Aufnahme für
@@ -47,6 +48,9 @@ export default async function GuestRecordingPage({
           {info.title && (
             <p className="text-sm text-ink-muted pt-1">{info.title}</p>
           )}
+          <p className="text-[11px] text-ink-muted tabular-nums pt-1">
+            Link-ID: #{String(info.numericId).padStart(3, "0")}
+          </p>
         </header>
 
         {/* Video oben — die Haupthandlung */}

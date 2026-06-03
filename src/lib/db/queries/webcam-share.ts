@@ -15,6 +15,11 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users, webcamShareLinks } from "@/lib/db/schema";
 
+/** Formatiert die per-User numericId als sichtbare 3-stellige #ID. */
+export function formatLinkId(numericId: number): string {
+  return `#${String(numericId).padStart(3, "0")}`;
+}
+
 export type WebcamShareLink = typeof webcamShareLinks.$inferSelect;
 
 /** Soft-Limit pro User (Spam-Guard). */
@@ -93,6 +98,10 @@ export async function createShareLink(
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const slug = generateShareSlug();
     try {
+      // numeric_id wird atomic via SUBQUERY berechnet, damit zwei parallele
+      // Inserts desselben Users nicht beide dieselbe ID setzen. Die UNIQUE
+      // (user_id, numeric_id) wirft sonst — wir wiederholen dann den
+      // Versuch (siehe catch unten).
       const [row] = await db
         .insert(webcamShareLinks)
         .values({
@@ -101,14 +110,20 @@ export async function createShareLink(
           title: input.title,
           maxDurationSec: input.maxDurationSec,
           expiresAt: input.expiresAt,
+          numericId: sql<number>`(
+            SELECT COALESCE(MAX(numeric_id), 0) + 1
+            FROM ${webcamShareLinks}
+            WHERE user_id = ${userId}
+          )`,
         })
         .returning();
       if (row) return { ok: true, link: row };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
-      // Bei Slug-Kollision: nächsten Slug probieren
+      // Bei Slug- ODER numeric_id-Kollision (Race): nächsten Versuch.
       if (
         msg.includes("webcam_share_links_slug_uq") ||
+        msg.includes("webcam_share_links_user_numeric_uq") ||
         msg.includes("duplicate key") ||
         msg.includes("unique")
       ) {
@@ -180,6 +195,7 @@ export type PublicShareStatus = "open" | "used" | "expired" | "revoked";
 
 export interface PublicShareLinkInfo {
   slug: string;
+  numericId: number;
   title: string | null;
   maxDurationSec: number;
   status: PublicShareStatus;
@@ -192,6 +208,7 @@ export async function getShareLinkBySlugPublic(
   const [row] = await db
     .select({
       slug: webcamShareLinks.slug,
+      numericId: webcamShareLinks.numericId,
       title: webcamShareLinks.title,
       maxDurationSec: webcamShareLinks.maxDurationSec,
       expiresAt: webcamShareLinks.expiresAt,
@@ -225,6 +242,7 @@ export async function getShareLinkBySlugPublic(
 
   return {
     slug: row.slug,
+    numericId: row.numericId,
     title: row.title,
     maxDurationSec: row.maxDurationSec,
     status,

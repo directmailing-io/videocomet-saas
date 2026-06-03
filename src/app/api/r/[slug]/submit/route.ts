@@ -25,6 +25,7 @@ import {
   deleteMediaItem,
 } from "@/lib/db/queries/media";
 import {
+  formatLinkId,
   getShareLinkBySlugInternal,
   getShareLinkBySlugPublic,
   markShareLinkUsed,
@@ -146,9 +147,10 @@ export async function POST(
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date());
+  const linkIdTag = formatLinkId(link.numericId);
   const baseName = link.title?.trim()
-    ? `Gast-Aufnahme · ${link.title.trim()}`
-    : `Gast-Aufnahme · ${displayDate}`;
+    ? `Gast-Aufnahme ${linkIdTag} · ${link.title.trim()}`
+    : `Gast-Aufnahme ${linkIdTag} · ${displayDate}`;
 
   let createdMediaId: string | null = null;
   try {
