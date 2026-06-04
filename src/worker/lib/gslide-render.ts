@@ -105,10 +105,10 @@ export async function renderGSlideToPng(opts: {
   outputPath: string;
 }): Promise<void> {
   const parsed = parsePublishedSlidesUrl(opts.slide.publishedUrl);
-  const slideUrl = buildSlideUrl(
-    parsed.canonicalPubembedUrl,
-    opts.slide.slideIndex + 1,
-  );
+  // KRITISCH: Google ignoriert numerische `?slide=N`-Parameter im
+  // Pubembed. Wir starten daher auf der ersten Folie (`id.p`) und
+  // navigieren danach per ArrowRight bis zum Ziel-Index.
+  const firstUrl = buildSlideUrl(parsed.canonicalPubembedUrl);
 
   const pooled = await getContext();
   let page: Page | null = null;
@@ -120,12 +120,19 @@ export async function renderGSlideToPng(opts: {
       deviceScaleFactor: 1,
     });
 
-    await page.goto(slideUrl, {
+    await page.goto(firstUrl, {
       waitUntil: "domcontentloaded",
       timeout: PER_SLIDE_NAVIGATION_TIMEOUT_MS,
     });
 
     await waitForSlideReady(page);
+
+    // Bis zur Ziel-Folie weiterklicken
+    for (let i = 0; i < opts.slide.slideIndex; i += 1) {
+      await page.keyboard.press("ArrowRight");
+      await new Promise((r) => setTimeout(r, 900));
+    }
+    await waitForSlideReady(page).catch(() => undefined);
 
     // 1. Pre-Substitute: alle Keys vom Lead vorbereiten.
     const resolved = buildResolvedKeyValueMap(
@@ -266,12 +273,13 @@ export async function renderGSlideToPng(opts: {
 
 // ── Internals ──────────────────────────────────────────────────────────────
 
-function buildSlideUrl(canonical: string, oneBasedIdx: number): string {
+function buildSlideUrl(canonical: string): string {
   const u = new URL(canonical);
   u.searchParams.set("start", "false");
   u.searchParams.set("loop", "false");
   u.searchParams.set("delayms", "60000");
-  u.searchParams.set("slide", String(oneBasedIdx));
+  // `id.p` ist Google's Default-Token für die erste Folie.
+  u.searchParams.set("slide", "id.p");
   return u.toString();
 }
 

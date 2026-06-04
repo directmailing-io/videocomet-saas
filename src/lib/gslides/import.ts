@@ -95,8 +95,8 @@ async function runImport(
       deviceScaleFactor: 1,
     });
 
-    // Wir starten auf Folie 1, damit der initiale Render-Cycle stabil ist.
-    const firstUrl = buildSlideUrl(parsed.canonicalPubembedUrl, 1);
+    // Start auf Folie 1 (slide=id.p) — die Pubembed-Init-Sequenz mag das.
+    const firstUrl = buildSlideUrl(parsed.canonicalPubembedUrl, "id.p");
     await page.goto(firstUrl, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
@@ -112,11 +112,13 @@ async function runImport(
       );
     }
 
+    // Wir capturen alle Folien sequenziell — Folie 0 ist schon angezeigt,
+    // danach jeweils ArrowRight + kurze Karenz für den Slide-In.
     const slides: ImportedSlide[] = [];
     for (let i = 0; i < totalSlides; i++) {
       try {
         const result = await withTimeout(
-          captureSlide(page, parsed, i),
+          captureCurrentSlide(page, parsed, i),
           PER_SLIDE_TIMEOUT_MS,
           `captureSlide(${i})`,
         );
@@ -131,6 +133,12 @@ async function runImport(
           thumbnailUrl: null,
           detectedPlaceholders: [],
         });
+      }
+      // Zur nächsten Folie navigieren (außer beim letzten Iterationsschritt)
+      if (i < totalSlides - 1) {
+        await page.keyboard.press("ArrowRight");
+        await sleep(900);
+        await waitForSlideReady(page).catch(() => undefined);
       }
     }
 
@@ -202,16 +210,17 @@ async function runRefresh(
       deviceScaleFactor: 1,
     });
 
-    // Direkt-Navigation auf die Ziel-Folie via URL.
-    const url = buildSlideUrl(parsed.canonicalPubembedUrl, slideIndex + 1);
+    // Start auf der ersten Folie, dann per ArrowRight bis zum Ziel-Index
+    // navigieren — Google ignoriert numerische `slide=`-Werte, die direkte
+    // URL-Navigation funktioniert nur mit echten Slide-IDs die wir nicht
+    // sicher von außen kennen.
+    const url = buildSlideUrl(parsed.canonicalPubembedUrl, "id.p");
     await page.goto(url, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
-
     await waitForSlideReady(page);
 
-    // Verifizieren, dass die Folie existiert.
     const total = await detectSlideCount(page);
     if (slideIndex >= total) {
       throw new GSlidesImportError(
@@ -220,7 +229,13 @@ async function runRefresh(
       );
     }
 
-    const captured = await captureSlide(page, parsed, slideIndex);
+    for (let i = 0; i < slideIndex; i += 1) {
+      await page.keyboard.press("ArrowRight");
+      await sleep(900);
+    }
+    await waitForSlideReady(page).catch(() => undefined);
+
+    const captured = await captureCurrentSlide(page, parsed, slideIndex);
     return {
       thumbnailUrl: captured.thumbnailUrl,
       detectedPlaceholders: captured.detectedPlaceholders,
@@ -256,12 +271,17 @@ export class GSlidesImportError extends Error {
  * der eine Punkt zum Anpassen. Funktioniert in der aktuellen Renderer-
  * Version (Stand 2026-06).
  */
-function buildSlideUrl(canonical: string, oneBasedIdx: number): string {
+function buildSlideUrl(canonical: string, slideToken: string): string {
   const u = new URL(canonical);
   u.searchParams.set("start", "false");
   u.searchParams.set("loop", "false");
   u.searchParams.set("delayms", "60000");
-  u.searchParams.set("slide", String(oneBasedIdx));
+  // ACHTUNG: Google akzeptiert NUR echte Slide-IDs (`id.p`, `id.gXXXX`)
+  // — Integer-Indices `?slide=1` werden ignoriert und Google serviert
+  // stumm die erste Folie. Wir starten daher auf `id.p` (= erste Folie)
+  // und navigieren danach per ArrowRight pro Capture, statt URLs zu
+  // bauen.
+  u.searchParams.set("slide", slideToken);
   return u.toString();
 }
 
@@ -325,36 +345,35 @@ async function waitForSlideReady(page: Page): Promise<void> {
  * klaren Fehler.
  */
 async function detectSlideCount(page: Page): Promise<number> {
-  // (A) Filmstrip / Thumbnail-Liste
+  // (A) Definitive Quelle: window.viewerData.slidePageCount. Pubembed
+  // schreibt das nach Init in die Page. Wir pollen bis 5s.
+  const fromViewer = await page
+    .evaluate(async () => {
+      const w = window as unknown as { viewerData?: { slidePageCount?: number } };
+      for (let i = 0; i < 50; i++) {
+        const n = w.viewerData?.slidePageCount;
+        if (typeof n === "number" && n > 0) return n;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return 0;
+    })
+    .catch(() => 0);
+  if (fromViewer > 0) return fromViewer;
+
+  // (B) Fallback: DOM-Selektoren wenn viewerData nicht da (alte Renderer)
   const fromDom = await page
     .evaluate(() => {
-      // Mehrere Quellen probieren — wir nehmen das Maximum, weil manche
-      // duplizieren (Filmstrip + SVG-Liste).
       const candidates = [
         document.querySelectorAll("[data-thumb-index]").length,
         document.querySelectorAll(".punch-filmstrip-thumbnail").length,
-        document.querySelectorAll("svg.punch-viewer-svgpage-svg").length,
-        document.querySelectorAll(".punch-viewer-svgpage-wrapper").length,
-        // pubembed exposes <a> tags with "id.p<N>" anchors in the nav
         Array.from(document.querySelectorAll('a[href*="#slide=id."]')).length,
       ];
-      // Bonus: Google legt manchmal ein `__viewer_data__`-Script inline,
-      // das die slide-IDs enthält. Wir parsen es defensiv.
-      let fromScript = 0;
-      for (const sc of Array.from(document.querySelectorAll("script"))) {
-        const text = sc.textContent ?? "";
-        if (text.includes("slide_id")) {
-          const matches = text.match(/"slide_id"/g);
-          if (matches) fromScript = Math.max(fromScript, matches.length);
-        }
-      }
-      return Math.max(0, ...candidates, fromScript);
+      return Math.max(0, ...candidates);
     })
     .catch(() => 0);
-
   if (fromDom > 0) return fromDom;
 
-  // (B) Letzter Strohhalm: zumindest die aktuelle Folie zählt.
+  // (C) Letzter Strohhalm: zumindest die aktuelle Folie zählt.
   const visible = await page
     .$("svg.punch-viewer-svgpage-svg, .punch-viewer-svgpage-wrapper svg, iframe.punch-present-iframe")
     .then((el) => (el ? 1 : 0))
@@ -370,18 +389,13 @@ async function detectSlideCount(page: Page): Promise<number> {
  * Click-Tricks, weil das in der aktuellen Renderer-Version stabil ist und
  * uns vor State-Bugs in Google's slide-cache schützt.
  */
-async function captureSlide(
+async function captureCurrentSlide(
   page: Page,
   parsed: ParsedGSlidesUrl,
   slideIndex: number,
 ): Promise<ImportedSlide> {
-  const url = buildSlideUrl(parsed.canonicalPubembedUrl, slideIndex + 1);
-  await page.goto(url, {
-    waitUntil: "domcontentloaded",
-    timeout: 30_000,
-  });
-  await waitForSlideReady(page);
-  // Kurze Karenz nach Navigation — Google animiert den Slide-In.
+  // Annahme: die Page steht bereits auf der richtigen Folie (Caller
+  // navigiert per ArrowRight). Kurze Karenz für Slide-In-Animation.
   await sleep(400);
 
   // 1) Placeholder-Extraktion aus dem DOM. Wir lesen ALLE TextNodes der
