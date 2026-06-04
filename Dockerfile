@@ -27,7 +27,16 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # ffmpeg: needed by /api/media/[id]/frame for the wizard's live thumbnail
 # preview (single-frame extraction). Runs in-process for sub-200ms response —
 # the worker queue would add too much latency for the interactive UI.
-RUN apk add --no-cache ffmpeg
+#
+# chromium: needed by /api/gslides/import for interactive Google-Slides
+# thumbnail + placeholder-extraction at upload time. Same reason as ffmpeg
+# above — the worker queue would add unacceptable latency for a "Folien
+# laden"-Button. We re-use puppeteer-core (already in deps) and point it
+# at /usr/bin/chromium via CHROMIUM_PATH env (worker config).
+RUN apk add --no-cache ffmpeg chromium \
+  nss freetype harfbuzz ca-certificates ttf-freefont \
+  font-noto-emoji
+ENV CHROMIUM_PATH=/usr/bin/chromium
 RUN addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 nextjs
 COPY --from=builder /app/public ./public
