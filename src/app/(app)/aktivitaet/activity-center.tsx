@@ -134,7 +134,7 @@ export function ActivityCenter({
   const [kindFilter, setKindFilter] = React.useState<KindFilter>("all");
   const [temperatureFilter, setTemperatureFilter] =
     React.useState<TemperatureFilter>("all");
-  const [dateRange, setDateRange] = React.useState<DateRangeKey>("7d");
+  const [dateRange, setDateRange] = React.useState<DateRangeKey>("today");
   const [search, setSearch] = React.useState("");
 
   // ── Data-State ────────────────────────────────────────────────────
@@ -896,16 +896,24 @@ function FeedSkeleton() {
 
 function computeDateRange(key: DateRangeKey): { from: string; to: string } {
   const now = new Date();
-  const to = now.toISOString();
+  // `to` immer auf Ende des aktuellen Tages legen — nicht auf `now`. Sonst
+  // werden Events, die NACH dem Verbindungs-Aufbau eintreffen, vom Filter
+  // ausgeschlossen (`event.ts > to`) und Du musst reloaden um sie zu sehen.
+  // Der Server-SSE-Tick bumpt das `to` zusätzlich auf jedem Poll auf live
+  // `now`, damit auch Sessions, die über Mitternacht laufen, korrekt sind.
+  const to = new Date(now);
+  to.setHours(23, 59, 59, 999);
   const from = new Date(now);
   if (key === "today") {
     from.setHours(0, 0, 0, 0);
   } else if (key === "7d") {
     from.setDate(now.getDate() - 7);
+    from.setHours(0, 0, 0, 0);
   } else if (key === "30d") {
     from.setDate(now.getDate() - 30);
+    from.setHours(0, 0, 0, 0);
   }
-  return { from: from.toISOString(), to };
+  return { from: from.toISOString(), to: to.toISOString() };
 }
 
 function computeFallbackStats(rows: ActivityFeedRow[]): LeadDrawerData["stats"] {

@@ -120,6 +120,11 @@ export async function GET(req: NextRequest) {
       const tickAppend = async () => {
         if (closed) return;
         try {
+          // `to` auf JETZT bumpen — sonst werden Events, die NACH dem
+          // SSE-Verbindungs-Aufbau eintreffen, vom Server-Filter
+          // ausgeschlossen. Der User müsste die Seite reloaden um neue
+          // Aktivitäten zu sehen.
+          filters.to = new Date();
           const feed = await getActivityFeed(userId, filters);
           let appended = 0;
           // Reverse: älteste neue Row zuerst, damit der Client chronologisch
@@ -156,6 +161,9 @@ export async function GET(req: NextRequest) {
       const tickCounts = async () => {
         if (closed) return;
         try {
+          // Wie in tickAppend: `to` auf JETZT bumpen damit live
+          // angekommene Events in den Counts auftauchen.
+          filters.to = new Date();
           const counts: ActivityCounts = await getActivityCounts(
             userId,
             filters,
