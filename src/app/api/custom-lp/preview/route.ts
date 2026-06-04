@@ -24,6 +24,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUserApi } from "@/lib/auth-guard";
+import { substitute } from "@/lib/placeholders/substitute";
 
 const previewSchema = z.object({
   html: z.string().min(1).max(2 * 1024 * 1024), // 2 MB cap auf rohem HTML
@@ -47,21 +48,16 @@ const DEMO_LEAD = {
 
 /**
  * Ersetzt `{{key}}` und `{{key|fallback}}` Placeholder im HTML.
- * Bewusst sehr simpel — der echte Renderer (Agent B) macht das gleiche,
- * dies ist die clientseitige Vorschau und muss nicht 1:1 sein.
+ * Delegiert an die zentrale `substitute()`-Funktion, damit dieselbe
+ * Lookup-Logik wie im echten Renderer greift (case-insensitive, Mapping-
+ * Auflösung, Fallback). Die Preview kennt KEIN Mapping — sie nutzt die
+ * Demo-Lead-Daten direkt.
  */
 function applyPlaceholders(
   html: string,
   data: Record<string, string>,
 ): string {
-  return html.replace(
-    /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\|([^}]*))?\}\}/g,
-    (_match, key: string, fallback?: string) => {
-      const val = data[key];
-      if (val && val.length > 0) return val;
-      return (fallback ?? "").trim();
-    },
-  );
+  return substitute(html, data, undefined, "double-brace-fallback");
 }
 
 /**

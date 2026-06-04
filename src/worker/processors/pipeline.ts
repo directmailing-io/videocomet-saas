@@ -51,6 +51,7 @@ import { runThumbnailExtract } from "./thumbnail-extract";
 import { runQrGenerate } from "./qr-generate";
 import { runLandingPageCreate } from "./landingpage-create";
 import { runDocxModify } from "./docx-modify";
+import { substitute as substitutePlaceholder } from "@/lib/placeholders/substitute";
 import { runDocxToPdf } from "./docx-to-pdf";
 import { runPdfCompress } from "./pdf-compress";
 import { runPdfUpload } from "./pdf-upload";
@@ -245,10 +246,15 @@ function pickField(
  * (raw column-mapping output) and adds auto-derived fields so the template
  * author can use `{{landingpageUrl}}`, `{{firstName}}`, `{{lastName}}`
  * directly even if those columns aren't in the source spreadsheet.
+ *
+ * Wenn das `placeholderMapping` (neues Format) gesetzt ist, gewinnen seine
+ * Werte über die Alias-Heuristik — dadurch greift die User-Wahl aus der
+ * Mapping-Stage konsistent in PDF + Video.
  */
 function buildDocxVars(
   leadData: Record<string, string>,
   landingpageUrl: string,
+  mapping?: Record<string, string> | Record<string, { column?: string; fallback?: string }>,
 ): Record<string, string> {
   const firstName = pickField(leadData, [
     "firstName",
@@ -262,13 +268,28 @@ function buildDocxVars(
     "last_name",
     "nachname",
   ]);
-  return {
+  const base: Record<string, string> = {
     ...leadData,
     landingpageUrl,
     landingpage_url: landingpageUrl,
     firstName,
     lastName,
   };
+  // Wenn der User explizit gemappt hat, schreiben wir die aufgelösten Werte
+  // unter dem PLATZHALTER-Key in die Vars-Map — der nachgelagerte
+  // docxtemplater ersetzt `{{key}}` dann mit dem korrekten Wert.
+  if (mapping) {
+    for (const key of Object.keys(mapping)) {
+      const v = substitutePlaceholder(
+        `{{${key}}}`,
+        leadData,
+        mapping,
+        "double-brace",
+      );
+      if (v) base[key] = v;
+    }
+  }
+  return base;
 }
 
 /**
@@ -302,6 +323,17 @@ export async function pipelineProcessor(
 
   const skipVideo = skipVideoFlag || videoAlreadyDone;
   const skipPdf = skipPdfFlag || pdfAlreadyDone;
+
+  // Platzhalter-Mapping aus dem Run extrahieren. Liegt seit 2026-06-02 als
+  // `placeholderMapping` (neues Format) in `runs.column_mapping`. Bestehende
+  // Runs haben evtl. nur das Legacy-`mapping` (Record<string,string>) — die
+  // zentrale `substitute()` versteht beides via `resolveMapping`.
+  const storedCm =
+    (run.columnMapping as {
+      mapping?: Record<string, string>;
+      placeholderMapping?: Record<string, { column?: string; fallback?: string }>;
+    } | null) ?? {};
+  const placeholderMapping = storedCm.placeholderMapping ?? storedCm.mapping;
 
   const leadLabel = `Lead ${lead.rowIndex + 1}`;
   const pipelineStartedAt = Date.now();
@@ -366,6 +398,7 @@ export async function pipelineProcessor(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             segments: (campaign.segments as any) ?? [],
             leadData: (lead.data ?? {}) as Record<string, string>,
+            placeholderMapping,
             pip: {
               position: campaign.pipPosition?.includes("right")
                 ? "right"
@@ -446,6 +479,7 @@ export async function pipelineProcessor(
             leadData: (lead.data ?? {}) as Record<string, string>,
             rowIndex: lead.rowIndex,
             slugTemplate: campaign.slugTemplate ?? null,
+            placeholderMapping,
             domainId: campaign.domainId ?? null,
             customLpVersionId,
             customLpHost,
@@ -589,7 +623,7 @@ export async function pipelineProcessor(
           runDocxModify({
             outDir: workDir,
             googleDocsUrl: campaign.pdfGoogleDocsUrl!,
-            vars: buildDocxVars(lead.data ?? {}, pageUrl!),
+            vars: buildDocxVars(lead.data ?? {}, pageUrl!, placeholderMapping),
             qrPngPath,
             thumbJpgPath: thumbFilePath,
           }),

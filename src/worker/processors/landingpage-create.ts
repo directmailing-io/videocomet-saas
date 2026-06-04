@@ -27,6 +27,10 @@ import { db } from "@/lib/db";
 import { leads, userDomains } from "@/lib/db/schema";
 import { generateSlug } from "@/lib/slug";
 import { updateLeadStatus } from "@/lib/db/queries/leads";
+import type {
+  LegacyMapping,
+  PlaceholderMapping,
+} from "@/lib/placeholders/types";
 
 export interface LandingPageInput {
   leadId: string;
@@ -37,6 +41,12 @@ export interface LandingPageInput {
   rowIndex: number;
   /** Slug template from the campaign, e.g. `{firstName}-{lastName}`. */
   slugTemplate: string | null;
+  /**
+   * Optionales Placeholder-Mapping aus `runs.column_mapping.placeholderMapping`.
+   * Wenn gesetzt, gewinnt es im Slug-Template vor der Alias-Logik (z. B.
+   * wenn der User explizit `firstName` → `Anrede` gemappt hat).
+   */
+  placeholderMapping?: PlaceholderMapping | LegacyMapping;
   /** Optional custom-domain id (the campaign chose a custom domain). */
   domainId: string | null;
   /**
@@ -131,6 +141,7 @@ export async function runLandingPageCreate(
   const slug = await generateSlug({
     template: input.slugTemplate,
     leadData: input.leadData,
+    mapping: input.placeholderMapping,
     isAvailable,
     fallbackId: input.rowIndex,
   });

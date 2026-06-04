@@ -26,6 +26,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { RunWizardStepPlaceholders } from "./run-wizard-step-placeholders";
 
 export interface RunWizardProps {
   campaignId: string;
@@ -70,6 +71,19 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
   const [preview, setPreview] = React.useState<ParsedPreview | null>(null);
 
   const [mapping, setMapping] = React.useState<Record<string, string>>({});
+
+  /**
+   * Steuert, welche Variante des Mapping-Steps angezeigt wird:
+   *   - "placeholder"  → neuer einheitlicher Platzhalter-Mapper (Agent A's
+   *                      `GET /api/runs/[id]/placeholders` Backend)
+   *   - "legacy"       → alter 1:1-Mapping-Step als Fallback, falls der
+   *                      Endpoint (noch) nicht verfügbar ist
+   *   - "auto"         → Default; entscheidet die Step-Komponente selbst
+   */
+  const [mappingMode, setMappingMode] = React.useState<
+    "auto" | "placeholder" | "legacy"
+  >("auto");
+  const [fallbackReason, setFallbackReason] = React.useState<string | null>(null);
 
   /** Create the draft run lazily when the user clicks "Weiter" from step 0. */
   async function ensureRunCreated(): Promise<string | null> {
@@ -161,15 +175,20 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
     setSubmitting(true);
     setError(null);
     try {
-      const mr = await fetch(`/api/runs/${runId}/mapping`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ columnMapping: mapping }),
-      });
-      if (!mr.ok) {
-        const j = await mr.json().catch(() => ({}));
-        setError(j?.error ?? "Mapping konnte nicht gespeichert werden.");
-        return;
+      // Nur im Legacy-Mode hier mappen — der neue Platzhalter-Step speichert
+      // sein Mapping bereits beim Verlassen, ein zweiter PUT würde den
+      // gerade gesetzten `placeholderMapping`-Eintrag überschreiben.
+      if (mappingMode === "legacy") {
+        const mr = await fetch(`/api/runs/${runId}/mapping`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ columnMapping: mapping }),
+        });
+        if (!mr.ok) {
+          const j = await mr.json().catch(() => ({}));
+          setError(j?.error ?? "Mapping konnte nicht gespeichert werden.");
+          return;
+        }
       }
       const sr = await fetch(`/api/runs/${runId}/start`, { method: "POST" });
       const sj = await sr.json();
@@ -368,51 +387,76 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Spalten-Mapping</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-ink-muted">
-                Ordne unseren Platzhaltern die passenden Spalten aus deiner Liste zu.
-                Nicht zugewiesene Felder bleiben leer.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {STANDARD_PLACEHOLDERS.map((ph) => (
-                  <div key={ph.key}>
-                    <Label htmlFor={`map-${ph.key}`}>
-                      {`{{`}
-                      {ph.key}
-                      {`}}`} . {ph.label}
-                    </Label>
-                    <Select
-                      value={mapping[ph.key] ?? "__none__"}
-                      onValueChange={(v) =>
-                        setMapping((m) => {
-                          const next = { ...m };
-                          if (v === "__none__") delete next[ph.key];
-                          else next[ph.key] = v;
-                          return next;
-                        })
-                      }
-                    >
-                      <SelectTrigger id={`map-${ph.key}`}>
-                        <SelectValue placeholder="Spalte wählen" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">— keine —</SelectItem>
-                        {preview.headers.map((h) => (
-                          <SelectItem key={h} value={h}>
-                            {h}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {/*
+            Neuer einheitlicher Platzhalter-Mapping-Step (Agent A's Backend).
+            Wenn der GET-Endpoint einen Fehler liefert (z. B. weil das
+            Backend noch nicht deployed ist), wechseln wir transparent auf
+            den Legacy-1:1-Mapper unten.
+          */}
+          {mappingMode !== "legacy" && runId && (
+            <RunWizardStepPlaceholders
+              runId={runId}
+              previewRows={preview.rows}
+              onContinue={() => setStep(2)}
+              onFallbackRequested={(reason) => {
+                setMappingMode("legacy");
+                setFallbackReason(reason);
+              }}
+            />
+          )}
+
+          {mappingMode === "legacy" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Spalten-Mapping</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {fallbackReason && (
+                  <p className="text-xs text-warn">
+                    Fallback aktiv: {fallbackReason}
+                  </p>
+                )}
+                <p className="text-sm text-ink-muted">
+                  Ordne unseren Platzhaltern die passenden Spalten aus deiner Liste zu.
+                  Nicht zugewiesene Felder bleiben leer.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {STANDARD_PLACEHOLDERS.map((ph) => (
+                    <div key={ph.key}>
+                      <Label htmlFor={`map-${ph.key}`}>
+                        {`{{`}
+                        {ph.key}
+                        {`}}`} . {ph.label}
+                      </Label>
+                      <Select
+                        value={mapping[ph.key] ?? "__none__"}
+                        onValueChange={(v) =>
+                          setMapping((m) => {
+                            const next = { ...m };
+                            if (v === "__none__") delete next[ph.key];
+                            else next[ph.key] = v;
+                            return next;
+                          })
+                        }
+                      >
+                        <SelectTrigger id={`map-${ph.key}`}>
+                          <SelectValue placeholder="Spalte wählen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— keine —</SelectItem>
+                          {preview.headers.map((h) => (
+                            <SelectItem key={h} value={h}>
+                              {h}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -452,20 +496,27 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
           Zurück
         </Button>
         {step < STEPS.length - 1 ? (
-          <Button
-            onClick={handleNext}
-            loading={submitting || creating}
-            disabled={
-              step === 0
-                ? uploadKind === "file"
-                  ? !file
-                  : !sheetUrl.trim()
-                : false
-            }
-            iconRight={<ArrowRight className="size-4" />}
-          >
-            {step === 0 ? "Datei einlesen" : "Weiter"}
-          </Button>
+          // Im neuen Placeholder-Step rendert die Komponente ihren eigenen
+          // „Weiter"-Button (mit Validation). Wir blenden den globalen Footer-
+          // Button dann aus, damit die UX nicht doppelt wirkt.
+          step === 1 && mappingMode !== "legacy" ? (
+            <span />
+          ) : (
+            <Button
+              onClick={handleNext}
+              loading={submitting || creating}
+              disabled={
+                step === 0
+                  ? uploadKind === "file"
+                    ? !file
+                    : !sheetUrl.trim()
+                  : false
+              }
+              iconRight={<ArrowRight className="size-4" />}
+            >
+              {step === 0 ? "Datei einlesen" : "Weiter"}
+            </Button>
+          )
         ) : (
           <Button
             onClick={handleNext}

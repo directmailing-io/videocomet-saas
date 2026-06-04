@@ -45,6 +45,11 @@ import {
   renderUnreachablePlaceholder,
 } from "../lib/website-render-pipeline";
 import type { Segment } from "@/lib/segments/types";
+import { substitute } from "@/lib/placeholders/substitute";
+import type {
+  LegacyMapping,
+  PlaceholderMapping,
+} from "@/lib/placeholders/types";
 
 export interface VideoRenderInput {
   outDir: string;
@@ -66,6 +71,12 @@ export interface VideoRenderInput {
   /** Lead data for placeholder substitution in text segments. */
   leadData?: Record<string, string>;
   /**
+   * Optionales Platzhalter-Mapping aus `runs.column_mapping.placeholderMapping`.
+   * Wenn nicht vorhanden, fällt die Substitution auf das alte Verhalten zurück
+   * (key === column) — siehe `substitute()` in `@/lib/placeholders/substitute`.
+   */
+  placeholderMapping?: PlaceholderMapping | LegacyMapping;
+  /**
    * Per-lead public landing-page URL. Threaded through so the gdocs
    * personalisation can substitute `{{landingpageUrl}}` placeholders. When
    * unset, the placeholder substitution falls back to empty string.
@@ -77,12 +88,18 @@ export interface VideoRenderInput {
   landingpageUrl?: string;
 }
 
-/** Replace {{key}} placeholders in any string with values from leadData. */
-function applyPlaceholders(s: string, data: Record<string, string> | undefined): string {
+/**
+ * Replace {{key}} placeholders in any string with values from leadData.
+ * Delegiert an die zentrale `substitute()` aus `@/lib/placeholders`, damit
+ * das gleiche Lookup-Verhalten wie in PDF/LP greift.
+ */
+function applyPlaceholders(
+  s: string,
+  data: Record<string, string> | undefined,
+  mapping?: PlaceholderMapping | LegacyMapping,
+): string {
   if (!data) return s;
-  return s.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (_, key: string) => {
-    return data[key] ?? "";
-  });
+  return substitute(s, data, mapping, "double-brace");
 }
 
 /**
@@ -118,10 +135,16 @@ function pickFieldCI(
  *   - `{{landingpageUrl}}` / `{{landingpage_url}}`
  *   - `{{firstName}}` / `{{lastName}}` (case-insensitively derived from
  *     common column names like "Vorname", "first_name", …)
+ *
+ * Wenn ein `placeholderMapping` (neues Format) übergeben wird, kommen
+ * SEINE Werte zuerst — pro Key wird die Spalte aus dem Mapping aufgelöst,
+ * sodass der User in der Mapping-Stage explizit z. B. `vorname` → `Anrede`
+ * legen kann.
  */
 function buildGDocsVars(
   leadData: Record<string, string>,
   landingpageUrl: string | undefined,
+  mapping?: PlaceholderMapping | LegacyMapping,
 ): Record<string, string> {
   const lpUrl = landingpageUrl ?? "";
   const firstName = pickFieldCI(leadData, [
@@ -136,13 +159,33 @@ function buildGDocsVars(
     "last_name",
     "nachname",
   ]);
-  return {
+  const base: Record<string, string> = {
     ...leadData,
     landingpageUrl: lpUrl,
     landingpage_url: lpUrl,
     firstName,
     lastName,
   };
+  // Mapping-Overrides anwenden — pro Key der im Mapping steht, schreiben wir
+  // den per `substitute()` aufgelösten Wert in base. So sieht der Docs-
+  // Renderer (der die Vars 1:1 in `{{key}}` einsetzt) das vom User gewählte
+  // Mapping ohne dass wir die Doc-Engine selbst anfassen müssen.
+  if (mapping) {
+    for (const key of Object.keys(extractMappingKeys(mapping))) {
+      const v = substitute(`{{${key}}}`, leadData, mapping, "double-brace");
+      if (v) base[key] = v;
+    }
+  }
+  return base;
+}
+
+/** Liefert die im Mapping enthaltenen Keys, unabhängig vom Format. */
+function extractMappingKeys(
+  mapping: PlaceholderMapping | LegacyMapping,
+): Record<string, true> {
+  const out: Record<string, true> = {};
+  for (const k of Object.keys(mapping)) out[k] = true;
+  return out;
 }
 
 export interface VideoRenderOutput {
@@ -333,6 +376,7 @@ export async function runVideoRender(
     await renderSegmentsBase({
       segments: input.segments,
       leadData: input.leadData,
+      placeholderMapping: input.placeholderMapping,
       landingpageUrl: input.landingpageUrl,
       outDir: input.outDir,
       basePath,
@@ -388,6 +432,7 @@ export async function runVideoRender(
 async function renderSegmentsBase(opts: {
   segments: Segment[];
   leadData?: Record<string, string>;
+  placeholderMapping?: PlaceholderMapping | LegacyMapping;
   landingpageUrl?: string;
   outDir: string;
   basePath: string;
@@ -425,7 +470,11 @@ async function renderSegmentsBase(opts: {
     try {
       if (seg.kind === "text") {
         await renderTextSegment({
-          text: applyPlaceholders(seg.text, opts.leadData),
+          text: applyPlaceholders(
+            seg.text,
+            opts.leadData,
+            opts.placeholderMapping,
+          ),
           bgColor: seg.bgColor,
           textColor: seg.textColor,
           fontSize: seg.fontSize,
@@ -502,7 +551,11 @@ async function renderSegmentsBase(opts: {
             durationSec: durationMs / 1000,
           });
         } else {
-          const vars = buildGDocsVars(opts.leadData ?? {}, opts.landingpageUrl);
+          const vars = buildGDocsVars(
+            opts.leadData ?? {},
+            opts.landingpageUrl,
+            opts.placeholderMapping,
+          );
           const gdocsOutDir = join(opts.outDir, `gdocs-${i}`);
           try {
             const fr = await renderPersonalizedGDocs({

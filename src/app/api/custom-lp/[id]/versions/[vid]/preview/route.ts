@@ -25,6 +25,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getTemplate, getVersion } from "@/lib/db/queries/custom-lp";
 import { readFile } from "@/lib/custom-lp/storage";
+import { substitute } from "@/lib/placeholders/substitute";
 
 const DEMO_LEAD: Record<string, string> = {
   firstName: "Peter",
@@ -36,14 +37,7 @@ const DEMO_LEAD: Record<string, string> = {
 };
 
 function applyPlaceholders(input: string): string {
-  return input.replace(
-    /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\|([^}]*))?\}\}/g,
-    (_m, key: string, fallback?: string) => {
-      const v = DEMO_LEAD[key];
-      if (v && v.length > 0) return v;
-      return (fallback ?? "").trim();
-    },
-  );
+  return substitute(input, DEMO_LEAD, undefined, "double-brace-fallback");
 }
 
 /**
