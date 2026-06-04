@@ -74,33 +74,46 @@ const TERMINAL_PREFLIGHT_STATUSES: readonly string[] = [
   "unknown_error",
 ];
 
-/** Candidate column-names for the Lead's website URL, in priority order. */
+/**
+ * Kandidaten-Spalten für die Website-URL eines Leads, in Prioritäts-
+ * Reihenfolge. Die Liste enthält die typischen Schreibvarianten — der
+ * normalisierte Lookup in `pickWebsiteUrl` macht sie zusätzlich
+ * separator-tolerant (`Website-URL`, `website_url`, …).
+ */
 const WEBSITE_URL_KEYS: readonly string[] = [
   "websiteUrl",
+  "website-url",
+  "website_url",
   "website",
   "url",
   "webseite",
+  "homepage",
+  "domain",
 ];
 
 /**
  * Resolves the first non-empty website URL from `leads.data` using the
- * known key set. Falls back to a case-insensitive scan so CSV authors who
- * shipped `WebsiteURL` or `Website` get matched too.
+ * known key set. Falls back to einer normalisierten Suche — Bindestriche,
+ * Unterstriche und Spaces werden für den Vergleich entfernt, sodass auch
+ * `Website-URL`, `website_url`, `web site URL` matchen.
  */
+function normaliseFieldKey(k: string): string {
+  return k.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function pickWebsiteUrl(data: Record<string, string> | null | undefined): string | null {
   if (!data) return null;
   for (const k of WEBSITE_URL_KEYS) {
     const v = data[k];
     if (v && v.trim()) return v.trim();
   }
-  // Case-insensitive fallback — built lazily because most rows hit the
-  // direct lookup above.
-  const lower = new Map<string, string>();
+  // Normalisiertes Fallback — separator-tolerant + case-insensitive.
+  const normalised = new Map<string, string>();
   for (const [k, v] of Object.entries(data)) {
-    lower.set(k.toLowerCase(), v);
+    normalised.set(normaliseFieldKey(k), v);
   }
   for (const k of WEBSITE_URL_KEYS) {
-    const v = lower.get(k.toLowerCase());
+    const v = normalised.get(normaliseFieldKey(k));
     if (v && v.trim()) return v.trim();
   }
   return null;

@@ -239,10 +239,24 @@ export async function listPreflightLeads(
 
 function projectPreflightLead(l: typeof leads.$inferSelect): PreflightLeadRow {
   const data = (l.data ?? {}) as Record<string, unknown>;
+  // Normalisiertes Lookup — Bindestriche/Unterstriche/Spaces werden für
+  // den Match ignoriert. Damit greift `Website-URL` auf den Alias
+  // `websiteUrl`, `vor_name` auf `Vorname` etc.
+  const normalise = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normalisedData = new Map<string, string>();
+  for (const [k, v] of Object.entries(data)) {
+    if (typeof v === "string" && v.trim().length > 0) {
+      normalisedData.set(normalise(k), v.trim());
+    }
+  }
   const pick = (keys: string[]): string | null => {
     for (const k of keys) {
       const v = data[k];
       if (typeof v === "string" && v.trim().length > 0) return v.trim();
+    }
+    for (const k of keys) {
+      const v = normalisedData.get(normalise(k));
+      if (v) return v;
     }
     return null;
   };
