@@ -180,9 +180,16 @@ export function ActivityCenter({
     if (kindFilter !== "all") p.set("kind", kindFilter);
     if (temperatureFilter !== "all") p.set("temperature", temperatureFilter);
     if (dateRange !== "custom") {
-      const { from, to } = computeDateRange(dateRange);
-      p.set("from", from);
-      p.set("to", to);
+      // Defense-in-Depth: ein kaputter Date-Konstruktor (z.B. exotische
+      // Browser-Locale) darf nicht die gesamte Seite crashen.
+      try {
+        const { from, to } = computeDateRange(dateRange);
+        if (from) p.set("from", from);
+        if (to) p.set("to", to);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("[activity-center] computeDateRange threw:", err);
+      }
     }
     if (search.trim().length > 0) p.set("search", search.trim());
     p.set("limit", String(PAGE_LIMIT));
@@ -206,13 +213,19 @@ export function ActivityCenter({
 
         // Feed (Pflicht)
         if (feedRes.status === "fulfilled" && feedRes.value.ok) {
-          const data = (await feedRes.value.json()) as {
-            rows: ActivityFeedRow[];
-            nextCursor: string | null;
-          };
-          setRows(data.rows ?? []);
-          setNextCursor(data.nextCursor ?? null);
-          setLoadingState("ready");
+          try {
+            const data = (await feedRes.value.json()) as {
+              rows?: ActivityFeedRow[];
+              nextCursor?: string | null;
+            };
+            setRows(Array.isArray(data?.rows) ? data.rows : []);
+            setNextCursor(data?.nextCursor ?? null);
+            setLoadingState("ready");
+          } catch {
+            setRows([]);
+            setNextCursor(null);
+            setLoadingState("error");
+          }
         } else {
           setRows([]);
           setNextCursor(null);
@@ -221,8 +234,16 @@ export function ActivityCenter({
 
         // Counts (best-effort — Feed darf auch ohne sie rendern)
         if (countsRes.status === "fulfilled" && countsRes.value.ok) {
-          const c = (await countsRes.value.json()) as ActivityCounts;
-          setCounts(c);
+          try {
+            const c = (await countsRes.value.json()) as ActivityCounts;
+            // Sanity: nur setzen wenn das Shape grob passt — sonst crasht
+            // counts.total.toLocaleString() im Topbar.
+            if (c && typeof c === "object" && typeof c.total === "number") {
+              setCounts(c);
+            }
+          } catch {
+            /* counts sind best-effort — Feed läuft auch ohne */
+          }
         }
       } catch {
         if (!cancelled) setLoadingState("error");
@@ -274,6 +295,12 @@ export function ActivityCenter({
     queryString,
     enabled: loadingState !== "initial",
     onAppend: React.useCallback((row: ActivityFeedRow) => {
+      // Defense-in-Depth: ein malformed SSE-Payload darf die Liste nicht
+      // zerschießen. Mindestens eventId + lead-objekt sind Pflicht — sonst
+      // crasht der FeedRow-Render an `row.lead.name`.
+      if (!row || typeof row !== "object" || !row.eventId || !row.lead) {
+        return;
+      }
       setRows((prev) => {
         // Duplikate vermeiden — Backend sendet zwar IDs, aber besser safe.
         if (prev.some((r) => r.eventId === row.eventId)) return prev;
@@ -291,15 +318,23 @@ export function ActivityCenter({
         }`;
       }
       // Fade-out nach 1.2s — neuer Highlight verschwindet.
-      window.setTimeout(() => {
-        setNewRowIds((prev) => {
-          const next = new Set(prev);
-          next.delete(row.eventId);
-          return next;
-        });
-      }, 1200);
+      if (typeof window !== "undefined") {
+        window.setTimeout(() => {
+          setNewRowIds((prev) => {
+            if (!prev.has(row.eventId)) return prev;
+            const next = new Set(prev);
+            next.delete(row.eventId);
+            return next;
+          });
+        }, 1200);
+      }
     }, []),
-    onCounts: React.useCallback((c: ActivityCounts) => setCounts(c), []),
+    onCounts: React.useCallback((c: ActivityCounts) => {
+      // Sanity-Check: kaputtes Payload würde sonst Topbar/StatsRail crashen.
+      if (c && typeof c === "object" && typeof c.total === "number") {
+        setCounts(c);
+      }
+    }, []),
   });
 
   // ── Pagination: Load-More on Scroll-Bottom ────────────────────────
@@ -707,9 +742,7 @@ function ActivityTopbar({
         </div>
         <p className="text-sm text-ink-muted leading-relaxed">
           {counts
-            ? `${counts.total.toLocaleString("de-DE")} Events · ${counts.uniqueLeads.toLocaleString(
-                "de-DE",
-              )} Leads`
+            ? `${formatNumber(counts.total)} Events · ${formatNumber(counts.uniqueLeads)} Leads`
             : streamState === "connecting"
               ? "Lädt Übersicht…"
               : "0 Events · 0 Leads"}
@@ -836,9 +869,7 @@ function ExportDialog({
         <div className="rounded-squircle-sm border border-line bg-surface-muted/40 px-4 py-3 text-sm">
           <p className="font-semibold text-ink mb-1">
             {counts
-              ? `${counts.total.toLocaleString("de-DE")} Events · ${counts.uniqueLeads.toLocaleString(
-                  "de-DE",
-                )} Leads`
+              ? `${formatNumber(counts.total)} Events · ${formatNumber(counts.uniqueLeads)} Leads`
               : "Auswahl wird berechnet…"}
           </p>
           <p className="text-xs text-ink-muted">Filter: {filterSummary}</p>
@@ -894,6 +925,20 @@ function FeedSkeleton() {
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────
 
+/**
+ * `Number#toLocaleString` crasht zwar nicht direkt, aber unser API-Vertrag
+ * verspricht ein `number`, und JSON-Parsing einer kaputten Response könnte
+ * uns ein `undefined`/`null` unterjubeln. Defense-in-Depth: Coerce zu 0.
+ */
+function formatNumber(n: unknown): string {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "0";
+  try {
+    return n.toLocaleString("de-DE");
+  } catch {
+    return String(Math.trunc(n));
+  }
+}
+
 function computeDateRange(key: DateRangeKey): { from: string; to: string } {
   const now = new Date();
   // `to` immer auf Ende des aktuellen Tages legen — nicht auf `now`. Sonst
@@ -913,7 +958,12 @@ function computeDateRange(key: DateRangeKey): { from: string; to: string } {
     from.setDate(now.getDate() - 30);
     from.setHours(0, 0, 0, 0);
   }
-  return { from: from.toISOString(), to: to.toISOString() };
+  // Sanity-Check: ungültige Daten (z.B. NaN nach Date-Math) dürfen nicht
+  // als ISO-String erzwungen werden — `Date#toISOString` wirft dann
+  // RangeError und crasht den Render.
+  const safeFrom = Number.isFinite(from.getTime()) ? from : now;
+  const safeTo = Number.isFinite(to.getTime()) ? to : now;
+  return { from: safeFrom.toISOString(), to: safeTo.toISOString() };
 }
 
 function computeFallbackStats(rows: ActivityFeedRow[]): LeadDrawerData["stats"] {
