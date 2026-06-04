@@ -240,17 +240,36 @@ export function WebcamMonitor({
     // bewusst nur bei src/startSec-Wechsel
   }, [webcamUrl, startSec]);
 
-  /* ── State-Prop → play() / pause() ────────────────────────────── */
+  /* ── State-Prop → play() / pause() ──────────────────────────────
+   * Bei JEDER Transition `nicht-playing → playing` springen wir auf
+   * `startSec` zurück. Im Scroll-Recorder gibt es kein "Pause-Resume" —
+   * jedes "playing" ist eine neue Aufnahme (Erst-Take oder Re-Take), nicht
+   * eine Fortsetzung. Würden wir nur am Ende reseten, würde ein vorzeitig
+   * gestoppter Take beim Re-Take an der alten Position weiterspielen.
+   */
+  const prevStateRef = React.useRef<typeof state>(state);
   React.useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
 
+    const prev = prevStateRef.current;
+    prevStateRef.current = state;
+
     if (state === "playing") {
-      // Wenn wir am/nach Ende sind, vorher auf startSec zurücksetzen,
-      // damit ein Re-Take auch tatsächlich neu losläuft.
-      if (el.currentTime >= effectiveEndSec - 0.01) {
+      // Re-Take / Erst-Take erkannt — Reset auf Folien-Anfang.
+      if (prev !== "playing") {
         try {
           el.currentTime = startSec;
+          setCurrentSec(startSec);
+        } catch {
+          /* ignore */
+        }
+      } else if (el.currentTime >= effectiveEndSec - 0.01) {
+        // Doppel-Defense: falls state-Watch verzögert auslöst und wir
+        // schon am Ende sind.
+        try {
+          el.currentTime = startSec;
+          setCurrentSec(startSec);
         } catch {
           /* ignore */
         }

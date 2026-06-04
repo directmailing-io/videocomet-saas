@@ -257,8 +257,13 @@ export function useWizardDraft(
     }
     if (isFresh && lastSavedAt === null) return;
 
-    setStatus("saving");
+    // WICHTIG: status NICHT hier (synchron beim Re-Render) auf "saving"
+    // setzen — wir setzen es erst INNERHALB des Timeouts. Sonst flackert
+    // die Pille bei jedem Tastenanschlag auf "Speichere…" und bleibt
+    // dauerhaft hängen, solange der User aktiv tippt (cleanup cancelt
+    // den Timeout vor dem tatsächlichen Save).
     const handle = window.setTimeout(() => {
+      setStatus("saving");
       const envelope: DraftEnvelope = {
         version: STORAGE_VERSION,
         savedAt: new Date().toISOString(),
