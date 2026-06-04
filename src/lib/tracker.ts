@@ -16,7 +16,10 @@
  * thread it through props.
  */
 
-const ENDPOINT = "/api/track/event";
+// Stealth-Path: viele Browser-AdBlocker (uBlock-Default-Filter, EasyList,
+// Brave-Shields) blockieren reflexartig Pfade die "track" oder "analytics"
+// enthalten. `/c` ist same-origin und unverdächtig.
+const ENDPOINT = "/c";
 
 export type TrackKind =
   | "page_view"

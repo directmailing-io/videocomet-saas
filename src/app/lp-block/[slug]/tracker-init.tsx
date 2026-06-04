@@ -85,21 +85,37 @@ export function TrackerInit({
 }
 
 /**
- * Fixed pill at the top of the viewport telling the internal tester that
- * tracking is disabled. Keep it subtle — leads should never see it (it only
- * renders when preview-mode is active), but if they did the language is
- * still neutral enough not to scare them.
+ * Sichtbarer Hinweis am oberen Rand: aktiver Vorschau-Modus DEAKTIVIERT
+ * jegliches Tracking — sonst wundert sich der Tester, warum sein
+ * Aktivitäts-Feed leer bleibt. Inklusive "Vorschau beenden"-Button der
+ * den Cookie löscht und neu lädt → live Tracking aktiv.
  */
 function PreviewBadge() {
+  function exitPreview() {
+    try {
+      // Cookie expiren + Page-State reset
+      document.cookie = "vc_preview=; Path=/; Max-Age=0; SameSite=Lax";
+      // URL-Param entfernen, sonst greift er sofort wieder
+      const url = new URL(window.location.href);
+      url.searchParams.delete("preview");
+      window.location.replace(url.toString());
+    } catch {
+      window.location.reload();
+    }
+  }
   return (
-    <div className="fixed left-1/2 top-3 z-[100] -translate-x-1/2">
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 border border-amber-300 px-3 py-1 text-xs font-semibold text-amber-900 shadow">
-        <span
-          className="inline-block size-1.5 rounded-full bg-amber-500"
-          aria-hidden="true"
-        />
-        Vorschau-Modus · kein Tracking
-      </span>
+    <div className="fixed left-1/2 top-3 z-[100] -translate-x-1/2 max-w-[92vw]">
+      <div className="flex items-center gap-2 rounded-full bg-amber-100 border border-amber-300 px-3 py-1.5 text-xs sm:text-sm font-semibold text-amber-900 shadow-lg">
+        <span className="inline-block size-2 rounded-full bg-amber-500 animate-pulse" aria-hidden="true" />
+        <span>Vorschau-Modus aktiv — Tracking ist deaktiviert</span>
+        <button
+          type="button"
+          onClick={exitPreview}
+          className="ml-1 rounded-full bg-amber-900 text-amber-50 px-2.5 py-0.5 text-[11px] font-bold hover:bg-amber-800 transition-colors"
+        >
+          Vorschau beenden
+        </button>
+      </div>
     </div>
   );
 }
