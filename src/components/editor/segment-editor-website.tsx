@@ -17,12 +17,19 @@ import type {
   WebCaptureMode,
   WebsiteSegment,
   ScrollFrame,
+  Segment,
 } from "@/lib/segments/types";
 import { ScrollRecorderModal } from "./scroll-recorder-modal";
 
 interface SegmentEditorWebsiteProps {
   segment: WebsiteSegment;
   onChange: (segment: WebsiteSegment) => void;
+  /** Bunny-CDN-URL des Webcam-Videos (für PiP-Sync im Scroll-Recorder). */
+  webcamUrl?: string | null;
+  /** Alle Segmente — für Index-Berechnung im Webcam-Monitor. */
+  allSegments?: Segment[];
+  /** Index dieses Segments innerhalb von `allSegments`. */
+  currentSegmentIndex?: number | null;
 }
 
 interface CaptureModeOption {
@@ -65,6 +72,9 @@ function formatMs(ms: number): string {
 export function SegmentEditorWebsite({
   segment,
   onChange,
+  webcamUrl,
+  allSegments,
+  currentSegmentIndex,
 }: SegmentEditorWebsiteProps) {
   const [recorderOpen, setRecorderOpen] = React.useState(false);
   const previewUrl = segment.fallbackUrl.trim();
@@ -200,6 +210,9 @@ export function SegmentEditorWebsite({
           onSave={(scrollFrames: ScrollFrame[]) =>
             onChange({ ...segment, scrollFrames })
           }
+          webcamUrl={webcamUrl ?? null}
+          allSegments={allSegments ?? null}
+          currentSegmentIndex={currentSegmentIndex ?? null}
         />
       )}
     </div>

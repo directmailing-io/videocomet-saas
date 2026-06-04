@@ -228,6 +228,9 @@ export function WizardStep3Editor({
   }
 
   const selectedSegment = segments.find((s) => s.id === selectedId) ?? null;
+  const selectedSegmentIndex = selectedSegment
+    ? segments.findIndex((s) => s.id === selectedSegment.id)
+    : null;
 
   // Wenn keine Webcam-Dauer bekannt: Großer Hinweis und kein Editor.
   // (Tritt bei alten Mediathek-Einträgen oder zu schnellem Klicken nach
@@ -499,6 +502,13 @@ export function WizardStep3Editor({
           mediaItems={mediaItems}
           webcamDurationMs={webcamDurationMs}
           otherSegmentsDurationMs={total - selectedSegment.durationMs}
+          webcamUrl={webcamUrl}
+          allSegments={segments}
+          currentSegmentIndex={
+            selectedSegmentIndex != null && selectedSegmentIndex >= 0
+              ? selectedSegmentIndex
+              : null
+          }
         />
       ) : segments.length > 0 ? (
         <Card className="p-6 text-center text-sm text-ink-muted">

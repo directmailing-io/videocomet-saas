@@ -49,6 +49,22 @@ export interface SegmentEditorProps {
    * Maximum für dieses Segment zu berechnen: webcam - other = maxForThis.
    */
   otherSegmentsDurationMs?: number;
+  /**
+   * Bunny-CDN-URL der Webcam-Aufnahme. Wird für die optionale
+   * Webcam-PiP-Vorschau im Scroll-Recorder durchgereicht.
+   */
+  webcamUrl?: string | null;
+  /**
+   * Alle Segmente der Timeline. Wird für die Berechnung der Webcam-
+   * Zeitfenster (segmentStartMs) im Scroll-Recorder benötigt.
+   */
+  allSegments?: Segment[];
+  /**
+   * Index dieses Segments innerhalb von `allSegments`. Null = kein
+   * Index bekannt (z. B. vor Selektion); in dem Fall ist der
+   * Webcam-Monitor-Toggle disabled.
+   */
+  currentSegmentIndex?: number | null;
 }
 
 const KIND_META: Record<SegmentKind, { label: string; Icon: React.ComponentType<{ className?: string }> }> = {
@@ -67,6 +83,9 @@ export function SegmentEditor({
   mediaItems,
   webcamDurationMs,
   otherSegmentsDurationMs,
+  webcamUrl,
+  allSegments,
+  currentSegmentIndex,
 }: SegmentEditorProps) {
   const meta = KIND_META[segment.kind];
   const Icon = meta.Icon;
@@ -119,6 +138,9 @@ export function SegmentEditor({
           segment={segment}
           onChange={onChange}
           mediaItems={mediaItems}
+          webcamUrl={webcamUrl ?? null}
+          allSegments={allSegments ?? null}
+          currentSegmentIndex={currentSegmentIndex ?? null}
         />
       </div>
     </Card>
@@ -129,10 +151,16 @@ function SegmentBody({
   segment,
   onChange,
   mediaItems,
+  webcamUrl,
+  allSegments,
+  currentSegmentIndex,
 }: {
   segment: Segment;
   onChange: (s: Segment) => void;
   mediaItems: SegmentEditorMediaItem[];
+  webcamUrl: string | null;
+  allSegments: Segment[] | null;
+  currentSegmentIndex: number | null;
 }) {
   switch (segment.kind) {
     case "text":
@@ -164,6 +192,9 @@ function SegmentBody({
         <SegmentEditorWebsite
           segment={segment}
           onChange={(s: WebsiteSegment) => onChange(s)}
+          webcamUrl={webcamUrl}
+          allSegments={allSegments ?? undefined}
+          currentSegmentIndex={currentSegmentIndex}
         />
       );
     case "gdocs":
@@ -171,6 +202,9 @@ function SegmentBody({
         <SegmentEditorGDocs
           segment={segment}
           onChange={(s: GDocsSegment) => onChange(s)}
+          webcamUrl={webcamUrl}
+          allSegments={allSegments ?? undefined}
+          currentSegmentIndex={currentSegmentIndex}
         />
       );
     case "slide":

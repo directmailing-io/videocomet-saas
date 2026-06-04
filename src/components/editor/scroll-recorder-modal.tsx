@@ -8,6 +8,8 @@ import {
   RotateCcw,
   Square,
   AlertCircle,
+  Video as VideoIcon,
+  VideoOff,
 } from "lucide-react";
 import {
   Dialog,
@@ -17,7 +19,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { ScrollFrame } from "@/lib/segments/types";
+import type { ScrollFrame, Segment } from "@/lib/segments/types";
+import { segmentStartMs } from "@/lib/segments/timeline";
+import { WebcamMonitor } from "./webcam-monitor";
 
 /**
  * Preview source – two mutually-exclusive variants that the modal
@@ -61,7 +65,25 @@ interface ScrollRecorderModalProps {
   segmentDurationMs: number;
   initialFrames?: ScrollFrame[];
   onSave: (frames: ScrollFrame[]) => void;
+  /**
+   * Webcam-PiP-Vorschau während der Aufnahme. Optional — wenn null oder
+   * leer, ist der Toggle disabled (mit Hinweis).
+   */
+  webcamUrl?: string | null;
+  /**
+   * Vollständige Segment-Liste der Timeline. Wird für das Berechnen
+   * der Webcam-Start/End-Sekunden benötigt.
+   */
+  allSegments?: Segment[] | null;
+  /**
+   * Index des aktuellen Segments innerhalb von `allSegments`. Null
+   * (oder ohne `allSegments`) → Toggle disabled.
+   */
+  currentSegmentIndex?: number | null;
 }
+
+/** localStorage-Key für die Persistenz des Webcam-Monitor-Toggles. */
+const WEBCAM_MONITOR_STORAGE_KEY = "vc:webcam-monitor:enabled";
 
 interface ScreenshotResult {
   status: "pending" | "running" | "done" | "failed";
@@ -110,11 +132,54 @@ export function ScrollRecorderModal({
   segmentDurationMs,
   initialFrames,
   onSave,
+  webcamUrl,
+  allSegments,
+  currentSegmentIndex,
 }: ScrollRecorderModalProps) {
   const [phase, setPhase] = React.useState<Phase>({ kind: "loading" });
   const [source, setSource] = React.useState<PreviewSource | null>(null);
   const [jobId, setJobId] = React.useState<string | null>(null);
   const [iframeLoaded, setIframeLoaded] = React.useState(false);
+
+  // ── Webcam-Monitor Toggle ──────────────────────────────────────────
+  // Persistiert in localStorage unter `vc:webcam-monitor:enabled`.
+  // Default OFF beim allerersten Aufruf (Key existiert nicht).
+  const [webcamMonitorEnabled, setWebcamMonitorEnabled] = React.useState(false);
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(WEBCAM_MONITOR_STORAGE_KEY);
+      if (raw === "1" || raw === "true") setWebcamMonitorEnabled(true);
+    } catch {
+      /* SSR / private mode → bleibt OFF */
+    }
+  }, []);
+  const setWebcamMonitorEnabledPersisted = React.useCallback(
+    (next: boolean) => {
+      setWebcamMonitorEnabled(next);
+      if (typeof window === "undefined") return;
+      try {
+        window.localStorage.setItem(
+          WEBCAM_MONITOR_STORAGE_KEY,
+          next ? "1" : "0",
+        );
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  );
+
+  // Voraussetzungen für den Webcam-Monitor:
+  //   - es gibt eine Webcam-URL
+  //   - wir kennen die Position des Segments in der Timeline
+  const webcamMonitorAvailable = Boolean(
+    webcamUrl &&
+      webcamUrl.length > 0 &&
+      allSegments &&
+      currentSegmentIndex != null &&
+      currentSegmentIndex >= 0,
+  );
 
   const imageViewportRef = React.useRef<HTMLDivElement | null>(null);
   const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
@@ -424,6 +489,38 @@ export function ScrollRecorderModal({
     return `Vorherige Aufnahme: ${initialFrames.length} Frames, ${formatMs(lastT)} lang.`;
   }, [initialFrames]);
 
+  // ── Webcam-Monitor: Start/End-Sec + State-Mapping ─────────────────────
+  // Berechnet das Webcam-Zeitfenster aus dem Segment-Index. Identische
+  // Akkumulations-Logik wie im PreviewPlayer (siehe segmentStartMs).
+  const webcamWindow = React.useMemo(() => {
+    if (!webcamMonitorAvailable || !allSegments || currentSegmentIndex == null) {
+      return null;
+    }
+    const startMs = segmentStartMs(allSegments, currentSegmentIndex);
+    const seg = allSegments[currentSegmentIndex];
+    const durMs = seg?.durationMs ?? segmentDurationMs;
+    return {
+      startSec: startMs / 1000,
+      endSec: (startMs + Math.max(0, durMs)) / 1000,
+    };
+  }, [
+    webcamMonitorAvailable,
+    allSegments,
+    currentSegmentIndex,
+    segmentDurationMs,
+  ]);
+
+  // Mapping Phase → WebcamMonitor-State.
+  //   recording                → "playing"
+  //   countdown                → "paused" (Video bleibt am ersten Frame)
+  //   loading | failed | ready
+  //   | done                   → "paused"
+  const webcamMonitorState: "idle" | "playing" | "paused" =
+    phase.kind === "recording" ? "playing" : "paused";
+
+  const webcamMonitorElapsedMs =
+    phase.kind === "recording" ? phase.elapsedMs : undefined;
+
   // ── Retry (POST /api/screenshot again on the same URL) ─────────────────
   const retryScreenshot = React.useCallback(() => {
     setJobId(null);
@@ -532,6 +629,9 @@ export function ScrollRecorderModal({
           source={source}
           iframeLoaded={iframeLoaded}
           segmentDurationMs={segmentDurationMs}
+          webcamMonitorAvailable={webcamMonitorAvailable}
+          webcamMonitorEnabled={webcamMonitorEnabled}
+          onToggleWebcamMonitor={setWebcamMonitorEnabledPersisted}
           onStart={beginRecording}
           onStop={stopRecording}
           onSave={() => {
@@ -558,6 +658,27 @@ export function ScrollRecorderModal({
           }}
         />
       </DialogContent>
+
+      {/* Webcam-Monitor: floating PiP-Vorschau über dem ganzen Viewport.
+          Wird nur gerendert, wenn:
+            - Toggle in der Toolbar ist AN
+            - Modal sichtbar (open)
+            - Webcam-URL + Segment-Index verfügbar
+          Beim Klick auf das ×-Icon im Monitor wird der Toggle deaktiviert. */}
+      {open &&
+        webcamMonitorEnabled &&
+        webcamMonitorAvailable &&
+        webcamWindow &&
+        webcamUrl && (
+          <WebcamMonitor
+            webcamUrl={webcamUrl}
+            startSec={webcamWindow.startSec}
+            endSec={webcamWindow.endSec}
+            state={webcamMonitorState}
+            elapsedMs={webcamMonitorElapsedMs}
+            onClose={() => setWebcamMonitorEnabledPersisted(false)}
+          />
+        )}
     </Dialog>
   );
 }
@@ -728,6 +849,9 @@ function Controls({
   source,
   iframeLoaded,
   segmentDurationMs,
+  webcamMonitorAvailable,
+  webcamMonitorEnabled,
+  onToggleWebcamMonitor,
   onStart,
   onStop,
   onSave,
@@ -738,15 +862,37 @@ function Controls({
   source: PreviewSource | null;
   iframeLoaded: boolean;
   segmentDurationMs: number;
+  webcamMonitorAvailable: boolean;
+  webcamMonitorEnabled: boolean;
+  onToggleWebcamMonitor: (next: boolean) => void;
   onStart: () => void;
   onStop: () => void;
   onSave: () => void;
   onRestart: () => void;
   onCancel: () => void;
 }) {
+  // Der Webcam-Monitor-Toggle ist nur in den Phasen sichtbar/sinnvoll, in
+  // denen man "noch keine Aufnahme läuft" — also Loading/Ready/Done. Während
+  // Countdown/Recording bleibt er ausgeblendet (der Recorder kümmert sich
+  // ums State-Mapping eigenständig). Damit der User in Phase=failed nicht
+  // verwirrt wird, blenden wir den Toggle dort ebenfalls aus.
+  const showToggle =
+    phase.kind === "loading" ||
+    phase.kind === "ready" ||
+    phase.kind === "done";
+
+  const toggle = showToggle ? (
+    <WebcamMonitorToggle
+      available={webcamMonitorAvailable}
+      enabled={webcamMonitorEnabled}
+      onChange={onToggleWebcamMonitor}
+    />
+  ) : null;
+
   if (phase.kind === "loading") {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {toggle ?? <span />}
         <Button variant="ghost" onClick={onCancel}>
           Abbrechen
         </Button>
@@ -769,23 +915,26 @@ function Controls({
     const waitingForIframe =
       source?.kind === "iframe" && !iframeLoaded;
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-ink-muted">
-          {waitingForIframe
-            ? "Vorschau wird gerendert…"
-            : `Max. Aufnahme-Dauer: ${formatMs(segmentDurationMs)}`}
-        </p>
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={onCancel}>
-            Abbrechen
-          </Button>
-          <Button
-            onClick={onStart}
-            disabled={waitingForIframe}
-            iconLeft={<Camera className="size-4" />}
-          >
-            Aufnahme starten
-          </Button>
+      <div className="flex flex-col gap-3">
+        {toggle}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-ink-muted">
+            {waitingForIframe
+              ? "Vorschau wird gerendert…"
+              : `Max. Aufnahme-Dauer: ${formatMs(segmentDurationMs)}`}
+          </p>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" onClick={onCancel}>
+              Abbrechen
+            </Button>
+            <Button
+              onClick={onStart}
+              disabled={waitingForIframe}
+              iconLeft={<Camera className="size-4" />}
+            >
+              Aufnahme starten
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -818,24 +967,86 @@ function Controls({
   if (phase.kind === "done") {
     const lastT = phase.frames[phase.frames.length - 1]?.t ?? 0;
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-ink-muted">
-          {phase.frames.length} Frames aufgezeichnet, {formatMs(lastT)} lang.
-        </p>
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            onClick={onRestart}
-            iconLeft={<RotateCcw className="size-4" />}
-          >
-            Erneut aufnehmen
-          </Button>
-          <Button onClick={onSave} iconLeft={<Check className="size-4" />}>
-            Übernehmen
-          </Button>
+      <div className="flex flex-col gap-3">
+        {toggle}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-ink-muted">
+            {phase.frames.length} Frames aufgezeichnet, {formatMs(lastT)} lang.
+          </p>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              onClick={onRestart}
+              iconLeft={<RotateCcw className="size-4" />}
+            >
+              Erneut aufnehmen
+            </Button>
+            <Button onClick={onSave} iconLeft={<Check className="size-4" />}>
+              Übernehmen
+            </Button>
+          </div>
         </div>
       </div>
     );
   }
   return null;
+}
+
+/**
+ * Toggle-Switch für die Webcam-PiP-Vorschau in der Recorder-Toolbar.
+ *
+ * - Persistenz erfolgt im Parent (localStorage Key `vc:webcam-monitor:enabled`).
+ * - Disabled, wenn entweder keine Webcam-URL existiert oder wir den Segment-
+ *   Index nicht kennen (`available === false`). Der `title`-Tooltip erklärt
+ *   den Grund, damit der User nicht raten muss.
+ */
+function WebcamMonitorToggle({
+  available,
+  enabled,
+  onChange,
+}: {
+  available: boolean;
+  enabled: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  const Icon = enabled ? VideoIcon : VideoOff;
+  const disabledTitle =
+    "Wähle erst in Schritt 1 ein Webcam-Video";
+  const activeTitle = enabled
+    ? "Webcam-Vorschau ausblenden"
+    : "Webcam-Vorschau einblenden";
+  return (
+    <button
+      type="button"
+      onClick={() => available && onChange(!enabled)}
+      disabled={!available}
+      aria-pressed={enabled}
+      title={available ? activeTitle : disabledTitle}
+      className={cn(
+        "inline-flex items-center gap-2 self-start rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+        available
+          ? enabled
+            ? "border-brand bg-brand-soft text-brand-deep hover:bg-brand-100"
+            : "border-line bg-surface text-ink hover:bg-surface-muted"
+          : "border-line bg-surface-soft text-ink-muted cursor-not-allowed",
+      )}
+    >
+      <Icon className="size-3.5" />
+      <span>Webcam mit Ton einblenden</span>
+      <span
+        aria-hidden
+        className={cn(
+          "ml-1 inline-flex h-4 w-7 items-center rounded-full transition-colors",
+          available && enabled ? "bg-brand" : "bg-ink/15",
+        )}
+      >
+        <span
+          className={cn(
+            "inline-block size-3 transform rounded-full bg-white shadow-sm transition-transform",
+            available && enabled ? "translate-x-3.5" : "translate-x-0.5",
+          )}
+        />
+      </span>
+    </button>
+  );
 }

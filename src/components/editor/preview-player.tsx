@@ -33,6 +33,7 @@ import * as React from "react";
 import { Play, Pause, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Segment } from "@/lib/segments/types";
+import { segmentStartMs } from "@/lib/segments/timeline";
 import {
   PreviewSegmentRender,
   getActiveSegment,
@@ -93,14 +94,9 @@ function pipShapeClass(shape: "square" | "rounded" | "circle"): string {
 /* Hilfsfunktionen Segmente                                            */
 /* ------------------------------------------------------------------ */
 
-/** Liefert die Start-Position (ms) eines Segments im Timeline-Verlauf. */
-function getSegmentStartMs(segments: Segment[], index: number): number {
-  let acc = 0;
-  for (let i = 0; i < index && i < segments.length; i++) {
-    acc += Math.max(0, segments[i].durationMs | 0);
-  }
-  return acc;
-}
+// `getSegmentStartMs` ist nach `@/lib/segments/timeline#segmentStartMs`
+// gewandert, damit auch der Scroll-Recorder + Webcam-Monitor die identische
+// Akkumulations-Logik nutzen können.
 
 /**
  * Sucht das nächste Video-Segment ab `fromIndex` (inkl.) und gibt dessen URL
@@ -216,7 +212,7 @@ export function PreviewPlayer({
   /** Start-Offset (ms) der aktiven Folie in der Timeline — wird zum
    *  Umrechnen von playheadMs in den segmentlokalen Offset gebraucht. */
   const activeStartMs = React.useMemo(
-    () => (activeIndex >= 0 ? getSegmentStartMs(segments, activeIndex) : 0),
+    () => (activeIndex >= 0 ? segmentStartMs(segments, activeIndex) : 0),
     [segments, activeIndex],
   );
 
