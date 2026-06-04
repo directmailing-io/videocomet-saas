@@ -38,11 +38,32 @@ const PRIVATE_HOST_RES: RegExp[] = [
  * Liest ein Feld aus dem flachen `lead.data`-Bag. Akzeptiert mehrere
  * gebräuchliche Aliase, weil das Column-Mapping je nach CSV unterschiedlich
  * benannte Spalten auf dieselbe semantische Bedeutung mappt.
+ *
+ * Lookup ist case-insensitive UND separator-tolerant: `Website-URL`,
+ * `website_url`, `web site URL` matchen alle den Alias `websiteUrl`.
+ * Anzeige im UI bleibt im Original.
  */
+function normaliseKey(k: string): string {
+  return k.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function pick(data: Record<string, unknown>, keys: string[]): string | null {
+  // Direkt-Match zuerst (häufigster Fall, kein Allocation).
   for (const k of keys) {
     const v = data[k];
     if (typeof v === "string" && v.trim().length > 0) return v.trim();
+  }
+  // Normalisiertes Fallback — baut die Map lazily, weil die meisten Rows
+  // den Direkt-Match treffen.
+  const normalised = new Map<string, string>();
+  for (const [k, v] of Object.entries(data)) {
+    if (typeof v === "string" && v.trim().length > 0) {
+      normalised.set(normaliseKey(k), v.trim());
+    }
+  }
+  for (const k of keys) {
+    const v = normalised.get(normaliseKey(k));
+    if (v) return v;
   }
   return null;
 }
