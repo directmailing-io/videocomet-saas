@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
@@ -123,26 +122,22 @@ interface PublicLandingProps {
 }
 
 /**
- * Internal "preview" mode is enabled when EITHER:
- *   - the URL carries `?preview=1` (typical first hit from the admin UI), OR
- *   - the `vc_preview=1` cookie is set (subsequent same-browser navigations,
- *     written client-side by TrackerInit for 1h).
+ * Internal "preview" mode is enabled ONLY when `?preview=1` ist im URL.
  *
- * In preview mode the no-JS fallback pixel is suppressed server-side, the
- * JS tracker becomes a no-op, and a visible badge is shown to the tester.
+ * Früher persistierten wir das via Cookie (vc_preview, 1h gültig). Das war
+ * ein UX-Footgun: ein einmaliger Test-Klick mit ?preview=1 hat das
+ * Tracking für eine Stunde IN DIESEM Browser komplett ausgeschaltet —
+ * auch für die "echten" Tests. Wir akzeptieren jetzt lieber, dass der
+ * Tester sich beim Wechsel zwischen Leads den Param zweimal in die URL
+ * tippt.
+ *
+ * In preview mode wird das no-JS-Fallback-Pixel serverseitig unterdrückt,
+ * der JS-Tracker wird no-op und es erscheint eine sichtbare Badge.
  */
 async function detectPreviewMode(searchParams: PublicLandingProps["searchParams"]): Promise<boolean> {
   const sp = await searchParams;
   const param = sp?.preview;
-  if (Array.isArray(param) ? param.includes("1") : param === "1") {
-    return true;
-  }
-  try {
-    const c = await cookies();
-    return c.get("vc_preview")?.value === "1";
-  } catch {
-    return false;
-  }
+  return Array.isArray(param) ? param.includes("1") : param === "1";
 }
 
 /**

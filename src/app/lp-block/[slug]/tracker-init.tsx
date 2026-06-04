@@ -54,14 +54,16 @@ export function TrackerInit({
     if (preview) {
       setPreviewMode(true);
       setPreviewActive(true);
-      // Persist the bypass for 1h so the user can navigate around in the
-      // app without re-adding the URL param. Session-cookie alternative
-      // would lose state on tab close — 1h is a sensible session length
-      // for previewing campaigns.
+      // KEIN Cookie-Schreiben mehr — der Cookie war ein Footgun. Sobald
+      // er gesetzt war, blieben alle Tests im selben Browser für 1h
+      // ohne Tracking, auch wenn die URL `?preview=1` gar nicht mehr
+      // enthielt. Heute zählt NUR der URL-Param.
+      //
+      // Defensiv: alten Cookie löschen, falls noch aus früherer Version
+      // im Browser hängt.
       try {
         if (typeof document !== "undefined") {
-          document.cookie =
-            "vc_preview=1; Path=/; Max-Age=3600; SameSite=Lax";
+          document.cookie = "vc_preview=; Path=/; Max-Age=0; SameSite=Lax";
         }
       } catch {
         /* swallow */
@@ -70,6 +72,17 @@ export function TrackerInit({
       // we save the fetch/sendBeacon roundtrip.
       setTrackingSlug(slug);
       return;
+    }
+    // Defensive: alter Cookie löschen, falls ein User von vorheriger
+    // Version noch einen vc_preview=1 hat — sonst würde der Server beim
+    // nächsten Render wieder Preview erkennen. (Server liest den Cookie
+    // ab Heute nicht mehr; nur als Hygiene gegen Stale-Browser-State.)
+    try {
+      if (typeof document !== "undefined") {
+        document.cookie = "vc_preview=; Path=/; Max-Age=0; SameSite=Lax";
+      }
+    } catch {
+      /* swallow */
     }
 
     setTrackingSlug(slug);
