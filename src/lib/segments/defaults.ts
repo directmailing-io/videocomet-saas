@@ -7,6 +7,7 @@
 
 import type {
   GDocsSegment,
+  GSlideSegment,
   ImageLayer,
   ImageSegment,
   Layer,
@@ -25,6 +26,12 @@ import { SLIDE_STAGE_HEIGHT, SLIDE_STAGE_WIDTH } from "./types";
 /** Standard-Dauer pro Segment in Millisekunden (5 Sekunden). */
 export const DEFAULT_SEGMENT_DURATION_MS = 5000;
 
+/**
+ * Smart-Default für Google-Slides-Folien. Für Akquise-Videos ist 4s die
+ * Lese-Geschwindigkeits-Faustregel — siehe Konzept-Dokument.
+ */
+export const DEFAULT_GSLIDE_DURATION_MS = 4000;
+
 /** Lesbarer Default-Label pro Segment-Typ. */
 export const SEGMENT_KIND_LABELS: Record<SegmentKind, string> = {
   text: "Textfolie",
@@ -32,6 +39,7 @@ export const SEGMENT_KIND_LABELS: Record<SegmentKind, string> = {
   video: "Video",
   website: "Website",
   gdocs: "Google Docs",
+  gslide: "Google Slide",
   slide: "Freie Folie",
 };
 
@@ -133,6 +141,35 @@ export function createGDocsSegment(opts?: CreateSegmentOptions): GDocsSegment {
     kind: "gdocs",
     docsUrl: "",
     captureMode: "static-hero",
+  };
+}
+
+/**
+ * Factory für ein Google-Slides-Segment.
+ *
+ * Default-Dauer 4 s (statt DEFAULT_SEGMENT_DURATION_MS=5000) — passt zu
+ * Akquise-Videos. Der Caller kann via `opts.durationMs` überschreiben.
+ *
+ * `publishedUrl` startet leer; das UI füllt sie nach erfolgreichem Import.
+ * `lastFetchedAt` wird auf "now" gesetzt, damit der "Aktualisieren"-Button
+ * im Editor von Anfang an einen sinnvollen Wert anzeigt.
+ */
+export function createGSlideSegment(
+  opts?: CreateSegmentOptions,
+): GSlideSegment {
+  const base = {
+    id: opts?.id ?? newId(),
+    durationMs: opts?.durationMs ?? DEFAULT_GSLIDE_DURATION_MS,
+    label: opts?.label ?? SEGMENT_KIND_LABELS.gslide,
+  };
+  return {
+    ...base,
+    kind: "gslide",
+    publishedUrl: "",
+    slideIndex: 0,
+    thumbnailUrl: null,
+    detectedPlaceholders: [],
+    lastFetchedAt: new Date().toISOString(),
   };
 }
 
@@ -282,6 +319,8 @@ export function createSegment(
       return createWebsiteSegment(opts);
     case "gdocs":
       return createGDocsSegment(opts);
+    case "gslide":
+      return createGSlideSegment(opts);
     case "slide":
       return createSlideSegment(opts);
     default: {

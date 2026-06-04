@@ -30,7 +30,12 @@ import {
   landingPageTemplates,
 } from "@/lib/db/schema";
 import type { Segment, Layer } from "@/lib/segments/types";
-import { isTextSegment, isSlideSegment, isGDocsSegment } from "@/lib/segments/types";
+import {
+  isTextSegment,
+  isSlideSegment,
+  isGDocsSegment,
+  isGSlideSegment,
+} from "@/lib/segments/types";
 import type {
   DetectedPlaceholder,
   PlaceholderSource,
@@ -179,6 +184,21 @@ function scanSegments(
       // erledigt das einmal pro eindeutiger docsUrl (s. u.).
       // Hier nur das Label vormerken, falls der Fetch fehlschlägt.
       // (Source wird beim Fetch-Versuch eingetragen.)
+    }
+    if (isGSlideSegment(seg)) {
+      // Bei Google-Slides-Segmenten ist der Pubembed-DOM live in Google's
+      // Hand — wir fetchen NICHT pro Collector-Run. Stattdessen ist der
+      // Cache `detectedPlaceholders[]` (gefüllt beim Import + beim
+      // manuellen "Aktualisieren") die Wahrheit. Das hält den Collector
+      // schnell und vermeidet, dass ein flackerndes Google-Backend hier
+      // den Wizard blockiert.
+      const label =
+        seg.label?.trim() ||
+        `Google-Slide-Segment ${ordinal} (Folie ${seg.slideIndex + 1})`;
+      const source: PlaceholderSource = { kind: "gslide", label };
+      for (const key of seg.detectedPlaceholders ?? []) {
+        pushHit(acc, key, source);
+      }
     }
   });
 }

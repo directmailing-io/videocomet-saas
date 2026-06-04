@@ -5,6 +5,7 @@ import {
   FileText,
   Globe,
   Image as ImageIcon,
+  Presentation,
   Sparkles,
   Trash2,
   Type as TypeIcon,
@@ -14,6 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type {
   GDocsSegment,
+  GSlideSegment,
   ImageSegment,
   Segment,
   SegmentKind,
@@ -28,6 +30,7 @@ import { SegmentEditorImage } from "./segment-editor-image";
 import { SegmentEditorVideo } from "./segment-editor-video";
 import { SegmentEditorWebsite } from "./segment-editor-website";
 import { SegmentEditorGDocs } from "./segment-editor-gdocs";
+import { SegmentEditorGSlide } from "./segment-editor-gslide";
 import { SegmentEditorSlide } from "./segment-editor-slide";
 
 export interface SegmentEditorMediaItem {
@@ -73,6 +76,7 @@ const KIND_META: Record<SegmentKind, { label: string; Icon: React.ComponentType<
   video: { label: "Video", Icon: VideoIcon },
   website: { label: "Website", Icon: Globe },
   gdocs: { label: "Google Docs", Icon: FileText },
+  gslide: { label: "Google Slide", Icon: Presentation },
   slide: { label: "Freie Folie", Icon: Sparkles },
 };
 
@@ -205,6 +209,13 @@ function SegmentBody({
           webcamUrl={webcamUrl}
           allSegments={allSegments ?? undefined}
           currentSegmentIndex={currentSegmentIndex}
+        />
+      );
+    case "gslide":
+      return (
+        <SegmentEditorGSlide
+          segment={segment}
+          onChange={(s: GSlideSegment) => onChange(s)}
         />
       );
     case "slide":

@@ -7,6 +7,7 @@ import {
   Video,
   Globe,
   FileText,
+  Presentation,
   Sparkles,
   ChevronLeft,
   ChevronRight,
@@ -59,6 +60,13 @@ const KIND_STYLES: Record<
     text: "text-blue-900",
     label: "Google Docs",
     icon: FileText,
+  },
+  gslide: {
+    bg: "bg-sky-200",
+    border: "border-sky-300",
+    text: "text-sky-900",
+    label: "Google Slide",
+    icon: Presentation,
   },
   slide: {
     bg: "bg-fuchsia-200",

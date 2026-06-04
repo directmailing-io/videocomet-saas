@@ -599,6 +599,27 @@ async function renderSegmentsBase(opts: {
           outputDir: join(opts.outDir, `slide-${i}`),
           outputPath: partPath,
         });
+      } else if (seg.kind === "gslide") {
+        // Google-Slides-Segment: pubembed-URL → Puppeteer → DOM-Substitute
+        // → Screenshot → MP4. Crasht der Pubembed-Load (z. B. weil der
+        // User die Veröffentlichung zurückgezogen hat), fängt der catch
+        // weiter unten und liefert einen Black-Clip.
+        if (!seg.publishedUrl?.trim()) {
+          await generateBlackClip({
+            outputPath: partPath,
+            durationSec: durationMs / 1000,
+          });
+        } else {
+          const { renderGSlideToMp4 } = await import("../lib/gslide-render");
+          await renderGSlideToMp4({
+            slide: seg,
+            leadData: opts.leadData ?? {},
+            mapping: opts.placeholderMapping,
+            durationMs,
+            outputDir: join(opts.outDir, `gslide-${i}`),
+            outputPath: partPath,
+          });
+        }
       } else {
         // image / video not yet rendered in v1 — black clip placeholder.
         console.warn(

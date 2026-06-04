@@ -15,7 +15,13 @@
  */
 
 import * as React from "react";
-import { Globe, FileText, ImageOff, VideoOff } from "lucide-react";
+import {
+  Globe,
+  FileText,
+  ImageOff,
+  VideoOff,
+  Presentation,
+} from "lucide-react";
 import type {
   Segment,
   TextSegment,
@@ -23,6 +29,7 @@ import type {
   VideoSegment,
   WebsiteSegment,
   GDocsSegment,
+  GSlideSegment,
   WebCaptureMode,
 } from "@/lib/segments/types";
 
@@ -300,6 +307,40 @@ function RenderWebsite({ segment }: { segment: WebsiteSegment }) {
   );
 }
 
+function RenderGSlide({ segment }: { segment: GSlideSegment }) {
+  // Wenn ein Thumbnail vorliegt, zeigen wir es auf schwarzem 16:9-Hintergrund
+  // mit object-fit:contain — so wie es im finalen Render erscheint.
+  if (segment.thumbnailUrl) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-ink">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={segment.thumbnailUrl}
+          alt={`Folie ${segment.slideIndex + 1}`}
+          className="h-full w-full object-contain"
+        />
+      </div>
+    );
+  }
+  // Fallback: schöne Placeholder-Karte für noch nicht geladene Thumbnails.
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-surface-soft p-8">
+      <div className="w-full max-w-md rounded-squircle-md border border-line bg-surface px-6 py-5 shadow-card">
+        <div className="mb-3 flex items-center gap-2 text-brand-deep">
+          <Presentation className="size-5" />
+          <span className="text-xs font-semibold uppercase tracking-wide">
+            Google Slide · Folie {segment.slideIndex + 1}
+          </span>
+        </div>
+        <p className="text-xs leading-relaxed text-ink-muted">
+          Thumbnail wird beim Import generiert. Falls leer: im Segment-Editor
+          „Aktualisieren" klicken.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function RenderGDocs({ segment }: { segment: GDocsSegment }) {
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-surface-soft p-8">
@@ -369,6 +410,8 @@ export function PreviewSegmentRender({
       return <RenderWebsite segment={segment} />;
     case "gdocs":
       return <RenderGDocs segment={segment} />;
+    case "gslide":
+      return <RenderGSlide segment={segment} />;
     case "slide":
       // Slide-Editor wird in dieser Vorschau (Step 3 klassisch) nicht
       // gerendert — der eigene Editor-Pfad rendert SlideSegments separat.

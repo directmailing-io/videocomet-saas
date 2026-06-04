@@ -15,6 +15,7 @@ export type SegmentKind =
   | "video"
   | "website"
   | "gdocs"
+  | "gslide"
   | "slide";
 
 export type TextAlign = "left" | "center" | "right";
@@ -125,6 +126,32 @@ export interface GDocsSegment extends SegmentBase {
   scrollFrames?: ScrollFrame[];
 }
 
+/**
+ * Google-Slides-Folie als personalisiertes Segment.
+ *
+ * Quelle: User veröffentlicht seine Präsentation einmalig per
+ * „Datei → Im Web veröffentlichen". Wir laden die `pubembed`-HTML einer
+ * einzelnen Folie in Puppeteer, ersetzen `{{key}}`-TextNodes durch
+ * Lead-Werte per `page.evaluate` und screenshotten 1280×720.
+ *
+ * `publishedUrl` + `slideIndex` sind Single Source of Truth.
+ * `thumbnailUrl` und `detectedPlaceholders` werden beim Import +
+ * beim manuellen „Aktualisieren" befüllt.
+ */
+export interface GSlideSegment extends SegmentBase {
+  kind: "gslide";
+  /** Published-Web-URL (`/d/e/…/pubembed` oder `/pub`). */
+  publishedUrl: string;
+  /** Index der Folie im Deck, 0-basiert. */
+  slideIndex: number;
+  /** Thumbnail in Bunny-Storage (für Editor-Vorschau). null = nicht generiert. */
+  thumbnailUrl: string | null;
+  /** Cache der zuletzt erkannten Platzhalter-Keys auf dieser Folie. */
+  detectedPlaceholders: string[];
+  /** Wann zuletzt mit Google synchronisiert (ISO-8601, für „Aktualisieren"). */
+  lastFetchedAt: string;
+}
+
 // ── Freier Folien-Editor (kind: "slide") ────────────────────────────────────
 //
 // Eine Slide-Folie besteht aus einer Liste von Layers über einem Hintergrund.
@@ -207,6 +234,7 @@ export type Segment =
   | VideoSegment
   | WebsiteSegment
   | GDocsSegment
+  | GSlideSegment
   | SlideSegment;
 
 // ── Type Guards ──────────────────────────────────────────────────────────────
@@ -229,6 +257,10 @@ export function isWebsiteSegment(s: Segment): s is WebsiteSegment {
 
 export function isGDocsSegment(s: Segment): s is GDocsSegment {
   return s.kind === "gdocs";
+}
+
+export function isGSlideSegment(s: Segment): s is GSlideSegment {
+  return s.kind === "gslide";
 }
 
 export function isSlideSegment(s: Segment): s is SlideSegment {

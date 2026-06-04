@@ -16,6 +16,7 @@ export type PlaceholderSourceKind =
   | "slide" // SlideSegment → TextLayer Tiptap-HTML
   | "text" // TextSegment.text
   | "gdocs" // Google-Doc-Brief / Segment
+  | "gslide" // Google-Slides-Folie (kind: "gslide")
   | "pdf" // PDF-Brief der Kampagne (= campaigns.pdfGoogleDocsUrl)
   | "lp-block" // Block-Landingpage-Template
   | "lp-custom" // Custom-HTML-LP (ZIP-Upload)

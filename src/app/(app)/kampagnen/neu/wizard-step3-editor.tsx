@@ -6,6 +6,7 @@ import {
   Image as ImageIcon,
   Video as VideoIcon,
   FileText,
+  Presentation,
   Type,
   Plus,
   Sparkles,
@@ -17,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
+  type GSlideSegment,
   type Segment,
   type SegmentKind,
 } from "@/lib/segments/types";
@@ -32,6 +34,7 @@ import {
 import { PreviewPlayer } from "@/components/editor/preview-player";
 import { Timeline } from "@/components/editor/timeline";
 import { SegmentEditor } from "@/components/editor/segment-editor";
+import { GSlideImportDialog } from "@/components/editor/gslide-import-dialog";
 
 export interface WizardStep3Props {
   segments: Segment[];
@@ -66,6 +69,13 @@ const ADD_CARDS: AddCard[] = [
     title: "Freie Folie",
     description:
       "Multi-Layer mit Bildern, Formen und Text — alle Google-Fonts, Platzhalter überall, frei platzierbar.",
+  },
+  {
+    kind: "gslide",
+    icon: Presentation,
+    title: "Google Slides",
+    description:
+      "Veröffentlichtes Slides-Deck importieren — jede Folie wird ein Segment mit Platzhalter-Ersetzung.",
   },
   {
     kind: "website",
@@ -115,6 +125,7 @@ export function WizardStep3Editor({
 }: WizardStep3Props) {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [currentTimeMs, setCurrentTimeMs] = React.useState(0);
+  const [gslideDialogOpen, setGslideDialogOpen] = React.useState(false);
 
   // Wir bekommen webcamDurationSec evtl. nicht aus den Props (ältere Media-
   // Items wurden ohne durationSec hochgeladen). In dem Fall sniffen wir die
@@ -193,11 +204,42 @@ export function WizardStep3Editor({
   function addSegment(kind: SegmentKind) {
     if (webcamDurationMs == null) return;
     if (!canAdd) return;
+    // Google Slides öffnet einen Import-Dialog, statt direkt ein leeres
+    // Segment in die Timeline zu legen — der Dialog erzeugt nach Auswahl
+    // ggf. mehrere Segmente in einem Rutsch.
+    if (kind === "gslide") {
+      setGslideDialogOpen(true);
+      return;
+    }
     // Smart-Add: nimm den verbleibenden Rest, wenn weniger als Default frei.
     const durationMs = Math.min(DEFAULT_SEGMENT_DURATION_MS, remainingMs);
     const seg = createSegment(kind, { durationMs });
     onSegmentsChange([...segments, seg]);
     setSelectedId(seg.id);
+  }
+
+  /**
+   * Wird vom Google-Slides-Import-Dialog aufgerufen. Wir hängen die neuen
+   * Segmente an die Liste an, kappen aber pro Segment am verbleibenden
+   * Webcam-Budget — sodass die Summe nie das harte Limit überschreitet.
+   */
+  function handleAddGSlideSegments(newSegs: GSlideSegment[]) {
+    if (webcamDurationMs == null) return;
+    let remaining = Math.max(0, webcamDurationMs - total);
+    const accepted: GSlideSegment[] = [];
+    for (const seg of newSegs) {
+      if (remaining < MIN_REMAINING_FOR_ADD_MS) break;
+      const capped = Math.min(seg.durationMs, remaining);
+      // Mindest-Dauer sicherstellen; wenn nicht genug Platz, wird gestoppt.
+      if (capped < MIN_REMAINING_FOR_ADD_MS) break;
+      accepted.push({ ...seg, durationMs: capped });
+      remaining -= capped;
+    }
+    if (accepted.length === 0) return;
+    onSegmentsChange([...segments, ...accepted]);
+    // Erstes neues Segment selektieren — gibt dem User direkt visuelles
+    // Feedback und macht den Refresh-Button erreichbar.
+    setSelectedId(accepted[0].id);
   }
 
   function updateSegment(updated: Segment) {
@@ -522,6 +564,16 @@ export function WizardStep3Editor({
           </p>
         </Card>
       )}
+
+      {/* Google-Slides-Import-Dialog. Wird nur gerendert, wenn open=true,
+          damit der Reset-Effect im Dialog sauber triggern kann. */}
+      <GSlideImportDialog
+        open={gslideDialogOpen}
+        onOpenChange={setGslideDialogOpen}
+        remainingBudgetMs={remainingMs === Number.POSITIVE_INFINITY ? null : remainingMs}
+        minPerSegmentMs={MIN_REMAINING_FOR_ADD_MS}
+        onAddSegments={handleAddGSlideSegments}
+      />
     </div>
   );
 }
