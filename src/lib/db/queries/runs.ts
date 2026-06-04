@@ -71,12 +71,17 @@ export async function finalizeRunIfAllLeadsDone(runId: string): Promise<{
   total: number;
   done: number;
 }> {
+  // Soft-deleted Leads (preflight-rejected) zählen NICHT als ausstehend —
+  // sonst wartet die Run-Finalisierung ewig auf einen Lead, der die
+  // Pipeline gar nicht durchläuft. `removed_at IS NULL` schließt diese
+  // Rows aus dem Total raus.
   const rows = (await db.execute(sql`
     SELECT
       COUNT(*)::int AS total,
       COUNT(*) FILTER (WHERE ${leads.status} IN ('completed', 'failed'))::int AS done
     FROM ${leads}
     WHERE ${leads.runId} = ${runId}
+      AND ${leads.removedAt} IS NULL
   `)) as unknown as Array<{ total: number; done: number }>;
   const r = Array.isArray(rows) ? rows[0] : (rows as { rows?: Array<{ total: number; done: number }> }).rows?.[0];
   const total = Number(r?.total ?? 0);

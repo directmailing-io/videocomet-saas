@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
-import { and, eq, gt, inArray, or } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { leads, runs, userDomains } from "@/lib/db/schema";
@@ -176,7 +176,10 @@ async function listAllLeads(runId: string, userId: string) {
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
     .leftJoin(userDomains, eq(userDomains.id, leads.domainId))
-    .where(and(eq(leads.runId, runId), eq(runs.userId, userId)))
+    // Soft-deleted Leads (z.B. preflight-rejected) NIE in den Snapshot —
+    // sonst zeigt die Live-Tabelle sie als "Wartet" und der User denkt
+    // das System hängt. Audit-Trail bleibt in der DB.
+    .where(and(eq(leads.runId, runId), eq(runs.userId, userId), isNull(leads.removedAt)))
     .orderBy(leads.rowIndex);
   return rows.map((r) => projectLead(r.lead, r.customHostname));
 }
@@ -206,6 +209,7 @@ async function listChangedOrInFlightLeads(
       and(
         eq(leads.runId, runId),
         eq(runs.userId, userId),
+        isNull(leads.removedAt),
         or(
           gt(leads.startedAt, sinceTs),
           gt(leads.completedAt, sinceTs),
