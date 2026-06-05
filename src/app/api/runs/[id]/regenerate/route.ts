@@ -148,12 +148,17 @@ export async function POST(
   // Wichtig: `bunny_video_id` muss synchron zu `video_url` resetted werden.
   // Sonst zeigt die Landingpage spaeter via dem alten Bunny-Stream-GUID auf
   // ein Video aus einem frueheren Run (z.B. mit anderem Webcam-Source).
+  // Wichtig: `videoMp4Url` muss synchron zu `videoUrl` resetted werden.
+  // Sonst zeigt der Custom-LP-Renderer / Webcam-Monitor / Mediathek auf
+  // einen alten Bunny-MP4-Pfad (z.B. aus einem frueheren Webcam-Asset)
+  // waehrend die neue Pipeline noch laeuft → 404 fuer den User.
   const resetPatch =
     mode === "all"
       ? {
           ...baseReset,
           bunnyVideoId: null,
           videoUrl: null,
+          videoMp4Url: null,
           pdfUrl: null,
           thumbnailUrl: null,
         }
@@ -162,6 +167,7 @@ export async function POST(
             ...baseReset,
             bunnyVideoId: null,
             videoUrl: null,
+            videoMp4Url: null,
             thumbnailUrl: null,
           }
         : mode === "pdf"

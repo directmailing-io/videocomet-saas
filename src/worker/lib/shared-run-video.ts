@@ -127,6 +127,50 @@ export async function claimSharedVideoUpload(
 }
 
 /**
+ * Heartbeat-Refresh für den Lock während eines langen Compress/Upload.
+ *
+ * Hintergrund (Bug E2, Stale-Lock):
+ *
+ *   `STALE_LOCK_MINUTES=5` ist die Schwelle, ab der `claimSharedVideoUpload`
+ *   einen aktiven Lock als verlassen behandelt. Ein 1080p-Portrait-Compress
+ *   kann auf langsamen Workern aber gut über 5 min dauern → ein zweiter Worker
+ *   würde dann den Lock kapern, parallel komprimieren UND parallel zu Bunny
+ *   hochladen (doppelter Cost + Doubled-Race auf setSharedVideoReady).
+ *
+ *   Lösung: der ACTIVE Lock-Holder ruft alle 30 s `touchSharedVideoLock(runId)`
+ *   auf — wir setzen `sharedVideoUploadStartedAt = now()`. Dadurch sieht der
+ *   Stale-Check (`started_at < now() - 5min`) den Lock immer als frisch.
+ *
+ * Idempotenz / Safety:
+ *   - WHERE state IN ('compressing','uploading') — wenn wir den Lock zwischen-
+ *     zeitlich verloren haben (state='ready' weil ein anderer Worker Schluss
+ *     gemacht hat) oder fehlgeschlagen sind (state='failed'), matched die
+ *     UPDATE 0 Rows → no-op, kein Throw, kein Side-Effect.
+ *   - Wir TOUCHEN nur das Timestamp-Feld — der State bleibt unverändert.
+ *
+ * Diese Funktion darf nie throwen — der Caller fired sie aus einem setInterval-
+ * Callback. Ein Throw aus einem Timer-Callback würde unhandled durchschlagen
+ * und ggf. den Node-Prozess crashen. Wir loggen DB-Fehler und schlucken sie.
+ */
+export async function touchSharedVideoLock(runId: string): Promise<void> {
+  try {
+    await db
+      .update(runs)
+      .set({ sharedVideoUploadStartedAt: new Date() })
+      .where(
+        and(
+          eq(runs.id, runId),
+          inArray(runs.sharedVideoState, ["compressing", "uploading"]),
+        ),
+      );
+  } catch (err) {
+    console.warn(
+      `[shared-run-video] heartbeat touch failed (run=${runId}): ${(err as Error).message}`,
+    );
+  }
+}
+
+/**
  * Markiert die Upload-Phase explizit (von compressing → uploading).
  * Pure-Soft-Update; nicht-kritisch (wir nutzen den State hauptsächlich
  * für Debug-Visibility). Wenn niemand sonst arbeitet, sollte das durch-

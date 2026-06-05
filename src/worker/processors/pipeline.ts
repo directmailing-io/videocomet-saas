@@ -56,6 +56,8 @@ import { substitute as substitutePlaceholder } from "@/lib/placeholders/substitu
 import { runDocxToPdf } from "./docx-to-pdf";
 import { runPdfCompress } from "./pdf-compress";
 import { runPdfUpload } from "./pdf-upload";
+import { addBunnyAssetRef } from "@/lib/db/queries/bunny-assets";
+import { trackAndRefAsset } from "../lib/bunny-asset-tracking";
 
 /**
  * Per-stage hard-timeout values (ms). These bound each pipeline stage
@@ -428,18 +430,18 @@ export async function pipelineProcessor(
         // Bunny-Stream-Video freigeben.
         if (shared.bunnyAssetId) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const mod = (await import(
-              "@/lib/db/queries/bunny-assets" as any
-            )) as any; // TODO Paket B
-            await mod.addBunnyAssetRef(
+            await addBunnyAssetRef(
               shared.bunnyAssetId,
               "lead",
               data.leadId,
             );
-          } catch {
-            // Paket B noch nicht da oder doppel-ref kollidiert (unique idx)
-            // → silently skip.
+          } catch (err) {
+            // Doppel-ref kollidiert (unique idx) wird intern bereits via
+            // ON CONFLICT DO NOTHING geschluckt; alles andere ist ein DB-
+            // Glitch — log und weiter, Pipeline darf nicht abbrechen.
+            console.warn(
+              `[pipeline] addBunnyAssetRef(lead) failed for asset=${shared.bunnyAssetId}: ${(err as Error).message}`,
+            );
           }
         }
         const sharedMs = Date.now() - sharedStart;
@@ -531,28 +533,29 @@ export async function pipelineProcessor(
       );
       bunnyVideoId = upload.bunnyVideoId;
       videoUrl = upload.videoUrl;
+      // KRITISCH: `runVideoUpload` hat in EINEM atomaren UPDATE bereits
+      // bunnyVideoId / videoUrl / thumbnailUrl / videoWidth / videoHeight /
+      // videoOrientation / videoMp4Url auf den Lead geschrieben — analog zum
+      // WO-Pfad oben (line ~419). Hier KEIN weiterer Lead-Update mehr, sonst
+      // entsteht eine Race zwischen den zwei UPDATEs und der Custom-LP-
+      // Renderer kann zwischendurch eine inkonsistente Snapshot-Kombination
+      // sehen (z.B. neue videoUrl + alte videoMp4Url).
 
       // Bunny-Asset-Tracking für with-presentation (1 Asset pro Lead-
-      // Video). Best-effort; Paket B liefert die Helpers.
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mod = (await import(
-          "@/lib/db/queries/bunny-assets" as any
-        )) as any; // TODO Paket B
-        const asset = await mod.trackBunnyAsset({
+      // Video). Best-effort via Helper — Fehler werden gelogged, brechen
+      // aber die Pipeline nicht ab.
+      await trackAndRefAsset({
+        trackInput: {
           userId: data.userId,
           kind: "stream",
           bunnyId: upload.bunnyVideoId,
           cdnUrl: upload.videoUrl,
           width: upload.width,
           height: upload.height,
-        });
-        if (asset?.id) {
-          await mod.addBunnyAssetRef(asset.id, "lead", data.leadId);
-        }
-      } catch {
-        // Paket B fehlt oder Doppel-Ref → silently skip.
-      }
+        },
+        ownerType: "lead",
+        ownerId: data.leadId,
+      });
 
       const uploadMs = Date.now() - uploadStart;
       await insertPipelineEvent({

@@ -27,6 +27,7 @@ import {
   leads,
   runs,
 } from "@/lib/db/schema";
+import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
 
 /** Resolved context: everything the sandbox renderer needs in one bundle. */
 export interface CustomLpPublicContext {
@@ -175,14 +176,14 @@ async function materialise(
   // MP4-URL-Resolution (Paket D/H persistiert die finale MP4-URL auf
   // `leads.videoMp4Url`, sobald die Pipeline-Stage `bunnyUpload` durch ist):
   //   1) Wenn `leads.videoMp4Url` gesetzt ist → das ist die Source of Truth.
-  //   2) Sonst: Backward-Compat — wir transformieren den Bunny-HLS-Playlist-
-  //      Pfad (`.../playlist.m3u8`) in den progressiven MP4-Pfad
-  //      (`.../play_720p.mp4`). Greift fuer Bestand-Leads, die noch keine
-  //      neue Spalte haben.
+  //   2) Sonst: Backward-Compat — `pickBunnyMp4Fallback` transformiert den
+  //      Bunny-HLS-Playlist-Pfad in einen progressiven MP4-Pfad. Da wir hier
+  //      keine `availableResolutions` joinen, nutzt der Helper den safen
+  //      480p-Default (existiert auch fuer Portrait-Quellen — anders als
+  //      das frueher hardcoded 720p, das fuer 404×720-Sources einen 404 lief).
   const videoMp4Url =
     row.videoMp4Url ??
-    row.videoUrl?.replace(/playlist\.m3u8($|\?)/, "play_720p.mp4$1") ??
-    null;
+    (row.videoUrl ? pickBunnyMp4Fallback(row.videoUrl) : null);
 
   // Orientation als string in DB; auf erlaubtes Tupel verengen.
   const videoOrientation =

@@ -36,7 +36,7 @@ import { deleteFile } from "@/lib/bunny/storage";
 import { deleteVideo } from "@/lib/bunny/stream";
 import { db } from "@/lib/db";
 import { bunnyAssets } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 const BATCH_SIZE = 20;
 const PARALLELISM = 4;
@@ -53,6 +53,12 @@ export interface BunnyPurgeTickResult {
   failed: number;
   /** In diesem Tick neu in `purge_pending` markierte Orphans. */
   orphansSwept: number;
+  /**
+   * Race-Defensive (Paket G): Assets, die zwischen Orphan-Sweep und
+   * Bunny-Delete eine neue Ref bekommen haben → wir lassen sie unangetastet
+   * und der nächste Sweep prüft erneut.
+   */
+  skippedRace: number;
 }
 
 function log(level: "info" | "warn" | "error", msg: string, extra?: unknown): void {
@@ -78,11 +84,75 @@ function isAlreadyGoneError(err: unknown): boolean {
 }
 
 /**
+ * Race-defensive Re-Check vor dem physischen Bunny-Delete.
+ *
+ * Problem (Paket G Bug 2): zwischen dem Orphan-Sweep (markiert Assets mit
+ * 0 Refs als `purge_pending`) und dem `deleteVideo` / `deleteFile`-Call
+ * vergehen typisch ~50–300 ms. In diesem Fenster kann ein paralleler
+ * Worker via `trackBunnyAsset` → `addBunnyAssetRef` eine NEUE Ref auf
+ * exakt diese Bunny-GUID hängen (z.B. weil zwei Leads parallel die
+ * gleiche Quelldatei hochladen → identischer source-hash → gleicher
+ * Bunny-Asset-Row via UNIQUE-Index). Wenn wir trotzdem Bunny-DELETEn,
+ * verlieren wir das Asset physisch — der neue Ref-Owner würde 404 sehen.
+ *
+ * Diese Funktion prüft IN EINER LESE-TRANSAKTION nochmal, ob das Asset
+ * weiterhin `purge_pending` ist UND `NOT EXISTS` einer Ref vorliegt.
+ * Wenn ja: physischer Delete ist sicher. Wenn nein: skip — der Worker
+ * lässt das Asset in Ruhe, der nächste Orphan-Sweep wird es ggf. wieder
+ * aufgreifen, sobald die neue Ref wirklich wieder weg ist.
+ *
+ * Anmerkung: das ist KEIN vollständiger Lock (Postgres hat keine
+ * Row-Level-Locks ohne `FOR UPDATE`). Eine theoretisch sichere Variante
+ * wäre ein State-Übergang `purge_pending → purging` in einer UPDATE-
+ * RETURNING-Anweisung (claim-pattern). Für die Fenster, die uns hier
+ * praktisch beißen (Ms-Bereich), reicht der Re-Check — und er ist
+ * deutlich einfacher als ein neuer State + Recovery-Pfad.
+ */
+async function claimAssetForPhysicalDelete(asset: PurgeReadyAsset): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [stillOrphan] = await tx
+      .select({ id: bunnyAssets.id })
+      .from(bunnyAssets)
+      .where(
+        and(
+          eq(bunnyAssets.id, asset.id),
+          eq(bunnyAssets.purgeState, "purge_pending"),
+          sql`NOT EXISTS (
+            SELECT 1 FROM bunny_asset_refs WHERE asset_id = ${asset.id}
+          )`,
+        ),
+      )
+      .limit(1);
+    return !!stillOrphan;
+  });
+}
+
+/**
  * Verarbeitet einen einzelnen Asset: ruft die passende Bunny-Delete-API
  * (Stream oder Storage), behandelt 404 als Erfolg, und schreibt das
  * Ergebnis in die DB.
+ *
+ * VOR dem Bunny-Call läuft `claimAssetForPhysicalDelete` — wenn in der
+ * Zwischenzeit eine neue Ref aufgepoppt ist, wird der Delete übersprungen
+ * (Race-Schutz, siehe Bug 2 in Paket G).
  */
-async function purgeSingleAsset(asset: PurgeReadyAsset): Promise<"purged" | "failed"> {
+async function purgeSingleAsset(
+  asset: PurgeReadyAsset,
+): Promise<"purged" | "failed" | "skipped"> {
+  // Race-Defensive: erneutes Refs==0-Check unmittelbar vor dem Bunny-Call.
+  // Wenn zwischen Orphan-Sweep und JETZT eine neue Ref entstanden ist
+  // (z.B. via `trackBunnyAsset` mit identischer GUID), brechen wir ab
+  // und lassen den Asset in `purge_pending` stehen — der Sweep wird ihn
+  // erneut prüfen, sobald die Refs wieder weg sind.
+  const claimed = await claimAssetForPhysicalDelete(asset);
+  if (!claimed) {
+    log(
+      "info",
+      `skip ${asset.id} (${asset.kind}/${asset.bunnyId}) — race lost (new ref appeared or state moved)`,
+    );
+    return "skipped";
+  }
+
   try {
     if (asset.kind === "stream") {
       await deleteVideo(asset.bunnyId);
@@ -164,11 +234,11 @@ export async function runBunnyPurgeTick(): Promise<BunnyPurgeTickResult> {
     assets = await getAssetsReadyForPurge(BATCH_SIZE);
   } catch (err) {
     log("error", `getAssetsReadyForPurge failed: ${(err as Error)?.message ?? err}`);
-    return { scanned: 0, purged: 0, failed: 0, orphansSwept };
+    return { scanned: 0, purged: 0, failed: 0, orphansSwept, skippedRace: 0 };
   }
 
   if (assets.length === 0) {
-    return { scanned: 0, purged: 0, failed: 0, orphansSwept };
+    return { scanned: 0, purged: 0, failed: 0, orphansSwept, skippedRace: 0 };
   }
 
   log("info", `tick: processing ${assets.length} asset(s)`);
@@ -176,12 +246,14 @@ export async function runBunnyPurgeTick(): Promise<BunnyPurgeTickResult> {
   // (3) Rate-limit via Chunks à PARALLELISM mit 250ms-Pause zwischen Chunks.
   let purged = 0;
   let failed = 0;
+  let skippedRace = 0;
   for (let i = 0; i < assets.length; i += PARALLELISM) {
     const chunk = assets.slice(i, i + PARALLELISM);
     const settled = await Promise.allSettled(chunk.map(purgeSingleAsset));
     for (const r of settled) {
       if (r.status === "fulfilled") {
         if (r.value === "purged") purged += 1;
+        else if (r.value === "skipped") skippedRace += 1;
         else failed += 1;
       } else {
         // Nicht-Bunny-Fehler (z.B. DB down) — bubblen wir nicht hoch um den
@@ -204,9 +276,9 @@ export async function runBunnyPurgeTick(): Promise<BunnyPurgeTickResult> {
 
   log(
     "info",
-    `tick done: scanned=${assets.length} purged=${purged} failed=${failed} orphansSwept=${orphansSwept}`,
+    `tick done: scanned=${assets.length} purged=${purged} failed=${failed} skippedRace=${skippedRace} orphansSwept=${orphansSwept}`,
   );
-  return { scanned: assets.length, purged, failed, orphansSwept };
+  return { scanned: assets.length, purged, failed, orphansSwept, skippedRace };
 }
 
 const PURGE_INTERVAL_MS = 60_000;

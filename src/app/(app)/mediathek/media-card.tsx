@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
+import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
 
 export interface MediaCardItem {
   id: string;
@@ -82,16 +83,6 @@ function typeIcon(type: string) {
   if (type === "video") return <Film className="size-6 text-ink-muted" />;
   if (type === "logo") return <ImageIcon className="size-6 text-ink-muted" />;
   return <FileVideo className="size-6 text-ink-muted" />;
-}
-
-/**
- * Bunny Stream playlist.m3u8 → MP4-Fallback. Native <video> kann HLS nur
- * in Safari; alle anderen Browser brauchen den progressiven play_720p.mp4
- * (gleicher Pfad in Bunny Stream). Query-Parameter (z. B. token/expires)
- * werden mitgenommen.
- */
-function toMp4Fallback(url: string): string {
-  return url.replace(/\/playlist\.m3u8(\?.*)?$/i, "/play_720p.mp4$1");
 }
 
 function isHlsUrl(url: string): boolean {
@@ -144,10 +135,15 @@ export function MediaCard({ item }: { item: MediaCardItem }) {
 
   // Bei embed=false: <video> bekommt entweder MP4-Fallback (HLS) oder URL roh.
   // Bei embed=true: <iframe> mit Bunny-Player.
+  // HLS-Playlist → progressive MP4-Fallback. Native <video> kann HLS nur in
+  // Safari; alle anderen Browser brauchen den progressiven `play_<res>.mp4`.
+  // Client-Side haben wir hier KEINE availableResolutions verfügbar — der
+  // Helper fällt deshalb intern auf den safe-default `play_480p.mp4` zurück
+  // (existiert für JEDES Bunny-Stream-Video, anders als 720p).
   const videoSrc =
     playbackUrl && !isEmbed
       ? isHlsUrl(playbackUrl)
-        ? toMp4Fallback(playbackUrl)
+        ? pickBunnyMp4Fallback(playbackUrl)
         : playbackUrl
       : null;
 

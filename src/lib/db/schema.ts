@@ -85,6 +85,13 @@ export const mediaItems = pgTable("media_items", {
   // — das matched das frühere implizite Verhalten.
   width: integer("width"),
   height: integer("height"),
+  // ── Bunny-Stream availableResolutions (Migration 0016) ────────────────
+  // Real von Bunny gerenderte Resolutions-Labels (`["240p", "480p", ...]`).
+  // Wird vom MP4-Fallback-Helper `pickBunnyMp4Fallback()` gelesen, um die
+  // höchste tatsächlich existierende Auflösung zu wählen — verhindert
+  // 404s für Portrait-Quellen (kein 720p-Render).
+  // NULL = unbekannt / Altbestand → Helper nutzt safe-default `play_480p`.
+  availableResolutions: text("available_resolutions").array(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userIdx: index("media_user_idx").on(t.userId),
@@ -491,6 +498,16 @@ export const customLpVersions = pgTable("custom_lp_versions", {
   annotations: jsonb("annotations").$type<Record<string, unknown>>(),
   bytesTotal: integer("bytes_total").notNull(),
   uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * Soft-Delete-Marker (Migration 0017, Paket G).
+   *
+   * NULL = aktiv, sichtbar im Editor. Nicht-NULL = gelöscht aus Editor-
+   * Sicht, aber Bestand-Runs, die auf diese `id` pinnen, lesen den
+   * Storage-Pfad weiter (render-Queries filtern bewusst NICHT auf
+   * `deleted_at`). Damit überlebt ein Versions-Delete jeden Pipeline-Run,
+   * der bereits an die Version gebunden ist.
+   */
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 }, (t) => ({
   templateIdx: index("custom_lp_versions_template_idx").on(t.templateId),
   uniqueVersionPerTemplate: unique("custom_lp_versions_tpl_ver_uq").on(t.templateId, t.version),
@@ -600,3 +617,15 @@ export const bunnyAssetRefs = pgTable("bunny_asset_refs", {
   ownerUq: uniqueIndex("bunny_asset_refs_owner_uq").on(t.assetId, t.ownerType, t.ownerId),
   ownerIdx: index("bunny_asset_refs_owner_idx").on(t.ownerType, t.ownerId),
 }));
+
+// ── Index-Namen als Konstanten ────────────────────────────────────────────
+//
+// Werden vom Worker (`landingpage-create.ts`) zur Erkennung von
+// UNIQUE-Constraint-Violations genutzt — Single-Source-of-Truth, damit
+// Migrations und Drift-Checks denselben Namen referenzieren.
+export const LEADS_CAMPAIGN_DEFAULT_SLUG_UQ = "leads_campaign_default_slug_uq";
+export const LEADS_CAMPAIGN_CUSTOM_SLUG_UQ = "leads_campaign_custom_slug_uq";
+/** @deprecated Pre-Migration-0014. Hier für Bestandsschutz (z.B. Branching). */
+export const LEGACY_LEADS_DEFAULT_SLUG_UQ = "leads_default_slug_uq";
+/** @deprecated Pre-Migration-0014. Hier für Bestandsschutz (z.B. Branching). */
+export const LEGACY_LEADS_CUSTOM_SLUG_UQ = "leads_custom_slug_uq";

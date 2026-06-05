@@ -24,7 +24,13 @@
 
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { userDomains } from "@/lib/db/schema";
+import {
+  userDomains,
+  LEADS_CAMPAIGN_DEFAULT_SLUG_UQ,
+  LEADS_CAMPAIGN_CUSTOM_SLUG_UQ,
+  LEGACY_LEADS_DEFAULT_SLUG_UQ,
+  LEGACY_LEADS_CUSTOM_SLUG_UQ,
+} from "@/lib/db/schema";
 import { generateSlug, slugHexSuffix } from "@/lib/slug";
 import { findSlugInCampaign, updateLeadStatus } from "@/lib/db/queries/leads";
 import type {
@@ -136,7 +142,19 @@ async function resolveEffectiveDomainId(
  * Postgres-Fehler-Detector fuer Slug-UNIQUE-Verletzungen. Wir matchen sowohl
  * den Default- als auch den Custom-Domain-Partial-Index, damit Retries
  * konsistent funktionieren.
+ *
+ * Wir prüfen die neuen campaign-scoped Index-Namen (Migration 0014) UND die
+ * Legacy-Namen (Pre-0014). Letzteres ist Bestandsschutz für Dev-Branches
+ * oder Envs, die noch nicht migriert wurden — sonst würde der Race-Retry-
+ * Pfad dort still kaputt sein.
  */
+const SLUG_UNIQUE_CONSTRAINTS: ReadonlySet<string> = new Set([
+  LEADS_CAMPAIGN_DEFAULT_SLUG_UQ,
+  LEADS_CAMPAIGN_CUSTOM_SLUG_UQ,
+  LEGACY_LEADS_DEFAULT_SLUG_UQ,
+  LEGACY_LEADS_CUSTOM_SLUG_UQ,
+]);
+
 function isSlugUniqueViolation(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   // postgres-js wirft via DrizzleQueryError; der echte pg-Error sitzt als
@@ -147,10 +165,7 @@ function isSlugUniqueViolation(err: unknown): boolean {
       : (err as Record<string, unknown>);
   if (inner.code !== "23505") return false;
   const constraint = String(inner.constraint_name ?? "");
-  return (
-    constraint === "leads_default_slug_uq" ||
-    constraint === "leads_custom_slug_uq"
-  );
+  return SLUG_UNIQUE_CONSTRAINTS.has(constraint);
 }
 
 /**

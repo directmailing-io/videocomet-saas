@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getMediaItem } from "@/lib/db/queries/media";
+import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
 
 /**
  * GET /api/media/[id]/frame?ms=12345
@@ -68,15 +69,15 @@ export async function GET(
   }
 
   // ── Download source MP4/WebM into a temp file ─────────────────────────
-  // Bunny serves both Stream (HLS) and Storage (mp4/webm). For HLS
-  // playlists, switch to the MP4 fallback so ffmpeg can seek.
-  let downloadUrl = media.publicUrl;
-  const hlsMatch = downloadUrl.match(
-    /^(https?:\/\/[^/]+)\/([0-9a-f-]{36})\/playlist\.m3u8$/i,
+  // Bunny serves both Stream (HLS) and Storage (mp4/webm). Für HLS-Playlists
+  // schalten wir auf den progressiven MP4-Pfad um, damit ffmpeg seeken kann.
+  // `pickBunnyMp4Fallback` nutzt — wenn auf dem Media-Item persistiert — die
+  // tatsächlich gerenderten `availableResolutions`, sonst sicheren 480p-
+  // Default (existiert auch für Portrait-Quellen, anders als 720p).
+  const downloadUrl = pickBunnyMp4Fallback(
+    media.publicUrl,
+    media.availableResolutions,
   );
-  if (hlsMatch) {
-    downloadUrl = `${hlsMatch[1]}/${hlsMatch[2]}/play_720p.mp4`;
-  }
 
   const referer =
     process.env.APP_URL ??

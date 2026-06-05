@@ -19,11 +19,11 @@
  */
 
 import {
-  getVideo,
   getVideoDownloadUrls,
   uploadVideo,
 } from "@/lib/bunny/stream";
 import { updateLeadStatus } from "@/lib/db/queries/leads";
+import { waitForBunnyEncoding } from "../lib/wait-for-bunny-encoding";
 
 export interface VideoUploadInput {
   leadId: string;
@@ -63,9 +63,15 @@ function orientationOf(
 }
 
 /**
- * Probt Bunny-Meta + MP4-Fallback. Bunny-`status`:
- *   0 = created, 1 = uploaded, 2 = processing, 3 = transcoding, 4 = finished, 5 = error.
- * Pragmatisch: wir akzeptieren `status >= 3` ODER `availableResolutions` non-empty.
+ * Wartet SYNCHRON auf Bunny-Encoding (status>=3 ODER availableResolutions!=""),
+ * dann liest mp4Url + width/height. Wirft `BunnyEncodingRetryableError` wenn
+ * Bunny nach 60 s noch nicht durch ist — BullMQ retried den Job, der Lead
+ * bleibt im `uploading`-Status (wir schreiben in dem Pfad NICHT updateLeadStatus).
+ *
+ * Bug E1: Vorher haben wir EINEN getVideo()-Call gemacht. Wenn Bunny da noch
+ * nicht durch war (häufig: 1080p Portrait braucht > sofort), schrieben wir
+ * videoMp4Url=null an den Lead, und der Custom-LP-Player fiel auf den
+ * hardcoded play_720p.mp4-Pfad zurück → 404 für Portrait-Quellen.
  */
 async function resolvePostUploadMeta(
   videoId: string,
@@ -78,38 +84,21 @@ async function resolvePostUploadMeta(
 }> {
   const parsed = parseStreamHlsUrl(hlsUrl);
   if (!parsed) return { width: null, height: null, mp4Url: null, orientation: null };
-  let width: number | null = null;
-  let height: number | null = null;
+  // Bounded-Poll auf Bunny-Encoding. Throws nach 60s (BullMQ-Retry-Pfad).
+  const ready = await waitForBunnyEncoding(videoId);
+  const width = ready.width > 0 ? ready.width : null;
+  const height = ready.height > 0 ? ready.height : null;
+  const orientation =
+    width != null && height != null ? orientationOf(width, height) : null;
   let mp4Url: string | null = null;
-  let orientation: "landscape" | "portrait" | "square" | null = null;
   try {
-    const meta = await getVideo(videoId);
-    const w = Number(meta.width ?? 0);
-    const h = Number(meta.height ?? 0);
-    if (w > 0 && h > 0) {
-      width = w;
-      height = h;
-      orientation = orientationOf(w, h);
-    }
-    // Status-Check: encode fertig genug für MP4-Fallback?
-    const status = Number(meta.status ?? 0);
-    const hasMp4 = String(meta.availableResolutions ?? "").trim().length > 0;
-    if (status >= 3 || hasMp4) {
-      try {
-        const downloads = await getVideoDownloadUrls(
-          videoId,
-          parsed.cdnHostname,
-        );
-        mp4Url = downloads[0]?.url ?? null;
-      } catch (err) {
-        console.warn(
-          `[video-upload] getVideoDownloadUrls failed for ${videoId}: ${(err as Error).message}`,
-        );
-      }
-    }
+    const downloads = await getVideoDownloadUrls(videoId, parsed.cdnHostname);
+    mp4Url = downloads[0]?.url ?? null;
   } catch (err) {
+    // Sollte selten passieren — Bunny hat eben gerade ready gemeldet. Wir
+    // tolerieren null + lassen Public-LP lazy nachsuchen.
     console.warn(
-      `[video-upload] getVideo failed for ${videoId}: ${(err as Error).message}`,
+      `[video-upload] getVideoDownloadUrls failed for ${videoId}: ${(err as Error).message}`,
     );
   }
   return { width, height, mp4Url, orientation };

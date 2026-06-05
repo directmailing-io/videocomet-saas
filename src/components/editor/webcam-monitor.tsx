@@ -21,6 +21,7 @@
 import * as React from "react";
 import { Volume2, VolumeX, Volume1, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
 
 /* ------------------------------------------------------------------ */
 /* Public Interface (FIX — Agent B verlässt sich darauf)               */
@@ -66,11 +67,14 @@ type VolumeStep = (typeof VOLUME_STEPS)[number];
  * spielt HLS nur in Safari — der MP4-Fallback existiert immer für aktivierte
  * MP4-Streams in Bunny.
  *
- * Pattern wiederverwendet aus `lib/db/queries/custom-lp-public.ts`.
+ * Implementation: delegiert an `pickBunnyMp4Fallback` (siehe
+ * `src/lib/bunny/mp4-fallback.ts`). Client-Side haben wir keine
+ * `availableResolutions` — der Helper fällt auf `play_480p.mp4` zurück,
+ * was für Portrait-Quellen (kein 720p-Render) das sichere Verhalten ist.
  */
 function normalizeWebcamUrl(url: string): string {
   if (!url) return url;
-  return url.replace(/\/playlist\.m3u8(?:\?.*)?$/, "/play_720p.mp4");
+  return pickBunnyMp4Fallback(url);
 }
 
 function formatMMSS(sec: number): string {

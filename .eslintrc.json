@@ -1,0 +1,41 @@
+{
+  "root": true,
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": true
+    }
+  },
+  "rules": {
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "Literal[value=\"_host\"]",
+        "message": "Direct '_host' query-param access verboten. Nutze resolveCustomDomainHost(req) bzw. resolveCustomDomainHostFromPage(searchParams, headers)."
+      },
+      {
+        "selector": "MemberExpression[computed=false][property.name=\"_host\"]",
+        "message": "Direct '_host' query-param access verboten. Nutze resolveCustomDomainHost(req) bzw. resolveCustomDomainHostFromPage(searchParams, headers)."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/lib/custom-domain-host.ts",
+        "src/middleware.ts",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
+    }
+  ],
+  "noInlineConfig": false,
+  "reportUnusedDisableDirectives": false,
+  "ignorePatterns": [".next/**", "node_modules/**", "dist/**", "build/**"]
+}

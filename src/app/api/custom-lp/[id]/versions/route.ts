@@ -30,6 +30,7 @@ import {
   getTemplate,
   listAffectedRuns,
   listVersions,
+  softDeleteCustomLpVersion,
   updateTemplate,
 } from "@/lib/db/queries/custom-lp";
 import { CUSTOM_LP_LIMITS } from "@/lib/custom-lp/types";
@@ -292,4 +293,64 @@ export async function POST(
     },
     { status: 201 },
   );
+}
+
+/**
+ * DELETE /api/custom-lp/[id]/versions?versionId=<uuid>
+ *
+ * Soft-Delete einer einzelnen Custom-LP-Version (Paket G).
+ *
+ * Verhalten:
+ *  - Markiert die Version als `deleted_at = now()`. Storage-Files bei Bunny
+ *    bleiben liegen — sie werden vom Bunny-Asset-Register (Paket B/D)
+ *    referenz-gezählt und fallen weg, sobald keine Refs mehr existieren.
+ *  - Bestand-Runs, die diese `versionId` pinnen, bleiben funktional: der
+ *    public-Renderer liest die Version per direktem `id`-Lookup ohne
+ *    Soft-Delete-Filter — d.h. die Pipeline läuft sauber durch.
+ *  - War die Version die `activeVersionId` des Templates, wird der Pointer
+ *    in derselben Transaktion auf NULL gesetzt (Drift-Schutz für die
+ *    Editor-Liste).
+ *
+ * Response-Shape:
+ *  - 200 `{ ok: true, alreadyDeleted: boolean }` — Soft-Delete erfolgt
+ *    (oder Version war bereits soft-gelöscht; idempotent).
+ *  - 400, wenn `versionId` fehlt oder kein UUID.
+ *  - 404, wenn Version nicht zum tenant/template gehört.
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const auth = await requireUserApi();
+  if (!auth.ok) return auth.response;
+
+  const versionId = req.nextUrl.searchParams.get("versionId");
+  if (!versionId || !/^[0-9a-fA-F-]{36}$/.test(versionId)) {
+    return NextResponse.json(
+      { error: "Query-Parameter \"versionId\" fehlt oder ist ungültig." },
+      { status: 400 },
+    );
+  }
+
+  // Tenant-guard: Template muss dem User gehören.
+  try {
+    await getTemplate(params.id, auth.user.id);
+  } catch {
+    return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
+  }
+
+  try {
+    const deleted = await softDeleteCustomLpVersion(versionId, auth.user.id);
+    return NextResponse.json({ ok: true, alreadyDeleted: !deleted });
+  } catch (err) {
+    if (err instanceof Error && err.message === "Not found") {
+      return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
+    }
+    // eslint-disable-next-line no-console
+    console.error("[custom-lp] soft-delete version failed:", err);
+    return NextResponse.json(
+      { error: "Interner Fehler beim Löschen der Version." },
+      { status: 500 },
+    );
+  }
 }

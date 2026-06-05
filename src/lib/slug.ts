@@ -66,10 +66,18 @@ export function slugHexSuffix(): string {
 export const RESERVED_SLUGS = new Set<string>([
   // Next.js / framework
   "_next", "favicon.ico", "robots.txt", "sitemap.xml",
-  // App-Routen
+  // App-Routen (top-level Verzeichnisse aus src/app/)
   "api", "v", "admin", "login", "logout", "register", "auth",
   "dashboard", "kampagnen", "runden", "mediathek", "landingpages",
   "einstellungen", "analytics", "app",
+  // Stealth-Tracker-Pfade + Custom-LP Renderer (Migration 0014)
+  "lp-block", "cv", "c", "r",
+  // Password-Reset (Top-Level-Routen in src/app/)
+  "passwort-vergessen", "passwort-zuruecksetzen",
+  // Bridge-Script (wird vom Custom-LP Sandbox via /__videocomet-bridge.js
+  // serviert; ein Lead-Slug `__videocomet-bridge.js` würde den Script-Pfad
+  // schatten und Trackings brechen).
+  "__videocomet-bridge.js",
   // Tracking / health
   "track", "healthz", "health", "ping",
   // Reserved für kuenftige Features

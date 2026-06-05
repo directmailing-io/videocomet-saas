@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
+import { resolveCustomDomainHostFromPage } from "@/lib/custom-domain-host";
 import {
   campaigns,
   landingPageTemplates,
@@ -214,7 +216,12 @@ export default async function PublicLandingPage({
   // `domain_id IS NULL` aufgelöst werden. Ein Lead, der einer Custom-Domain
   // zugewiesen ist, darf NICHT über `app.videocomet.de/v/<slug>` erreichbar
   // sein — sonst kann der Slug eines Kundens fremde Lead-Daten ausliefern.
-  const hostParam = typeof sp?._host === "string" ? sp._host : null;
+  //
+  // Defensive: der Query-Param kann unter Next.js-14-Edge→Node-Rewrites
+  // verloren gehen. `resolveCustomDomainHostFromPage` faellt dann auf den
+  // `host`-Header zurueck und filtert App-eigene Hosts (siehe
+  // src/lib/custom-domain-host.ts).
+  const hostParam = resolveCustomDomainHostFromPage(sp, await headers());
   let isCustomDomain = false;
   let lead: Awaited<ReturnType<typeof getLeadBySlugForDefaultDomain>> = null;
   if (hostParam) {

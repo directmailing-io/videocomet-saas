@@ -6,7 +6,7 @@
  * 404 to avoid leaking the existence of resources across users.
  */
 
-import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   campaigns,
@@ -87,6 +87,10 @@ export async function updateTemplate(
  * Deletes a template (cascade-deletes all versions via FK). Refuses if any
  * run is still pinning a version of this template — the API caller should
  * detach those runs first or surface the conflict to the user.
+ *
+ * NOTE: das `stillPinned`-Set ignoriert soft-gelöschte Versions NICHT —
+ * eine gepinnte deleted-Version blockt den Template-Delete genauso wie eine
+ * aktive, weil ein FK-Cascade die Run-Spalte sonst zerschlüge.
  */
 export async function deleteTemplate(id: string, userId: string): Promise<void> {
   // Tenant-guard first.
@@ -140,6 +144,7 @@ export async function listTemplatesForUser(
       versionCount: sql<number>`(
         SELECT COUNT(*)::int FROM ${customLpVersions}
         WHERE ${customLpVersions.templateId} = ${customLpTemplates.id}
+          AND ${customLpVersions.deletedAt} IS NULL
       )`,
       activeVersionId: customLpVersions.id,
       activeVersionNumber: customLpVersions.version,
@@ -148,7 +153,13 @@ export async function listTemplatesForUser(
     .from(customLpTemplates)
     .leftJoin(
       customLpVersions,
-      eq(customLpTemplates.activeVersionId, customLpVersions.id),
+      // Editor-Anzeige: aktive Version nur dann zurückgeben, wenn sie
+      // nicht weichgelöscht ist. Auf Render-Seite (custom-lp-public.ts)
+      // wird der Pin trotzdem aufgelöst, damit Bestand-Runs nicht brechen.
+      and(
+        eq(customLpTemplates.activeVersionId, customLpVersions.id),
+        isNull(customLpVersions.deletedAt),
+      ),
     )
     .where(eq(customLpTemplates.userId, userId))
     .orderBy(desc(customLpTemplates.createdAt));
@@ -219,6 +230,13 @@ export async function createVersion(
   return row as CustomLpVersion;
 }
 
+/**
+ * Editor-Lookup einer Version. Soft-gelöschte Versions werden bewusst
+ * gefiltert — alle Editor-Surfaces (preview, activate, picker-update)
+ * sollen sie als "weg" sehen. Für render-Pfade (Pipeline / Public-LP)
+ * gibt es den unfilterten Lookup in `custom-lp-public.ts`, der die
+ * gepinnte Version unabhängig vom Soft-Delete-Status auflöst.
+ */
 export async function getVersion(
   versionId: string,
   userId: string,
@@ -234,6 +252,7 @@ export async function getVersion(
       and(
         eq(customLpVersions.id, versionId),
         eq(customLpTemplates.userId, userId),
+        isNull(customLpVersions.deletedAt),
       ),
     )
     .limit(1);
@@ -250,7 +269,12 @@ export async function listVersions(
   return db
     .select()
     .from(customLpVersions)
-    .where(eq(customLpVersions.templateId, templateId))
+    .where(
+      and(
+        eq(customLpVersions.templateId, templateId),
+        isNull(customLpVersions.deletedAt),
+      ),
+    )
     .orderBy(asc(customLpVersions.version));
 }
 
@@ -258,8 +282,81 @@ export async function countVersions(templateId: string): Promise<number> {
   const [row] = await db
     .select({ c: count() })
     .from(customLpVersions)
-    .where(eq(customLpVersions.templateId, templateId));
+    .where(
+      and(
+        eq(customLpVersions.templateId, templateId),
+        isNull(customLpVersions.deletedAt),
+      ),
+    );
   return row?.c ?? 0;
+}
+
+/**
+ * Soft-Delete einer Custom-LP-Version (Paket G).
+ *
+ * Verhalten:
+ *  - Idempotent: ein zweiter Aufruf auf eine bereits gelöschte Version
+ *    ist ein no-op (returned `false`).
+ *  - Tenant-guarded: nutzt den `getVersion`-Lookup für die User-Pruefung,
+ *    fällt aber bei "schon gelöscht" sauber durch (404 wäre für den Caller
+ *    irreführend, daher prüfen wir manuell auf das Template).
+ *  - Wenn die zu löschende Version aktuell die `activeVersionId` des
+ *    Templates ist, wird der Pointer auf NULL gesetzt. Andernfalls würde
+ *    `listTemplatesForUser` durch den `deletedAt`-Filter im `leftJoin`
+ *    plötzlich `activeVersion=null` anzeigen, der Template-Eintrag aber
+ *    weiter `activeVersionId !== null` halten — UI-Drift.
+ *  - Runs, die noch auf diese Version pinnen, bleiben unangetastet. Der
+ *    Render-Pfad (`custom-lp-public.ts`) liest die Version explizit per
+ *    ID und ignoriert `deletedAt` — Bestand-Runs überleben den Delete.
+ *
+ * Returns `true` wenn die Version durch diesen Call markiert wurde,
+ * `false` wenn sie schon vorher soft-gelöscht war.
+ */
+export async function softDeleteCustomLpVersion(
+  versionId: string,
+  userId: string,
+): Promise<boolean> {
+  // Tenant-guard via direct join (NICHT `getVersion`, weil das auf
+  // `deletedAt IS NULL` filtert und einen bereits gelöschten Pin als 404
+  // melden würde — wir wollen aber idempotent sein).
+  const [row] = await db
+    .select({
+      versionId: customLpVersions.id,
+      templateId: customLpVersions.templateId,
+      deletedAt: customLpVersions.deletedAt,
+      activeVersionId: customLpTemplates.activeVersionId,
+    })
+    .from(customLpVersions)
+    .innerJoin(
+      customLpTemplates,
+      eq(customLpVersions.templateId, customLpTemplates.id),
+    )
+    .where(
+      and(
+        eq(customLpVersions.id, versionId),
+        eq(customLpTemplates.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (!row) throw new Error("Not found");
+  if (row.deletedAt !== null) return false;
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(customLpVersions)
+      .set({ deletedAt: new Date() })
+      .where(eq(customLpVersions.id, versionId));
+
+    if (row.activeVersionId === versionId) {
+      await tx
+        .update(customLpTemplates)
+        .set({ activeVersionId: null, updatedAt: new Date() })
+        .where(eq(customLpTemplates.id, row.templateId));
+    }
+  });
+
+  return true;
 }
 
 /**
