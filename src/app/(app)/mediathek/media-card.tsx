@@ -108,12 +108,12 @@ export function MediaCard({ item }: { item: MediaCardItem }) {
   const [deleting, setDeleting] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  // Lazily-fetched signed playback URL for videos/webcams. We start with
-  // `null` and resolve to either:
-  //   - a signed Bunny Stream URL (token-auth-protected pullzone), or
-  //   - the original publicUrl (Bunny Storage, no token-auth needed).
-  // The endpoint decides — see /api/media/[id]/signed-url.
+  // Lazily-fetched playback URL für Videos/Webcams. Server entscheidet:
+  //   - embed=true → Bunny iframe-Player-URL (Stream-Videos, Token-Auth-frei)
+  //   - embed=false + url=signed → token-auth-signierte HLS-URL
+  //   - embed=false + url=original → Bunny Storage URL (Webcam-Recording)
   const [playbackUrl, setPlaybackUrl] = React.useState<string | null>(null);
+  const [isEmbed, setIsEmbed] = React.useState(false);
   const isPlayable = item.type === "video" || item.type === "webcam";
   React.useEffect(() => {
     if (!isPlayable) return;
@@ -125,16 +125,16 @@ export function MediaCard({ item }: { item: MediaCardItem }) {
           { cache: "no-store" },
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const body = (await res.json()) as { url?: string };
+        const body = (await res.json()) as { url?: string; embed?: boolean };
         if (!cancelled && typeof body.url === "string" && body.url.length > 0) {
           setPlaybackUrl(body.url);
+          setIsEmbed(Boolean(body.embed));
         }
       } catch {
-        // Fallback: try the raw publicUrl. If token-auth is on, this 403s
-        // — but at least we attempted, and the empty <video> renders a
-        // broken state the user can investigate (Vorschau-Link öffnet's
-        // dann immer noch im neuen Tab).
-        if (!cancelled) setPlaybackUrl(item.publicUrl);
+        if (!cancelled) {
+          setPlaybackUrl(item.publicUrl);
+          setIsEmbed(false);
+        }
       }
     })();
     return () => {
@@ -142,14 +142,14 @@ export function MediaCard({ item }: { item: MediaCardItem }) {
     };
   }, [isPlayable, item.id, item.publicUrl]);
 
-  // <video> kriegt entweder MP4-Fallback (HLS-URL) oder die URL roh
-  // (Storage CDN). Wir leiten erst nach Sign-Fetch ab, damit Token/Expires
-  // korrekt in der MP4-URL landen.
-  const videoSrc = playbackUrl
-    ? isHlsUrl(playbackUrl)
-      ? toMp4Fallback(playbackUrl)
-      : playbackUrl
-    : null;
+  // Bei embed=false: <video> bekommt entweder MP4-Fallback (HLS) oder URL roh.
+  // Bei embed=true: <iframe> mit Bunny-Player.
+  const videoSrc =
+    playbackUrl && !isEmbed
+      ? isHlsUrl(playbackUrl)
+        ? toMp4Fallback(playbackUrl)
+        : playbackUrl
+      : null;
 
   // Wenn die Server-Wahrheit neu hereinkommt (z.B. nach router.refresh nach
   // Submit eines Gast-Videos), den lokalen State synchron halten.
@@ -244,7 +244,15 @@ export function MediaCard({ item }: { item: MediaCardItem }) {
             />
           ) : item.type === "video" || item.type === "webcam" ? (
             <>
-              {videoSrc ? (
+              {isEmbed && playbackUrl ? (
+                <iframe
+                  src={playbackUrl}
+                  allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                  className="w-full h-full bg-black border-0"
+                  title={name}
+                />
+              ) : videoSrc ? (
                 <video
                   src={videoSrc}
                   controls

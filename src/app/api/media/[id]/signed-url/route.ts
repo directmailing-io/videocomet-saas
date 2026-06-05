@@ -24,6 +24,7 @@ import { getMediaItem } from "@/lib/db/queries/media";
 import {
   signStreamHlsUrl,
   isBunnyStreamUrl,
+  getBunnyStreamEmbedUrl,
   DEFAULT_HLS_SIGN_TTL_SEC,
 } from "@/lib/bunny/sign-url";
 
@@ -43,21 +44,30 @@ export async function GET(
 
   const original = media.publicUrl;
   const isStream = isBunnyStreamUrl(original);
-  const url = isStream ? signStreamHlsUrl(original, DEFAULT_HLS_SIGN_TTL_SEC) : original;
 
-  // Cache headers: short browser cache, no shared cache — the token bakes
-  // in an expiry, so anything past TTL becomes a 403 anyway. We let the
-  // client decide when to refetch.
+  // Bunny-Stream-Videos rendern wir bevorzugt als iframe-Embed — Bunny's
+  // eigener Player hat eigene Auth-Logik und braucht keinen Token-Key.
+  // Sign-Helper als Fallback (wenn Embed-URL nicht ableitbar oder
+  // BUNNY_STREAM_TOKEN_AUTH_KEY gesetzt ist).
+  let url = original;
+  let embed = false;
+  if (isStream) {
+    const embedUrl = getBunnyStreamEmbedUrl(original);
+    if (embedUrl) {
+      url = embedUrl;
+      embed = true;
+    } else {
+      url = signStreamHlsUrl(original, DEFAULT_HLS_SIGN_TTL_SEC);
+    }
+  }
+
   return NextResponse.json(
     {
       url,
-      signed: isStream && url !== original,
+      embed,
+      signed: isStream && !embed && url !== original,
       expiresInSec: DEFAULT_HLS_SIGN_TTL_SEC,
     },
-    {
-      headers: {
-        "Cache-Control": "private, no-store",
-      },
-    },
+    { headers: { "Cache-Control": "private, no-store" } },
   );
 }

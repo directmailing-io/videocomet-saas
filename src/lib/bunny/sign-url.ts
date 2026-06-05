@@ -30,6 +30,38 @@ import { getBunnyStreamEnv } from "./env";
 /** Default TTL for signed playback URLs (1 hour). */
 export const DEFAULT_HLS_SIGN_TTL_SEC = 3600;
 
+/** Bunny's iframe-Player-Host. Eigene Auth-Logik, braucht KEIN Token. */
+const BUNNY_EMBED_HOST = "https://iframe.mediadelivery.net";
+
+/**
+ * Baut die Bunny-iframe-Embed-URL für ein Stream-Video, ausgehend von der
+ * gespeicherten HLS-`publicUrl`. Vorteil gegenüber direktem HLS:
+ *  - Bunny's eigener Player wird geliefert (kein Token-Auth-Key nötig)
+ *  - Funktioniert in Firefox/Chrome ohne hls.js
+ *  - Vorschau hat sofort die richtige UI (Controls, Poster, Captions)
+ *
+ * Pattern: `vz-<hash>.b-cdn.net/<guid>/playlist.m3u8`
+ *      →   `iframe.mediadelivery.net/embed/<libraryId>/<guid>`
+ *
+ * Liefert `null` wenn die URL nicht in das Stream-Pattern passt — Caller
+ * fällt dann auf `signStreamHlsUrl()` zurück.
+ */
+export function getBunnyStreamEmbedUrl(rawUrl: string): string | null {
+  if (!isBunnyStreamUrl(rawUrl)) return null;
+  let u: URL;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+  // Pfad-Form: `/<guid>/playlist.m3u8` ODER `/<guid>/play_720p.mp4` etc.
+  const m = u.pathname.match(/^\/([a-f0-9-]{36})(?:\/|$)/i);
+  if (!m) return null;
+  const guid = m[1];
+  const env = getBunnyStreamEnv();
+  return `${BUNNY_EMBED_HOST}/embed/${env.libraryId}/${guid}`;
+}
+
 /**
  * Returns `true` if the given URL looks like it belongs to our Bunny Stream
  * CDN (vz-*.b-cdn.net) and therefore *might* need token-auth signing.
