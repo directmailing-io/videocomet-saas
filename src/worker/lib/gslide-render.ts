@@ -114,10 +114,12 @@ export async function renderGSlideToPng(opts: {
   let page: Page | null = null;
   try {
     page = await pooled.context.newPage();
+    // 2× DPR für schärferes Bild — Google rendert Text als SVG-Pfade,
+    // 1× wirkt am Endrenderer matschig.
     await page.setViewport({
       width: SLIDE_W,
       height: SLIDE_H,
-      deviceScaleFactor: 1,
+      deviceScaleFactor: 2,
     });
 
     await page.goto(firstUrl, {
@@ -126,6 +128,51 @@ export async function renderGSlideToPng(opts: {
     });
 
     await waitForSlideReady(page);
+
+    // Chrome (Navbar oben, Folien-Nummer, Google-Slides-Branding, Steuer-
+    // leiste unten) sofort ausblenden — sonst sieht der Lead diese Pubembed-
+    // Bedienelemente im finalen Video.
+    await page
+      .addStyleTag({
+        content: `
+          /* Top navbar mit "Folie X" Indicator */
+          .punch-viewer-navbar,
+          .punch-viewer-content-mask,
+          /* Bottom controls (prev/next, slide-counter, brand badge) */
+          .punch-viewer-controls,
+          .punch-viewer-controls-rendered,
+          [class*="punch-viewer-navbar"],
+          [class*="punch-viewer-controls"],
+          [class*="punch-viewer-brand"],
+          [class*="punch-viewer-watermark"],
+          [class*="branding"],
+          [class*="watermark"],
+          [class*="punch-page-counter"],
+          .docs-icon-img-container,
+          /* Speaker notes / dialogs */
+          .punch-speaker-notes,
+          [aria-label*="Folie"],
+          /* Generic chrome guard */
+          [class*="present-action-bar"],
+          [class*="page-counter"]
+          {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            height: 0 !important;
+            width: 0 !important;
+            overflow: hidden !important;
+            pointer-events: none !important;
+          }
+          html, body {
+            background: #000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+          }
+        `,
+      })
+      .catch(() => undefined);
 
     // Bis zur Ziel-Folie weiterklicken
     for (let i = 0; i < opts.slide.slideIndex; i += 1) {

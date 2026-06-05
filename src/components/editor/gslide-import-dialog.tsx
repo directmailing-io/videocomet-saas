@@ -425,6 +425,21 @@ function Step1Instructions({
         </span>
       </div>
 
+      {/* Wichtige Einschränkung — Platzhalter-Substitution */}
+      <div className="flex items-start gap-2.5 rounded-squircle-sm border border-warn/40 bg-warn/5 px-4 py-3 text-sm text-warn-deep">
+        <Info className="size-4 shrink-0 mt-0.5" />
+        <div className="leading-snug">
+          <strong className="font-semibold">Hinweis zu Platzhaltern:</strong>{" "}
+          Google rendert Folientext server-seitig zu Vektor-Pfaden — das heißt,
+          Platzhalter wie <code className="font-mono text-xs bg-warn/10 px-1 rounded">{`{{firstName}}`}</code>
+          {" "}werden im Video <strong>nicht automatisch</strong> durch Lead-Daten
+          ersetzt. Für personalisierte Texte nutze stattdessen den Folientyp
+          {" "}<strong>Freie Folie</strong> oder eine{" "}
+          <strong>Textfolie</strong>. Google-Slides sind ideal für statische,
+          hochwertig designte Inhalte.
+        </div>
+      </div>
+
       {/* Footer */}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3 pt-2">
         <Button type="button" variant="ghost" onClick={onCancel}>

@@ -198,19 +198,32 @@ export function SegmentEditorGSlide({
             </span>
           </div>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {segment.detectedPlaceholders.map((key) => (
-              <span
-                key={key}
-                className={cn(
-                  "inline-flex items-center rounded-full border border-brand-200 bg-brand-soft px-2.5 py-1 font-mono text-[11px] font-medium text-brand-deep",
-                )}
-                title={`Wird beim Rendern pro Lead ersetzt: {{${key}}}`}
-              >
-                {`{{${key}}}`}
+          <>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {segment.detectedPlaceholders.map((key) => (
+                <span
+                  key={key}
+                  className={cn(
+                    "inline-flex items-center rounded-full border border-warn/40 bg-warn/5 px-2.5 py-1 font-mono text-[11px] font-medium text-warn-deep",
+                  )}
+                  title={`Erkannt, aber nicht ersetzbar in Google Slides: {{${key}}}`}
+                >
+                  {`{{${key}}}`}
+                </span>
+              ))}
+            </div>
+            <div className="flex items-start gap-2 rounded-squircle-sm border border-warn/30 bg-warn/5 p-3 text-xs text-warn-deep">
+              <Info className="size-3.5 shrink-0 mt-0.5" />
+              <span className="leading-snug">
+                <strong>Diese Platzhalter werden NICHT pro Lead ersetzt.</strong>{" "}
+                Google rendert Folientext server-seitig zu Vektor-Pfaden — der
+                Originaltext kann nachträglich nicht mehr substituiert werden.
+                Für personalisierte Texte nutze stattdessen den Folientyp
+                {" "}<strong>Freie Folie</strong> oder eine{" "}
+                <strong>Textfolie</strong>.
               </span>
-            ))}
-          </div>
+            </div>
+          </>
         )}
       </div>
 

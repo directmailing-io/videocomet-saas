@@ -89,10 +89,12 @@ async function runImport(
   let page: Page | null = null;
   try {
     page = await pooled.context.newPage();
+    // 2× DPR + Chrome ausblenden — gleiche Logik wie im Worker-Renderer,
+    // damit Editor-Thumbnails 1:1 das zeigen was später im Video landet.
     await page.setViewport({
       width: SLIDE_VIEWPORT_W,
       height: SLIDE_VIEWPORT_H,
-      deviceScaleFactor: 1,
+      deviceScaleFactor: 2,
     });
 
     // Start auf Folie 1 (slide=id.p) — die Pubembed-Init-Sequenz mag das.
@@ -103,6 +105,41 @@ async function runImport(
     });
 
     await waitForSlideReady(page);
+
+    // Pubembed-Chrome verstecken (Folien-Nummer oben, Navigation unten,
+    // Google-Slides-Badge). Sonst landet das alles in den Thumbnails.
+    await page
+      .addStyleTag({
+        content: `
+          .punch-viewer-navbar,
+          .punch-viewer-content-mask,
+          .punch-viewer-controls,
+          .punch-viewer-controls-rendered,
+          [class*="punch-viewer-navbar"],
+          [class*="punch-viewer-controls"],
+          [class*="punch-viewer-brand"],
+          [class*="punch-viewer-watermark"],
+          [class*="branding"],
+          [class*="watermark"],
+          [class*="punch-page-counter"],
+          [class*="present-action-bar"],
+          [class*="page-counter"],
+          [aria-label*="Folie"]
+          {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+          }
+          html, body {
+            background: #000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+          }
+        `,
+      })
+      .catch(() => undefined);
 
     const totalSlides = await detectSlideCount(page);
     if (totalSlides <= 0) {
