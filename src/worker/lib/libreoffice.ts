@@ -63,6 +63,7 @@ function runConvert(
   outputDir: string,
   profileDir: string,
   timeoutMs: number,
+  targetFormat: string = "pdf",
 ): Promise<void> {
   // LibreOffice expects a file:// URL for -env:UserInstallation. Using
   // pathToFileURL ensures correct encoding (spaces, unicode, etc.).
@@ -74,7 +75,7 @@ function runConvert(
         `-env:UserInstallation=${profileUrl}`,
         "--headless",
         "--convert-to",
-        "pdf",
+        targetFormat,
         "--outdir",
         outputDir,
         inputPath,
@@ -166,6 +167,64 @@ export async function convertDocxToPdf(
     }
 
     // Verify the output exists.
+    await stat(expected);
+    return expected;
+  } finally {
+    await removeProfileDir(profileDir);
+  }
+}
+
+export interface ConvertPptxInput {
+  inputPath: string;
+  outputDir: string;
+  timeoutMs?: number;
+}
+
+/**
+ * Convert a PPTX file to PDF. Returns the absolute path of the produced
+ * PDF on success. Same retry- and profile-isolation-strategy as
+ * `convertDocxToPdf` — Impress-Konversion ist genauso single-instance-pro-
+ * Profil und braucht denselben Schutz.
+ *
+ * Hintergrund: Wir konvertieren PPTX → PDF und rastern danach mit
+ * `pdftoppm` (Poppler) pro Folie ein PNG. LibreOffice's eigenes
+ * `--convert-to png` produziert nur die ERSTE Folie, daher dieser Umweg.
+ */
+export async function convertPptxToPdf(
+  input: ConvertPptxInput,
+): Promise<string> {
+  const timeout = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const expected = join(
+    input.outputDir,
+    `${basename(input.inputPath, extname(input.inputPath))}.pdf`,
+  );
+
+  const profileDir = await createProfileDir();
+  try {
+    try {
+      await runConvert(
+        defaultBinary(),
+        input.inputPath,
+        input.outputDir,
+        profileDir,
+        timeout,
+        "pdf",
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[libreoffice] primary PPTX conversion failed, retrying with soffice:`,
+        err,
+      );
+      await runConvert(
+        "/usr/bin/soffice",
+        input.inputPath,
+        input.outputDir,
+        profileDir,
+        timeout,
+        "pdf",
+      );
+    }
     await stat(expected);
     return expected;
   } finally {

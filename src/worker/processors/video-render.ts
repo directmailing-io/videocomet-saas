@@ -328,18 +328,47 @@ export async function runVideoRender(
 
   // Materialise the webcam source on disk first.
   const webcamLocal = join(input.outDir, "webcam-src.mp4");
-  if (input.webcamSourceUrl.startsWith("file://")) {
-    const stripped = input.webcamSourceUrl.replace(/^file:\/\//, "");
-    if (!existsSync(stripped)) {
-      throw new Error(`[render] webcam source missing: ${stripped}`);
+  const rawPath = (() => {
+    if (input.webcamSourceUrl.startsWith("file://")) {
+      return input.webcamSourceUrl.replace(/^file:\/\//, "");
     }
-    // Re-compress in place to normalize codec.
-    await compressVideo({ inputPath: stripped, outputPath: webcamLocal });
+    return null;
+  })();
+  let sourcePath: string;
+  if (rawPath) {
+    if (!existsSync(rawPath)) {
+      throw new Error(`[render] webcam source missing: ${rawPath}`);
+    }
+    sourcePath = rawPath;
   } else {
     const raw = join(input.outDir, "webcam-raw");
     await fetchToFile(input.webcamSourceUrl, raw);
-    await compressVideo({ inputPath: raw, outputPath: webcamLocal });
+    sourcePath = raw;
   }
+
+  // Orientation-aware compress: portrait sources (z. B. 720×1280 Selfie)
+  // sollen NICHT auf 1280×720 ge-pillarboxt werden — das war der Bug. Wir
+  // probten daher VOR dem compress die Pixel-Dimensionen der Quelle und
+  // wählen Output-Auflösung entsprechend.
+  //   - Landscape / quadratisch (w ≥ h): 1280×720 (Status quo)
+  //   - Portrait (w < h): 720×1280
+  // Wenn der Probe fehlschlägt: Fallback Landscape (Status quo) — bricht
+  // also keinen Bestands-Render, nur Portrait-Sources bekommen das neue
+  // Verhalten.
+  const { probeVideoDimensions } = await import("../../lib/ffprobe");
+  const srcDims = await probeVideoDimensions(sourcePath);
+  const isPortrait =
+    srcDims !== null && srcDims.height > srcDims.width;
+  const outW = isPortrait ? 720 : 1280;
+  const outH = isPortrait ? 1280 : 720;
+  console.log(
+    `[render] webcam source dims=${srcDims ? `${srcDims.width}x${srcDims.height}` : "n/a"} → output ${outW}x${outH} (${isPortrait ? "portrait" : "landscape"})`,
+  );
+  await compressVideo({
+    inputPath: sourcePath,
+    outputPath: webcamLocal,
+    settings: { width: outW, height: outH },
+  });
 
   // KRITISCH: die wahre Webcam-Dauer aus der normalisierten Source messen.
   // Wenn `defaultDurationSec` aus der DB NULL ist, fiel der alte Code auf

@@ -17,7 +17,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl tini fonts-liberation fonts-noto-core fonts-noto-extra fonts-dejavu-core fonts-roboto \
       ffmpeg ghostscript imagemagick poppler-utils \
-      libreoffice-core libreoffice-writer libreoffice-common \
+      libreoffice-core libreoffice-writer libreoffice-impress libreoffice-common \
       chromium chromium-sandbox \
       libnss3 libatk-bridge2.0-0 libcups2 libgbm1 libasound2 libpangocairo-1.0-0 \
       libxss1 libxcomposite1 libxrandr2 libxdamage1 libxshmfence1 \

@@ -41,6 +41,10 @@ export interface RecordedMedia {
   name: string;
   publicUrl: string;
   durationSec: number | null;
+  /** Pixel-Dimensionen aus dem POST-Response (server-seitig via ffprobe).
+   *  Optional, weil ältere Records das Feld nicht enthielten. */
+  width?: number | null;
+  height?: number | null;
 }
 
 type RecorderState =
@@ -264,6 +268,8 @@ export function WebcamRecorder({
               name: string;
               publicUrl: string;
               durationSec: number | null;
+              width?: number | null;
+              height?: number | null;
             };
           };
           resolve({
@@ -271,6 +277,8 @@ export function WebcamRecorder({
             name: j.media.name,
             publicUrl: j.media.publicUrl,
             durationSec: j.media.durationSec ?? null,
+            width: j.media.width ?? null,
+            height: j.media.height ?? null,
           });
         } catch (e) {
           reject(e instanceof Error ? e : new Error("Antwort konnte nicht gelesen werden."));

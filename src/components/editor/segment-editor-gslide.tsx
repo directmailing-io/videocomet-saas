@@ -5,6 +5,7 @@ import {
   RotateCw,
   Presentation,
   AlertTriangle,
+  CheckCircle2,
   ImageOff,
   Info,
 } from "lucide-react";
@@ -12,6 +13,23 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import type { GSlideSegment } from "@/lib/segments/types";
+
+/**
+ * Reine URL-Heuristik (browser-safe): erkennt eine alte Pubembed-Variante.
+ * Im Edit-Mode werden Placeholder pro Lead ersetzt; im Pubembed-Mode nicht
+ * — wir entscheiden anhand des URL-Schemas, welche Banner-Variante das
+ * Segment im Editor zeigt.
+ */
+function isLegacyPubembed(url: string): boolean {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    if (!u.hostname.endsWith("docs.google.com")) return false;
+    return /\/presentation\/d\/e\/[^/]+\/(pubembed|pub|embed)/.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Segment-Editor für eine importierte Google-Slides-Folie.
@@ -63,6 +81,7 @@ export function SegmentEditorGSlide({
   const { toast } = useToast();
   const [refreshing, setRefreshing] = React.useState(false);
   const [refreshError, setRefreshError] = React.useState<string | null>(null);
+  const isLegacy = isLegacyPubembed(segment.publishedUrl);
   // Damit „vor X Min" sich nach 30s automatisch aktualisiert, retriggern
   // wir den Re-Render alle 30s. Vermeidet Stale-UI.
   const [, force] = React.useReducer((x: number) => x + 1, 0);
@@ -204,25 +223,46 @@ export function SegmentEditorGSlide({
                 <span
                   key={key}
                   className={cn(
-                    "inline-flex items-center rounded-full border border-warn/40 bg-warn/5 px-2.5 py-1 font-mono text-[11px] font-medium text-warn-deep",
+                    "inline-flex items-center rounded-full border px-2.5 py-1 font-mono text-[11px] font-medium",
+                    isLegacy
+                      ? "border-warn/40 bg-warn/5 text-warn-deep"
+                      : "border-brand-200 bg-brand-soft text-brand-deep",
                   )}
-                  title={`Erkannt, aber nicht ersetzbar in Google Slides: {{${key}}}`}
+                  title={
+                    isLegacy
+                      ? `Erkannt, aber NICHT ersetzbar (Legacy-Pubembed): {{${key}}}`
+                      : `Wird pro Lead ersetzt: {{${key}}}`
+                  }
                 >
                   {`{{${key}}}`}
                 </span>
               ))}
             </div>
-            <div className="flex items-start gap-2 rounded-squircle-sm border border-warn/30 bg-warn/5 p-3 text-xs text-warn-deep">
-              <Info className="size-3.5 shrink-0 mt-0.5" />
-              <span className="leading-snug">
-                <strong>Diese Platzhalter werden NICHT pro Lead ersetzt.</strong>{" "}
-                Google rendert Folientext server-seitig zu Vektor-Pfaden — der
-                Originaltext kann nachträglich nicht mehr substituiert werden.
-                Für personalisierte Texte nutze stattdessen den Folientyp
-                {" "}<strong>Freie Folie</strong> oder eine{" "}
-                <strong>Textfolie</strong>.
-              </span>
-            </div>
+            {isLegacy ? (
+              <div className="flex items-start gap-2 rounded-squircle-sm border border-warn/30 bg-warn/5 p-3 text-xs text-warn-deep">
+                <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+                <span className="leading-snug">
+                  <strong>
+                    Diese Platzhalter werden NICHT pro Lead ersetzt.
+                  </strong>{" "}
+                  Die Folie wurde über die alte „Im Web veröffentlichen"-
+                  Variante eingebunden — Google rendert hier Text als
+                  Vektor-Pfade, die wir nicht mehr substituieren können. Teile
+                  das Deck stattdessen über{" "}
+                  <strong>Teilen → Jeder mit dem Link → Betrachter</strong> und
+                  importiere es neu.
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 rounded-squircle-sm border border-brand-200 bg-brand-soft p-3 text-xs text-brand-deep">
+                <CheckCircle2 className="size-3.5 shrink-0 mt-0.5" />
+                <span className="leading-snug">
+                  Diese Platzhalter werden pro Lead aus deinen CSV-Daten
+                  ersetzt — wir rendern die Folie serverseitig mit den
+                  jeweiligen Werten.
+                </span>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -232,10 +272,9 @@ export function SegmentEditorGSlide({
         <div className="flex items-start gap-2.5 rounded-squircle-sm border border-brand-200 bg-brand-soft px-4 py-3 text-sm text-brand-deep">
           <Info className="size-4 shrink-0 mt-0.5" />
           <span className="leading-snug">
-            Hast du die Slides nachträglich bearbeitet? Erst in Google Slides{" "}
-            <strong className="font-semibold">veröffentlichen</strong>, dann
-            hier auf „Aktualisieren" klicken — sonst zeigen wir die alte
-            Version.
+            Hast du die Slides nachträglich bearbeitet? Speichere in Google
+            Slides und klicke hier auf „Aktualisieren" — sonst nutzen wir den
+            alten Stand.
           </span>
         </div>
       )}

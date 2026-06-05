@@ -45,7 +45,10 @@ export default async function NeuePage() {
 
   const [webcams, templates, allMedia, domains, customTemplates] =
     await Promise.all([
-      listUserMedia(user.id, "webcam"),
+      // Step 1 picks any "human-spoken" video: classic webcam recordings AND
+      // videos the user uploaded directly to the media library. They behave
+      // the same way downstream — both serve as the spoken-segment source.
+      listUserMedia(user.id, ["webcam", "video"]),
       listUserTpls(user.id),
       // Editor needs images + videos for image / video segments
       listUserMedia(user.id),
@@ -62,6 +65,9 @@ export default async function NeuePage() {
           name: w.name,
           publicUrl: w.publicUrl,
           durationSec: w.durationSec ?? null,
+          kind: w.type === "video" ? "video" : "webcam",
+          width: w.width ?? null,
+          height: w.height ?? null,
         })),
         templates: templates.map((t) => ({
           id: t.id,

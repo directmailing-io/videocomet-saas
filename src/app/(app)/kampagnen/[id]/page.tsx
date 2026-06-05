@@ -137,6 +137,8 @@ export default async function CampaignDetailPage({
             publicUrl: mediaItems.publicUrl,
             name: mediaItems.name,
             durationSec: mediaItems.durationSec,
+            width: mediaItems.width,
+            height: mediaItems.height,
           })
           .from(mediaItems)
           .where(eq(mediaItems.id, campaign.webcamMediaId))
@@ -460,6 +462,8 @@ function WebcamPreview({
     publicUrl: string;
     name: string;
     durationSec: number | null;
+    width?: number | null;
+    height?: number | null;
   } | null;
 }) {
   if (!media || !media.publicUrl) {
@@ -481,13 +485,25 @@ function WebcamPreview({
     ? media.publicUrl.replace(/playlist\.m3u8$/, "play_720p.mp4")
     : media.publicUrl;
 
+  // Portrait-Source (z. B. 720×1280 Selfie) bekommt ein 9:16-Fenster mit
+  // begrenzter Höhe, sonst klassisches 16:9. Bei NULL-Dimensionen (Altbestand
+  // vor Migration 0011) fallen wir auf 16:9 zurück.
+  const isPortrait =
+    typeof media.width === "number" &&
+    typeof media.height === "number" &&
+    media.height > media.width;
+
   return (
     <div className="space-y-2">
       <video
         src={videoSrc}
         controls
         preload="metadata"
-        className="aspect-video w-full rounded-squircle-md bg-ink border border-line"
+        className={
+          isPortrait
+            ? "aspect-[9/16] mx-auto max-h-[60vh] max-w-[260px] rounded-squircle-md bg-ink border border-line object-contain"
+            : "aspect-video w-full rounded-squircle-md bg-ink border border-line object-contain"
+        }
       />
       <div className="flex items-center justify-between text-xs text-ink-muted">
         <span className="truncate">{media.name}</span>

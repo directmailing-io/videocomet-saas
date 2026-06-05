@@ -129,10 +129,18 @@ export interface GDocsSegment extends SegmentBase {
 /**
  * Google-Slides-Folie als personalisiertes Segment.
  *
- * Quelle: User veröffentlicht seine Präsentation einmalig per
- * „Datei → Im Web veröffentlichen". Wir laden die `pubembed`-HTML einer
- * einzelnen Folie in Puppeteer, ersetzen `{{key}}`-TextNodes durch
- * Lead-Werte per `page.evaluate` und screenshotten 1280×720.
+ * Zwei Pipelines, je nach `publishedUrl` (Mode wird zur Laufzeit aus der
+ * URL via `parsePublishedSlidesUrl()` abgeleitet — kein eigenes Feld):
+ *
+ *   1. Edit-URL („Anyone with link" / Viewer) — bevorzugt.
+ *      Wir laden den PPTX-Export, ersetzen `{{key}}` direkt im
+ *      Office-Open-XML und rendern via LibreOffice headless. Vollwertige
+ *      Personalisierung.
+ *
+ *   2. Pubembed-URL (Legacy „Im Web veröffentlichen") — Bestandskampagnen.
+ *      Puppeteer screenshottet die fertig gerenderte Folie; Platzhalter
+ *      werden NICHT mehr ersetzt (Google rendert Text server-seitig zu
+ *      SVG-Pfaden).
  *
  * `publishedUrl` + `slideIndex` sind Single Source of Truth.
  * `thumbnailUrl` und `detectedPlaceholders` werden beim Import +

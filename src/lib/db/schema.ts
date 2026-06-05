@@ -77,6 +77,13 @@ export const mediaItems = pgTable("media_items", {
   publicUrl: text("public_url").notNull(),
   durationSec: integer("duration_sec"),
   bytes: integer("bytes"),
+  // Native Pixel-Dimensionen der Quelle. Wird beim Upload via ffprobe befüllt
+  // (siehe `media-upload-service.ts`). NULL für Altbestand und für nicht-
+  // probte Image/Logo-Uploads (deren Aspect spielt für die Render-Pipeline
+  // keine Rolle). Worker und UI behandeln NULL als "16:9 / Landscape default"
+  // — das matched das frühere implizite Verhalten.
+  width: integer("width"),
+  height: integer("height"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userIdx: index("media_user_idx").on(t.userId),

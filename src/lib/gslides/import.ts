@@ -1,38 +1,53 @@
 /**
- * Google-Slides „Published Deck" → Folien-Importer.
+ * Google-Slides „Deck"-Importer.
  *
- * Pipeline pro Folie:
- *   1. Puppeteer öffnet die kanonische Pubembed-URL
- *   2. Wir warten auf `document.fonts.ready` und auf das eigentliche
- *      Slide-SVG (Google rendert client-side, brauchen Sekunde Zeit)
- *   3. Wir messen die Folien-Anzahl im Deck (Side-Filmstrip ODER Body-Config)
- *   4. Wir navigieren pro Folie:
- *      - PRIMÄR per URL-Hash (`?slide=N`, 1-basiert)
- *      - FALLBACK per Click auf den „Nächste"-Button
- *   5. Wir machen einen 1280×720-Screenshot des Folien-Containers
- *   6. Wir laden den Screenshot zu Bunny Storage hoch
- *   7. Wir extrahieren alle TextNodes der Folie und sammeln {{key}}-Treffer
+ * Zwei Pipelines, je nach URL-Mode:
  *
- * Ein Modul-internes Hard-Timeout pro Folie schützt vor hängendem
- * Puppeteer — sollte eine Folie nicht binnen 25 s rendern, wird sie als
- * leeres Thumbnail markiert und der Import fährt fort.
+ *   1. `mode: "edit"`  (NEU, bevorzugt)
+ *      - PPTX-Export herunterladen (`/d/<docId>/export/pptx`)
+ *      - XML parsen → Folien-Liste + Placeholder pro Folie
+ *      - LibreOffice (im App-Container) rendert das PPTX als PNG-Sequenz
+ *      - PNGs werden als Thumbnails nach Bunny hochgeladen
  *
- * Anti-Bias: Wir sind defensiv mit Selektoren. Google ändert die Pubembed-
- * Renderer-Internals gelegentlich; wir loggen jede Annahme, damit
- * Diagnose im Worker-Log möglich bleibt.
+ *   2. `mode: "pubembed"`  (Legacy)
+ *      - Puppeteer öffnet die kanonische Pubembed-URL und screenshottet
+ *        pro Folie. Substitution ist NICHT möglich — wir flagen die
+ *        Folien als `placeholdersSubstitutable: false`, damit das UI eine
+ *        Warnung zeigen kann.
+ *
+ * Result-Struktur ist EINHEITLICH (`ImportPublishedDeckResult`) für
+ * beide Pipelines — der `mode`-Feld zeigt dem UI, welche Variante
+ * zurückkommt.
+ *
+ * Der Importer NIEMALS wirft für einzelne fehlgeschlagene Folien — sie
+ * landen mit `thumbnailUrl: null` im Ergebnis. Werfend nur bei
+ * nicht-erreichbarer URL / ungültigem URL-Format / komplett fehlge-
+ * schlagenem PPTX-Download (für API-Routen, die diese Fehler in HTTP-
+ * Codes übersetzen).
  */
 
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "puppeteer-core";
 import { getContext } from "@/worker/lib/browser-pool";
 import { uploadFile } from "@/lib/bunny/storage";
 import {
+  isEditMode,
+  isPubembedMode,
   parsePublishedSlidesUrl,
+  type ParsedGSlidesEdit,
+  type ParsedGSlidesPubembed,
   type ParsedGSlidesUrl,
 } from "./validate-url";
+import {
+  downloadPptx,
+  PptxDownloadError,
+} from "./pptx-fetch";
+import { extractSlidesFromPptx } from "./pptx-zip";
+import { collectPlaceholdersFromXml } from "./pptx-placeholders";
+import { renderPptxToPngs } from "./pptx-render";
 
 const SLIDE_VIEWPORT_W = 1280;
 const SLIDE_VIEWPORT_H = 720;
@@ -53,22 +68,31 @@ export interface ImportedSlide {
 }
 
 export interface ImportPublishedDeckResult {
-  /** Die kanonische Pubembed-URL (ohne Query). */
+  /** Welche Pipeline gelaufen ist — UI rendert ggf. eine Deprecated-Warnung. */
+  mode: "edit" | "pubembed";
+  /**
+   * Kanonische URL des Imports. Bei Edit-Mode: PPTX-Export-URL.
+   * Bei Pubembed: die Pubembed-URL ohne Query.
+   */
+  canonicalUrl: string;
+  /**
+   * Legacy-Feld: bleibt gefüllt für Bestandskampagnen, die das alte
+   * Property-Name lesen.
+   */
   canonicalPubembedUrl: string;
   /** Total slides discovered. */
   totalSlides: number;
   slides: ImportedSlide[];
+  /**
+   * `true`, wenn diese Pipeline pro Lead Substitution beherrscht. Edit-Mode
+   * = true, Pubembed = false. Das Frontend zeigt im false-Fall eine deutliche
+   * „Platzhalter werden NICHT ersetzt"-Warnung.
+   */
+  placeholdersSubstitutable: boolean;
 }
 
 /**
- * Lädt das veröffentlichte Deck und liefert Thumbnails + Placeholder-Cache
- * pro Folie.
- *
- * Niemals werfend für „Slide n konnte nicht gerendert werden" — solche
- * Folien landen mit `thumbnailUrl: null` im Ergebnis und der Importer
- * fährt mit der nächsten fort. Werfend nur bei nicht-erreichbarer URL
- * oder ungültigem URL-Format (für API-Routen, die diese Fehler in
- * passende HTTP-Codes übersetzen).
+ * Lädt das Deck und liefert Thumbnails + Placeholder-Cache pro Folie.
  */
 export async function importPublishedDeck(
   publishedUrl: string,
@@ -76,28 +100,136 @@ export async function importPublishedDeck(
   const parsed = parsePublishedSlidesUrl(publishedUrl);
 
   return withTimeout(
-    runImport(parsed),
+    isEditMode(parsed) ? runEditImport(parsed) : runPubembedImport(parsed),
     HARD_TIMEOUT_MS,
     "importPublishedDeck",
   );
 }
 
-async function runImport(
-  parsed: ParsedGSlidesUrl,
+// ── Edit-Mode-Pipeline ──────────────────────────────────────────────────────
+
+async function runEditImport(
+  parsed: ParsedGSlidesEdit,
+): Promise<ImportPublishedDeckResult> {
+  // 1) PPTX herunterladen. Hier werfen wir gerne — Caller weiß, wie er
+  //    „not-shared" dem User klar zurückspielt.
+  let pptxBuf: Buffer;
+  try {
+    pptxBuf = await downloadPptx(parsed.docId);
+  } catch (err) {
+    if (err instanceof PptxDownloadError && err.code === "not-shared") {
+      throw new GSlidesImportError("not-published", err.message);
+    }
+    throw err;
+  }
+
+  // 2) Folien-Texte + Placeholder-Liste parsen.
+  const slides = await extractSlidesFromPptx(pptxBuf);
+  if (slides.length === 0) {
+    throw new GSlidesImportError(
+      "not-published",
+      "Das Deck enthält keine Folien.",
+    );
+  }
+
+  const slidePlaceholders = new Map<number, string[]>();
+  for (const s of slides) {
+    slidePlaceholders.set(s.slideIndex, collectPlaceholdersFromXml(s.xmlContent));
+  }
+
+  // 3) PPTX → PNG-Sequenz. Falls LibreOffice ausfällt → Thumbnails null,
+  //    Metadaten kommen trotzdem zurück. Der Editor zeigt einen Refresh-
+  //    Button an, mit dem der User das später nachholen kann.
+  const tmpRenderDir = join(tmpdir(), `gslides-thumbs-${parsed.docId}`);
+  await mkdir(tmpRenderDir, { recursive: true });
+  let pngPaths: string[] = [];
+  try {
+    const rendered = await renderPptxToPngs({
+      pptxBuf,
+      outputDir: tmpRenderDir,
+      dpi: 150,
+    });
+    pngPaths = rendered.pngPaths;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[gslides/import] LibreOffice-Render fehlgeschlagen, lade ohne Thumbnails: ${
+        (err as Error).message
+      }`,
+    );
+  }
+
+  // 4) Pro Folie Thumbnail nach Bunny. Wir tolerieren weniger PNGs als
+  //    Folien (PDF-Rasterung kann in Edge-Cases einzelne Seiten kürzen) —
+  //    fehlende PNGs werden zu `null`-Thumbnails.
+  const docIdHash = createHash("sha1")
+    .update(parsed.docId)
+    .digest("hex")
+    .slice(0, 16);
+
+  const out: ImportedSlide[] = [];
+  for (let i = 0; i < slides.length; i += 1) {
+    const detected = slidePlaceholders.get(i) ?? [];
+    let thumbnailUrl: string | null = null;
+    const pngPath = pngPaths[i];
+    if (pngPath) {
+      try {
+        const buf = await readFile(pngPath);
+        const result = await uploadFile({
+          buffer: buf,
+          remotePath: `gslides/${docIdHash}/slide-${i}.png`,
+          contentType: "image/png",
+        });
+        thumbnailUrl = result.url;
+      } catch (uploadErr) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[gslides/import] bunny upload failed for slide ${i}: ${
+            (uploadErr as Error).message
+          }`,
+        );
+      }
+    }
+    out.push({
+      slideIndex: i,
+      thumbnailUrl,
+      detectedPlaceholders: detected,
+    });
+  }
+
+  // 5) Tmp-Dir aufräumen.
+  await rm(tmpRenderDir, { recursive: true, force: true }).catch(
+    () => undefined,
+  );
+
+  return {
+    mode: "edit",
+    canonicalUrl: parsed.canonicalExportUrl,
+    // Backward-Compat: bestehender Schema-Code liest `canonicalPubembedUrl`.
+    // Wir füllen es mit der Export-URL — der Wert ist nur als Cache-Key
+    // relevant und wird im Edit-Mode nicht als Pubembed-URL interpretiert.
+    canonicalPubembedUrl: parsed.canonicalExportUrl,
+    totalSlides: slides.length,
+    slides: out,
+    placeholdersSubstitutable: true,
+  };
+}
+
+// ── Pubembed-Pipeline (Legacy) ──────────────────────────────────────────────
+
+async function runPubembedImport(
+  parsed: ParsedGSlidesPubembed,
 ): Promise<ImportPublishedDeckResult> {
   const pooled = await getContext();
   let page: Page | null = null;
   try {
     page = await pooled.context.newPage();
-    // 2× DPR + Chrome ausblenden — gleiche Logik wie im Worker-Renderer,
-    // damit Editor-Thumbnails 1:1 das zeigen was später im Video landet.
     await page.setViewport({
       width: SLIDE_VIEWPORT_W,
       height: SLIDE_VIEWPORT_H,
       deviceScaleFactor: 2,
     });
 
-    // Start auf Folie 1 (slide=id.p) — die Pubembed-Init-Sequenz mag das.
     const firstUrl = buildSlideUrl(parsed.canonicalPubembedUrl, "id.p");
     await page.goto(firstUrl, {
       waitUntil: "domcontentloaded",
@@ -106,8 +238,6 @@ async function runImport(
 
     await waitForSlideReady(page);
 
-    // Pubembed-Chrome verstecken (Folien-Nummer oben, Navigation unten,
-    // Google-Slides-Badge). Sonst landet das alles in den Thumbnails.
     await page
       .addStyleTag({
         content: `
@@ -149,8 +279,6 @@ async function runImport(
       );
     }
 
-    // Wir capturen alle Folien sequenziell — Folie 0 ist schon angezeigt,
-    // danach jeweils ArrowRight + kurze Karenz für den Slide-In.
     const slides: ImportedSlide[] = [];
     for (let i = 0; i < totalSlides; i++) {
       try {
@@ -171,7 +299,6 @@ async function runImport(
           detectedPlaceholders: [],
         });
       }
-      // Zur nächsten Folie navigieren (außer beim letzten Iterationsschritt)
       if (i < totalSlides - 1) {
         await page.keyboard.press("ArrowRight");
         await sleep(900);
@@ -180,9 +307,12 @@ async function runImport(
     }
 
     return {
+      mode: "pubembed",
+      canonicalUrl: parsed.canonicalPubembedUrl,
       canonicalPubembedUrl: parsed.canonicalPubembedUrl,
       totalSlides,
       slides,
+      placeholdersSubstitutable: false,
     };
   } catch (err) {
     if (err instanceof GSlidesImportError) throw err;
@@ -201,12 +331,8 @@ async function runImport(
   }
 }
 
-/**
- * Re-fetch für eine einzelne Folie — nutzt der „Aktualisieren"-Button im
- * Editor. Returnt nur die Felder, die das Segment-Schema cached
- * (`thumbnailUrl`, `detectedPlaceholders`) — der Caller mergt das ins
- * Segment.
- */
+// ── Refresh: einzelne Folie neu fetchen ─────────────────────────────────────
+
 export interface RefreshSlideResult {
   thumbnailUrl: string | null;
   detectedPlaceholders: string[];
@@ -219,22 +345,93 @@ export async function refreshSlide(
   slideIndex: number,
 ): Promise<RefreshSlideResult> {
   if (!Number.isInteger(slideIndex) || slideIndex < 0) {
-    throw new GSlidesImportError(
-      "bad-index",
-      "Ungültiger Folien-Index.",
-    );
+    throw new GSlidesImportError("bad-index", "Ungültiger Folien-Index.");
   }
   const parsed = parsePublishedSlidesUrl(publishedUrl);
 
   return withTimeout(
-    runRefresh(parsed, slideIndex),
+    isEditMode(parsed)
+      ? runEditRefresh(parsed, slideIndex)
+      : runPubembedRefresh(parsed, slideIndex),
     PER_SLIDE_TIMEOUT_MS + 15_000,
     `refreshSlide(${slideIndex})`,
   );
 }
 
-async function runRefresh(
-  parsed: ParsedGSlidesUrl,
+async function runEditRefresh(
+  parsed: ParsedGSlidesEdit,
+  slideIndex: number,
+): Promise<RefreshSlideResult> {
+  // Wir laden das ganze PPTX (Single-Slide-Export gibt es nicht) und
+  // rendern alle Folien — das ist nicht effizient, reicht für das
+  // gelegentliche „Aktualisieren" aber locker.
+  let pptxBuf: Buffer;
+  try {
+    pptxBuf = await downloadPptx(parsed.docId);
+  } catch (err) {
+    if (err instanceof PptxDownloadError && err.code === "not-shared") {
+      throw new GSlidesImportError("not-published", err.message);
+    }
+    throw err;
+  }
+  const slides = await extractSlidesFromPptx(pptxBuf);
+  if (slideIndex >= slides.length) {
+    throw new GSlidesImportError(
+      "bad-index",
+      `Folie ${slideIndex + 1} existiert nicht (Deck hat ${slides.length} Folien).`,
+    );
+  }
+
+  const detected = collectPlaceholdersFromXml(
+    slides[slideIndex].xmlContent,
+  );
+
+  // Render alle PNGs, picke das richtige.
+  const tmpRenderDir = join(tmpdir(), `gslides-refresh-${parsed.docId}-${slideIndex}`);
+  await mkdir(tmpRenderDir, { recursive: true });
+  let thumbnailUrl: string | null = null;
+  try {
+    const rendered = await renderPptxToPngs({
+      pptxBuf,
+      outputDir: tmpRenderDir,
+      dpi: 150,
+    });
+    const pngPath = rendered.pngPaths[slideIndex];
+    if (pngPath) {
+      const buf = await readFile(pngPath);
+      const docIdHash = createHash("sha1")
+        .update(parsed.docId)
+        .digest("hex")
+        .slice(0, 16);
+      const result = await uploadFile({
+        buffer: buf,
+        remotePath: `gslides/${docIdHash}/slide-${slideIndex}.png`,
+        contentType: "image/png",
+      });
+      thumbnailUrl = result.url;
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[gslides/refresh] PPTX-Render fehlgeschlagen für Folie ${slideIndex}: ${
+        (err as Error).message
+      }`,
+    );
+  } finally {
+    await rm(tmpRenderDir, { recursive: true, force: true }).catch(
+      () => undefined,
+    );
+  }
+
+  return {
+    thumbnailUrl,
+    detectedPlaceholders: detected,
+    lastFetchedAt: new Date().toISOString(),
+  };
+}
+
+async function runPubembedRefresh(
+  parsed: ParsedGSlidesPubembed,
   slideIndex: number,
 ): Promise<RefreshSlideResult> {
   const pooled = await getContext();
@@ -247,10 +444,6 @@ async function runRefresh(
       deviceScaleFactor: 1,
     });
 
-    // Start auf der ersten Folie, dann per ArrowRight bis zum Ziel-Index
-    // navigieren — Google ignoriert numerische `slide=`-Werte, die direkte
-    // URL-Navigation funktioniert nur mit echten Slide-IDs die wir nicht
-    // sicher von außen kennen.
     const url = buildSlideUrl(parsed.canonicalPubembedUrl, "id.p");
     await page.goto(url, {
       waitUntil: "domcontentloaded",
@@ -300,43 +493,25 @@ export class GSlidesImportError extends Error {
   }
 }
 
-// ── Internals ──────────────────────────────────────────────────────────────
+// ── Pubembed-Internals (ungeändert aus Legacy-Pipeline) ─────────────────────
 
-/**
- * Baut die URL für eine bestimmte Folie. Google's pubembed akzeptiert
- * `?slide=<1-basierter Index>` — falls Google das Format wechselt, ist das
- * der eine Punkt zum Anpassen. Funktioniert in der aktuellen Renderer-
- * Version (Stand 2026-06).
- */
 function buildSlideUrl(canonical: string, slideToken: string): string {
   const u = new URL(canonical);
   u.searchParams.set("start", "false");
   u.searchParams.set("loop", "false");
   u.searchParams.set("delayms", "60000");
-  // ACHTUNG: Google akzeptiert NUR echte Slide-IDs (`id.p`, `id.gXXXX`)
-  // — Integer-Indices `?slide=1` werden ignoriert und Google serviert
-  // stumm die erste Folie. Wir starten daher auf `id.p` (= erste Folie)
-  // und navigieren danach per ArrowRight pro Capture, statt URLs zu
-  // bauen.
   u.searchParams.set("slide", slideToken);
   return u.toString();
 }
 
-/**
- * Wartet auf die Sichtbarkeit der Slide-SVG-Bühne. Google rendert client-
- * seitig — DOMContentLoaded alleine reicht nicht.
- */
 async function waitForSlideReady(page: Page): Promise<void> {
-  // Selectors in der bevorzugten Reihenfolge. Mehrere Fallbacks weil
-  // Google die DOM-Klassen ohne Vorwarnung umbenennt.
   const SELECTORS = [
-    "svg.punch-viewer-svgpage-svg", // klassisches pubembed
+    "svg.punch-viewer-svgpage-svg",
     ".punch-viewer-svgpage-wrapper svg",
     "iframe.punch-present-iframe",
     "[aria-label='Folie']",
-    "[role='img'][aria-label]", // Generic fallback
+    "[role='img'][aria-label]",
   ];
-  // Bis zu 20 s warten — Google kann auf cold-start nahe an 10 s liegen.
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     for (const sel of SELECTORS) {
@@ -345,7 +520,6 @@ async function waitForSlideReady(page: Page): Promise<void> {
         .then((el) => el !== null)
         .catch(() => false);
       if (found) {
-        // Zusätzlich auf Fonts warten — Schrift-Swap dauert ~300 ms.
         await page
           .evaluate(() =>
             (
@@ -353,7 +527,6 @@ async function waitForSlideReady(page: Page): Promise<void> {
             ).fonts?.ready,
           )
           .catch(() => undefined);
-        // Ein letzter rAF, damit der Compositor durch ist.
         await page
           .evaluate(
             () => new Promise<void>((r) => requestAnimationFrame(() => r())),
@@ -364,26 +537,9 @@ async function waitForSlideReady(page: Page): Promise<void> {
     }
     await sleep(200);
   }
-  // Nicht abbrechen — die nachfolgende Folien-Zählung wird 0 liefern
-  // und der Caller wirft einen klaren Fehler.
 }
 
-/**
- * Misst die Anzahl Folien im Deck. Strategie:
- *   A. Google rendert im pubembed eine versteckte Filmstrip-Liste mit
- *      `data-thumb-index` oder `.punch-filmstrip-thumbnail` — wir zählen
- *      die.
- *   B. Wenn das nicht da ist, klicken wir „Nächste" und prüfen ob die
- *      slide-Page-URL einen anderen `id.p<N>` hat. Aufwendiger, daher
- *      Fallback.
- *
- * In der aktuellen Renderer-Version ist (A) verfügbar. Wenn Google das
- * mal abschaltet, wirft die Funktion 0 und der Caller liefert einen
- * klaren Fehler.
- */
 async function detectSlideCount(page: Page): Promise<number> {
-  // (A) Definitive Quelle: window.viewerData.slidePageCount. Pubembed
-  // schreibt das nach Init in die Page. Wir pollen bis 5s.
   const fromViewer = await page
     .evaluate(async () => {
       const w = window as unknown as { viewerData?: { slidePageCount?: number } };
@@ -397,7 +553,6 @@ async function detectSlideCount(page: Page): Promise<number> {
     .catch(() => 0);
   if (fromViewer > 0) return fromViewer;
 
-  // (B) Fallback: DOM-Selektoren wenn viewerData nicht da (alte Renderer)
   const fromDom = await page
     .evaluate(() => {
       const candidates = [
@@ -410,7 +565,6 @@ async function detectSlideCount(page: Page): Promise<number> {
     .catch(() => 0);
   if (fromDom > 0) return fromDom;
 
-  // (C) Letzter Strohhalm: zumindest die aktuelle Folie zählt.
   const visible = await page
     .$("svg.punch-viewer-svgpage-svg, .punch-viewer-svgpage-wrapper svg, iframe.punch-present-iframe")
     .then((el) => (el ? 1 : 0))
@@ -418,31 +572,15 @@ async function detectSlideCount(page: Page): Promise<number> {
   return visible;
 }
 
-/**
- * Navigiert zur Folie `slideIndex` (0-basiert), screenshottet, lädt das
- * Thumbnail hoch und extrahiert TextNodes.
- *
- * Hinweis: wir nutzen für die Navigation `page.goto(slide=N)` statt eines
- * Click-Tricks, weil das in der aktuellen Renderer-Version stabil ist und
- * uns vor State-Bugs in Google's slide-cache schützt.
- */
 async function captureCurrentSlide(
   page: Page,
-  parsed: ParsedGSlidesUrl,
+  parsed: ParsedGSlidesPubembed,
   slideIndex: number,
 ): Promise<ImportedSlide> {
-  // Annahme: die Page steht bereits auf der richtigen Folie (Caller
-  // navigiert per ArrowRight). Kurze Karenz für Slide-In-Animation.
   await sleep(400);
 
-  // 1) Placeholder-Extraktion aus dem DOM. Wir lesen ALLE TextNodes der
-  //    Seite, nicht nur der aktuellen Folie — pubembed zeigt eh nur eine
-  //    Folie und der Hidden-Cache enthält manchmal noch Reste der vorigen.
-  //    Daher beschränken wir uns auf die sichtbare svg-Bühne, falls
-  //    vorhanden.
   const detected = await extractPlaceholders(page);
 
-  // 2) Screenshot.
   let pngBuf: Buffer;
   try {
     pngBuf = (await page.screenshot({
@@ -462,7 +600,6 @@ async function captureCurrentSlide(
     );
   }
 
-  // 3) Upload nach Bunny.
   const thumbPath = bunnyThumbPath(parsed.publisherHash, slideIndex);
   let thumbnailUrl: string | null = null;
   try {
@@ -473,9 +610,6 @@ async function captureCurrentSlide(
     });
     thumbnailUrl = result.url;
   } catch (err) {
-    // Defensive: wir crashen nicht, falls Bunny zickt. Der Caller sieht
-    // null und kann „Aktualisieren" anbieten. Der Pre-Render-Check vor
-    // Run-Start fängt fehlende Thumbnails ebenfalls ab.
     // eslint-disable-next-line no-console
     console.warn(
       `[gslides/import] bunny upload failed for slide ${slideIndex}: ${
@@ -491,11 +625,6 @@ async function captureCurrentSlide(
   };
 }
 
-/**
- * Extrahiert `{{key}}`-Treffer aus den Text-Nodes der Folie. Wir
- * konzentrieren uns auf den sichtbaren SVG-Bereich; wenn der nicht
- * existiert, fallen wir auf `document.body` zurück.
- */
 async function extractPlaceholders(page: Page): Promise<string[]> {
   const texts = await page
     .evaluate(() => {
@@ -504,8 +633,6 @@ async function extractPlaceholders(page: Page): Promise<string[]> {
         "svg.punch-viewer-svgpage-svg, .punch-viewer-svgpage-wrapper svg",
       );
       if (svg) roots.push(svg);
-      // pubembed kann die Folie auch in einem inneren iframe rendern. Da kommen
-      // wir same-origin nicht ran — wir versuchen es trotzdem defensiv.
       const iframe = document.querySelector(
         "iframe.punch-present-iframe",
       ) as HTMLIFrameElement | null;
@@ -532,10 +659,6 @@ async function extractPlaceholders(page: Page): Promise<string[]> {
     })
     .catch(() => [] as string[]);
 
-  // Adjazenz-Heuristik: wenn `{{first` und `Name}}` auf zwei aufeinander-
-  // folgenden TextNodes aufgeteilt wurden (Google manchmal bei Bold-
-  // Übergängen), joinen wir die Liste, scannen das Ergebnis UND scannen
-  // jeden einzelnen Node. So fangen wir beide Fälle ab.
   const merged = texts.join(" ");
   const out = new Set<string>();
   let m: RegExpExecArray | null;
@@ -552,11 +675,6 @@ async function extractPlaceholders(page: Page): Promise<string[]> {
   return Array.from(out).sort();
 }
 
-/**
- * Erzeugt einen kurzen Hash des Publisher-Hash für Bunny-Pfade. Die
- * Publisher-Hashes sind selbst schon kollisionsfrei; wir kürzen sie nur,
- * weil Bunny-Listings mit 200+ Zeichen pro Pfad mühsam sind.
- */
 function bunnyThumbPath(publisherHash: string, slideIndex: number): string {
   const h = createHash("sha1")
     .update(publisherHash)
@@ -601,8 +719,7 @@ async function withTimeout<T>(
 // ── Diagnose-Helper (für Tests/Dev) ────────────────────────────────────────
 
 /**
- * Schreibt eine Debug-HTML der aktuellen Seite raus — wird nur in Tests
- * verwendet, niemals von der Produktiv-Pipeline.
+ * Schreibt eine Debug-HTML der aktuellen Seite raus — nur in Tests.
  */
 export async function dumpDebugHtml(
   page: Page,
@@ -616,3 +733,6 @@ export async function dumpDebugHtml(
   return file;
 }
 
+// Re-exports für saubere Imports vom UI/API.
+export type { ParsedGSlidesUrl };
+export { isEditMode, isPubembedMode };

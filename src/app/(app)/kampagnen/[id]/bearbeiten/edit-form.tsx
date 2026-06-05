@@ -40,6 +40,9 @@ export interface EditCampaignWebcam {
   name: string;
   publicUrl: string;
   durationSec: number | null;
+  /** Distinguishes classic webcam recordings ("webcam") from media library
+   *  uploads ("video") so the picker can show a subtle badge. */
+  kind: "webcam" | "video";
 }
 
 export interface EditCampaignTemplate {
@@ -401,11 +404,19 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
                         <p className="text-sm font-semibold text-ink truncate pr-6">
                           {w.name}
                         </p>
-                        {w.durationSec != null && (
-                          <p className="text-xs text-ink-muted">
-                            {w.durationSec}s
-                          </p>
-                        )}
+                        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-muted">
+                          {w.durationSec != null && <span>{w.durationSec}s</span>}
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+                              w.kind === "video"
+                                ? "border-line text-ink-muted"
+                                : "border-brand/30 bg-brand-soft text-brand-deep",
+                            )}
+                          >
+                            {w.kind === "video" ? "Upload" : "Webcam"}
+                          </span>
+                        </div>
                       </button>
                     );
                   })

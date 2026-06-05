@@ -36,16 +36,30 @@ export async function GET(req: NextRequest) {
   const auth = await requireUserApi();
   if (!auth.ok) return auth.response;
 
+  // Support both `?type=webcam` (single) and `?type=webcam,video` (CSV).
+  // The CSV form is used e.g. by the campaign wizard so users can select
+  // both a webcam recording and a directly-uploaded video from one picker.
   const typeParam = req.nextUrl.searchParams.get("type");
-  let type: MediaType | undefined;
+  let type: MediaType | MediaType[] | undefined;
   if (typeParam) {
-    if (!MEDIA_TYPES.includes(typeParam as MediaType)) {
-      return NextResponse.json(
-        { error: "Ungültiger type-Parameter." },
-        { status: 400 },
-      );
+    const raw = typeParam
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (raw.length === 0) {
+      type = undefined;
+    } else {
+      for (const v of raw) {
+        if (!MEDIA_TYPES.includes(v as MediaType)) {
+          return NextResponse.json(
+            { error: "Ungültiger type-Parameter." },
+            { status: 400 },
+          );
+        }
+      }
+      const parsed = raw as MediaType[];
+      type = parsed.length === 1 ? parsed[0] : parsed;
     }
-    type = typeParam as MediaType;
   }
 
   const items = await listUserMedia(auth.user.id, type);
@@ -126,6 +140,11 @@ export async function POST(req: NextRequest) {
       publicUrl: uploaded.publicUrl,
       durationSec: uploaded.durationSec ?? clientDurationSec,
       bytes: uploaded.bytes,
+      // ffprobe-gemessene Pixel-Dimensionen (Webcam + Video-Uploads). Bei
+      // image / logo bleibt NULL — unkritisch, da das Aspect für die
+      // Render-Pipeline dort keine Rolle spielt.
+      width: uploaded.width,
+      height: uploaded.height,
     });
 
     return NextResponse.json({ media }, { status: 201 });

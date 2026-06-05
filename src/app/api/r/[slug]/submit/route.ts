@@ -32,7 +32,10 @@ import {
 } from "@/lib/db/queries/webcam-share";
 import { deleteFile, uploadFile } from "@/lib/bunny/storage";
 import { getBunnyStorageEnv } from "@/lib/bunny/env";
-import { probeVideoBufferDuration } from "@/lib/ffprobe";
+import {
+  probeVideoBufferDuration,
+  probeVideoBufferDimensions,
+} from "@/lib/ffprobe";
 
 const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 const ALLOWED_MIMES = ["video/webm", "video/mp4"] as const;
@@ -167,6 +170,24 @@ export async function POST(
     );
   }
 
+  // Pixel-Dimensionen messen — entscheidet später im Renderer ob Portrait-
+  // oder Landscape-Output gewählt wird. NULL bleibt unkritisch (Default-
+  // Landscape im Renderer + Picker zeigt eben 16:9-Tile).
+  let probedWidth: number | null = null;
+  let probedHeight: number | null = null;
+  try {
+    const dims = await probeVideoBufferDimensions(buffer, ext);
+    if (dims) {
+      probedWidth = dims.width;
+      probedHeight = dims.height;
+    }
+  } catch (err) {
+    console.warn(
+      "[api/r/submit] ffprobe dimensions failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   let createdMediaId: string | null = null;
   try {
     const media = await createMediaItem(link.userId, {
@@ -176,6 +197,8 @@ export async function POST(
       publicUrl: uploaded.url,
       durationSec: probedDurationSec,
       bytes: buffer.byteLength,
+      width: probedWidth,
+      height: probedHeight,
     });
     createdMediaId = media.id;
   } catch (err) {

@@ -20,6 +20,13 @@ export interface BunnyStreamEnv {
   apiKey: string;
   libraryId: string;
   cdnHostname: string;
+  /**
+   * Optional token-auth security key for the Bunny Stream pullzone.
+   * Set when the Bunny library has "Token Authentication" enabled — without
+   * it, HLS playlist URLs return 403. If unset, signing is a no-op (so dev
+   * envs without token-auth keep working).
+   */
+  tokenAuthKey: string | null;
 }
 
 export interface BunnyStorageEnv {
@@ -30,10 +37,12 @@ export interface BunnyStorageEnv {
 }
 
 export function getBunnyStreamEnv(): BunnyStreamEnv {
+  const tokenAuthKey = process.env.BUNNY_STREAM_TOKEN_AUTH_KEY ?? "";
   return {
     apiKey: requireEnv("BUNNY_STREAM_API_KEY"),
     libraryId: requireEnv("BUNNY_STREAM_LIBRARY_ID"),
     cdnHostname: requireEnv("BUNNY_STREAM_CDN_HOSTNAME"),
+    tokenAuthKey: tokenAuthKey.length > 0 ? tokenAuthKey : null,
   };
 }
 

@@ -11,8 +11,11 @@ export const maxDuration = 60;
  *
  * Antwort 200:
  *   {
- *     canonicalPubembedUrl: string,
+ *     mode: "edit" | "pubembed",
+ *     canonicalUrl: string,
+ *     canonicalPubembedUrl: string,      // Legacy-Feld, gleich canonicalUrl
  *     totalSlides: number,
+ *     placeholdersSubstitutable: boolean, // false bei pubembed → UI zeigt Warnung
  *     slides: Array<{
  *       slideIndex: number,
  *       thumbnailUrl: string | null,
@@ -22,9 +25,8 @@ export const maxDuration = 60;
  *
  * Fehler-Mapping:
  *   - 400 → Body unleserlich / leer
- *   - 422 → URL ist die EDIT-URL, nicht die Pub-URL (klare Fehlermeldung)
- *   - 404 → URL ist published-Format, aber Deck nicht erreichbar
- *   - 502 → Puppeteer-Timeout oder Bunny-Upload-Fehler
+ *   - 404 → URL erkannt, aber Deck nicht erreichbar (nicht geteilt)
+ *   - 502 → LibreOffice-/Puppeteer-Timeout, Bunny-Upload-Fehler etc.
  *
  * Auth: User-Session (Tenant-Guard via Lucia).
  */

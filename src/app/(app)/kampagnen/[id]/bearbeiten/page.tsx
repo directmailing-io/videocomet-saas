@@ -50,7 +50,9 @@ export default async function CampaignEditPage({
 
   const [webcams, templates, allMedia, domains, customTemplates] =
     await Promise.all([
-      listUserMedia(user.id, "webcam"),
+      // Step 1 also accepts directly-uploaded videos (type=video), not just
+      // webcam recordings — both serve as the spoken-segment source.
+      listUserMedia(user.id, ["webcam", "video"]),
       listUserTpls(user.id),
       listUserMedia(user.id),
       listUserDomains(user.id),
@@ -84,6 +86,7 @@ export default async function CampaignEditPage({
       name: w.name,
       publicUrl: w.publicUrl,
       durationSec: w.durationSec ?? null,
+      kind: w.type === "video" ? "video" : "webcam",
     })),
     templates: templates.map((t) => ({
       id: t.id,

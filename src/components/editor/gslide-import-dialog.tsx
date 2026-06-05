@@ -58,11 +58,12 @@ interface ImportedSlide {
 }
 
 interface ImportSuccess {
+  mode: "edit" | "pubembed";
+  placeholdersSubstitutable: boolean;
   slides: ImportedSlide[];
 }
 
 type ImportError =
-  | "edit_url_not_pub"
   | "invalid_url"
   | "not_published"
   | "fetch_timeout"
@@ -70,26 +71,6 @@ type ImportError =
 
 const DURATION_OPTIONS_S = [2, 3, 4, 5, 6, 8, 10, 15] as const;
 const DEFAULT_DURATION_S = 4;
-
-/**
- * Heuristik: erkennt die Edit-URL (`/d/<id>/edit` ohne `/d/e/`).
- * Pub-URL hat `/d/e/...`. Wir warnen schon vor dem Submit, damit der
- * Server-Roundtrip gespart wird.
- */
-function looksLikeEditUrl(url: string): boolean {
-  const trimmed = url.trim();
-  if (!trimmed) return false;
-  try {
-    const u = new URL(trimmed);
-    if (!u.hostname.endsWith("docs.google.com")) return false;
-    // /d/e/... = published embed
-    if (u.pathname.includes("/d/e/")) return false;
-    // /d/<id>/edit | /d/<id>/view | etc. = edit url
-    return /\/presentation\/d\/[^/]+\/(edit|view|preview)/.test(u.pathname);
-  } catch {
-    return false;
-  }
-}
 
 function isPlausibleUrl(url: string): boolean {
   const trimmed = url.trim();
@@ -102,14 +83,29 @@ function isPlausibleUrl(url: string): boolean {
   }
 }
 
+/**
+ * Erkennt eine Legacy-Pubembed-URL (`/d/e/<hash>/pubembed|pub|embed`).
+ * Wenn ja, warnen wir VOR dem Submit, dass Platzhalter nicht ersetzt
+ * werden — der User soll auf den neuen „Anyone with link"-Flow umsteigen.
+ */
+function looksLikePubembedUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  try {
+    const u = new URL(trimmed);
+    if (!u.hostname.endsWith("docs.google.com")) return false;
+    return /\/presentation\/d\/e\/[^/]+\/(pubembed|pub|embed)/.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
 function errorMessage(code: ImportError | string | null): string {
   switch (code) {
-    case "edit_url_not_pub":
-      return "Das war die Edit-URL. Bitte zuerst veröffentlichen (Schritt 2 oben) und dann den Veröffentlichungs-Link einfügen.";
     case "not_published":
-      return "Die Präsentation ist nicht veröffentlicht. Bitte Schritt 2 ausführen und erneut versuchen.";
+      return 'Wir konnten das Deck nicht laden. Stelle sicher, dass es per „Teilen → Jeder mit dem Link → Betrachter" freigegeben ist.';
     case "invalid_url":
-      return "Diese URL kennen wir nicht. Sie sollte mit https://docs.google.com/presentation/... beginnen.";
+      return "Diese URL kennen wir nicht. Sie sollte mit https://docs.google.com/presentation/d/... beginnen.";
     case "fetch_timeout":
       return "Folien konnten nicht geladen werden. Bitte erneut versuchen.";
     default:
@@ -129,6 +125,11 @@ export function GSlideImportDialog({
   const [loading, setLoading] = React.useState(false);
   const [errorCode, setErrorCode] = React.useState<string | null>(null);
   const [slides, setSlides] = React.useState<ImportedSlide[]>([]);
+  const [importMode, setImportMode] = React.useState<"edit" | "pubembed">(
+    "edit",
+  );
+  const [placeholdersSubstitutable, setPlaceholdersSubstitutable] =
+    React.useState(true);
   const [selectedIndices, setSelectedIndices] = React.useState<Set<number>>(
     new Set(),
   );
@@ -145,6 +146,8 @@ export function GSlideImportDialog({
         setLoading(false);
         setErrorCode(null);
         setSlides([]);
+        setImportMode("edit");
+        setPlaceholdersSubstitutable(true);
         setSelectedIndices(new Set());
         setDurationS(DEFAULT_DURATION_S);
       }, 180);
@@ -154,9 +157,8 @@ export function GSlideImportDialog({
   }, [open]);
 
   const trimmedUrl = url.trim();
-  const editUrlDetected = looksLikeEditUrl(trimmedUrl);
-  const submitDisabled =
-    loading || !isPlausibleUrl(trimmedUrl) || editUrlDetected;
+  const pubembedDetected = looksLikePubembedUrl(trimmedUrl);
+  const submitDisabled = loading || !isPlausibleUrl(trimmedUrl);
 
   async function handleImport() {
     if (submitDisabled) return;
@@ -184,6 +186,8 @@ export function GSlideImportDialog({
         setErrorCode("unknown");
         return;
       }
+      setImportMode(data.mode ?? "pubembed");
+      setPlaceholdersSubstitutable(data.placeholdersSubstitutable ?? false);
       setSlides(data.slides);
       // Vor-Selektion: alle Folien, die mindestens einen Platzhalter haben —
       // das deckt 90% der Use-Cases ab (Slides ohne Platzhalter werden meist
@@ -280,7 +284,7 @@ export function GSlideImportDialog({
           <Step1Instructions
             url={url}
             onUrlChange={setUrl}
-            editUrlDetected={editUrlDetected}
+            pubembedDetected={pubembedDetected}
             loading={loading}
             errorCode={errorCode}
             onCancel={() => onOpenChange(false)}
@@ -290,6 +294,8 @@ export function GSlideImportDialog({
         ) : (
           <Step2Selection
             slides={slides}
+            mode={importMode}
+            placeholdersSubstitutable={placeholdersSubstitutable}
             selectedIndices={selectedIndices}
             allSelected={allSelected}
             someSelected={someSelected}
@@ -318,7 +324,7 @@ export function GSlideImportDialog({
 function Step1Instructions({
   url,
   onUrlChange,
-  editUrlDetected,
+  pubembedDetected,
   loading,
   errorCode,
   onCancel,
@@ -327,7 +333,7 @@ function Step1Instructions({
 }: {
   url: string;
   onUrlChange: (v: string) => void;
-  editUrlDetected: boolean;
+  pubembedDetected: boolean;
   loading: boolean;
   errorCode: string | null;
   onCancel: () => void;
@@ -349,19 +355,22 @@ function Step1Instructions({
         {[
           "Öffne deine Google-Slides-Präsentation.",
           <>
-            Klicke oben auf <strong className="font-semibold text-ink">Datei</strong>{" "}
-            →{" "}
+            Klicke oben rechts auf{" "}
+            <strong className="font-semibold text-ink">Teilen</strong>.
+          </>,
+          <>
+            Stelle den allgemeinen Zugriff auf{" "}
             <strong className="font-semibold text-ink">
-              Im Web veröffentlichen
-            </strong>
-            .
+              Jeder, der über den Link verfügt
+            </strong>{" "}
+            → Rolle{" "}
+            <strong className="font-semibold text-ink">Betrachter</strong>.
           </>,
           <>
             Klicke auf{" "}
-            <strong className="font-semibold text-ink">Veröffentlichen</strong>{" "}
-            und kopiere den angezeigten Link.
+            <strong className="font-semibold text-ink">Link kopieren</strong>{" "}
+            und füge ihn hier unten ein.
           </>,
-          "Füge ihn hier unten ein.",
         ].map((text, idx) => (
           <li
             key={idx}
@@ -379,15 +388,14 @@ function Step1Instructions({
 
       {/* URL Input */}
       <div className="space-y-2">
-        <Label htmlFor="gslide-url">Veröffentlichungs-Link</Label>
+        <Label htmlFor="gslide-url">Freigabe-Link</Label>
         <Input
           ref={inputRef}
           id="gslide-url"
           value={url}
           onChange={(e) => onUrlChange(e.target.value)}
-          placeholder="https://docs.google.com/presentation/d/e/..."
+          placeholder="https://docs.google.com/presentation/d/<DOC_ID>/edit?usp=sharing"
           className="font-mono text-xs"
-          error={editUrlDetected}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !submitDisabled) {
               e.preventDefault();
@@ -396,19 +404,21 @@ function Step1Instructions({
           }}
         />
 
-        {editUrlDetected && (
-          <div className="inline-flex items-start gap-2 rounded-full border border-danger/30 bg-danger/10 px-3 py-1.5 text-xs text-danger">
-            <AlertTriangle className="size-3.5 shrink-0 mt-px" />
+        {pubembedDetected && (
+          <div className="flex items-start gap-2 rounded-squircle-sm border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn-deep">
+            <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
             <span className="leading-snug">
-              Das ist die Edit-URL. Bitte erst veröffentlichen (siehe Schritt 2)
-              und dann den Veröffentlichungs-Link einfügen.
+              Das sieht nach einer alten Veröffentlichungs-URL aus
+              (<code className="font-mono">/d/e/…/pubembed</code>). Damit lassen
+              sich Platzhalter <strong>nicht</strong> pro Lead ersetzen. Nutze
+              lieber den neuen Freigabe-Link (Schritte oben).
             </span>
           </div>
         )}
       </div>
 
       {/* Server-Error */}
-      {errorCode && !editUrlDetected && (
+      {errorCode && (
         <div className="flex items-start gap-2.5 rounded-squircle-sm border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
           <XCircle className="size-4 shrink-0 mt-0.5" />
           <span className="leading-snug">{errorMessage(errorCode)}</span>
@@ -419,25 +429,14 @@ function Step1Instructions({
       <div className="flex items-start gap-2.5 rounded-squircle-sm border border-brand-200 bg-brand-soft px-4 py-3 text-sm text-brand-deep">
         <Info className="size-4 shrink-0 mt-0.5" />
         <span className="leading-snug">
-          Du brauchst <strong className="font-semibold">keinen</strong> öffentlichen
-          Zugriff freizugeben — die Veröffentlichung erstellt eine separate,
-          eingebettete Kopie deines Decks.
+          „Jeder mit dem Link" gibt deinen Inhalt nicht öffentlich frei —
+          gesehen wird er nur von Personen, denen du den Link aktiv schickst.
+          Wir laden das Deck einmalig, ersetzen Platzhalter wie{" "}
+          <code className="font-mono text-xs bg-brand-200/30 px-1 rounded">
+            {`{{firstName}}`}
+          </code>{" "}
+          pro Lead und rendern serverseitig.
         </span>
-      </div>
-
-      {/* Wichtige Einschränkung — Platzhalter-Substitution */}
-      <div className="flex items-start gap-2.5 rounded-squircle-sm border border-warn/40 bg-warn/5 px-4 py-3 text-sm text-warn-deep">
-        <Info className="size-4 shrink-0 mt-0.5" />
-        <div className="leading-snug">
-          <strong className="font-semibold">Hinweis zu Platzhaltern:</strong>{" "}
-          Google rendert Folientext server-seitig zu Vektor-Pfaden — das heißt,
-          Platzhalter wie <code className="font-mono text-xs bg-warn/10 px-1 rounded">{`{{firstName}}`}</code>
-          {" "}werden im Video <strong>nicht automatisch</strong> durch Lead-Daten
-          ersetzt. Für personalisierte Texte nutze stattdessen den Folientyp
-          {" "}<strong>Freie Folie</strong> oder eine{" "}
-          <strong>Textfolie</strong>. Google-Slides sind ideal für statische,
-          hochwertig designte Inhalte.
-        </div>
       </div>
 
       {/* Footer */}
@@ -464,6 +463,8 @@ function Step1Instructions({
 
 function Step2Selection({
   slides,
+  mode,
+  placeholdersSubstitutable,
   selectedIndices,
   allSelected,
   someSelected,
@@ -479,6 +480,8 @@ function Step2Selection({
   onAdd,
 }: {
   slides: ImportedSlide[];
+  mode: "edit" | "pubembed";
+  placeholdersSubstitutable: boolean;
   selectedIndices: Set<number>;
   allSelected: boolean;
   someSelected: boolean;
@@ -497,6 +500,37 @@ function Step2Selection({
 
   return (
     <div className="space-y-4">
+      {/* Mode-Banner: Pubembed → Warnung, Edit → Erfolg */}
+      {mode === "pubembed" || !placeholdersSubstitutable ? (
+        <div className="flex items-start gap-2.5 rounded-squircle-sm border border-warn/40 bg-warn/5 px-4 py-3 text-sm text-warn-deep">
+          <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+          <span className="leading-snug">
+            <strong className="font-semibold">
+              Legacy-Veröffentlichung erkannt:
+            </strong>{" "}
+            Platzhalter wie{" "}
+            <code className="font-mono text-xs bg-warn/10 px-1 rounded">
+              {`{{firstName}}`}
+            </code>{" "}
+            werden bei dieser Variante <strong>nicht</strong> pro Lead ersetzt.
+            Teile dein Deck stattdessen über{" "}
+            <strong>Teilen → Jeder mit dem Link → Betrachter</strong>, um die
+            Personalisierung zu aktivieren.
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-start gap-2.5 rounded-squircle-sm border border-brand-200 bg-brand-soft px-4 py-3 text-sm text-brand-deep">
+          <CheckCircle2 className="size-4 shrink-0 mt-0.5" />
+          <span className="leading-snug">
+            Platzhalter wie{" "}
+            <code className="font-mono text-xs bg-brand-200/30 px-1 rounded">
+              {`{{firstName}}`}
+            </code>{" "}
+            werden pro Lead automatisch ersetzt.
+          </span>
+        </div>
+      )}
+
       {/* Bulk-Aktion + Dauer-Picker */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-squircle-sm border border-line bg-surface-soft px-4 py-3">
         <button

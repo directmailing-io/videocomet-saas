@@ -84,6 +84,20 @@ function typeIcon(type: string) {
   return <FileVideo className="size-6 text-ink-muted" />;
 }
 
+/**
+ * Bunny Stream playlist.m3u8 → MP4-Fallback. Native <video> kann HLS nur
+ * in Safari; alle anderen Browser brauchen den progressiven play_720p.mp4
+ * (gleicher Pfad in Bunny Stream). Query-Parameter (z. B. token/expires)
+ * werden mitgenommen.
+ */
+function toMp4Fallback(url: string): string {
+  return url.replace(/\/playlist\.m3u8(\?.*)?$/i, "/play_720p.mp4$1");
+}
+
+function isHlsUrl(url: string): boolean {
+  return /\/playlist\.m3u8(\?|$)/i.test(url);
+}
+
 export function MediaCard({ item }: { item: MediaCardItem }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -93,6 +107,49 @@ export function MediaCard({ item }: { item: MediaCardItem }) {
   const [submitting, setSubmitting] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
+
+  // Lazily-fetched signed playback URL for videos/webcams. We start with
+  // `null` and resolve to either:
+  //   - a signed Bunny Stream URL (token-auth-protected pullzone), or
+  //   - the original publicUrl (Bunny Storage, no token-auth needed).
+  // The endpoint decides — see /api/media/[id]/signed-url.
+  const [playbackUrl, setPlaybackUrl] = React.useState<string | null>(null);
+  const isPlayable = item.type === "video" || item.type === "webcam";
+  React.useEffect(() => {
+    if (!isPlayable) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/media/${encodeURIComponent(item.id)}/signed-url`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = (await res.json()) as { url?: string };
+        if (!cancelled && typeof body.url === "string" && body.url.length > 0) {
+          setPlaybackUrl(body.url);
+        }
+      } catch {
+        // Fallback: try the raw publicUrl. If token-auth is on, this 403s
+        // — but at least we attempted, and the empty <video> renders a
+        // broken state the user can investigate (Vorschau-Link öffnet's
+        // dann immer noch im neuen Tab).
+        if (!cancelled) setPlaybackUrl(item.publicUrl);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isPlayable, item.id, item.publicUrl]);
+
+  // <video> kriegt entweder MP4-Fallback (HLS-URL) oder die URL roh
+  // (Storage CDN). Wir leiten erst nach Sign-Fetch ab, damit Token/Expires
+  // korrekt in der MP4-URL landen.
+  const videoSrc = playbackUrl
+    ? isHlsUrl(playbackUrl)
+      ? toMp4Fallback(playbackUrl)
+      : playbackUrl
+    : null;
 
   // Wenn die Server-Wahrheit neu hereinkommt (z.B. nach router.refresh nach
   // Submit eines Gast-Videos), den lokalen State synchron halten.
@@ -187,13 +244,19 @@ export function MediaCard({ item }: { item: MediaCardItem }) {
             />
           ) : item.type === "video" || item.type === "webcam" ? (
             <>
-              <video
-                src={item.publicUrl}
-                controls
-                preload="metadata"
-                playsInline
-                className="w-full h-full object-cover bg-black"
-              />
+              {videoSrc ? (
+                <video
+                  src={videoSrc}
+                  controls
+                  preload="metadata"
+                  playsInline
+                  className="w-full h-full object-cover bg-black"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-black">
+                  <Loader2 className="size-5 text-white/60 animate-spin" />
+                </div>
+              )}
               {formatDuration(item.durationSec) && (
                 <span className="pointer-events-none absolute top-2 right-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white tabular-nums">
                   {formatDuration(item.durationSec)}
@@ -272,7 +335,11 @@ export function MediaCard({ item }: { item: MediaCardItem }) {
                 Umbenennen
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <a href={item.publicUrl} target="_blank" rel="noreferrer">
+                <a
+                  href={playbackUrl ?? item.publicUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   <Eye className="size-4 text-ink-muted" />
                   Vorschau
                 </a>

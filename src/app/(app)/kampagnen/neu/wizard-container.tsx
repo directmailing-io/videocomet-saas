@@ -21,6 +21,14 @@ export interface WizardWebcam {
   name: string;
   publicUrl: string;
   durationSec: number | null;
+  /** Distinguishes classic webcam recordings ("webcam") from media library
+   *  uploads ("video") so the picker can show a subtle badge. The downstream
+   *  rendering pipeline treats them identically. */
+  kind: "webcam" | "video";
+  /** Native source pixel dimensions (server-probed at upload). Both NULL
+   *  for legacy items prior to Migration 0011 — UI falls back to 16:9. */
+  width: number | null;
+  height: number | null;
 }
 
 export interface WizardTemplate {

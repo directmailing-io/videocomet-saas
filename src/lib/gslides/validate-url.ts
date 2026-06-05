@@ -1,41 +1,76 @@
 /**
- * Validierung + Normalisierung von Google-Slides-Published-URLs.
+ * Validierung + Normalisierung von Google-Slides-URLs.
  *
- * Google bietet zwei Formate für „Im Web veröffentlicht"-Decks:
- *   1. Pubembed   `https://docs.google.com/presentation/d/e/<HASH>/pubembed`
- *      (interaktives Embed mit Folien-Nav + transitions)
- *   2. Pub        `https://docs.google.com/presentation/d/e/<HASH>/pub`
- *      (Auto-Advance-Spielmodus für Slideshow-Tabs)
+ * Zwei Modi werden akzeptiert:
  *
- * Beide haben den `e` zwischen `/d/` und der Hash — das ist der entscheidende
- * Unterschied zur EDIT-URL (`/presentation/d/<DOC_ID>/edit`).
+ *   1. „edit"  (NEU, bevorzugt)
+ *      Edit-/View-/Preview-URL einer mit „Anyone with link" geteilten
+ *      Präsentation. Wir extrahieren die `docId` und nutzen den
+ *      PPTX-Export-Endpoint `/d/<docId>/export/pptx` als kanonische Quelle.
+ *      Diese Variante erlaubt Substitution im XML, weil wir das Deck
+ *      vollständig herunterladen können.
  *
- * Edit-URLs werden klar zurückgewiesen, weil Google sie ohne Login nicht
- * rendert und Puppeteer dort nur ein „Login" sieht.
+ *   2. „pubembed"  (Legacy)
+ *      Bestehende „Im Web veröffentlichen"-URLs (`/d/e/<HASH>/pubembed`
+ *      oder `/d/e/<HASH>/pub`). Bleiben akzeptiert für Bestandskampagnen,
+ *      sind aber als „deprecated" markiert: Substitution funktioniert NUR
+ *      auf DOM-Ebene und ist fragil. Wir wollen diese Variante mittelfristig
+ *      abschalten.
+ *
+ * Der entscheidende Unterschied im Pfad: Pubembed enthält `/d/e/<HASH>/…`
+ * (mit dem `e/` als separatem Pfad-Segment), eine Edit-URL enthält
+ * `/d/<DOC_ID>/…` (ohne `e/` davor). Wir matchen die Edit-Variante zuerst
+ * mit einem Negative-Lookahead `(?!e\/)`, sonst würde der Pubembed-Regex
+ * auch eine Edit-URL halbwegs greifen.
  */
 
+export type GSlidesUrlMode = "edit" | "pubembed";
+
+/**
+ * Legacy-Typname für Kompatibilität mit bestehendem Code.
+ * Wir mappen die alten Werte (`"pubembed" | "pub"`) auf den Modus
+ * `"pubembed"` und exportieren beides.
+ */
 export type GSlidesUrlKind = "pubembed" | "pub";
 
-export interface ParsedGSlidesUrl {
-  /** Welche Variante der published URL es ist. */
-  kind: GSlidesUrlKind;
-  /**
-   * Der publisher-Hash, der in `/d/e/<HASH>/…` steht. NICHT die docId — eine
-   * published-Url verwendet einen separaten public hash, der nichts mit der
-   * docId zu tun haben muss.
-   */
-  publisherHash: string;
-  /**
-   * Kanonische pubembed-URL, ohne Query-String. Wir nutzen sie als Schlüssel
-   * für Bunny-Storage-Pfade etc.
-   */
-  canonicalPubembedUrl: string;
+/**
+ * Edit-Modus: User hat eine Anyone-with-link-URL geteilt. Wir laden das
+ * Deck via PPTX-Export, parsen es selber und können Platzhalter im XML
+ * 1:1 ersetzen.
+ */
+export interface ParsedGSlidesEdit {
+  mode: "edit";
+  /** Die Google-Document-ID (in der URL zwischen `/d/` und `/edit`). */
+  docId: string;
+  /** Kanonische PPTX-Export-URL — Cache-Key + Quelle für `downloadPptx`. */
+  canonicalExportUrl: string;
 }
+
+/**
+ * Pubembed-Modus: Legacy-Pub-/Pubembed-URLs. Halten wir am Leben für
+ * Bestandskampagnen, aber Substitution wird hier NICHT mehr ausgeführt.
+ */
+export interface ParsedGSlidesPubembed {
+  mode: "pubembed";
+  /** Der publisher-Hash, der in `/d/e/<HASH>/…` steht. */
+  publisherHash: string;
+  /** Kanonische pubembed-URL ohne Query-String. */
+  canonicalPubembedUrl: string;
+  /** Subform — pubembed-Iframe vs. Auto-Advance-Spielmodus. */
+  kind: GSlidesUrlKind;
+}
+
+export type ParsedGSlidesUrl = ParsedGSlidesEdit | ParsedGSlidesPubembed;
 
 export class GSlidesUrlError extends Error {
   /**
    * Maschinen-lesbarer Code. Hilft den API-Routen, die passende HTTP-Status-
-   * Code zurückzugeben (z. B. 422 für edit-url).
+   * Code zurückzugeben.
+   *
+   * `edit-url` ist mit dem Pivot auf PPTX-Export NICHT mehr ein Fehler —
+   * wir behalten den Code dennoch, weil bestehende API-Routen ihn auf 422
+   * mappen und der Code für „nicht-published, aber nicht-bekannt"
+   * gebraucht wird.
    */
   readonly code:
     | "edit-url"
@@ -53,12 +88,11 @@ export class GSlidesUrlError extends Error {
 }
 
 /**
- * Prüft eine User-Eingabe gegen die published-URL-Formate von Google Slides.
+ * Prüft eine User-Eingabe und liefert entweder ein Edit-Mode-Result oder
+ * ein Pubembed-Mode-Result.
  *
- * Wirft `GSlidesUrlError`, wenn die URL keine published-URL ist (z. B.
- * `/edit`). Für valide URLs wird die kanonische Pubembed-URL zurückgegeben —
- * Caller können sie als Cache-Key verwenden und müssen sich nicht um
- * Query-Parameter scheren.
+ * Wirft `GSlidesUrlError`, wenn die URL weder das eine noch das andere
+ * Format hat (kaputt, falscher Host, leer).
  */
 export function parsePublishedSlidesUrl(input: string): ParsedGSlidesUrl {
   const raw = (input ?? "").trim();
@@ -72,7 +106,7 @@ export function parsePublishedSlidesUrl(input: string): ParsedGSlidesUrl {
   } catch {
     throw new GSlidesUrlError(
       "malformed",
-      "Das ist keine gültige URL. Bitte den Veröffentlichungs-Link aus Google Slides hier einfügen.",
+      "Das ist keine gültige URL. Bitte den Link aus Google Slides hier einfügen.",
     );
   }
 
@@ -92,40 +126,60 @@ export function parsePublishedSlidesUrl(input: string): ParsedGSlidesUrl {
     );
   }
 
-  // Path: `/presentation/d/e/<HASH>/(pubembed|pub)` ist published.
-  // Path: `/presentation/d/<DOC_ID>/edit` ist EDIT — explizit ablehnen.
   const path = url.pathname.replace(/\/+$/, "");
 
-  // Wir matchen die Edit-URL ZUERST — sonst würde der Pubembed-Regex
-  // mit lazyem `[^/]+` versehentlich greifen.
+  // 1) Edit-/View-/Preview-URL (NEU, bevorzugt). Negative-Lookahead `(?!e\/)`
+  //    schützt davor, dass wir die `e`-Position einer Pubembed-URL als
+  //    docId interpretieren. Akzeptierte Sub-Pfade:
+  //      /edit
+  //      /edit?usp=sharing
+  //      /view
+  //      /preview
+  //      /present
+  //      /copy
+  //      /template/preview
+  //    Wir wollen auch Edit-URLs ohne expliziten Suffix akzeptieren — also
+  //    `/d/<docId>` (ohne folgenden Sub-Path) wäre theoretisch denkbar,
+  //    geben Google teilen die aber nie aus. Wir bleiben strict und
+  //    verlangen einen bekannten Suffix.
+  //
+  //    docId-Constraint: alphanumerisch + `-_`, mind. 25 Zeichen. Echte
+  //    Google-IDs sind 44 Zeichen lang, kürzere Tokens stammen aus E-Mail-
+  //    Disclaimer-Links und sind keine echten Decks.
   const editMatch = path.match(
-    /^\/presentation\/d\/(?!e\/)([a-zA-Z0-9_-]+)\/(edit|view|present|preview|copy|template)$/,
+    /^\/presentation\/d\/(?!e\/)([a-zA-Z0-9_-]{25,})(?:\/(?:edit|view|preview|present|copy|template(?:\/preview)?))?$/,
   );
   if (editMatch) {
-    throw new GSlidesUrlError(
-      "edit-url",
-      'Das ist die Bearbeiten-URL deiner Präsentation. Bitte in Google Slides auf „Datei → Im Web veröffentlichen" klicken und den dort angezeigten Link verwenden.',
-    );
+    const docId = editMatch[1];
+    return {
+      mode: "edit",
+      docId,
+      canonicalExportUrl: `https://docs.google.com/presentation/d/${docId}/export/pptx`,
+    };
   }
 
+  // 2) Pubembed-/Pub-URL (Legacy). `embed` ist Alias für `pubembed`.
   const pubMatch = path.match(
     /^\/presentation\/d\/e\/([a-zA-Z0-9_-]+)\/(pubembed|pub|embed)$/,
   );
-  if (!pubMatch) {
-    throw new GSlidesUrlError(
-      "no-hash",
-      "Die URL sieht nicht nach einem veröffentlichten Google-Slides-Deck aus. Erwartet wird ein Link auf docs.google.com/presentation/d/e/.../pubembed.",
-    );
+  if (pubMatch) {
+    const publisherHash = pubMatch[1];
+    const rawKind = pubMatch[2];
+    const kind: GSlidesUrlKind = rawKind === "pub" ? "pub" : "pubembed";
+    const canonicalPubembedUrl = `https://docs.google.com/presentation/d/e/${publisherHash}/pubembed`;
+    return {
+      mode: "pubembed",
+      publisherHash,
+      canonicalPubembedUrl,
+      kind,
+    };
   }
-  const publisherHash = pubMatch[1];
-  // `embed` ist ein Alias für `pubembed` — beides matched, beide werden
-  // als pubembed behandelt.
-  const rawKind = pubMatch[2];
-  const kind: GSlidesUrlKind = rawKind === "pub" ? "pub" : "pubembed";
 
-  const canonicalPubembedUrl = `https://docs.google.com/presentation/d/e/${publisherHash}/pubembed`;
-
-  return { kind, publisherHash, canonicalPubembedUrl };
+  // 3) Nichts passt → werfen.
+  throw new GSlidesUrlError(
+    "no-hash",
+    "Die URL sieht weder nach einer geteilten Bearbeiten-URL noch nach einem veröffentlichten Deck aus. Erwartet wird ein Link wie docs.google.com/presentation/d/<ID>/edit.",
+  );
 }
 
 /**
@@ -138,4 +192,22 @@ export function isPublishedSlidesUrl(input: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Type-Guard für Edit-Mode-Results. Caller benutzen das in
+ * Substitutions-Pipelines.
+ */
+export function isEditMode(p: ParsedGSlidesUrl): p is ParsedGSlidesEdit {
+  return p.mode === "edit";
+}
+
+/**
+ * Type-Guard für Legacy-Pubembed-Results. Caller benutzen das, um die
+ * Warn-Banner-Logik im UI zu triggern.
+ */
+export function isPubembedMode(
+  p: ParsedGSlidesUrl,
+): p is ParsedGSlidesPubembed {
+  return p.mode === "pubembed";
 }

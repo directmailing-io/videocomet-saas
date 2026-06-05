@@ -19,7 +19,10 @@ import { randomUUID } from "node:crypto";
 import { uploadVideo, getVideo } from "@/lib/bunny/stream";
 import { uploadFile } from "@/lib/bunny/storage";
 import { slugify } from "@/lib/utils";
-import { probeVideoBufferDuration } from "@/lib/ffprobe";
+import {
+  probeVideoBufferDuration,
+  probeVideoBufferDimensions,
+} from "@/lib/ffprobe";
 
 export type MediaKind = "webcam" | "image" | "video" | "logo";
 
@@ -35,6 +38,16 @@ export interface UploadMediaResult {
   publicUrl: string;
   durationSec: number | null;
   bytes: number;
+  /**
+   * Native Pixel-Dimensionen der Quelle. Wird via ffprobe gemessen für
+   * Video-Uploads (webcam / video). Bei image / logo bleiben die Werte
+   * `null`, weil wir dort keine Pipeline-Entscheidung darauf bauen.
+   * Server-seitige Detection statt Client-`<video>.videoWidth`: ffprobe
+   * sieht das echte Pixel-Format inkl. SAR/DAR und ist unabhängig vom
+   * Browser-State (ein offener Tab könnte sonst die Werte falsch reporten).
+   */
+  width: number | null;
+  height: number | null;
   bunnyVideoId?: string;
   storagePath?: string;
 }
@@ -99,12 +112,33 @@ export async function uploadMediaFile(
       await writeFile(tmpPath, buffer);
       const result = await uploadVideo({ filePath: tmpPath, title: filename });
       const durationSec = await pollStreamDuration(result.videoId);
+      // Bunny Stream re-encoded das Video — dessen Stream-Dimensionen sind
+      // damit zwar nicht die Original-Werte, aber wir wollen ohnehin den
+      // SOURCE-Aspect kennen (Pipeline-Entscheidung Portrait vs Landscape).
+      // Quelle ist `tmpPath`: schnell ffprobe lokal.
+      let width: number | null = null;
+      let height: number | null = null;
+      try {
+        const { probeVideoDimensions } = await import("@/lib/ffprobe");
+        const dims = await probeVideoDimensions(tmpPath);
+        if (dims) {
+          width = dims.width;
+          height = dims.height;
+        }
+      } catch (err) {
+        console.warn(
+          "[media-upload] video dimension probe failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
       console.log(
-        `[media-upload] stream-upload ok videoId=${result.videoId} duration=${durationSec ?? "n/a"}`,
+        `[media-upload] stream-upload ok videoId=${result.videoId} duration=${durationSec ?? "n/a"} dims=${width ?? "n/a"}x${height ?? "n/a"}`,
       );
       return {
         publicUrl: result.hlsUrl,
         durationSec,
+        width,
+        height,
         bytes,
         bunnyVideoId: result.videoId,
       };
@@ -136,7 +170,14 @@ export async function uploadMediaFile(
   // zurück → finales Video kann LÄNGER als die Webcam werden (Prod-Bug
   // 2026-06-03: 6s-Webcam → 22s-Video). Bei image/logo überspringen wir
   // den Probe — kein Video, keine Dauer.
+  //
+  // ZUSÄTZLICH: Pixel-Dimensionen probe für Webcam (Portrait vs Landscape).
+  // Beide Probes greifen auf denselben Buffer zu — einmal nach /tmp
+  // schreiben würde minimal sparen, ist aber Overkill: jeder Probe schreibt
+  // selbst nur ein paar MB temporär raus.
   let durationSec: number | null = null;
+  let width: number | null = null;
+  let height: number | null = null;
   if (kind === "webcam") {
     try {
       const probed = await probeVideoBufferDuration(buffer, safeExt || "webm");
@@ -158,6 +199,25 @@ export async function uploadMediaFile(
         err instanceof Error ? err.message : err,
       );
     }
+    try {
+      const dims = await probeVideoBufferDimensions(buffer, safeExt || "webm");
+      if (dims) {
+        width = dims.width;
+        height = dims.height;
+        console.log(
+          `[media-upload] webcam dims probed=${width}x${height} (orientation=${width >= height ? "landscape" : "portrait"})`,
+        );
+      } else {
+        console.warn(
+          `[media-upload] webcam dimension probe returned null — width/height stay NULL, worker falls back to landscape default.`,
+        );
+      }
+    } catch (err) {
+      console.warn(
+        "[media-upload] ffprobe dimension probe failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
   console.log(`[media-upload] storage-upload ok remotePath=${result.remotePath}`);
@@ -165,6 +225,8 @@ export async function uploadMediaFile(
   return {
     publicUrl: result.url,
     durationSec,
+    width,
+    height,
     bytes,
     storagePath: result.remotePath,
   };

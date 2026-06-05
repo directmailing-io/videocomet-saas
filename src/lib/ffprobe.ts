@@ -93,6 +93,69 @@ function parseDurationSec(raw: string): number | null {
 }
 
 /**
+ * Probt die nativen Pixel-Dimensionen des ERSTEN Video-Streams. Liefert
+ * `null` wenn die Datei kein Video ist, ffprobe nichts findet oder die
+ * gelesenen Werte unplausibel sind (≤0 oder >16k).
+ *
+ * Wird beim Upload verwendet, um `media_items.width/height` zu setzen und
+ * im Renderer, um zwischen Landscape- (1920×1080) und Portrait-Output
+ * (1080×1920) zu entscheiden.
+ */
+export async function probeVideoDimensions(
+  filePath: string,
+): Promise<{ width: number; height: number } | null> {
+  try {
+    // `-select_streams v:0` → nur der erste Video-Stream, `csv=p=0` → nur die
+    // Werte ohne Header. Beispiel-Output: `1920,1080`.
+    const out = await runFfprobe([
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=width,height",
+      "-of",
+      "csv=p=0",
+      filePath,
+    ]);
+    const line = out.split(/\r?\n/).map((l) => l.trim()).find(Boolean);
+    if (!line) return null;
+    const [wRaw, hRaw] = line.split(",");
+    const w = parseInt(wRaw ?? "", 10);
+    const h = parseInt(hRaw ?? "", 10);
+    if (!Number.isFinite(w) || !Number.isFinite(h)) return null;
+    if (w < 8 || h < 8 || w > 16384 || h > 16384) return null;
+    return { width: w, height: h };
+  } catch (err) {
+    console.warn(
+      "[ffprobe] dimensions failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
+/**
+ * Bequemlichkeits-Wrapper: probt einen Buffer (z. B. ein gerade hochgeladenes
+ * Recording) auf seine nativen Pixel-Dimensionen. Schreibt temporär nach /tmp.
+ */
+export async function probeVideoBufferDimensions(
+  buffer: Buffer,
+  hintExt?: string,
+): Promise<{ width: number; height: number } | null> {
+  const safeExt = (hintExt ?? "bin").replace(/[^a-zA-Z0-9]/g, "");
+  const dir = join(tmpdir(), "videocomet-probes");
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, `${randomUUID()}.${safeExt || "bin"}`);
+  try {
+    await writeFile(path, buffer);
+    return await probeVideoDimensions(path);
+  } finally {
+    try { await unlink(path); } catch { /* ignore */ }
+  }
+}
+
+/**
  * Probt eine Video-Datei via ffprobe. Bei MediaRecorder-WebM ohne Duration-
  * Header probt ffprobe per `-count_packets` durch — robust, kostet ~50-200ms.
  */

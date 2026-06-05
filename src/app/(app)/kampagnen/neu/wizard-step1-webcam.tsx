@@ -9,6 +9,7 @@ import {
   Loader2,
   Play,
   AlertCircle,
+  Film,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,6 +32,15 @@ interface Webcam {
   name: string;
   publicUrl: string;
   durationSec: number | null;
+  /** "webcam" = recorded via the in-app recorder.
+   *  "video"  = uploaded directly to the media library.
+   *  Both behave identically downstream; this only drives the subtle UI
+   *  badge so users can spot which is which. */
+  kind: "webcam" | "video";
+  /** Native source dimensions (ffprobe at upload time). Both NULL → unknown;
+   *  UI falls back to landscape (16:9) so legacy items render as before. */
+  width: number | null;
+  height: number | null;
 }
 
 export interface WizardStep1Props {
@@ -47,6 +57,9 @@ interface MediaApiItem {
   name: string;
   publicUrl: string;
   durationSec: number | null;
+  type: "webcam" | "video" | "image" | "logo";
+  width: number | null;
+  height: number | null;
 }
 
 function durationLabel(seconds: number | null): string {
@@ -55,6 +68,43 @@ function durationLabel(seconds: number | null): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return s === 0 ? `${m}m` : `${m}m ${s}s`;
+}
+
+/**
+ * KindBadge — winziges Pill, das den Ursprung der Datei zeigt:
+ *   - "Webcam" für In-App-Aufnahmen (Brand-Soft, weil Standard-Pfad)
+ *   - "Upload" für Mediathek-Uploads (neutral Line, weniger prominent)
+ *
+ * Bewusst dezent: Lesbar aber nicht aufdringlich, damit die Thumbnails
+ * weiter fürs Video-Bild stehen, nicht für Meta-Info.
+ */
+function KindBadge({
+  kind,
+  className,
+}: {
+  kind: "webcam" | "video";
+  className?: string;
+}) {
+  const isUpload = kind === "video";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+        isUpload
+          ? "border-line bg-surface text-ink-muted"
+          : "border-brand/30 bg-brand-soft text-brand-deep",
+        className,
+      )}
+      title={isUpload ? "Aus Mediathek hochgeladen" : "Webcam-Aufnahme"}
+    >
+      {isUpload ? (
+        <Film className="size-2.5" />
+      ) : (
+        <Video className="size-2.5" />
+      )}
+      {isUpload ? "Upload" : "Webcam"}
+    </span>
+  );
 }
 
 export function WizardStep1Webcam({
@@ -92,7 +142,10 @@ export function WizardStep1Webcam({
     setPickerLoading(true);
     setPickerError(null);
     try {
-      const res = await fetch("/api/media?type=webcam", {
+      // Step 1 accepts both: classic recordings ("webcam") and direct video
+      // uploads from the media library ("video"). Both serve as the spoken
+      // segment source, so the picker shows them together with a small badge.
+      const res = await fetch("/api/media?type=webcam,video", {
         credentials: "same-origin",
       });
       if (!res.ok) {
@@ -105,6 +158,9 @@ export function WizardStep1Webcam({
           name: it.name,
           publicUrl: it.publicUrl,
           durationSec: it.durationSec ?? null,
+          kind: it.type === "video" ? "video" : "webcam",
+          width: it.width ?? null,
+          height: it.height ?? null,
         })),
       );
     } catch (err) {
@@ -132,6 +188,14 @@ export function WizardStep1Webcam({
       name: media.name,
       publicUrl: media.publicUrl,
       durationSec: media.durationSec ?? null,
+      // The in-app recorder always creates a `webcam`-type media item.
+      kind: "webcam",
+      // The recorder doesn't surface the probed dimensions in its callback
+      // payload. Leaving as null = "unknown" → fallback to landscape in the
+      // preview. The picker-refresh path below picks up the persisted values
+      // from the API when the user navigates away & back.
+      width: media.width ?? null,
+      height: media.height ?? null,
     };
     setWebcams((prev) => [newItem, ...prev.filter((w) => w.id !== newItem.id)]);
     onChange(newItem.id);
@@ -145,8 +209,8 @@ export function WizardStep1Webcam({
         Webcam-Video wählen
       </h2>
       <p className="text-sm text-ink-muted mb-6">
-        Wähle eine vorhandene Aufnahme aus deiner Mediathek oder nimm jetzt
-        eine neue auf.
+        Wähle eine vorhandene Webcam-Aufnahme oder ein hochgeladenes Video
+        aus deiner Mediathek — oder nimm jetzt eine neue Aufnahme auf.
       </p>
 
       {selected ? (
@@ -163,8 +227,8 @@ export function WizardStep1Webcam({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm text-ink-muted">
               {webcams.length === 0
-                ? "Du hast noch keine Webcam-Aufnahme."
-                : "Wähle eine Webcam aus deiner Mediathek."}
+                ? "Du hast noch keine Webcam-Aufnahme oder kein Video."
+                : "Wähle eine Aufnahme oder ein Video aus deiner Mediathek."}
             </div>
             <div className="flex flex-wrap gap-2">
               {webcams.length > 0 && (
@@ -217,8 +281,8 @@ export function WizardStep1Webcam({
           <DialogHeader>
             <DialogTitle>Aus Mediathek wählen</DialogTitle>
             <DialogDescription>
-              Klicke eine Webcam-Aufnahme an, um sie für diese Kampagne zu
-              verwenden.
+              Klicke eine Webcam-Aufnahme oder ein hochgeladenes Video an, um
+              es für diese Kampagne zu verwenden.
             </DialogDescription>
           </DialogHeader>
           {pickerLoading ? (
@@ -338,11 +402,26 @@ function SelectedWebcamPreview({
     "loading" | "ready" | "error"
   >("loading");
   const [reloadKey, setReloadKey] = React.useState(0);
+  // Client-side fallback wenn die Server-Werte für Altbestand fehlen — wir
+  // ermitteln Aspect aus dem geladenen <video>-Element und nutzen es für den
+  // Container-Aspect (rein lokal, wird nicht zurückgeschrieben).
+  const [detectedDims, setDetectedDims] = React.useState<
+    { width: number; height: number } | null
+  >(null);
 
   // Wenn sich die Auswahl ändert (anderes Video), zurück in den Lade-Status.
   React.useEffect(() => {
     setLoadState("loading");
+    setDetectedDims(null);
   }, [webcam.id]);
+
+  /** Effektives Aspect: bevorzugt DB-Werte, dann Client-Detection. */
+  const effectiveDims =
+    webcam.width != null && webcam.height != null
+      ? { width: webcam.width, height: webcam.height }
+      : detectedDims;
+  const isPortrait =
+    effectiveDims !== null && effectiveDims.height > effectiveDims.width;
 
   return (
     <div className="rounded-squircle-md border border-line bg-surface p-4">
@@ -354,6 +433,7 @@ function SelectedWebcamPreview({
         <span className="text-sm font-semibold text-ink truncate">
           {webcam.name}
         </span>
+        <KindBadge kind={webcam.kind} />
         <span className="text-xs text-ink-muted">
           {durationLabel(webcam.durationSec)}
         </span>
@@ -365,7 +445,21 @@ function SelectedWebcamPreview({
         )}
       </div>
 
-      <div className="relative w-full max-w-[480px] aspect-video overflow-hidden rounded-squircle-sm bg-ink">
+      {/*
+       * Container-Aspect richtet sich nach der gemessenen Source. Portrait
+       * (height > width) → schmaleres 9:16-Fenster mit gedeckelter Höhe, sonst
+       * klassisches 16:9. Wenn width/height noch unbekannt sind (Altbestand
+       * vor Migration 0011 oder Probe fehlgeschlagen), bleibt es bei 16:9
+       * — entspricht dem alten Verhalten.
+       */}
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-squircle-sm bg-ink",
+          isPortrait
+            ? "w-full max-w-[280px] aspect-[9/16] max-h-[60vh]"
+            : "w-full max-w-[480px] aspect-video",
+        )}
+      >
         <video
           key={`${webcam.id}-${reloadKey}`}
           src={webcam.publicUrl}
@@ -374,7 +468,18 @@ function SelectedWebcamPreview({
           preload="metadata"
           playsInline
           className="h-full w-full object-contain bg-ink"
-          onLoadedMetadata={() => setLoadState("ready")}
+          onLoadedMetadata={(e) => {
+            setLoadState("ready");
+            // Auto-Korrektur: wenn der Server NULL geliefert hat (Altbestand),
+            // versuchen wir per HTMLVideoElement nachträglich zu erkennen,
+            // welches Aspect wir wirklich rendern. Das hilft KEINER
+            // bestehenden Render-Pipeline (die liest aus der DB / probt
+            // server-seitig) — es macht nur die Preview lokal korrekt.
+            const v = e.currentTarget as HTMLVideoElement;
+            if ((webcam.width == null || webcam.height == null) && v.videoWidth > 0 && v.videoHeight > 0) {
+              setDetectedDims({ width: v.videoWidth, height: v.videoHeight });
+            }
+          }}
           onLoadedData={() => setLoadState("ready")}
           onError={() => setLoadState("error")}
         />
@@ -521,6 +626,10 @@ function WebcamThumb({
                 <Check className="size-3" />
               </span>
             )}
+            <KindBadge
+              kind={webcam.kind}
+              className="absolute left-1.5 top-1.5 shadow-sm backdrop-blur-sm"
+            />
           </div>
           <p className="text-sm font-semibold text-ink truncate">
             {webcam.name}

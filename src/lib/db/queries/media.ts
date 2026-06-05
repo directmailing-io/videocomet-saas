@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { mediaItems } from "@/lib/db/schema";
 
@@ -28,13 +28,34 @@ export async function deleteMediaItem(id: string, userId: string): Promise<void>
   if (result.length === 0) throw new Error("Not found");
 }
 
+/**
+ * Lists media items for a user. `type` may be:
+ *   - undefined  → all types
+ *   - MediaType  → exactly this type (backwards-compatible)
+ *   - MediaType[] → any of these types (uses SQL `IN (...)`)
+ *
+ * An empty array yields no rows (rather than throwing or behaving like
+ * "all types") — that way callers can pass a derived list without
+ * surprising results when it happens to be empty.
+ */
 export async function listUserMedia(
   userId: string,
-  type?: MediaType,
+  type?: MediaType | ReadonlyArray<MediaType>,
 ): Promise<MediaItem[]> {
-  const where = type
-    ? and(eq(mediaItems.userId, userId), eq(mediaItems.type, type))
-    : eq(mediaItems.userId, userId);
+  let where;
+  if (Array.isArray(type)) {
+    if (type.length === 0) return [];
+    // De-duplicate so the SQL `IN` list stays tidy when callers pass
+    // ["webcam","webcam"] from a CSV parser etc.
+    const uniqueTypes = Array.from(new Set(type)) as MediaType[];
+    where = uniqueTypes.length === 1
+      ? and(eq(mediaItems.userId, userId), eq(mediaItems.type, uniqueTypes[0]!))
+      : and(eq(mediaItems.userId, userId), inArray(mediaItems.type, uniqueTypes));
+  } else if (typeof type === "string") {
+    where = and(eq(mediaItems.userId, userId), eq(mediaItems.type, type));
+  } else {
+    where = eq(mediaItems.userId, userId);
+  }
   return db
     .select()
     .from(mediaItems)

@@ -28,15 +28,23 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # preview (single-frame extraction). Runs in-process for sub-200ms response —
 # the worker queue would add too much latency for the interactive UI.
 #
-# chromium: needed by /api/gslides/import for interactive Google-Slides
-# thumbnail + placeholder-extraction at upload time. Same reason as ffmpeg
-# above — the worker queue would add unacceptable latency for a "Folien
-# laden"-Button. We re-use puppeteer-core (already in deps) and point it
-# at /usr/bin/chromium via CHROMIUM_PATH env (worker config).
+# chromium: needed by /api/gslides/import for the LEGACY pubembed-Pipeline,
+# die für Bestandskampagnen Folien per Puppeteer screenshottet.
+#
+# libreoffice + poppler-utils: needed by /api/gslides/import (Edit-Mode-
+# Pipeline) sowie /api/gslides/refresh. Wir laden den PPTX-Export einer
+# Anyone-with-link-URL, lassen LibreOffice das Deck headless als PDF
+# rendern und rastern danach mit pdftoppm pro Folie ein Thumbnail. Im
+# Worker-Container ist dasselbe Toolchain bereits drin — wir spiegeln es
+# in den App-Container, weil der Import synchron beim Klick passieren muss
+# (kein Worker-Round-Trip akzeptabel für die UX).
 RUN apk add --no-cache ffmpeg chromium \
   nss freetype harfbuzz ca-certificates ttf-freefont \
-  font-noto-emoji
+  font-noto-emoji \
+  libreoffice poppler-utils
 ENV CHROMIUM_PATH=/usr/bin/chromium
+ENV LIBREOFFICE_PATH=/usr/bin/libreoffice
+ENV PDFTOPPM_PATH=/usr/bin/pdftoppm
 RUN addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 nextjs
 COPY --from=builder /app/public ./public
