@@ -62,18 +62,27 @@ export async function bulkInsertLeads(
   campaignId?: string,
 ): Promise<number> {
   if (rows.length === 0) return 0;
-  // Wenn der Caller die campaignId mitliefert, schreiben wir sie direkt —
-  // Sub-Select fällt weg. Fallback (kein campaignId-Argument): aus `runs`
-  // lookupen, damit Bestands-Aufrufer unverändert funktionieren.
-  const resolvedCampaignId = campaignId
-    ? sql<string>`${campaignId}::uuid`
-    : sql<string>`(SELECT campaign_id FROM ${runs} WHERE id = ${runId})`;
+  // `leads.campaign_id` ist NOT NULL (Migration 0014). Wir holen die ID
+  // vorab via Sub-Query, wenn der Caller sie nicht uebergeben hat — ein
+  // inline `sql` Helper im .values() wird von Drizzle nicht zuverlaessig
+  // als Spaltenwert gerendert (das war der Grund fuer das `null value`-
+  // Failing).
+  let resolvedCampaignId = campaignId;
+  if (!resolvedCampaignId) {
+    const [row] = await db
+      .select({ campaignId: runs.campaignId })
+      .from(runs)
+      .where(eq(runs.id, runId))
+      .limit(1);
+    if (!row) throw new Error(`bulkInsertLeads: run ${runId} not found`);
+    resolvedCampaignId = row.campaignId;
+  }
   const inserted = await db
     .insert(leads)
     .values(
       rows.map((r) => ({
         runId,
-        campaignId: resolvedCampaignId,
+        campaignId: resolvedCampaignId!,
         rowIndex: r.rowIndex,
         data: r.data,
       })),

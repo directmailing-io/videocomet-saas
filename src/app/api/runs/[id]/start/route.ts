@@ -145,7 +145,7 @@ export async function POST(
     return { rowIndex: index, data };
   });
 
-  const inserted = await bulkInsertLeads(params.id, bulkRows);
+  const inserted = await bulkInsertLeads(params.id, bulkRows, run.campaignId);
 
   // Snapshot the campaign's active Custom-LP version onto the run, so future
   // template edits do not silently change what THIS run delivers.

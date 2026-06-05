@@ -478,13 +478,6 @@ function WebcamPreview({
     );
   }
 
-  // HLS-Playlist-URL → MP4-Fallback fürs <video>-Element, das HLS nativ
-  // (außer Safari) nicht abspielen kann.
-  const isHls = media.publicUrl.includes(".m3u8");
-  const videoSrc = isHls
-    ? media.publicUrl.replace(/playlist\.m3u8$/, "play_720p.mp4")
-    : media.publicUrl;
-
   // Portrait-Source (z. B. 720×1280 Selfie) bekommt ein 9:16-Fenster mit
   // begrenzter Höhe, sonst klassisches 16:9. Bei NULL-Dimensionen (Altbestand
   // vor Migration 0011) fallen wir auf 16:9 zurück.
@@ -493,18 +486,36 @@ function WebcamPreview({
     typeof media.height === "number" &&
     media.height > media.width;
 
+  // Bunny Stream-URLs (vz-*.b-cdn.net/<guid>/playlist.m3u8) haben Token-Auth
+  // und Hotlink-Protection. Direkt-Fetch via <video> klappt nicht. Wir
+  // rendern stattdessen den Bunny-iframe-Player — der hat eigene Auth und
+  // braucht weder Token noch Referer-Tricks. Bunny-Storage-URLs (Webcam-
+  // Recordings) bleiben als <video>-Element.
+  const streamMatch = media.publicUrl.match(
+    /^https?:\/\/[^/]+\/([0-9a-f-]{36})\/playlist\.m3u8(?:\?.*)?$/i,
+  );
+  const aspectClass = isPortrait
+    ? "aspect-[9/16] mx-auto max-h-[60vh] max-w-[260px]"
+    : "aspect-video w-full";
+
   return (
     <div className="space-y-2">
-      <video
-        src={videoSrc}
-        controls
-        preload="metadata"
-        className={
-          isPortrait
-            ? "aspect-[9/16] mx-auto max-h-[60vh] max-w-[260px] rounded-squircle-md bg-ink border border-line object-contain"
-            : "aspect-video w-full rounded-squircle-md bg-ink border border-line object-contain"
-        }
-      />
+      {streamMatch ? (
+        <iframe
+          src={`https://iframe.mediadelivery.net/embed/670919/${streamMatch[1]}`}
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+          allowFullScreen
+          className={`${aspectClass} rounded-squircle-md bg-ink border border-line border-0`}
+          title={media.name}
+        />
+      ) : (
+        <video
+          src={media.publicUrl}
+          controls
+          preload="metadata"
+          className={`${aspectClass} rounded-squircle-md bg-ink border border-line object-contain`}
+        />
+      )}
       <div className="flex items-center justify-between text-xs text-ink-muted">
         <span className="truncate">{media.name}</span>
         {media.durationSec ? (
