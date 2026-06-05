@@ -8,6 +8,14 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ["archiver", "xlsx", "pdf-lib"],
   },
+  // ESLint im Container-Build NICHT aktivieren — die .eslintrc.json wird
+  // lokal + via `npm run lint` gepflegt. Im Docker-Build laeuft `npm ci`
+  // ohne devDependencies, weshalb @typescript-eslint-Plugin-Disable-
+  // Direktiven im Source als "rule unknown" failen. Build-Sicherheit
+  // statt Linting im Container.
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default nextConfig;
