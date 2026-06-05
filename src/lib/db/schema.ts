@@ -197,6 +197,23 @@ export const runs = pgTable("runs", {
    */
   preflightPurgedAt: timestamp("preflight_purged_at", { withTimezone: true }),
 
+  // ── Shared-Video (Webcam-only-Optimierung, Migration 0012) ────────────
+  // In webcam-only Mode ist das Video fuer ALLE Leads identisch — keine
+  // Personalisierung (kein Greenscreen, kein Slide-Render). Statt N×Upload
+  // nach Bunny Stream laden wir es EINMAL pro Run hoch (oder reusen den
+  // bestehenden Bunny-Stream-GUID, wenn der webcam-Source bereits in
+  // Stream liegt). Alle Leads in diesem Run teilen sich diese IDs.
+  // NULL = noch nicht aufgeloest (with-presentation, oder erster Job
+  // resolved gerade).
+  sharedBunnyVideoId: text("shared_bunny_video_id"),
+  sharedVideoUrl: text("shared_video_url"),
+  sharedThumbnailUrl: text("shared_thumbnail_url"),
+  // Optimistic-Lock: erster Worker, der das setzt, ist verantwortlich fuer
+  // den Upload. Andere Worker pollen `sharedBunnyVideoId`. Lock wird als
+  // stale behandelt, wenn aelter als 5 min und sharedBunnyVideoId NULL
+  // (z.B. weil der erste Worker crashed ist).
+  sharedVideoUploadStartedAt: timestamp("shared_video_upload_started_at", { withTimezone: true }),
+
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

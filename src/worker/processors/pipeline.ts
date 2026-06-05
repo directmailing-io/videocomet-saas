@@ -384,6 +384,47 @@ export async function pipelineProcessor(
           `skipped: campaign "${campaign.name}" has no webcam media attached (campaignId=${campaign.id}). Attach a webcam clip in the campaign settings and re-run.`,
         );
       }
+
+      // ── Webcam-only Fast-Path: shared video pro Run ──────────────
+      // Bei webcam-only ist das Video fuer alle Leads identisch. Wir
+      // resolven es pro Run einmalig (Stream-URL → GUID reuse, sonst
+      // single-upload mit Lock) und kopieren die IDs auf den Lead.
+      // Spart N×Re-Upload + N×Bunny-Encode-Wartezeit.
+      const isWebcamOnly = campaign.mode !== "with-presentation";
+      if (isWebcamOnly) {
+        await setCurrentStage(data.leadId, "videoUpload");
+        await updateLeadStatus(data.leadId, { status: "uploading" });
+        const sharedStart = Date.now();
+        const { resolveSharedRunVideo } = await import(
+          "../lib/shared-run-video"
+        );
+        const shared = await resolveSharedRunVideo(
+          data.runId,
+          webcam.publicUrl,
+        );
+        bunnyVideoId = shared.bunnyVideoId;
+        videoUrl = shared.videoUrl;
+        // thumbnailUrl wird in der naechsten Stage normal befuellt — wir
+        // setzen sie hier vorab, weil das von Bunny stammt und ohnehin
+        // pro Run identisch ist.
+        if (shared.thumbnailUrl) {
+          await updateLeadStatus(data.leadId, {
+            thumbnailUrl: shared.thumbnailUrl,
+          });
+        }
+        const sharedMs = Date.now() - sharedStart;
+        await insertPipelineEvent({
+          runId: data.runId,
+          leadId: data.leadId,
+          level: "info",
+          stage: "upload",
+          message: `${leadLabel}: shared video resolved in ${(sharedMs / 1000).toFixed(1)}s (bunnyId=${shared.bunnyVideoId.slice(0, 8)}…)`,
+          durationMs: sharedMs,
+        });
+        // Stages 1+2 erledigt — direkt weiter zu landingPageCreate.
+        // `renderedVideoPath` / `renderedDurationSec` bleiben null; die
+        // PDF-Stage faellt auf das gespeicherte thumbnailUrl zurueck.
+      } else {
       await setCurrentStage(data.leadId, "videoRender");
       const renderStart = Date.now();
       const render = await withStageTimeout(
@@ -451,6 +492,7 @@ export async function pipelineProcessor(
         message: `${leadLabel}: video upload done in ${(uploadMs / 1000).toFixed(1)}s`,
         durationMs: uploadMs,
       });
+      } // ← Ende `else` (with-presentation Pfad)
     } else {
       // Skip reason for the live log.
       const reason = videoAlreadyDone

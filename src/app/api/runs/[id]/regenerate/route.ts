@@ -187,11 +187,24 @@ export async function POST(
     run.campaignId,
   );
 
+  // Shared-Run-Video-Cache invalidieren wenn Video neu generiert werden soll.
+  // Modes "all" und "video" → der User will ein frisches Video. Falls die
+  // Kampagne inzwischen ein anderes Webcam-Asset referenziert, würde der
+  // alte Bunny-GUID sonst weiter ausgespielt.
+  const resetSharedVideo = mode === "all" || mode === "video";
   await updateRun(params.id, auth.user.id, {
     status: "generating",
     startedAt: new Date(),
     completedAt: null,
     customLpVersionId,
+    ...(resetSharedVideo
+      ? {
+          sharedBunnyVideoId: null,
+          sharedVideoUrl: null,
+          sharedThumbnailUrl: null,
+          sharedVideoUploadStartedAt: null,
+        }
+      : {}),
   });
 
   // Re-enqueue. Wenn Redis weg ist: rollen wir den Status NICHT zurück —
