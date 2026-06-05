@@ -125,3 +125,56 @@ export async function getVideo(
   );
   return (await response.json()) as Record<string, unknown>;
 }
+
+/**
+ * Liefert die besten verfügbaren MP4-Download-URLs für ein Bunny-Stream-
+ * Video. Sortiert von hoechster zu niedrigster Aufloesung.
+ *
+ * Hintergrund: Bunny rendert pro Quellvideo nur die Resolutionen, die
+ * Sinn ergeben. Ein 404×720-Portrait-Video bekommt z.B. nur 240p/360p/480p
+ * — ein hardcoded `play_720p.mp4` liefert dann 404.
+ *
+ * Die Bunny-API liefert `availableResolutions` als CSV (z.B. "360p,480p,240p").
+ * Wir parsen das + bauen die URL `<cdnBase>/<guid>/play_<res>.mp4`.
+ *
+ * Bei `hasOriginal: true` wird `<cdnBase>/<guid>/original` als letzter
+ * Fallback angehaengt.
+ */
+const RES_RANK: Record<string, number> = {
+  "240p": 240,
+  "360p": 360,
+  "480p": 480,
+  "720p": 720,
+  "1080p": 1080,
+  "1440p": 1440,
+  "2160p": 2160,
+};
+
+export interface VideoDownloadUrl {
+  url: string;
+  /** "1080p" | "720p" | … | "original" */
+  label: string;
+}
+
+export async function getVideoDownloadUrls(
+  videoId: string,
+  cdnHostname: string,
+): Promise<VideoDownloadUrl[]> {
+  const meta = await getVideo(videoId);
+  const resolutions = String(meta.availableResolutions ?? "")
+    .split(",")
+    .map((r) => r.trim().toLowerCase())
+    .filter((r) => r.length > 0 && RES_RANK[r] !== undefined);
+  // höchste Auflösung zuerst
+  resolutions.sort((a, b) => (RES_RANK[b] ?? 0) - (RES_RANK[a] ?? 0));
+
+  const base = `https://${cdnHostname.replace(/\/+$/, "")}/${videoId}`;
+  const out: VideoDownloadUrl[] = resolutions.map((r) => ({
+    url: `${base}/play_${r}.mp4`,
+    label: r,
+  }));
+  if (meta.hasOriginal === true) {
+    out.push({ url: `${base}/original`, label: "original" });
+  }
+  return out;
+}

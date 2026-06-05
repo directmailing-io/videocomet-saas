@@ -194,40 +194,78 @@ export interface VideoRenderOutput {
 }
 
 async function fetchToFile(url: string, outPath: string): Promise<void> {
-  // Tolerate file:// and http(s):// URLs; downloads stream into a Buffer
-  // (lead videos are 5-20MB so this is fine for v1).
   if (url.startsWith("file://")) {
     return; // Already on local disk; caller handles this branch.
   }
-  // For HLS playlists from Bunny Stream, switch to the MP4 fallback URL so
-  // ffmpeg can read a single seekable file. The Library has MP4 fallback
-  // enabled, so {guid}/play_720p.mp4 always exists.
-  //
-  // Pattern matches both bare and query-suffixed Bunny URLs:
-  //   https://vz-xxx.b-cdn.net/<guid>/playlist.m3u8
-  //   https://vz-xxx.b-cdn.net/<guid>/playlist.m3u8?token=…&expires=…
-  let downloadUrl = url;
+
+  // Bunny CDN blockt requests ohne Referer (Hotlink-Protection in der
+  // Library). APP_URL als Referer reicht — die Allowlist hat
+  // `app.videocomet.de` drin.
+  const referer = process.env.APP_URL ?? "https://app.videocomet.de";
+  const baseHeaders = {
+    Referer: referer,
+    Origin: referer,
+    "User-Agent": "videocomet-worker/1.0",
+  };
+
+  // Bunny-Stream-HLS: wir koennen ffmpeg nicht direkt eine playlist.m3u8
+  // geben (HTTP-Range-Seeks brauchen ein einzelnes Asset). Wir holen die
+  // beste verfuegbare MP4-Variante via Library-API — hardcoded
+  // `play_720p.mp4` knallt bei Videos, deren Source-Aufloesung kleiner als
+  // 720p ist (z.B. 404×720 Portrait), weil Bunny KEINE Upscale-Variante
+  // ausspielt.
   const hlsMatch = url.match(
-    /^(https?:\/\/[^/]+)\/([0-9a-f-]{36})\/playlist\.m3u8(?:\?.*)?$/i,
+    /^https?:\/\/([^/]+)\/([0-9a-f-]{36})\/playlist\.m3u8(?:\?.*)?$/i,
   );
   if (hlsMatch) {
-    downloadUrl = `${hlsMatch[1]}/${hlsMatch[2]}/play_720p.mp4`;
+    const cdnHostname = hlsMatch[1];
+    const guid = hlsMatch[2];
+    let candidates: { url: string; label: string }[] = [];
+    try {
+      const { getVideoDownloadUrls } = await import("@/lib/bunny/stream");
+      candidates = await getVideoDownloadUrls(guid, cdnHostname);
+    } catch (err) {
+      // API-Call-Failure → wir versuchen wenigstens die alten Konventionen.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[render] bunny meta lookup failed for ${guid}: ${
+          (err as Error).message
+        } — falling back to fixed resolutions`,
+      );
+    }
+    if (candidates.length === 0) {
+      // Fallback-Reihenfolge: hoechste zuerst, dann Original.
+      const base = `https://${cdnHostname}/${guid}`;
+      candidates = [
+        { url: `${base}/play_1080p.mp4`, label: "1080p" },
+        { url: `${base}/play_720p.mp4`, label: "720p" },
+        { url: `${base}/play_480p.mp4`, label: "480p" },
+        { url: `${base}/play_360p.mp4`, label: "360p" },
+        { url: `${base}/play_240p.mp4`, label: "240p" },
+        { url: `${base}/original`, label: "original" },
+      ];
+    }
+
+    let lastErr: string | null = null;
+    for (const c of candidates) {
+      const res = await fetch(c.url, { headers: baseHeaders });
+      if (res.ok) {
+        const buf = Buffer.from(await res.arrayBuffer());
+        await writeFile(outPath, buf);
+        return;
+      }
+      lastErr = `${res.status} ${c.label}`;
+    }
+    throw new Error(
+      `[render] webcam fetch failed for all variants (${candidates.length}): ${lastErr} ${url}`,
+    );
   }
-  // Bunny CDN blocks none-referrer requests by default. Provide an APP_URL
-  // referrer so the hot-link protection lets us through. We pass BOTH
-  // Referer and Origin because some Bunny Stream pull-zones validate one
-  // or the other depending on the hotlink config.
-  const referer = process.env.APP_URL ?? "https://app.videocomet.de";
-  const res = await fetch(downloadUrl, {
-    headers: {
-      Referer: referer,
-      Origin: referer,
-      "User-Agent": "videocomet-worker/1.0",
-    },
-  });
+
+  // Nicht-HLS: direkt fetchen (Bunny Storage / Webcam-Recording).
+  const res = await fetch(url, { headers: baseHeaders });
   if (!res.ok) {
     throw new Error(
-      `[render] webcam fetch ${res.status} ${downloadUrl} (referer=${referer})`,
+      `[render] webcam fetch ${res.status} ${url} (referer=${referer})`,
     );
   }
   const buf = Buffer.from(await res.arrayBuffer());
