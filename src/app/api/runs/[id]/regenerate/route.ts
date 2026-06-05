@@ -145,10 +145,14 @@ export async function POST(
     startedAt: null,
     completedAt: null,
   };
+  // Wichtig: `bunny_video_id` muss synchron zu `video_url` resetted werden.
+  // Sonst zeigt die Landingpage spaeter via dem alten Bunny-Stream-GUID auf
+  // ein Video aus einem frueheren Run (z.B. mit anderem Webcam-Source).
   const resetPatch =
     mode === "all"
       ? {
           ...baseReset,
+          bunnyVideoId: null,
           videoUrl: null,
           pdfUrl: null,
           thumbnailUrl: null,
@@ -156,6 +160,7 @@ export async function POST(
       : mode === "video"
         ? {
             ...baseReset,
+            bunnyVideoId: null,
             videoUrl: null,
             thumbnailUrl: null,
           }

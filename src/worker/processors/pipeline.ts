@@ -404,14 +404,16 @@ export async function pipelineProcessor(
         );
         bunnyVideoId = shared.bunnyVideoId;
         videoUrl = shared.videoUrl;
-        // thumbnailUrl wird in der naechsten Stage normal befuellt — wir
-        // setzen sie hier vorab, weil das von Bunny stammt und ohnehin
-        // pro Run identisch ist.
-        if (shared.thumbnailUrl) {
-          await updateLeadStatus(data.leadId, {
-            thumbnailUrl: shared.thumbnailUrl,
-          });
-        }
+        // KRITISCH: alle drei Felder atomar in die DB schreiben — sonst
+        // zeigt die Landingpage spaeter auf einen alten bunny_video_id
+        // (z.B. aus einem frueheren Run, der ein anderes Webcam-Source
+        // verwendet hat). Das Stage-10-Update (status='completed') faesst
+        // diese Felder nicht an.
+        await updateLeadStatus(data.leadId, {
+          bunnyVideoId: shared.bunnyVideoId,
+          videoUrl: shared.videoUrl,
+          thumbnailUrl: shared.thumbnailUrl || null,
+        });
         const sharedMs = Date.now() - sharedStart;
         await insertPipelineEvent({
           runId: data.runId,
