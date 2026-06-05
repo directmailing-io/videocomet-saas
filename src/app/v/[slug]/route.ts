@@ -190,9 +190,16 @@ async function proxyBlockLp(
   // im Container nicht (Traefik-Loop produziert "wrong version number" TLS-
   // Fehler). Innerhalb des Containers ist der Next.js-Server unter
   // http://127.0.0.1:3000 erreichbar.
-  const externalUrl = new URL(req.url);
+  //
+  // WICHTIG: req.nextUrl.searchParams (NICHT new URL(req.url)!) enthaelt
+  // die von der Middleware gesetzten Query-Params — insbesondere `_host`,
+  // den die Middleware bei Custom-Domain-Requests einsetzt. `req.url`
+  // zeigt auf die unveraenderte Client-URL und wuerde `_host` verlieren.
+  // Folgen: lp-block-Page macht Default-Domain-Lookup und findet evtl.
+  // einen gleichnamigen Lead aus einer fremden Kampagne (Tenant-Leak +
+  // falsches Video).
   const target = new URL(`http://127.0.0.1:3000/lp-block/${slug}`);
-  externalUrl.searchParams.forEach((value, key) => {
+  req.nextUrl.searchParams.forEach((value, key) => {
     target.searchParams.set(key, value);
   });
   // Public-Host als Header durchreichen, damit die LP-Page den richtigen
@@ -220,12 +227,41 @@ async function proxyBlockLp(
   return new NextResponse(body, { status: upstream.status, headers });
 }
 
+/**
+ * Liefert den Host des Original-Client-Requests. Bevorzugt der
+ * `_host`-Query-Param, den die Middleware bei Custom-Domain-Rewrites
+ * setzt — falls der durch Edge-Middleware-Quirks verloren geht (gab es
+ * gestreute Reports in Next.js 14), faellt der Code auf den Request-
+ * Host-Header zurueck. Eigener App-Host (`app.videocomet.de` etc.) wird
+ * NICHT als Custom-Domain interpretiert — der Lookup laeuft dann auf
+ * dem Default-Namespace wie bisher.
+ */
+function resolveCustomDomainHost(req: NextRequest): string | null {
+  const queryHost = req.nextUrl.searchParams.get("_host");
+  if (queryHost && queryHost.trim() !== "") return queryHost;
+  const rawHost = req.headers.get("host");
+  if (!rawHost) return null;
+  const lower = rawHost.toLowerCase().split(":")[0];
+  // Localhost / app-eigene Hosts → kein Custom-Domain-Lookup.
+  if (
+    lower === "127.0.0.1" ||
+    lower === "0.0.0.0" ||
+    lower === "localhost" ||
+    lower === "app.videocomet.de" ||
+    lower === "lp.videocomet.de" ||
+    lower.endsWith(".vercel.app")
+  ) {
+    return null;
+  }
+  return rawHost;
+}
+
 export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ slug: string }> },
 ): Promise<Response> {
   const { slug } = await ctx.params;
-  const hostParam = req.nextUrl.searchParams.get("_host");
+  const hostParam = resolveCustomDomainHost(req);
 
   // Resolve the domain ONCE — both the pin-check and the context load need
   // the same tenant-scope. Without hostParam wir bleiben auf der Default-
