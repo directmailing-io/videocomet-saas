@@ -85,6 +85,8 @@ export interface EditCampaignData {
     customLpTemplateId: string | null;
     domainId: string | null;
     slugTemplate: string | null;
+    /** Optionaler Tenant-Suffix für Lead-Slugs (Migration 0014). NULL = kein Suffix. */
+    slugSuffix: string | null;
     pdfEnabled: boolean;
     pdfGoogleDocsUrl: string;
     pdfQrEnabled: boolean;
@@ -108,6 +110,7 @@ interface FormState {
   customLpTemplateId: string | null;
   domainId: string | null;
   slugTemplate: string | null;
+  slugSuffix: string | null;
   pdfEnabled: boolean;
   pdfGoogleDocsUrl: string;
   pdfQrEnabled: boolean;
@@ -125,6 +128,7 @@ type PatchBody = Partial<{
   customLpTemplateId: string | null;
   domainId: string | null;
   slugTemplate: string | null;
+  slugSuffix: string | null;
   pdfEnabled: boolean;
   pdfGoogleDocsUrl: string | null;
   pdfQrEnabled: boolean;
@@ -146,6 +150,7 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
     customLpTemplateId: data.campaign.customLpTemplateId,
     domainId: data.campaign.domainId,
     slugTemplate: data.campaign.slugTemplate,
+    slugSuffix: data.campaign.slugSuffix,
     pdfEnabled: data.campaign.pdfEnabled,
     pdfGoogleDocsUrl: data.campaign.pdfGoogleDocsUrl,
     pdfQrEnabled: data.campaign.pdfQrEnabled,
@@ -217,6 +222,7 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
           customLpTemplateId: state.customLpTemplateId,
           domainId: state.domainId,
           slugTemplate: state.slugTemplate,
+          slugSuffix: state.slugSuffix,
           pdfEnabled: state.pdfEnabled,
           pdfGoogleDocsUrl: state.pdfGoogleDocsUrl
             ? state.pdfGoogleDocsUrl
@@ -644,12 +650,32 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
             <SlugTemplateField
               value={state.slugTemplate}
               domain={data.domains.find((d) => d.id === state.domainId) ?? null}
+              suffix={state.slugSuffix}
               onCommit={(next) => {
                 setState((s) => ({ ...s, slugTemplate: next }));
                 void patchAndSync({ slugTemplate: next }, "Slug-Vorlage");
               }}
               onLocalChange={(next) =>
                 setState((s) => ({ ...s, slugTemplate: next }))
+              }
+            />
+          </CardContent>
+        </Card>
+
+        {/* Slug-Suffix (optional) */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Slug-Suffix (optional)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SlugSuffixField
+              value={state.slugSuffix}
+              onCommit={(next) => {
+                setState((s) => ({ ...s, slugSuffix: next }));
+                void patchAndSync({ slugSuffix: next }, "Slug-Suffix");
+              }}
+              onLocalChange={(next) =>
+                setState((s) => ({ ...s, slugSuffix: next }))
               }
             />
           </CardContent>
@@ -925,27 +951,33 @@ const PREVIEW_LEAD = {
 function SlugTemplateField({
   value,
   domain,
+  suffix,
   onCommit,
   onLocalChange,
 }: {
   value: string | null;
   domain: EditCampaignDomain | null;
+  /** Optionaler Tenant-Suffix aus dem Slug-Suffix-Feld (Preview-Anzeige). */
+  suffix: string | null;
   onCommit: (next: string | null) => void;
   onLocalChange: (next: string | null) => void;
 }) {
   const effective =
     value && value.trim() !== "" ? value : DEFAULT_SLUG_TEMPLATE;
-  const previewSlug = React.useMemo(
-    () => renderSlugTemplate(effective, PREVIEW_LEAD) || "lead",
-    [effective],
-  );
+  const previewSlug = React.useMemo(() => {
+    const base = renderSlugTemplate(effective, PREVIEW_LEAD) || "lead";
+    const trimmedSuffix = suffix?.trim() ?? "";
+    return trimmedSuffix ? `${base}-${trimmedSuffix}` : base;
+  }, [effective, suffix]);
   const host =
     domain && domain.status === "active"
       ? domain.hostname
       : null;
+  // Bei mehrfachem Vorkommen wird der erste Lead `…-mueller`, der zweite
+  // `…-mueller-2` etc. (numerische Kollisions-Suffixe seit Paket F).
   const previewUrl = host
     ? `${host}/${previewSlug}`
-    : `${DEFAULT_HOST}/v/${previewSlug}-a3f7`;
+    : `${DEFAULT_HOST}/v/${previewSlug}`;
 
   return (
     <div className="space-y-4">
@@ -1015,9 +1047,78 @@ function SlugTemplateField({
         </div>
         <p className="text-sm font-mono text-ink break-all">{previewUrl}</p>
         <p className="mt-1 text-[11px] text-ink-muted">
-          Bei Namens-Kollision wird ein 4-stelliger Hex-Suffix angehaengt (z.B.{" "}
-          <span className="font-mono">peter-mueller-a3f7</span>).
+          Bei Namens-Kollision innerhalb derselben Kampagne wird ein
+          numerischer Suffix angehaengt (z.B.{" "}
+          <span className="font-mono">peter-mueller-2</span>,{" "}
+          <span className="font-mono">peter-mueller-3</span> …).
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Slug-Suffix Feld (optional) ───────────────────────────────────────────
+// Tenant-Marker, der an JEDEN Lead-Slug angehängt wird, z.B. `…-test`. Praktisch
+// wenn derselbe Lead in mehreren Kampagnen unterscheidbar sein soll — drei
+// Kampagnen können je einen `simon-krempel` haben (campaign-scoped Unique),
+// per Suffix lassen sich diese aber auch im Pageview-Log auseinanderhalten.
+
+/** Spiegelt die DB-CHECK-Constraint `campaigns_slug_suffix_check`. */
+const SLUG_SUFFIX_RE = /^[a-z0-9-]{1,32}$/;
+
+function SlugSuffixField({
+  value,
+  onCommit,
+  onLocalChange,
+}: {
+  value: string | null;
+  onCommit: (next: string | null) => void;
+  onLocalChange: (next: string | null) => void;
+}) {
+  const [touched, setTouched] = React.useState(false);
+  const trimmed = (value ?? "").trim();
+  const isValid = trimmed === "" || SLUG_SUFFIX_RE.test(trimmed);
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label htmlFor="edit-slug-suffix">Suffix</Label>
+        <Input
+          id="edit-slug-suffix"
+          value={value ?? ""}
+          placeholder="z.B. test"
+          spellCheck={false}
+          aria-invalid={touched && !isValid ? true : undefined}
+          onChange={(e) => {
+            const raw = e.target.value;
+            // Live-Normalisierung: Lowercase + nur erlaubte Zeichen, sodass
+            // der User direkt sieht was im URL landet. Empty → null beim
+            // Commit (siehe onBlur).
+            const normalised = raw.toLowerCase().replace(/[^a-z0-9-]/g, "");
+            onLocalChange(normalised === "" ? null : normalised.slice(0, 32));
+          }}
+          onBlur={() => {
+            setTouched(true);
+            const next = trimmed === "" ? null : trimmed;
+            // Nur committen wenn Format passt (oder leer → null). Sonst
+            // halten wir den Wert im lokalen State, bis der User korrigiert.
+            if (next === null || SLUG_SUFFIX_RE.test(next)) {
+              onCommit(next);
+            }
+          }}
+        />
+        <p className="mt-1.5 text-xs text-ink-muted">
+          Wird an jeden Lead-Slug angehängt. Beispiel:{" "}
+          <span className="font-mono">test</span> →{" "}
+          <span className="font-mono">simon-krempel-test</span>. Nützlich
+          wenn du den gleichen Lead in mehreren Kampagnen unterscheidbar
+          machen willst. Lowercase, alphanumerisch + Bindestrich, max. 32
+          Zeichen. Leer lassen für keinen Suffix.
+        </p>
+        {touched && !isValid && (
+          <p className="mt-1 text-xs text-danger">
+            Nur a-z, 0-9 und Bindestrich (max. 32 Zeichen).
+          </p>
+        )}
       </div>
     </div>
   );

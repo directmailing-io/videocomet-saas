@@ -51,6 +51,13 @@ export interface RenderCustomLpArgs {
   videoMp4Url?: string | null;
   /** Thumbnail-URL fürs Poster-Attribut. */
   thumbnailUrl?: string | null;
+  /**
+   * Aspect-Ratio des Lead-Videos. Wird in eine `--vc-video-aspect`-CSS-
+   * Variable übersetzt und in den `<head>` injiziert, damit Custom-LP-
+   * Templates ihre Video-Container per `aspect-ratio: var(--vc-video-aspect)`
+   * styling-driven steuern können. `null` = unbekannt → 16/9.
+   */
+  videoOrientation?: "landscape" | "portrait" | "square" | null;
 }
 
 /** HTML-escape minimum needed to prevent breaking attributes/text nodes. */
@@ -344,6 +351,59 @@ function injectVideoSources(
 }
 
 /**
+ * Übersetzt die Lead-Orientation (+ ggf. die `videoAspectStrategy`-
+ * Annotation) in den `aspect-ratio`-CSS-Wert für die `--vc-video-aspect`-
+ * Variable. `force-*`-Strategien überschreiben die Lead-Orientation.
+ *
+ * Default-Fallback ist `16 / 9` — kompatibel mit dem Bestand (vor Paket A).
+ */
+export function resolveVideoAspectValue(args: {
+  videoOrientation: "landscape" | "portrait" | "square" | null | undefined;
+  annotations: CustomLpAnnotations | Record<string, unknown> | null;
+}): string {
+  const rawStrategy =
+    args.annotations && typeof args.annotations === "object"
+      ? (args.annotations as Record<string, unknown>).videoAspectStrategy
+      : undefined;
+  const strategy =
+    rawStrategy === "force-landscape" ||
+    rawStrategy === "force-portrait" ||
+    rawStrategy === "preserve"
+      ? rawStrategy
+      : "preserve";
+
+  if (strategy === "force-landscape") return "16 / 9";
+  if (strategy === "force-portrait") return "9 / 16";
+
+  // preserve → Lead-Orientation
+  switch (args.videoOrientation) {
+    case "portrait":
+      return "9 / 16";
+    case "square":
+      return "1 / 1";
+    case "landscape":
+      return "16 / 9";
+    default:
+      // Unknown — defensive 16/9, kompatibel mit Bestand.
+      return "16 / 9";
+  }
+}
+
+/**
+ * Baut den `<style>:root { --vc-video-aspect: …; }</style>`-Snippet, der
+ * im `<head>` der Custom-LP injiziert wird. Templates referenzieren die
+ * Variable per `aspect-ratio: var(--vc-video-aspect, 16 / 9)`.
+ */
+function buildAspectStyleSnippet(aspect: string): string {
+  // `aspect` ist ein kontrollierter Wert ("16 / 9", "9 / 16", "1 / 1") aus
+  // `resolveVideoAspectValue`. Trotzdem defensiv escapen — vermeidet
+  // jegliches CSS-Injection-Risiko, falls jemand die Helper-Signatur
+  // missbraucht.
+  const safe = aspect.replace(/[^0-9./\s]/g, "");
+  return `<style data-vc-video-aspect>:root{--vc-video-aspect:${safe};}</style>`;
+}
+
+/**
  * Public entry point — combines all rewrite steps. Idempotent up to
  * placeholder values: calling this twice with the same input produces
  * identical output.
@@ -366,7 +426,17 @@ export function renderCustomLp(args: RenderCustomLpArgs): string {
   //    snippet being processed.
   out = injectIntoHead(out, `<base href="${htmlEscape(baseHref)}">`);
 
-  // 4. Tracking-bridge bootstrap right before </body>.
+  // 4. Aspect-Ratio-CSS-Variable. Wird DIREKT nach `<base href>` in den
+  //    `<head>` geschoben, damit auch die ersten Stylesheet-Regeln auf den
+  //    Wert zugreifen koennen. Templates referenzieren ihn als
+  //    `aspect-ratio: var(--vc-video-aspect)`.
+  const aspectValue = resolveVideoAspectValue({
+    videoOrientation: args.videoOrientation ?? null,
+    annotations: args.annotations ?? null,
+  });
+  out = injectIntoHead(out, buildAspectStyleSnippet(aspectValue));
+
+  // 5. Tracking-bridge bootstrap right before </body>.
   out = injectBeforeBodyEnd(
     out,
     buildBridgeSnippet({
@@ -392,4 +462,6 @@ export const _renderInternals = {
   injectBeforeBodyEnd,
   resolvePlaceholder,
   safeRanges,
+  resolveVideoAspectValue,
+  buildAspectStyleSnippet,
 };

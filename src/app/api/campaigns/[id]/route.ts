@@ -3,12 +3,17 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { and, eq } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
+import { db } from "@/lib/db";
+import { leads, runs } from "@/lib/db/schema";
 import {
-  deleteCampaign,
   getCampaign,
+  softDeleteCampaign,
   updateCampaign,
 } from "@/lib/db/queries/campaigns";
+import { removeBunnyAssetRefsForOwner } from "@/lib/db/queries/bunny-assets";
+import { triggerBunnyPurgeTick } from "@/lib/bunny/purge-trigger";
 
 const patchSchema = z.object({
   name: z.string().min(1).max(120).optional(),
@@ -21,6 +26,17 @@ const patchSchema = z.object({
   customLpTemplateId: z.string().uuid().nullable().optional(),
   domainId: z.string().uuid().nullable().optional(),
   slugTemplate: z.string().min(1).max(120).nullable().optional(),
+  /**
+   * Optionaler Tenant-Suffix für Lead-Slugs (Migration 0014).
+   * `null` → SQL NULL setzen, `undefined` → Feld nicht ändern (Zod-`.optional()`
+   * lässt den Key dann weg, der Drizzle-UPDATE faesst ihn nicht an).
+   * Format-Regex spiegelt die DB-CHECK-Constraint `campaigns_slug_suffix_check`.
+   */
+  slugSuffix: z
+    .string()
+    .regex(/^[a-z0-9-]{1,32}$/, "Nur a-z, 0-9 und Bindestrich, max. 32 Zeichen.")
+    .nullable()
+    .optional(),
   pdfEnabled: z.boolean().optional(),
   pdfGoogleDocsUrl: z.string().url().nullable().optional(),
   pdfQrEnabled: z.boolean().optional(),
@@ -59,13 +75,83 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
+/**
+ * DELETE /api/campaigns/[id] — Soft-Delete + Bunny-Cleanup-Cascade.
+ *
+ * 1. `softDeleteCampaign` setzt `deletedAt`. Listen-Queries blenden den
+ *    Eintrag damit sofort aus.
+ * 2. Vor dem Soft-Delete-Marker holen wir Lead-/Run-IDs der Kampagne, weil
+ *    `deletedAt` keine FK-Cascade auslöst. Ohne diesen Snapshot würden die
+ *    Bunny-Refs für immer überleben und der Purge-Worker fände sie nie.
+ * 3. Alle `bunny_asset_refs` der Owner (leads / runs / campaign_webcam)
+ *    werden entfernt. Der nächste `markOrphanedAssetsForPurge`-Tick (Cron
+ *    alle 60s oder unser direkter Trigger unten) markiert Assets ohne Refs
+ *    als `purge_pending`; der Purge-Worker löscht sie dann aus Bunny.
+ * 4. Trigger sofort einen Purge-Tick, damit Bunny-Cleanup nicht bis zur
+ *    nächsten Cron-Minute wartet. Trigger ist fire-and-forget; der 60s-Cron
+ *    fängt Fehler ab.
+ */
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireUserApi();
   if (!auth.ok) return auth.response;
+
+  // Snapshot der Lead-/Run-IDs VOR dem Soft-Delete-Marker. Wir scopen
+  // strikt auf den User, weil `removeBunnyAssetRefsForOwner` keinen
+  // Tenant-Check macht — damit kann ein anderer Tenant nie Refs eines
+  // Fremd-Owners abrauben.
+  let leadIds: string[];
+  let runIds: string[];
   try {
-    await deleteCampaign(params.id, auth.user.id);
-    return NextResponse.json({ ok: true });
+    // Ownership-Check als Seiteneffekt: wirft "Not found" wenn Kampagne
+    // einem anderen User gehört oder bereits soft-deleted ist.
+    await getCampaign(params.id, auth.user.id);
+    const runRows = await db
+      .select({ id: runs.id })
+      .from(runs)
+      .where(and(eq(runs.campaignId, params.id), eq(runs.userId, auth.user.id)));
+    runIds = runRows.map((r) => r.id);
+    // Leads haben kein `userId` direkt — wir scopen über den Join auf
+    // `runs.userId`, damit ein anderer Tenant nie Refs eines Fremd-Leads
+    // abrauben kann (Tenant-Guard).
+    const leadRows = await db
+      .select({ id: leads.id })
+      .from(leads)
+      .innerJoin(runs, eq(runs.id, leads.runId))
+      .where(
+        and(eq(leads.campaignId, params.id), eq(runs.userId, auth.user.id)),
+      );
+    leadIds = leadRows.map((l) => l.id);
   } catch {
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
+
+  try {
+    await softDeleteCampaign(params.id, auth.user.id);
+  } catch {
+    return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
+  }
+
+  // Refs entfernen. Wir nutzen `Promise.all`, damit eine grosse Kampagne
+  // mit vielen Leads nicht sequenziell durch hunderte DB-Roundtrips
+  // läuft. Bei einem einzelnen Fehler swallowt der catch — der Purge-
+  // Worker findet die Asset später trotzdem nicht mehr, wenn die Refs
+  // weg sind, und der Cron räumt Orphan-Refs nach.
+  try {
+    await Promise.all([
+      ...leadIds.map((id) => removeBunnyAssetRefsForOwner("lead", id)),
+      ...runIds.map((id) => removeBunnyAssetRefsForOwner("run", id)),
+      removeBunnyAssetRefsForOwner("campaign_webcam", params.id),
+    ]);
+  } catch (err) {
+    // Soft-Delete ist bereits durch — UI sieht Cleanup, der Worker-Cron
+    // räumt verbleibende Refs nach. Daher nur loggen, nicht failen.
+    // eslint-disable-next-line no-console
+    console.warn("[campaigns:delete] ref cleanup partial failure:", err);
+  }
+
+  // Sofortige Purge anstossen (fire-and-forget). Cron alle 60s ist der
+  // Fallback, falls der Trigger fehlschlägt.
+  void triggerBunnyPurgeTick("campaigns:delete");
+
+  return NextResponse.json({ ok: true });
 }

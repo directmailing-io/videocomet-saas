@@ -29,6 +29,18 @@ export interface LandingRenderProps {
   /** Optional — page shell already keeps slug in cookies via TrackerInit. */
   slug?: string;
   videoSlot: React.ReactNode;
+  /**
+   * Aspect-Ratio des Lead-Videos. Wird ausschliesslich an den Hero-Block
+   * durchgereicht (andere Blöcke embedden das Video nicht). `null` =
+   * Bestandsverhalten (16:9-Container).
+   */
+  videoOrientation?: "landscape" | "portrait" | "square" | null;
+  /**
+   * Kampagnen-Modus. Wird ausschliesslich an den Hero-Block durchgereicht,
+   * der ihn mit `videoOrientation` kombiniert um den Slot-Wrapper auf
+   * Portrait-Webcam-Layout zu schalten.
+   */
+  campaignMode?: "webcam-only" | "with-presentation" | null;
 }
 
 export function LandingRender({
@@ -36,6 +48,8 @@ export function LandingRender({
   leadData,
   leadId,
   videoSlot,
+  videoOrientation,
+  campaignMode,
 }: LandingRenderProps) {
   const content = migrateLegacyContent(templateContent);
 
@@ -53,6 +67,8 @@ export function LandingRender({
             leadData={leadData}
             leadId={leadId}
             videoSlot={videoSlot}
+            videoOrientation={videoOrientation ?? null}
+            campaignMode={campaignMode ?? null}
           />
         ))}
       </div>
@@ -66,6 +82,8 @@ interface RenderBlockProps {
   leadData: LeadData;
   leadId: string;
   videoSlot: React.ReactNode;
+  videoOrientation: "landscape" | "portrait" | "square" | null;
+  campaignMode: "webcam-only" | "with-presentation" | null;
 }
 
 function RenderBlock({
@@ -74,12 +92,15 @@ function RenderBlock({
   leadData,
   leadId,
   videoSlot,
+  videoOrientation,
+  campaignMode,
 }: RenderBlockProps): React.ReactElement | null {
   const Component = BLOCK_REGISTRY[block.type];
   if (!Component) return null;
   // Only the hero receives the video slot; passing it everywhere would
   // tempt other blocks to embed the player in unexpected places.
-  const slot = block.type === "hero" ? videoSlot : undefined;
+  const isHero = block.type === "hero";
+  const slot = isHero ? videoSlot : undefined;
   return (
     <Component
       data={block.data}
@@ -88,6 +109,10 @@ function RenderBlock({
       leadData={leadData}
       leadId={leadId}
       slot={slot}
+      // Nur dem Hero geben wir die Video-Meta — andere Blöcke
+      // entscheiden ihr Layout nicht auf Basis des Lead-Videos.
+      videoOrientation={isHero ? videoOrientation : null}
+      campaignMode={isHero ? campaignMode : null}
     />
   );
 }

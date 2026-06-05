@@ -75,6 +75,7 @@ export default async function CampaignEditPage({
       customLpTemplateId: campaign.customLpTemplateId ?? null,
       domainId: campaign.domainId ?? null,
       slugTemplate: campaign.slugTemplate ?? null,
+      slugSuffix: campaign.slugSuffix ?? null,
       pdfEnabled: campaign.pdfEnabled,
       pdfGoogleDocsUrl: campaign.pdfGoogleDocsUrl ?? "",
       pdfQrEnabled: campaign.pdfQrEnabled,

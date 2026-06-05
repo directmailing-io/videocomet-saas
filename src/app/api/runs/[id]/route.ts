@@ -8,13 +8,13 @@ import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
 import {
-  deleteRun,
   getRun,
+  softDeleteRun,
   updateRun,
 } from "@/lib/db/queries/runs";
 import { countByStatus } from "@/lib/db/queries/leads";
-import { deleteVideo } from "@/lib/bunny/stream";
-import { deleteFile } from "@/lib/bunny/storage";
+import { removeBunnyAssetRefsForOwner } from "@/lib/db/queries/bunny-assets";
+import { triggerBunnyPurgeTick } from "@/lib/bunny/purge-trigger";
 
 const patchSchema = z.object({
   name: z.string().min(1).max(120).optional(),
@@ -74,9 +74,18 @@ export async function PATCH(
 }
 
 /**
- * DELETE /api/runs/[id] — cascades Leads (DB foreign key) and best-effort
- * cleans up Bunny assets in the background. Bunny errors are swallowed so a
- * single failed remote delete doesn't block the run-delete.
+ * DELETE /api/runs/[id] — Soft-Delete + Bunny-Cleanup-Cascade.
+ *
+ * Ablöse für den alten inline Lead-für-Lead Bunny-Delete (zog Stream-API
+ * synchron im Request-Pfad, ignorierte Shared-Video-Refs zwischen Leads).
+ * Neuer Flow:
+ *  1. Lead-IDs vor dem Soft-Delete snapshot'en (Tenant-Guard über Run-Join).
+ *  2. `softDeleteRun` setzt `deletedAt` — der Run ist sofort aus dem UI.
+ *  3. `bunny_asset_refs` für jeden Lead-Owner sowie den Run-Owner (Shared-
+ *     Video-Ref) entfernen. Refs für Assets, die NOCH von anderen Runs/Leads
+ *     verwendet werden (z.B. Shared-Webcam zwischen Runs), bleiben am
+ *     Asset hängen und schützen die GUID vor dem Purge.
+ *  4. Trigger einen sofortigen Purge-Tick; Cron alle 60s ist Fallback.
  */
 export async function DELETE(
   _req: NextRequest,
@@ -85,67 +94,41 @@ export async function DELETE(
   const auth = await requireUserApi();
   if (!auth.ok) return auth.response;
 
+  let leadIds: string[];
   try {
     // Verify ownership first.
     await getRun(params.id, auth.user.id);
+    // Snapshot Lead-IDs scoped auf den Run und (via Join) auf den User.
+    const leadRows = await db
+      .select({ id: leads.id })
+      .from(leads)
+      .innerJoin(runs, eq(runs.id, leads.runId))
+      .where(and(eq(leads.runId, params.id), eq(runs.userId, auth.user.id)));
+    leadIds = leadRows.map((l) => l.id);
   } catch {
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
 
-  // Snapshot lead-assets before deleting the run so we can clean Bunny up.
-  const leadAssets = await db
-    .select({
-      bunnyVideoId: leads.bunnyVideoId,
-      pdfUrl: leads.pdfUrl,
-    })
-    .from(leads)
-    .innerJoin(runs, eq(runs.id, leads.runId))
-    .where(and(eq(leads.runId, params.id), eq(runs.userId, auth.user.id)));
+  try {
+    await softDeleteRun(params.id, auth.user.id);
+  } catch {
+    return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
+  }
 
-  await deleteRun(params.id, auth.user.id);
+  try {
+    await Promise.all([
+      ...leadIds.map((id) => removeBunnyAssetRefsForOwner("lead", id)),
+      // `run`-Owner deckt sharedBunnyVideoId der Webcam-only-Optimierung
+      // ab. Refs werden vom Worker-Cron sowieso nachsweep'ed, aber das
+      // direkte Remove hier macht den Purge-Trigger unten effektiv.
+      removeBunnyAssetRefsForOwner("run", params.id),
+    ]);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[runs:delete] ref cleanup partial failure:", err);
+  }
 
-  // Best-effort Bunny cleanup, fire-and-forget so the response stays fast.
-  void cleanupBunnyAssets(leadAssets);
+  void triggerBunnyPurgeTick("runs:delete");
 
   return NextResponse.json({ ok: true });
-}
-
-async function cleanupBunnyAssets(
-  assets: Array<{ bunnyVideoId: string | null; pdfUrl: string | null }>,
-): Promise<void> {
-  for (const a of assets) {
-    if (a.bunnyVideoId) {
-      try {
-        await deleteVideo(a.bunnyVideoId);
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn("[runs:delete] bunny video delete failed:", err);
-      }
-    }
-    if (a.pdfUrl) {
-      // pdfUrl typically encodes a CDN host plus a remote-path. We can only
-      // delete via the remote-path; storing it separately would be cleaner,
-      // but for v1 we attempt to derive `runs/<runId>/leads/<leadId>.pdf`
-      // from the URL's path.
-      const remote = derivePdfRemotePath(a.pdfUrl);
-      if (remote) {
-        try {
-          await deleteFile(remote);
-        } catch (err) {
-          // eslint-disable-next-line no-console
-          console.warn("[runs:delete] bunny pdf delete failed:", err);
-        }
-      }
-    }
-  }
-}
-
-function derivePdfRemotePath(url: string): string | null {
-  try {
-    const u = new URL(url);
-    // Drop leading slash.
-    return u.pathname.replace(/^\/+/, "");
-  } catch {
-    return null;
-  }
 }

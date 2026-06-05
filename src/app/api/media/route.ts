@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/queries/media";
 import { uploadMediaFile, type MediaKind } from "@/lib/media-upload-service";
 import { validateUpload, type UploadKind } from "@/lib/upload";
+import { addBunnyAssetRef } from "@/lib/db/queries/bunny-assets";
 
 const MEDIA_TYPES: ReadonlyArray<MediaType> = [
   "webcam",
@@ -146,6 +147,21 @@ export async function POST(req: NextRequest) {
       width: uploaded.width,
       height: uploaded.height,
     });
+
+    // Bunny-Asset-Ref erst HIER setzen — wir brauchen `media.id`. Wenn
+    // `bunnyAssetId` fehlt (z.B. image/logo, oder Tracking-Fehler im
+    // Service), überspringen wir leise. Der Orphan-Sweeper (Paket E) räumt
+    // sonst auf.
+    if (uploaded.bunnyAssetId) {
+      try {
+        await addBunnyAssetRef(uploaded.bunnyAssetId, "media_item", media.id);
+      } catch (err) {
+        console.warn(
+          "[api/media] addBunnyAssetRef failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
 
     return NextResponse.json({ media }, { status: 201 });
   } catch (err) {

@@ -24,6 +24,7 @@ import { screenshotProcessor } from "./processors/screenshot";
 import { closeBrowserPool } from "./lib/browser-pool";
 import { startDomainVerifier } from "./jobs/domain-verifier";
 import { startDomainMonitor } from "./jobs/domain-monitor";
+import { startBunnyPurger } from "./processors/bunny-purge";
 import {
   startHeartbeat,
   stopHeartbeat,
@@ -493,6 +494,12 @@ async function main(): Promise<void> {
   // bis "active" geht) um Operational-Reliability.
   const stopDomainMonitor = startDomainMonitor();
 
+  // Bunny-Asset-Purger (Paket B): sweept Orphans + loescht physisch via
+  // Bunny-Stream/-Storage-APIs. Tickt alle 60s. Erste Iteration startet
+  // sofort beim Boot — laufende Orphans (z.B. aus einem Cascade-Delete
+  // vor Container-Restart) werden im naechsten Minutenfenster aufgeraeumt.
+  const stopBunnyPurger = startBunnyPurger();
+
   // 4 min global cap — sum of per-stage timeouts in processors/pipeline.ts
   // (videoRender 120 + videoUpload 60 + landingPage 10 + thumb 15 + qr 5 +
   // docxModify 30 + docxToPdf 60 + pdfCompress 20 + pdfUpload 30 = 350s)
@@ -615,6 +622,11 @@ async function main(): Promise<void> {
       stopDomainMonitor();
     } catch (err) {
       log("error", "domain monitor stop failed:", err);
+    }
+    try {
+      stopBunnyPurger();
+    } catch (err) {
+      log("error", "bunny purger stop failed:", err);
     }
     if (preflightWorkerShutdown) {
       try {

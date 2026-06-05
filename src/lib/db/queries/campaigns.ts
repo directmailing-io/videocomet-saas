@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { campaigns } from "@/lib/db/schema";
 
@@ -34,7 +34,13 @@ export async function updateCampaign(
   const [row] = await db
     .update(campaigns)
     .set({ ...patch, updatedAt: new Date() })
-    .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)))
+    .where(
+      and(
+        eq(campaigns.id, id),
+        eq(campaigns.userId, userId),
+        isNull(campaigns.deletedAt),
+      ),
+    )
     .returning();
   if (!row) throw new Error("Not found");
   return row;
@@ -48,11 +54,42 @@ export async function deleteCampaign(id: string, userId: string): Promise<void> 
   if (result.length === 0) throw new Error("Not found");
 }
 
+/**
+ * Soft-Delete: setzt `deletedAt`, entfernt KEINE FK-Children. Idempotent —
+ * ein erneuter Aufruf auf einer bereits soft-deleted Row liefert weiterhin
+ * "Not found" (Filter `deletedAt IS NULL`). Der Caller ist verantwortlich
+ * dafür, die `bunny_asset_refs` der zugehörigen Owner zu entfernen; der
+ * Background-Purge-Worker übernimmt danach das Bunny-Cleanup.
+ */
+export async function softDeleteCampaign(
+  id: string,
+  userId: string,
+): Promise<void> {
+  const result = await db
+    .update(campaigns)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(campaigns.id, id),
+        eq(campaigns.userId, userId),
+        isNull(campaigns.deletedAt),
+      ),
+    )
+    .returning({ id: campaigns.id });
+  if (result.length === 0) throw new Error("Not found");
+}
+
 export async function getCampaign(id: string, userId: string): Promise<Campaign> {
   const [row] = await db
     .select()
     .from(campaigns)
-    .where(and(eq(campaigns.id, id), eq(campaigns.userId, userId)))
+    .where(
+      and(
+        eq(campaigns.id, id),
+        eq(campaigns.userId, userId),
+        isNull(campaigns.deletedAt),
+      ),
+    )
     .limit(1);
   if (!row) throw new Error("Not found");
   return row;
@@ -62,6 +99,6 @@ export async function listUserCampaigns(userId: string): Promise<Campaign[]> {
   return db
     .select()
     .from(campaigns)
-    .where(eq(campaigns.userId, userId))
+    .where(and(eq(campaigns.userId, userId), isNull(campaigns.deletedAt)))
     .orderBy(desc(campaigns.createdAt));
 }

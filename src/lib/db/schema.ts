@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, smallint, jsonb, pgEnum, index, unique, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, boolean, integer, smallint, jsonb, pgEnum, index, unique, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // ── Enums ───────────────────────────────────────────────────────────────────
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
@@ -145,6 +146,16 @@ export const campaigns = pgTable("campaigns", {
   pdfThumbnailEnabled: boolean("pdf_thumbnail_enabled").notNull().default(false),
   pdfThumbnailFrameMs: integer("pdf_thumbnail_frame_ms"),
 
+  /**
+   * Optionaler Tenant-Suffix für Lead-Slugs dieser Kampagne (Migration 0014).
+   * Format: `^[a-z0-9-]{1,32}$` (CHECK-Constraint). NULL = kein Suffix.
+   */
+  slugSuffix: text("slug_suffix"),
+
+  /** Soft-Delete-Marker (Migration 0015). NULL = aktiv. Queries werden
+   * in Paket G angepasst — bis dahin keine Verhaltensänderung. */
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
@@ -214,6 +225,17 @@ export const runs = pgTable("runs", {
   // (z.B. weil der erste Worker crashed ist).
   sharedVideoUploadStartedAt: timestamp("shared_video_upload_started_at", { withTimezone: true }),
 
+  /**
+   * Lifecycle-State für das Shared-Video (Migration 0015):
+   *   pending → compressing → uploading → ready
+   *   (oder failed bei Fehlern). CHECK-Constraint hält das in der DB
+   *   konsistent. Default 'pending' für Bestände.
+   */
+  sharedVideoState: text("shared_video_state").notNull().default("pending"),
+
+  /** Soft-Delete-Marker (Migration 0015). NULL = aktiv. */
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -227,6 +249,14 @@ export const runs = pgTable("runs", {
 export const leads = pgTable("leads", {
   id: uuid("id").primaryKey().defaultRandom(),
   runId: uuid("run_id").notNull().references(() => runs.id, { onDelete: "cascade" }),
+
+  /**
+   * Denormalisierte FK auf campaigns (Migration 0014). Wird beim Insert
+   * aus `runs.campaign_id` befüllt. NOT NULL nach Backfill — neue Lead-
+   * Slug-Eindeutigkeit ist campaign-scoped, deshalb brauchen wir die
+   * Spalte direkt am Lead-Row.
+   */
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
 
   rowIndex: integer("row_index").notNull(),
   data: jsonb("data").notNull().$type<Record<string, string>>(),
@@ -244,6 +274,16 @@ export const leads = pgTable("leads", {
   thumbnailUrl: text("thumbnail_url"),
   pdfUrl: text("pdf_url"),
   pdfExpiresAt: timestamp("pdf_expires_at", { withTimezone: true }),
+
+  // ── Video-Dimensionen (Migration 0015) ─────────────────────────────────
+  // Vom Bunny-Resolver berechnet & gecached, damit Player + PDF-Thumbnail-
+  // Pipeline nicht jedesmal die Bunny-Stream-API anfragen muessen.
+  videoWidth: integer("video_width"),
+  videoHeight: integer("video_height"),
+  /** 'landscape' | 'portrait' | 'square' — CHECK-Constraint in DB. */
+  videoOrientation: text("video_orientation"),
+  /** Beste verfuegbare MP4-URL (z.B. Bunny-Stream-MP4-Fallback). */
+  videoMp4Url: text("video_mp4_url"),
 
   errorMessage: text("error_message"),
   attempts: integer("attempts").notNull().default(0),
@@ -298,11 +338,18 @@ export const leads = pgTable("leads", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   runIdx: index("leads_run_idx").on(t.runId),
-  // Slug-Eindeutigkeit ist als zwei partielle Unique-Indexes definiert
-  // (Migration 0004) — Drizzle-Schema-Builder kann partial-unique nicht
-  // ausdruecken, daher bewusst kein .unique() hier.
+  campaignIdx: index("leads_campaign_idx").on(t.campaignId),
   domainIdx: index("leads_domain_idx").on(t.domainId),
   statusIdx: index("leads_status_idx").on(t.status),
+  // Campaign-scoped Slug-Eindeutigkeit (Migration 0014).
+  // Default-LP: slug pro Kampagne eindeutig.
+  campaignDefaultSlugUq: uniqueIndex("leads_campaign_default_slug_uq")
+    .on(t.campaignId, t.slug)
+    .where(sql`${t.domainId} IS NULL AND ${t.slug} IS NOT NULL`),
+  // Custom-Domain-LP: slug pro (Kampagne, Domain) eindeutig.
+  campaignCustomSlugUq: uniqueIndex("leads_campaign_custom_slug_uq")
+    .on(t.campaignId, t.domainId, t.slug)
+    .where(sql`${t.domainId} IS NOT NULL AND ${t.slug} IS NOT NULL`),
 }));
 
 // ── Analytics-Events ────────────────────────────────────────────────────────
@@ -500,4 +547,56 @@ export const domainCheckLog = pgTable("domain_check_log", {
   message: text("message"),
 }, (t) => ({
   domainTsIdx: index("domain_check_log_domain_idx").on(t.domainId, t.ts),
+}));
+
+// ── Bunny-Assets (zentrales Register für Stream + Storage Objekte) ──────────
+// Jedes Bunny-Objekt (Stream-GUID oder Storage-Path) wird hier EINMAL pro
+// User registriert. Owner-Tabellen (leads, runs, media_items, ...) referen-
+// zieren via `bunny_asset_refs` (m:n). Sobald der letzte Ref faellt, kann
+// der Purge-Worker (Paket E) die Datei physisch loeschen.
+//
+// `kind` ist 'stream' oder 'storage' (CHECK-Constraint in der DB).
+// `purge_state` ist 'live' | 'purge_pending' | 'purged' (CHECK in DB).
+//
+// Migration 0013.
+export const bunnyAssets = pgTable("bunny_assets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** 'stream' | 'storage' — CHECK-Constraint in DB. */
+  kind: text("kind").notNull(),
+  /** Stream-GUID oder Storage-Path (je nach `kind`). */
+  bunnyId: text("bunny_id").notNull(),
+  /** Kanonische CDN-/HLS-URL. */
+  cdnUrl: text("cdn_url").notNull(),
+  width: integer("width"),
+  height: integer("height"),
+  bytes: integer("bytes"),
+  /** Optional sha256 fuer Dedupe. */
+  sourceHash: text("source_hash"),
+  /** 'live' | 'purge_pending' | 'purged' — CHECK-Constraint in DB. */
+  purgeState: text("purge_state").notNull().default("live"),
+  purgeAttempts: integer("purge_attempts").notNull().default(0),
+  purgeLastError: text("purge_last_error"),
+  purgedAt: timestamp("purged_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userKindIdUq: uniqueIndex("bunny_assets_user_kind_id_uq").on(t.userId, t.kind, t.bunnyId),
+  purgeStateIdx: index("bunny_assets_purge_state_idx").on(t.purgeState, t.createdAt),
+}));
+
+// m:n Bridge zwischen `bunny_assets` und den Owner-Rows. owner_type ist
+// 'lead' | 'run' | 'media_item' | 'campaign_webcam' (CHECK in DB).
+// Doppel-Refs sind ueber das Unique-Index ausgeschlossen.
+//
+// Migration 0013.
+export const bunnyAssetRefs = pgTable("bunny_asset_refs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  assetId: uuid("asset_id").notNull().references(() => bunnyAssets.id, { onDelete: "cascade" }),
+  /** 'lead' | 'run' | 'media_item' | 'campaign_webcam' — CHECK in DB. */
+  ownerType: text("owner_type").notNull(),
+  ownerId: uuid("owner_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  ownerUq: uniqueIndex("bunny_asset_refs_owner_uq").on(t.assetId, t.ownerType, t.ownerId),
+  ownerIdx: index("bunny_asset_refs_owner_idx").on(t.ownerType, t.ownerId),
 }));

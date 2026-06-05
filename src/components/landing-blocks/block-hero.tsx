@@ -18,6 +18,8 @@ export function BlockHero({
   style,
   leadData,
   slot,
+  videoOrientation,
+  campaignMode,
 }: BlockRenderProps): React.ReactElement {
   const headline = renderPlaceholders(
     typeof data.headline === "string" ? data.headline : undefined,
@@ -30,6 +32,15 @@ export function BlockHero({
   const alignment =
     data.alignment === "left" ? "left" : ("center" as const);
   const showVideo = data.showVideo !== false; // default true
+
+  // Portrait-Webcam-Only ist der einzige Fall, in dem wir den klassischen
+  // Hero-Slot-Wrapper aufgeben: 9:16-Videos im 16:9-Container (max-w-3xl)
+  // ergaeben riesige schwarze Streifen. Stattdessen rendern wir einen
+  // full-bleed schwarzen Hintergrund-Streifen, der zentriert das
+  // hochkant-Video hostet. Der `bg-black backdrop-blur` Effekt macht
+  // Letterboxing auf breiten Viewports wenigstens optisch ruhig.
+  const isPortraitWebcamOnly =
+    videoOrientation === "portrait" && campaignMode === "webcam-only";
 
   return (
     <BlockFrame
@@ -52,9 +63,19 @@ export function BlockHero({
         </p>
       )}
       {showVideo && slot && (
-        <div className="mt-8 rounded-squircle-lg overflow-hidden shadow-card text-left">
-          {slot}
-        </div>
+        isPortraitWebcamOnly ? (
+          // Full-bleed-Wrapper: kein rounded/overflow/shadow — der Slot
+          // (VideoPlayer) bringt seinen eigenen schwarzen Hintergrund mit.
+          // `bg-black/95 backdrop-blur` macht den umgebenden Bereich auf
+          // sehr breiten Viewports ruhig.
+          <div className="mt-8 -mx-5 sm:-mx-8 bg-black/95 backdrop-blur py-6 text-left">
+            {slot}
+          </div>
+        ) : (
+          <div className="mt-8 rounded-squircle-lg overflow-hidden shadow-card text-left">
+            {slot}
+          </div>
+        )
       )}
     </BlockFrame>
   );

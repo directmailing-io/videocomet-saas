@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
 
@@ -51,7 +51,9 @@ export async function updateRun(
   const [row] = await db
     .update(runs)
     .set(patch)
-    .where(and(eq(runs.id, id), eq(runs.userId, userId)))
+    .where(
+      and(eq(runs.id, id), eq(runs.userId, userId), isNull(runs.deletedAt)),
+    )
     .returning();
   if (!row) throw new Error("Not found");
   return row;
@@ -110,11 +112,29 @@ export async function deleteRun(id: string, userId: string): Promise<void> {
   if (result.length === 0) throw new Error("Not found");
 }
 
+/**
+ * Soft-Delete: setzt `deletedAt`. Cascade auf Leads / Bunny-Assets passiert
+ * NICHT automatisch — der Caller entfernt die `bunny_asset_refs` und der
+ * Background-Purge-Worker übernimmt das eigentliche Bunny-Cleanup.
+ */
+export async function softDeleteRun(id: string, userId: string): Promise<void> {
+  const result = await db
+    .update(runs)
+    .set({ deletedAt: new Date() })
+    .where(
+      and(eq(runs.id, id), eq(runs.userId, userId), isNull(runs.deletedAt)),
+    )
+    .returning({ id: runs.id });
+  if (result.length === 0) throw new Error("Not found");
+}
+
 export async function getRun(id: string, userId: string): Promise<Run> {
   const [row] = await db
     .select()
     .from(runs)
-    .where(and(eq(runs.id, id), eq(runs.userId, userId)))
+    .where(
+      and(eq(runs.id, id), eq(runs.userId, userId), isNull(runs.deletedAt)),
+    )
     .limit(1);
   if (!row) throw new Error("Not found");
   return row;
@@ -127,7 +147,13 @@ export async function listCampaignRuns(
   return db
     .select()
     .from(runs)
-    .where(and(eq(runs.campaignId, campaignId), eq(runs.userId, userId)))
+    .where(
+      and(
+        eq(runs.campaignId, campaignId),
+        eq(runs.userId, userId),
+        isNull(runs.deletedAt),
+      ),
+    )
     .orderBy(desc(runs.createdAt));
 }
 
@@ -203,7 +229,9 @@ export async function setRunStatus(
     const [cur] = await db
       .select({ status: runs.status })
       .from(runs)
-      .where(and(eq(runs.id, runId), eq(runs.userId, userId)))
+      .where(
+        and(eq(runs.id, runId), eq(runs.userId, userId), isNull(runs.deletedAt)),
+      )
       .limit(1);
     return { ok: false, currentStatus: (cur?.status as ExtendedRunStatus) ?? null };
   }
@@ -215,6 +243,7 @@ export async function setRunStatus(
       and(
         eq(runs.id, runId),
         eq(runs.userId, userId),
+        isNull(runs.deletedAt),
         inArray(runs.status, predecessors as Run["status"][]),
       ),
     )
@@ -226,7 +255,9 @@ export async function setRunStatus(
   const [cur] = await db
     .select({ status: runs.status })
     .from(runs)
-    .where(and(eq(runs.id, runId), eq(runs.userId, userId)))
+    .where(
+      and(eq(runs.id, runId), eq(runs.userId, userId), isNull(runs.deletedAt)),
+    )
     .limit(1);
   return { ok: false, currentStatus: (cur?.status as ExtendedRunStatus) ?? null };
 }
@@ -298,7 +329,13 @@ export async function listCampaignRunsWithCounts(
       )`,
     })
     .from(runs)
-    .where(and(eq(runs.campaignId, campaignId), eq(runs.userId, userId)))
+    .where(
+      and(
+        eq(runs.campaignId, campaignId),
+        eq(runs.userId, userId),
+        isNull(runs.deletedAt),
+      ),
+    )
     .orderBy(desc(runs.createdAt));
 
   return rows.map((r) => ({

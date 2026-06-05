@@ -38,6 +38,14 @@ export interface CustomLpPublicContext {
   videoMp4Url: string | null;
   /** Poster für den HTML5-Video-Player (vor Play). */
   thumbnailUrl: string | null;
+  /**
+   * Aspect-Ratio des Lead-Videos. Wird vom Custom-LP-Renderer in eine
+   * `--vc-video-aspect`-CSS-Variable übersetzt, damit Custom-Templates
+   * Portrait/Landscape/Square per CSS-Variable nutzen können. `null` =
+   * Paket A hat die Spalte noch nicht populiert → Renderer fällt auf
+   * `16/9` zurück.
+   */
+  videoOrientation: "landscape" | "portrait" | "square" | null;
   versionId: string;
   storagePath: string;
   entryHtml: string;
@@ -62,6 +70,12 @@ export async function getCustomLpContextBySlugForDefaultDomain(
       leadData: leads.data,
       videoUrl: leads.videoUrl,
       thumbnailUrl: leads.thumbnailUrl,
+      // Aus Paket A (Migration 0015): vom Bunny-Resolver beim Finalize
+      // gepinnte MP4-URL + Orientation. `videoMp4Url` ist die Source of
+      // Truth — fehlt sie (Bestand vor Paket H), fallen wir im
+      // `materialise()` auf die Bunny-Replacement-Heuristik zurueck.
+      videoMp4Url: leads.videoMp4Url,
+      videoOrientation: leads.videoOrientation,
       customLpTemplateId: campaigns.customLpTemplateId,
       pinnedVersionId: runs.customLpVersionId,
       activeVersionId: customLpTemplates.activeVersionId,
@@ -99,6 +113,8 @@ export async function getCustomLpContextBySlugAndDomain(
       leadData: leads.data,
       videoUrl: leads.videoUrl,
       thumbnailUrl: leads.thumbnailUrl,
+      videoMp4Url: leads.videoMp4Url,
+      videoOrientation: leads.videoOrientation,
       customLpTemplateId: campaigns.customLpTemplateId,
       pinnedVersionId: runs.customLpVersionId,
       activeVersionId: customLpTemplates.activeVersionId,
@@ -128,6 +144,8 @@ async function materialise(
         leadData: Record<string, string>;
         videoUrl: string | null;
         thumbnailUrl: string | null;
+        videoMp4Url: string | null;
+        videoOrientation: string | null;
         customLpTemplateId: string | null;
         pinnedVersionId: string | null;
         activeVersionId: string | null;
@@ -154,13 +172,25 @@ async function materialise(
 
   if (!version) return null;
 
-  // Bunny-Stream-Konvention: aus .../playlist.m3u8 wird .../play_720p.mp4.
-  // Das ist der gleiche Pfad, nur das progressive MP4-File statt der HLS-
-  // Variante — kompatibel mit allen Browsern ohne HLS.js. Wir liefern beide
-  // aus damit Templates mit nativer HLS-Unterstützung (Safari) den ersten
-  // Source nehmen können.
+  // MP4-URL-Resolution (Paket D/H persistiert die finale MP4-URL auf
+  // `leads.videoMp4Url`, sobald die Pipeline-Stage `bunnyUpload` durch ist):
+  //   1) Wenn `leads.videoMp4Url` gesetzt ist → das ist die Source of Truth.
+  //   2) Sonst: Backward-Compat — wir transformieren den Bunny-HLS-Playlist-
+  //      Pfad (`.../playlist.m3u8`) in den progressiven MP4-Pfad
+  //      (`.../play_720p.mp4`). Greift fuer Bestand-Leads, die noch keine
+  //      neue Spalte haben.
   const videoMp4Url =
-    row.videoUrl?.replace(/playlist\.m3u8($|\?)/, "play_720p.mp4$1") ?? null;
+    row.videoMp4Url ??
+    row.videoUrl?.replace(/playlist\.m3u8($|\?)/, "play_720p.mp4$1") ??
+    null;
+
+  // Orientation als string in DB; auf erlaubtes Tupel verengen.
+  const videoOrientation =
+    row.videoOrientation === "landscape" ||
+    row.videoOrientation === "portrait" ||
+    row.videoOrientation === "square"
+      ? row.videoOrientation
+      : null;
 
   return {
     leadId: row.leadId,
@@ -168,6 +198,7 @@ async function materialise(
     videoUrl: row.videoUrl,
     videoMp4Url,
     thumbnailUrl: row.thumbnailUrl,
+    videoOrientation,
     versionId: version.id,
     storagePath: version.storagePath,
     entryHtml: version.entryHtml,

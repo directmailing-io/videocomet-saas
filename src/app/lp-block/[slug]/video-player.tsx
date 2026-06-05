@@ -24,6 +24,8 @@ import { setTrackingSlug, track } from "@/lib/tracker";
  * the new pipeline runs in parallel and feeds the realtime analytics view.
  */
 
+export type VideoOrientation = "landscape" | "portrait" | "square";
+
 export interface VideoPlayerProps {
   leadId: string;
   slug?: string;
@@ -31,6 +33,44 @@ export interface VideoPlayerProps {
   videoSrc?: string | null;
   thumbnailUrl?: string | null;
   title?: string;
+  /**
+   * Aspect-ratio-Hinweis für den Player-Container. `landscape` rendert wie
+   * gewohnt 16:9 mit `object-contain`. `portrait` (z.B. Smartphone-Webcam,
+   * 404x720) bekommt einen 9:16-Container mit max-Höhe + `object-cover`,
+   * damit nicht riesige schwarze Streifen links/rechts entstehen. `square`
+   * 1:1. `null`/unknown → Bestandsverhalten (16:9, defensive default).
+   */
+  videoOrientation?: VideoOrientation | null;
+}
+
+/**
+ * Klassen für den Outer-Container abhängig von der Video-Orientation.
+ * Der Container ist immer `relative` (damit das absolute `<video>` greift),
+ * mit `bg-black` als Letterbox-Color falls `object-contain` greift.
+ */
+function containerClassFor(orientation: VideoOrientation | null | undefined): string {
+  if (orientation === "portrait") {
+    return "relative w-full max-w-[min(420px,90vw)] mx-auto aspect-[9/16] max-h-[80vh] bg-black";
+  }
+  if (orientation === "square") {
+    return "relative w-full max-w-md mx-auto aspect-square bg-black";
+  }
+  // landscape + null/unknown → Bestand
+  return "relative w-full aspect-video bg-black";
+}
+
+/**
+ * `object-cover` für Portrait/Square — sonst hätte der Container ggf. wieder
+ * Streifen innerhalb der korrigierten Bounding-Box. Bei landscape bleibt
+ * `object-contain` der safe default (kein Crop, falls die Quelle abweicht).
+ */
+function videoObjectFitClassFor(
+  orientation: VideoOrientation | null | undefined,
+): string {
+  if (orientation === "portrait" || orientation === "square") {
+    return "object-cover";
+  }
+  return "object-contain";
 }
 
 function legacyTrackEvent(
@@ -70,6 +110,7 @@ export function VideoPlayer({
   videoSrc,
   thumbnailUrl,
   title,
+  videoOrientation,
 }: VideoPlayerProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const startedRef = React.useRef(false);
@@ -217,9 +258,12 @@ export function VideoPlayer({
     setIframeArmed(false);
   }, [leadId]);
 
+  const containerClass = containerClassFor(videoOrientation);
+  const videoFitClass = videoObjectFitClassFor(videoOrientation);
+
   if (bunnyEmbedUrl) {
     return (
-      <div className="relative w-full aspect-video bg-black">
+      <div className={containerClass}>
         <iframe
           src={bunnyEmbedUrl}
           title={title ?? "Video"}
@@ -242,7 +286,7 @@ export function VideoPlayer({
 
   if (videoSrc) {
     return (
-      <div className="relative w-full aspect-video bg-black">
+      <div className={containerClass}>
         <video
           ref={videoRef}
           src={videoSrc}
@@ -250,7 +294,7 @@ export function VideoPlayer({
           controls
           playsInline
           preload="metadata"
-          className="absolute inset-0 h-full w-full object-contain"
+          className={`absolute inset-0 h-full w-full ${videoFitClass}`}
           onPlay={onPlay}
           onTimeUpdate={onTimeUpdate}
           onPause={onPause}
@@ -263,8 +307,13 @@ export function VideoPlayer({
 
   // No video yet — render a calm placeholder. The page-shell already
   // shows a "Wird erstellt" notice when the lead is still pending.
+  // Placeholder erbt die korrigierte Aspect-Ratio damit der Layout-Shift
+  // beim spaeteren Hydrate des echten Players minimal ist.
+  const placeholderClass = containerClass.replace("bg-black", "bg-ink/5");
   return (
-    <div className="relative w-full aspect-video bg-ink/5 flex items-center justify-center text-sm text-ink-muted">
+    <div
+      className={`${placeholderClass} flex items-center justify-center text-sm text-ink-muted`}
+    >
       Video wird vorbereitet
     </div>
   );

@@ -22,11 +22,11 @@
  * renderer via the same path it would on `lp.videocomet.de`.
  */
 
-import { and, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { leads, userDomains } from "@/lib/db/schema";
+import { userDomains } from "@/lib/db/schema";
 import { generateSlug, slugHexSuffix } from "@/lib/slug";
-import { updateLeadStatus } from "@/lib/db/queries/leads";
+import { findSlugInCampaign, updateLeadStatus } from "@/lib/db/queries/leads";
 import type {
   LegacyMapping,
   PlaceholderMapping,
@@ -34,6 +34,18 @@ import type {
 
 export interface LandingPageInput {
   leadId: string;
+  /**
+   * Campaign-ID des Leads. Wird benötigt, weil die Slug-Eindeutigkeit ab
+   * Migration 0014 campaign-scoped ist — `(campaignId, slug)` bzw.
+   * `(campaignId, domainId, slug)` für Custom-Domain-Namespace.
+   */
+  campaignId: string;
+  /**
+   * Optionaler Tenant-Suffix aus `campaigns.slug_suffix`. Wird IMMER an den
+   * generierten Slug angehängt (z.B. `simon-krempel-test`). Format
+   * `^[a-z0-9-]{1,32}$` — DB-CHECK-Constraint hält das gerade.
+   */
+  campaignSlugSuffix: string | null;
   appUrl: string;
   /** Raw lead-data row (CSV) — feeds the slug-template renderer. */
   leadData: Record<string, string | null | undefined>;
@@ -68,31 +80,32 @@ export interface LandingPageOutput {
 }
 
 /**
- * Slug-Verfügbarkeits-Check, korrekt scoped:
- *   - Custom-Domain: unique innerhalb dieser domain_id (partial unique-Index)
- *   - Default:       unique innerhalb (domain_id IS NULL) — Backward-Compat
+ * Slug-Verfügbarkeits-Check, korrekt scoped auf `(campaignId, [domainId,] slug)`:
+ *   - Custom-Domain: unique innerhalb `(campaignId, domain_id, slug)` (partial Index)
+ *   - Default:       unique innerhalb `(campaignId, slug)` mit `domain_id IS NULL`
  * Schliesst den eigenen Lead aus, damit ein Retry idempotent ist.
  *
- * WICHTIG: `domainId` MUSS der EFFEKTIVE Wert sein, der spaeter in der DB
- * landet. Sonst checken wir im falschen Namespace (Symptom: Slug "verfuegbar"
- * laut Custom-Domain, schlaegt aber beim INSERT in den Default-Namespace
- * gegen den partial unique index `leads_default_slug_uq` fehl).
+ * WICHTIG: `effectiveDomainId` MUSS der EFFEKTIVE Wert sein, der spaeter in
+ * der DB landet (also `null` wenn die Custom-Domain noch nicht active ist).
+ * Sonst checken wir im falschen Namespace.
+ *
+ * Ab Migration 0014 ist Slug NICHT mehr global eindeutig — derselbe
+ * `simon-krempel` darf in drei unterschiedlichen Kampagnen leben. Wir
+ * scopen den Existenz-Check daher zusätzlich auf `campaignId`.
  */
-async function buildAvailabilityCheck(
+function buildAvailabilityCheck(
   leadId: string,
+  campaignId: string,
   effectiveDomainId: string | null,
-): Promise<(candidate: string) => Promise<boolean>> {
+): (candidate: string) => Promise<boolean> {
   return async (candidate: string) => {
-    const where = effectiveDomainId
-      ? and(eq(leads.slug, candidate), eq(leads.domainId, effectiveDomainId))
-      : and(eq(leads.slug, candidate), isNull(leads.domainId));
-    const [row] = await db
-      .select({ id: leads.id })
-      .from(leads)
-      .where(where)
-      .limit(1);
-    if (!row) return true;
-    return row.id === leadId;
+    const hit = await findSlugInCampaign(
+      campaignId,
+      candidate,
+      effectiveDomainId,
+      leadId,
+    );
+    return hit === null;
   };
 }
 
@@ -159,19 +172,26 @@ export async function runLandingPageCreate(
   // 1) Effektive Domain — gleicher Wert in `isAvailable` UND im UPDATE.
   const effectiveDomainId = await resolveEffectiveDomainId(input.domainId);
 
-  // 2) Availability-Check im KORREKTEN Namespace.
-  const isAvailable = await buildAvailabilityCheck(
+  // 2) Availability-Check im KORREKTEN Namespace (campaign-scoped + optional
+  //    domain-scoped, siehe Migration 0014).
+  const isAvailable = buildAvailabilityCheck(
     input.leadId,
+    input.campaignId,
     effectiveDomainId,
   );
 
-  // 3) Slug aus Template + Daten generieren (mit Suffix-Versuchen bei Konflikt).
+  // 3) Slug aus Template + Daten generieren. `numeric` als Kollisions-Strategie
+  //    — lesbarer als Hex (`simon-krempel-2` statt `simon-krempel-a3f7`).
+  //    Der optionale `campaignSlugSuffix` wird vom Generator auf jeden Slug
+  //    angehängt (Tenant-Marker).
   let slug = await generateSlug({
     template: input.slugTemplate,
     leadData: input.leadData,
     mapping: input.placeholderMapping,
     isAvailable,
     fallbackId: input.rowIndex,
+    campaignSlugSuffix: input.campaignSlugSuffix,
+    collisionStrategy: "numeric",
   });
 
   // 4) Atomarer Update mit Retry-Safety-Net gegen Race-Conditions (zwei

@@ -149,11 +149,13 @@ async function loadCampaignAndTemplate(runId: string): Promise<{
   themeId: string | null;
   templateContent: unknown;
   campaignName: string | null;
+  campaignMode: "webcam-only" | "with-presentation" | null;
 } | null> {
   try {
     const [row] = await db
       .select({
         campaignName: campaigns.name,
+        campaignMode: campaigns.mode,
         themeId: landingPageTemplates.themeId,
         templateContent: landingPageTemplates.content,
       })
@@ -166,10 +168,16 @@ async function loadCampaignAndTemplate(runId: string): Promise<{
       .where(eq(runs.id, runId))
       .limit(1);
     if (!row) return null;
+    // Mode kommt als raw text aus der DB; auf das bekannte Tupel verengen.
+    const mode =
+      row.campaignMode === "webcam-only" || row.campaignMode === "with-presentation"
+        ? row.campaignMode
+        : null;
     return {
       themeId: row.themeId ?? "clean",
       templateContent: row.templateContent ?? null,
       campaignName: row.campaignName ?? null,
+      campaignMode: mode,
     };
   } catch {
     return null;
@@ -279,6 +287,11 @@ export default async function PublicLandingPage({
       ? `https://iframe.mediadelivery.net/embed/${libraryId}/${lead.bunnyVideoId}`
       : null;
 
+  // Aspect-ratio-Hinweis aus Paket A. Lead-Query projiziert die Spalte
+  // bereits defensiv (null wenn die DB-Migration noch nicht gelaufen ist),
+  // wir reichen sie 1:1 in den Player + Hero durch.
+  const videoOrientation = lead.videoOrientation ?? null;
+
   const videoSlot = (
     <VideoPlayer
       leadId={lead.id}
@@ -287,6 +300,7 @@ export default async function PublicLandingPage({
       videoSrc={lead.videoUrl}
       thumbnailUrl={lead.thumbnailUrl}
       title={campaignInfo?.campaignName ?? "Video"}
+      videoOrientation={videoOrientation}
     />
   );
 
@@ -308,6 +322,8 @@ export default async function PublicLandingPage({
           leadId={lead.id}
           slug={slug}
           videoSlot={videoSlot}
+          videoOrientation={videoOrientation}
+          campaignMode={campaignInfo?.campaignMode ?? null}
         />
       </LandingThemeProvider>
       {/* Tracking pixel — fires page_view from the bare HTML even if

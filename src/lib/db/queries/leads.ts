@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
 import type {
@@ -11,6 +11,35 @@ import { PREFLIGHT_PROBLEMATIC_STATUSES } from "@/lib/preflight/types";
 export type Lead = typeof leads.$inferSelect;
 export type NewLead = typeof leads.$inferInsert;
 
+/**
+ * Public-facing Lead-Shape für die LP-Render-Hot-Path. Identisch zu `Lead`,
+ * verengt aber `videoOrientation` von `string | null` (Drizzle-Mapping einer
+ * `text`-Spalte mit CHECK-Constraint) auf das tatsaechlich erlaubte Tupel
+ * `'landscape' | 'portrait' | 'square' | null`. Die Page-Schicht kann so
+ * direkt `lead.videoOrientation === 'portrait'` switchen, ohne nochmal
+ * runtime-typischen Validation-Code zu schreiben.
+ */
+export type PublicLead = Omit<Lead, "videoOrientation"> & {
+  videoOrientation: "landscape" | "portrait" | "square" | null;
+};
+
+/**
+ * Verengt das nullable text-Feld auf die erlaubten Aspect-Tokens. Werte die
+ * nicht im erlaubten Tupel liegen werden auf `null` heruntergefallen — der
+ * CHECK-Constraint in der DB sollte das eigentlich verhindern, aber wir
+ * defensiven hier doppelt um die LP-Render-Schicht stabil zu halten.
+ */
+function projectPublicLead(row: Lead | null): PublicLead | null {
+  if (!row) return null;
+  const orientation =
+    row.videoOrientation === "landscape" ||
+    row.videoOrientation === "portrait" ||
+    row.videoOrientation === "square"
+      ? row.videoOrientation
+      : null;
+  return { ...row, videoOrientation: orientation };
+}
+
 export interface BulkLeadRow {
   rowIndex: number;
   data: Record<string, string>;
@@ -18,22 +47,70 @@ export interface BulkLeadRow {
 
 export type UpdateLeadPatch = Partial<Omit<Lead, "id" | "runId" | "createdAt">>;
 
+/**
+ * Bulk-Insert von Leads für einen Run.
+ *
+ * Die denormalisierte `campaignId` auf jedem Lead-Row (Migration 0014) wird
+ * automatisch aus `runs.campaign_id` per Sub-Select gefüllt, falls der Caller
+ * sie nicht explizit übergibt. Ein expliziter `campaignId`-Parameter spart den
+ * Sub-Select pro Row und ist der bevorzugte Pfad, weil der Caller die ID
+ * üblicherweise eh schon in der Hand hat (z.B. aus dem Auth-/Run-Kontext).
+ */
 export async function bulkInsertLeads(
   runId: string,
   rows: BulkLeadRow[],
+  campaignId?: string,
 ): Promise<number> {
   if (rows.length === 0) return 0;
+  // Wenn der Caller die campaignId mitliefert, schreiben wir sie direkt —
+  // Sub-Select fällt weg. Fallback (kein campaignId-Argument): aus `runs`
+  // lookupen, damit Bestands-Aufrufer unverändert funktionieren.
+  const resolvedCampaignId = campaignId
+    ? sql<string>`${campaignId}::uuid`
+    : sql<string>`(SELECT campaign_id FROM ${runs} WHERE id = ${runId})`;
   const inserted = await db
     .insert(leads)
     .values(
       rows.map((r) => ({
         runId,
+        campaignId: resolvedCampaignId,
         rowIndex: r.rowIndex,
         data: r.data,
       })),
     )
     .returning({ id: leads.id });
   return inserted.length;
+}
+
+/**
+ * Checkt ob ein Slug in der angegebenen Kampagne bereits existiert — scope-
+ * korrekt nach Default- (`domainId IS NULL`) bzw. Custom-Domain-Namespace.
+ *
+ * `excludeLeadId`: wenn gesetzt, wird dieser Lead ignoriert (z.B. wenn der
+ * Lead selbst gerade neu vergibt und sein eigener alter Slug nicht als
+ * Kollision zählen soll — Retry-Idempotenz).
+ *
+ * Returns: `{ id }` des kollidierenden Leads, oder `null` wenn der Slug frei
+ * ist. Caller entscheidet, ob die ID weiterverwendet wird (Logging, Retry).
+ */
+export async function findSlugInCampaign(
+  campaignId: string,
+  slug: string,
+  domainId: string | null,
+  excludeLeadId?: string,
+): Promise<{ id: string } | null> {
+  const conditions = [
+    eq(leads.campaignId, campaignId),
+    eq(leads.slug, slug),
+    domainId ? eq(leads.domainId, domainId) : isNull(leads.domainId),
+  ];
+  if (excludeLeadId) conditions.push(ne(leads.id, excludeLeadId));
+  const [row] = await db
+    .select({ id: leads.id })
+    .from(leads)
+    .where(and(...conditions))
+    .limit(1);
+  return row ?? null;
 }
 
 export async function updateLeadStatus(
@@ -58,13 +135,13 @@ export async function updateLeadStatus(
  */
 export async function getLeadBySlugForDefaultDomain(
   slug: string,
-): Promise<Lead | null> {
+): Promise<PublicLead | null> {
   const [row] = await db
     .select()
     .from(leads)
     .where(and(eq(leads.slug, slug), isNull(leads.domainId)))
     .limit(1);
-  return row ?? null;
+  return projectPublicLead(row ?? null);
 }
 
 /**
@@ -80,13 +157,13 @@ export async function getLeadBySlugForDefaultDomain(
 export async function getLeadBySlugAndDomain(
   slug: string,
   domainId: string,
-): Promise<Lead | null> {
+): Promise<PublicLead | null> {
   const [row] = await db
     .select()
     .from(leads)
     .where(and(eq(leads.slug, slug), eq(leads.domainId, domainId)))
     .limit(1);
-  return row ?? null;
+  return projectPublicLead(row ?? null);
 }
 
 export async function listLeadsByRun(runId: string, userId: string): Promise<Lead[]> {

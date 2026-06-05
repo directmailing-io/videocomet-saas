@@ -24,7 +24,6 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   composePip,
-  compressVideo,
   concatClips,
   generateBlackClip,
   imageSeqToMp4,
@@ -33,6 +32,7 @@ import {
   type PipPosition,
   type PipShape,
 } from "../lib/ffmpeg";
+import { compressForBunny } from "../lib/video-compress";
 import {
   normaliseWebsiteUrl,
   recordCapture,
@@ -385,28 +385,20 @@ export async function runVideoRender(
   }
 
   // Orientation-aware compress: portrait sources (z. B. 720×1280 Selfie)
-  // sollen NICHT auf 1280×720 ge-pillarboxt werden — das war der Bug. Wir
-  // probten daher VOR dem compress die Pixel-Dimensionen der Quelle und
-  // wählen Output-Auflösung entsprechend.
-  //   - Landscape / quadratisch (w ≥ h): 1280×720 (Status quo)
-  //   - Portrait (w < h): 720×1280
-  // Wenn der Probe fehlschlägt: Fallback Landscape (Status quo) — bricht
-  // also keinen Bestands-Render, nur Portrait-Sources bekommen das neue
-  // Verhalten.
-  const { probeVideoDimensions } = await import("../../lib/ffprobe");
-  const srcDims = await probeVideoDimensions(sourcePath);
-  const isPortrait =
-    srcDims !== null && srcDims.height > srcDims.width;
-  const outW = isPortrait ? 720 : 1280;
-  const outH = isPortrait ? 1280 : 720;
-  console.log(
-    `[render] webcam source dims=${srcDims ? `${srcDims.width}x${srcDims.height}` : "n/a"} → output ${outW}x${outH} (${isPortrait ? "portrait" : "landscape"})`,
-  );
-  await compressVideo({
+  // sollen NICHT auf 1280×720 ge-pillarboxt werden. compressForBunny erkennt
+  // die Source-Orientation selbst aus den Pixel-Dimensionen und wählt den
+  // passenden Cap (landscape→1280×720, portrait→720×1280, square→720×720).
+  // KEIN Upscale + KEIN Letterbox — die Scale-Formel ist `min(in,out)`.
+  // Bei H.264-Webcams läuft `-c copy` und spart Encode-Zeit; Re-Encode nur
+  // wenn nötig (Codec/Profile/Bitrate jenseits der Skip-Heuristik).
+  const compressResult = await compressForBunny({
     inputPath: sourcePath,
     outputPath: webcamLocal,
-    settings: { width: outW, height: outH },
+    reason: "webcam-source-normalize",
   });
+  console.log(
+    `[render] webcam normalised: ${compressResult.skipped ? "passthrough" : "re-encode"} (${compressResult.orientation}, ${(compressResult.bytesIn / 1024 / 1024).toFixed(2)}MB → ${(compressResult.bytesOut / 1024 / 1024).toFixed(2)}MB)`,
+  );
 
   // KRITISCH: die wahre Webcam-Dauer aus der normalisierten Source messen.
   // Wenn `defaultDurationSec` aus der DB NULL ist, fiel der alte Code auf

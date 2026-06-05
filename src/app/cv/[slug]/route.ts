@@ -119,6 +119,7 @@ export async function GET(
       videoUrl: context.videoUrl,
       videoMp4Url: context.videoMp4Url,
       thumbnailUrl: context.thumbnailUrl,
+      videoOrientation: context.videoOrientation,
     });
   } catch (err) {
     // eslint-disable-next-line no-console

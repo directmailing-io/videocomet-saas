@@ -9,9 +9,8 @@ import {
   getMediaItem,
   renameMediaItem,
 } from "@/lib/db/queries/media";
-import { deleteVideo } from "@/lib/bunny/stream";
-import { deleteFile } from "@/lib/bunny/storage";
-import { parseMediaUrl } from "@/lib/media-upload-service";
+import { removeBunnyAssetRefsForOwner } from "@/lib/db/queries/bunny-assets";
+import { triggerBunnyPurgeTick } from "@/lib/bunny/purge-trigger";
 
 const renameSchema = z.object({
   name: z.string().trim().min(1, "Name darf nicht leer sein.").max(200),
@@ -73,6 +72,20 @@ export async function PATCH(
   }
 }
 
+/**
+ * DELETE /api/media/[id] — Hard-Delete des Mediathek-Items + Bunny-Cleanup
+ * via Ref-Counting-System (Paket B/G).
+ *
+ * Flow:
+ *  1. Ownership-Check via `getMediaItem`.
+ *  2. `bunny_asset_refs` für `owner_type='media_item'` entfernen. Wenn der
+ *     Asset noch von einer Kampagne (`campaign_webcam`) referenziert wird,
+ *     überlebt die Bunny-GUID — sonst markiert der Sweep sie als
+ *     `purge_pending`.
+ *  3. DB-Row löschen (Mediathek-Items haben kein Soft-Delete; User-Action
+ *     ist explizit).
+ *  4. Sofortige Purge anstossen.
+ */
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: { id: string } },
@@ -80,31 +93,22 @@ export async function DELETE(
   const auth = await requireUserApi();
   if (!auth.ok) return auth.response;
 
-  let media;
   try {
-    media = await getMediaItem(params.id, auth.user.id);
+    // Ownership-Check.
+    await getMediaItem(params.id, auth.user.id);
   } catch {
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
 
-  // Best-effort Bunny cleanup. We still proceed with DB delete even if the
-  // remote delete fails (file orphans are cheaper than dangling DB rows).
   try {
-    const info = parseMediaUrl(media.publicUrl);
-    if (info.kind === "stream" && info.videoId) {
-      await deleteVideo(info.videoId);
-    } else if (info.kind === "storage" && info.storagePath) {
-      await deleteFile(info.storagePath);
-    } else {
-      console.warn(
-        `[api/media] could not determine bunny backend for url=${media.publicUrl}`,
-      );
-    }
+    await removeBunnyAssetRefsForOwner("media_item", params.id);
   } catch (err) {
-    console.error(
-      "[api/media] bunny cleanup failed (continuing with DB delete):",
-      err,
-    );
+    // Refs nicht entfernt → DB-Delete würde dangling Refs hinterlassen, die
+    // der Worker später als foreign-key-orphans wegrräumen muss. Wir
+    // proceed trotzdem mit dem Hard-Delete, weil der `bunny_asset_refs.owner_id`
+    // KEINE FK auf media_items hat (es ist `text`/UUID-Owner-Pattern), also
+    // sind dangling Refs für die DB harmlos und der nächste Sweep findet sie.
+    console.warn("[api/media] ref cleanup failed (continuing):", err);
   }
 
   try {
@@ -112,6 +116,8 @@ export async function DELETE(
   } catch {
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
+
+  void triggerBunnyPurgeTick("media:delete");
 
   return NextResponse.json({ ok: true });
 }

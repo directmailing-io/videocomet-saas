@@ -46,6 +46,7 @@ import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
 import type { LeadJobData } from "../types";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
 import { runVideoRender } from "./video-render";
+import { runVideoCompress } from "./video-compress";
 import { runVideoUpload } from "./video-upload";
 import { runThumbnailExtract } from "./thumbnail-extract";
 import { runQrGenerate } from "./qr-generate";
@@ -66,6 +67,7 @@ import { runPdfUpload } from "./pdf-upload";
  */
 const STAGE_TIMEOUTS_MS = {
   videoRender: 120_000, // CDP screencast is realtime: 60s clip + 60s buffer
+  videoCompress: 90_000, // ffmpeg re-encode + remux (passthrough is fast)
   videoUpload: 60_000, // Bunny stream upload is fast
   landingPageCreate: 10_000, // single DB write
   thumbnailExtract: 15_000, // ffmpeg single-frame extract
@@ -385,42 +387,68 @@ export async function pipelineProcessor(
         );
       }
 
-      // ── Webcam-only Fast-Path: shared video pro Run ──────────────
+      // ── Webcam-only Pfad: shared video resolve pro Run ───────────
       // Bei webcam-only ist das Video fuer alle Leads identisch. Wir
       // resolven es pro Run einmalig (Stream-URL → GUID reuse, sonst
-      // single-upload mit Lock) und kopieren die IDs auf den Lead.
-      // Spart N×Re-Upload + N×Bunny-Encode-Wartezeit.
+      // single-upload via Lock + Compress). Stages videoRender +
+      // videoUpload entfallen komplett — KEIN inline-Fast-Path mehr,
+      // damit auch dieser Pfad Compression durchläuft (sonst landen
+      // unkomprimierte WebMs/MP4s in Bunny Stream).
       const isWebcamOnly = campaign.mode !== "with-presentation";
       if (isWebcamOnly) {
         await setCurrentStage(data.leadId, "videoUpload");
         await updateLeadStatus(data.leadId, { status: "uploading" });
         const sharedStart = Date.now();
-        const { resolveSharedRunVideo } = await import(
-          "../lib/shared-run-video"
+        const { runVideoResolveShared } = await import(
+          "./video-resolve-shared"
         );
-        const shared = await resolveSharedRunVideo(
-          data.runId,
-          webcam.publicUrl,
-        );
+        const shared = await runVideoResolveShared({
+          runId: data.runId,
+          userId: data.userId,
+          webcamMediaUrl: webcam.publicUrl,
+        });
         bunnyVideoId = shared.bunnyVideoId;
-        videoUrl = shared.videoUrl;
-        // KRITISCH: alle drei Felder atomar in die DB schreiben — sonst
+        videoUrl = shared.hlsUrl;
+        // KRITISCH: alle Video-Felder atomar in die DB schreiben — sonst
         // zeigt die Landingpage spaeter auf einen alten bunny_video_id
         // (z.B. aus einem frueheren Run, der ein anderes Webcam-Source
         // verwendet hat). Das Stage-10-Update (status='completed') faesst
         // diese Felder nicht an.
         await updateLeadStatus(data.leadId, {
           bunnyVideoId: shared.bunnyVideoId,
-          videoUrl: shared.videoUrl,
+          videoUrl: shared.hlsUrl,
           thumbnailUrl: shared.thumbnailUrl || null,
+          videoWidth: shared.width,
+          videoHeight: shared.height,
+          videoOrientation: shared.orientation,
+          videoMp4Url: shared.mp4Url,
         });
+        // Bunny-Asset-Ref auf den Lead (1 Asset, N Lead-Refs). Sobald der
+        // letzte Lead gelöscht wird, kann der Purge-Worker (Paket E) das
+        // Bunny-Stream-Video freigeben.
+        if (shared.bunnyAssetId) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mod = (await import(
+              "@/lib/db/queries/bunny-assets" as any
+            )) as any; // TODO Paket B
+            await mod.addBunnyAssetRef(
+              shared.bunnyAssetId,
+              "lead",
+              data.leadId,
+            );
+          } catch {
+            // Paket B noch nicht da oder doppel-ref kollidiert (unique idx)
+            // → silently skip.
+          }
+        }
         const sharedMs = Date.now() - sharedStart;
         await insertPipelineEvent({
           runId: data.runId,
           leadId: data.leadId,
           level: "info",
           stage: "upload",
-          message: `${leadLabel}: shared video resolved in ${(sharedMs / 1000).toFixed(1)}s (bunnyId=${shared.bunnyVideoId.slice(0, 8)}…)`,
+          message: `${leadLabel}: shared video resolved in ${(sharedMs / 1000).toFixed(1)}s (bunnyId=${shared.bunnyVideoId.slice(0, 8)}…, ${shared.orientation}${shared.mp4Url ? ", mp4=ready" : ", mp4=pending"})`,
           durationMs: sharedMs,
         });
         // Stages 1+2 erledigt — direkt weiter zu landingPageCreate.
@@ -470,6 +498,23 @@ export async function pipelineProcessor(
         durationMs: renderMs,
       });
 
+      // ── Stage 1b: Compress (NEU, Paket D) ────────────────────────
+      // Renderer-Output ist intentionally pure (libx264, CRF26, baseline
+      // 3.1). compressForBunny prüft ob das schon Bunny-tauglich ist
+      // und macht passthrough-remux statt Re-Encode, wo möglich.
+      await setCurrentStage(data.leadId, "videoCompress");
+      const compressed = await withStageTimeout(
+        () =>
+          runVideoCompress({
+            leadId: data.leadId,
+            runId: data.runId,
+            inputPath: render.videoFilePath,
+            outDir: workDir,
+          }),
+        STAGE_TIMEOUTS_MS.videoCompress,
+        "videoCompress",
+      );
+
       await setCurrentStage(data.leadId, "videoUpload");
       await updateLeadStatus(data.leadId, { status: "uploading" });
       const uploadStart = Date.now();
@@ -477,7 +522,8 @@ export async function pipelineProcessor(
         () =>
           runVideoUpload({
             leadId: data.leadId,
-            videoFilePath: render.videoFilePath,
+            userId: data.userId,
+            videoFilePath: compressed.videoFilePath,
             title: `${campaign.name} – Lead ${lead.rowIndex}`,
           }),
         STAGE_TIMEOUTS_MS.videoUpload,
@@ -485,13 +531,36 @@ export async function pipelineProcessor(
       );
       bunnyVideoId = upload.bunnyVideoId;
       videoUrl = upload.videoUrl;
+
+      // Bunny-Asset-Tracking für with-presentation (1 Asset pro Lead-
+      // Video). Best-effort; Paket B liefert die Helpers.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mod = (await import(
+          "@/lib/db/queries/bunny-assets" as any
+        )) as any; // TODO Paket B
+        const asset = await mod.trackBunnyAsset({
+          userId: data.userId,
+          kind: "stream",
+          bunnyId: upload.bunnyVideoId,
+          cdnUrl: upload.videoUrl,
+          width: upload.width,
+          height: upload.height,
+        });
+        if (asset?.id) {
+          await mod.addBunnyAssetRef(asset.id, "lead", data.leadId);
+        }
+      } catch {
+        // Paket B fehlt oder Doppel-Ref → silently skip.
+      }
+
       const uploadMs = Date.now() - uploadStart;
       await insertPipelineEvent({
         runId: data.runId,
         leadId: data.leadId,
         level: "info",
         stage: "upload",
-        message: `${leadLabel}: video upload done in ${(uploadMs / 1000).toFixed(1)}s`,
+        message: `${leadLabel}: video upload done in ${(uploadMs / 1000).toFixed(1)}s${upload.mp4Url ? " (mp4=ready)" : " (mp4=pending)"}`,
         durationMs: uploadMs,
       });
       } // ← Ende `else` (with-presentation Pfad)
@@ -519,6 +588,8 @@ export async function pipelineProcessor(
         () =>
           runLandingPageCreate({
             leadId: data.leadId,
+            campaignId: campaign.id,
+            campaignSlugSuffix: campaign.slugSuffix ?? null,
             appUrl,
             leadData: (lead.data ?? {}) as Record<string, string>,
             rowIndex: lead.rowIndex,

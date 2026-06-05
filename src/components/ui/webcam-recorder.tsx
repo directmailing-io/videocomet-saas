@@ -32,9 +32,20 @@ import {
   Check,
   AlertCircle,
   X,
+  Monitor,
+  Smartphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+/**
+ * Orientation für die Aufnahme. Wir geben das nur als Hint an getUserMedia
+ * weiter — der Browser darf sich auch dagegen entscheiden (insb. wenn die
+ * Hardware nur landscape-Sensoren hat). Das ist OK: width/height kommen
+ * server-seitig per ffprobe in die DB, also bleibt die UI konsistent zur
+ * realen Aufnahme.
+ */
+type Orientation = "landscape" | "portrait";
 
 export interface RecordedMedia {
   id: string;
@@ -141,6 +152,7 @@ export function WebcamRecorder({
   const autoStopRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [state, setState] = React.useState<RecorderState>("preview");
+  const [orientation, setOrientation] = React.useState<Orientation>("landscape");
   const [elapsed, setElapsed] = React.useState(0);
   const [permError, setPermError] = React.useState<string | null>(null);
   const [recordError, setRecordError] = React.useState<string | null>(null);
@@ -173,16 +185,31 @@ export function WebcamRecorder({
     }
   }, []);
 
-  const initCamera = React.useCallback(async () => {
+  const orientationRef = React.useRef<Orientation>(orientation);
+  React.useEffect(() => {
+    orientationRef.current = orientation;
+  }, [orientation]);
+
+  const initCamera = React.useCallback(async (mode?: Orientation) => {
+    const effectiveMode: Orientation = mode ?? orientationRef.current;
     setPermError(null);
     setRecordError(null);
     try {
+      // Hint-Constraints: bei „portrait" drehen wir width/height + aspectRatio.
+      // Viele Desktop-Webcams ignorieren das und liefern weiter landscape —
+      // das ist OK, weil server-seitig ffprobe die tatsächlichen Dimensionen
+      // schreibt und die Picker-UI daraus das Format-Badge ableitet.
+      const isPortrait = effectiveMode === "portrait";
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 },
+          width: isPortrait
+            ? { ideal: 720, max: 1080 }
+            : { ideal: 1280, max: 1920 },
+          height: isPortrait
+            ? { ideal: 1280, max: 1920 }
+            : { ideal: 720, max: 1080 },
           frameRate: { ideal: 30, max: 60 },
-          aspectRatio: { ideal: 16 / 9 },
+          aspectRatio: { ideal: isPortrait ? 9 / 16 : 16 / 9 },
           facingMode: { ideal: "user" },
         },
         audio: true,
@@ -420,6 +447,19 @@ export function WebcamRecorder({
     await initCamera();
   }
 
+  /**
+   * Wechselt zwischen landscape und portrait. Stoppt den aktuellen Stream und
+   * fordert frische getUserMedia-Constraints an. Wir machen das nur im preview-
+   * State erlaubt — im recording-State wäre das ein Datenverlust.
+   */
+  async function switchOrientation(next: Orientation) {
+    if (state !== "preview") return;
+    if (next === orientation) return;
+    setOrientation(next);
+    stopStream();
+    await initCamera(next);
+  }
+
   async function handleConfirm() {
     if (!reviewMedia) return;
     setConfirming(true);
@@ -458,7 +498,7 @@ export function WebcamRecorder({
             {permError}
           </p>
           <div className="flex flex-wrap justify-center gap-2">
-            <Button type="button" size="sm" onClick={initCamera}>
+            <Button type="button" size="sm" onClick={() => void initCamera()}>
               Erneut versuchen
             </Button>
             {onCancel && (
@@ -508,7 +548,17 @@ export function WebcamRecorder({
             </div>
           )}
 
-          <div className="relative aspect-video w-full overflow-hidden rounded-squircle-md bg-ink">
+          <div
+            className={cn(
+              "relative w-full overflow-hidden rounded-squircle-md bg-ink mx-auto",
+              // Im Preview/Recording: Container-Aspect spiegelt den gewählten
+              // Orientation-Hint wieder. In Upload/Verify/Review behalten wir
+              // landscape, damit Spinner-Status & Review-Video nicht „zappeln".
+              (state === "preview" || state === "recording") && orientation === "portrait"
+                ? "aspect-[9/16] max-w-[280px] max-h-[60vh]"
+                : "aspect-video",
+            )}
+          >
             {state === "review" && reviewMedia ? (
               <>
                 <video
@@ -619,6 +669,54 @@ export function WebcamRecorder({
           {recordError && (
             <div className="rounded-squircle-md border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
               {recordError}
+            </div>
+          )}
+
+          {/* Orientation-Toggle: nur im preview-State sichtbar. Wir bieten den
+            * Switch bewusst nicht während der Aufnahme an, weil das den Stream
+            * killen und das Recording verlieren würde. */}
+          {state === "preview" && (
+            <div className="flex items-center justify-center gap-2">
+              <div
+                role="group"
+                aria-label="Aufnahme-Orientierung"
+                className="inline-flex items-center rounded-full border border-line bg-surface-soft p-1"
+              >
+                <button
+                  type="button"
+                  onClick={() => void switchOrientation("landscape")}
+                  aria-pressed={orientation === "landscape"}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                    orientation === "landscape"
+                      ? "bg-surface text-ink shadow-card"
+                      : "text-ink-muted hover:text-ink",
+                  )}
+                >
+                  <Monitor className="size-3.5" />
+                  Querformat
+                  <span className="text-[10px] font-medium tabular-nums opacity-70">
+                    16:9
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void switchOrientation("portrait")}
+                  aria-pressed={orientation === "portrait"}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                    orientation === "portrait"
+                      ? "bg-surface text-ink shadow-card"
+                      : "text-ink-muted hover:text-ink",
+                  )}
+                >
+                  <Smartphone className="size-3.5" />
+                  Hochformat
+                  <span className="text-[10px] font-medium tabular-nums opacity-70">
+                    9:16
+                  </span>
+                </button>
+              </div>
             </div>
           )}
 

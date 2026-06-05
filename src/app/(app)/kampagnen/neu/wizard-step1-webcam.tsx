@@ -107,6 +107,54 @@ function KindBadge({
   );
 }
 
+/**
+ * FormatBadge — kleines Pill mit Aspect-Ratio des Source-Videos.
+ *
+ * Hilft beim schnellen Erkennen, ob ein Asset für Shorts/Reels (9:16),
+ * klassische Outreach (16:9) oder Square (1:1) gedacht ist — ohne dass
+ * man das Thumbnail genauer ansehen muss.
+ *
+ * Legacy-Items vor Migration 0011 haben width=height=null → wir rendern
+ * dann kein Badge (lieber leer als falsch).
+ */
+function FormatBadge({
+  width,
+  height,
+  className,
+}: {
+  width: number | null;
+  height: number | null;
+  className?: string;
+}) {
+  if (width == null || height == null) return null;
+  if (width <= 0 || height <= 0) return null;
+
+  let label: string;
+  let title: string;
+  if (width > height) {
+    label = "16:9";
+    title = "Querformat (Landscape)";
+  } else if (height > width) {
+    label = "9:16";
+    title = "Hochformat (Portrait)";
+  } else {
+    label = "1:1";
+    title = "Quadratisch";
+  }
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border border-brand/30 bg-brand-soft text-brand-deep px-1.5 py-0.5 text-[10px] font-semibold leading-none tabular-nums",
+        className,
+      )}
+      title={title}
+    >
+      {label}
+    </span>
+  );
+}
+
 export function WizardStep1Webcam({
   webcams: initialWebcams,
   value,
@@ -434,6 +482,7 @@ function SelectedWebcamPreview({
           {webcam.name}
         </span>
         <KindBadge kind={webcam.kind} />
+        <FormatBadge width={webcam.width} height={webcam.height} />
         <span className="text-xs text-ink-muted">
           {durationLabel(webcam.durationSec)}
         </span>
@@ -626,6 +675,17 @@ function WebcamThumb({
                 <Check className="size-3" />
               </span>
             )}
+            {/* Format-Badge oben rechts. Bei aktivem Tile (Check-Pill nimmt
+             * die Ecke) rutscht das Badge eine Reihe runter, damit es nicht
+             * unter dem Check verschwindet. */}
+            <FormatBadge
+              width={webcam.width}
+              height={webcam.height}
+              className={cn(
+                "absolute right-1.5 shadow-sm backdrop-blur-sm",
+                active ? "top-7" : "top-1.5",
+              )}
+            />
             <KindBadge
               kind={webcam.kind}
               className="absolute left-1.5 top-1.5 shadow-sm backdrop-blur-sm"

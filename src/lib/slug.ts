@@ -192,21 +192,46 @@ export interface GenerateSlugOptions {
   fallbackId?: string | number;
   /** Maximale Versuche bei Kollision/Reserved. Default 8. */
   maxAttempts?: number;
+  /**
+   * Wenn gesetzt, wird `-<suffix>` an JEDEN generierten Slug angehängt
+   * (Tenant-Suffix aus `campaigns.slug_suffix`). Erwartet ein bereits
+   * normalisiertes Token (`^[a-z0-9-]{1,32}$`); die DB-CHECK-Constraint
+   * stellt das beim Schreiben sicher. Wir slugifyen hier defensiv nochmal,
+   * damit ein versehentlich uebergebenes Whitespace-Token nicht durchsickert.
+   */
+  campaignSlugSuffix?: string | null;
+  /**
+   * Wie Kollisions-Suffixe aussehen sollen:
+   *   - `numeric` (Default): `base`, `base-2`, `base-3`, … (lesbar, neuer Modus)
+   *   - `hex`: `base-a4f2` (alter Modus, Bestandsschutz für Migrationsweg)
+   */
+  collisionStrategy?: "numeric" | "hex";
 }
 
 /**
  * Generiert einen Slug aus Template + Daten und garantiert Eindeutigkeit
- * via `isAvailable()` callback. Strategie:
+ * via `isAvailable()` callback.
+ *
+ * Strategie (Reihenfolge ist wichtig — der Campaign-Suffix muss VOR dem
+ * Reserved-Check sitzen, damit `reserved-test` nicht trotz Tenant-Suffix
+ * mit dem App-Routen-Pfad kollidiert):
  *
  *   1. Template rendern → base
  *   2. Wenn base leer → Fallback `lead-<fallbackId>`
- *   3. Wenn base reserved → suffix anhaengen
- *   4. isAvailable(base)? → return
- *   5. sonst: bis zu `maxAttempts` mal `base-<hex4>` versuchen
- *   6. sonst: harten Fallback `<base>-<isoEpoch>` (kollidiert quasi nie)
+ *   3. Wenn `campaignSlugSuffix` gesetzt → `${base}-${suffix}` (Tenant-Marker)
+ *   4. Wenn base reserved → Hex-Suffix anhaengen (collision-strategy-agnostisch:
+ *      Reserved-Pfade sollen NIE als `api-2` rauskommen, das maskiert das Problem)
+ *   5. isAvailable(base)? → return
+ *   6. Kollisions-Loop:
+ *        - numeric: `base-2`, `base-3`, … bis `base-${maxAttempts+1}`
+ *        - hex:     `base-<hex4>` bis zu `maxAttempts` Versuche
+ *   7. Letzter Ausweg: Epoch-Suffix `<base>-<epoch36>` (race-resistant, kollidiert
+ *      praktisch nie und wird vom DB-Unique-Constraint als Safety-Net abgefangen).
  */
 export async function generateSlug(opts: GenerateSlugOptions): Promise<string> {
   const maxAttempts = opts.maxAttempts ?? 8;
+  const collisionStrategy = opts.collisionStrategy ?? "numeric";
+
   let base = renderSlugTemplate(
     opts.template ?? DEFAULT_SLUG_TEMPLATE,
     opts.leadData,
@@ -218,20 +243,41 @@ export async function generateSlug(opts: GenerateSlugOptions): Promise<string> {
     base = slugifyBasic(`lead-${fb}`);
   }
 
-  // Reserved → direkt suffixen (keine Naked-Reserved-Slugs).
+  // Tenant-Suffix (kommt VOR dem Reserved-Check, damit ein User explizit
+  // einen reservierten Pfad „retten" könnte indem er einen Suffix setzt —
+  // gleichzeitig schützt der Reserved-Check unten weiterhin, falls der
+  // resultierende kombinierte Slug immer noch reserved ist).
+  if (opts.campaignSlugSuffix && opts.campaignSlugSuffix.trim() !== "") {
+    const suffix = slugifyBasic(opts.campaignSlugSuffix);
+    if (suffix) base = `${base}-${suffix}`;
+  }
+
+  // Reserved → direkt mit Hex suffixen (numeric-`-2` würde das Reserved-
+  // Problem visuell verstecken; Hex ist hier der korrektere Marker).
   if (isReservedSlug(base)) {
     base = `${base}-${slugHexSuffix()}`;
   }
 
-  // Erst-Versuch ohne Suffix.
+  // Erst-Versuch ohne Kollisions-Suffix.
   if (await opts.isAvailable(base)) return base;
 
-  for (let i = 0; i < maxAttempts; i++) {
-    const candidate = `${base}-${slugHexSuffix()}`;
-    if (await opts.isAvailable(candidate)) return candidate;
+  if (collisionStrategy === "numeric") {
+    // Start bei -2 (das erste Vorkommen sitzt ohne Suffix), aufsteigend bis
+    // `-${maxAttempts+1}`. Beispiel: maxAttempts=8 → -2, -3, …, -9.
+    for (let n = 2; n <= maxAttempts + 1; n += 1) {
+      const candidate = `${base}-${n}`;
+      if (await opts.isAvailable(candidate)) return candidate;
+    }
+  } else {
+    for (let i = 0; i < maxAttempts; i += 1) {
+      const candidate = `${base}-${slugHexSuffix()}`;
+      if (await opts.isAvailable(candidate)) return candidate;
+    }
   }
 
-  // Letzter Ausweg: Epoch-basiert, fast garantiert eindeutig.
+  // Letzter Ausweg: Epoch-basiert, fast garantiert eindeutig. Greift nur,
+  // wenn `maxAttempts` Kandidaten in Folge kollidiert sind (extrem selten,
+  // typisch nur bei massiver Concurrency auf identischem Namen).
   return `${base}-${Date.now().toString(36).slice(-6)}`;
 }
 

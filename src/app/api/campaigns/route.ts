@@ -20,6 +20,16 @@ const createSchema = z.object({
   customLpTemplateId: z.string().uuid().nullable().optional(),
   domainId: z.string().uuid().nullable().optional(),
   slugTemplate: z.string().min(1).max(120).nullable().optional(),
+  /**
+   * Optionaler Tenant-Suffix für Lead-Slugs (Migration 0014). Format identisch
+   * zur DB-CHECK-Constraint: lowercase alphanumerisch + Bindestrich, 1-32 Zeichen.
+   * `null` → SQL NULL setzen, `undefined` → Feld nicht ändern.
+   */
+  slugSuffix: z
+    .string()
+    .regex(/^[a-z0-9-]{1,32}$/, "Nur a-z, 0-9 und Bindestrich, max. 32 Zeichen.")
+    .nullable()
+    .optional(),
   pdfEnabled: z.boolean().optional(),
   pdfGoogleDocsUrl: z.string().url().nullable().optional(),
   pdfQrEnabled: z.boolean().optional(),

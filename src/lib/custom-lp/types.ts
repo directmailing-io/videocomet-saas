@@ -119,6 +119,23 @@ export interface CustomLpAnnotations {
   secondaryCta?: string | null;
   /** Sections whose visibility should be tracked (e.g. `.pricing`). */
   sectionTracking?: string[];
+  /**
+   * Steuert, welche CSS-Aspect-Ratio in `--vc-video-aspect` injiziert wird.
+   *
+   *  - `preserve` (default): nutzt die echte Lead-Orientation (Portrait →
+   *    9/16, Landscape → 16/9, Square → 1/1). Greift auf 16/9 zurueck,
+   *    wenn die Lead-Orientation noch nicht bekannt ist.
+   *  - `force-landscape`: ignoriert die Lead-Orientation, injiziert
+   *    immer 16/9. Sinnvoll, wenn das Custom-Template hartkodiert auf
+   *    Landscape-Layout setzt und ein Portrait-Video gecropped werden
+   *    soll.
+   *  - `force-portrait`: analog 9/16.
+   *
+   * Hinweis: das hier ist nur die CSS-Variable. Ob die Variable tatsaechlich
+   * angewendet wird, entscheidet das Custom-Template (`aspect-ratio:
+   * var(--vc-video-aspect)`).
+   */
+  videoAspectStrategy?: "preserve" | "force-landscape" | "force-portrait";
   /** Free-form bag for additional, schema-less annotations from the picker. */
   [key: string]: unknown;
 }

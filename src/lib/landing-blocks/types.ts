@@ -140,4 +140,17 @@ export interface BlockRenderProps {
    * uses it (for the video player); other blocks ignore it.
    */
   slot?: React.ReactNode;
+  /**
+   * Aspect-ratio des Lead-Videos (kommt aus `leads.video_orientation`).
+   * Wird vom Hero-Block ausgewertet, um den Slot-Wrapper bei Portrait-
+   * Webcam-Videos auf Full-Bleed zu schalten — sonst entstehen schwarze
+   * Streifen links/rechts. `null`/undefined → konservatives 16:9-Layout.
+   */
+  videoOrientation?: "landscape" | "portrait" | "square" | null;
+  /**
+   * Kampagnen-Modus (`campaigns.mode`). Hero-Block nutzt das in Kombination
+   * mit `videoOrientation`, um zu entscheiden, ob er den Video-Container
+   * full-bleed (ohne max-width-Constraint) rendert.
+   */
+  campaignMode?: "webcam-only" | "with-presentation" | null;
 }
