@@ -38,6 +38,7 @@ import {
   type CustomLpPublicContext,
 } from "@/lib/db/queries/custom-lp-public";
 import { getDomainByHostname } from "@/lib/db/queries/user-domains";
+import { resolveCustomDomainHost } from "@/lib/custom-domain-host";
 import { getCustomLpStorageEnv } from "@/lib/custom-lp/storage";
 import { bunnyFetch, BunnyApiError } from "@/lib/bunny/_fetch";
 
@@ -69,7 +70,7 @@ export async function GET(
   //    request arrived through a customer custom-domain so the lookup
   //    can be domain-scoped (slug uniqueness is per-domain in that
   //    namespace).
-  const hostParam = req.nextUrl.searchParams.get("_host");
+  const hostParam = resolveCustomDomainHost(req);
   let context: CustomLpPublicContext | null;
   if (hostParam) {
     const domain = await getDomainByHostname(hostParam);

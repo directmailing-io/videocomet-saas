@@ -27,6 +27,7 @@ import {
   type CustomLpPublicContext,
 } from "@/lib/db/queries/custom-lp-public";
 import { getDomainByHostname } from "@/lib/db/queries/user-domains";
+import { resolveCustomDomainHost } from "@/lib/custom-domain-host";
 import { getCustomLpStorageEnv } from "@/lib/custom-lp/storage";
 import { bunnyFetch, BunnyApiError } from "@/lib/bunny/_fetch";
 
@@ -89,7 +90,7 @@ export async function GET(
   // TENANT-SAFETY: gleiche Default-vs-Custom-Domain-Aufteilung wie beim
   // HTML-Renderer — ein Custom-Domain-Lead darf nicht durch eine Default-
   // Domain-Asset-URL erreichbar sein.
-  const hostParam = req.nextUrl.searchParams.get("_host");
+  const hostParam = resolveCustomDomainHost(req);
   let context: CustomLpPublicContext | null;
   if (hostParam) {
     const domain = await getDomainByHostname(hostParam);

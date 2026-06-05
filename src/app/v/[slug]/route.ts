@@ -23,6 +23,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
 import { buildCustomLpCspHeader } from "@/lib/custom-lp/csp";
+import { resolveCustomDomainHost } from "@/lib/custom-domain-host";
 import { renderCustomLp } from "@/lib/custom-lp/renderer";
 import { sanitizeIndexHtml } from "@/lib/custom-lp/sanitizer";
 import {
@@ -226,35 +227,6 @@ async function proxyBlockLp(
   if (sc) headers.set("set-cookie", sc);
   headers.set("cache-control", "private, no-store, max-age=0");
   return new NextResponse(body, { status: upstream.status, headers });
-}
-
-/**
- * Liefert den Host des Original-Client-Requests. Bevorzugt der
- * `_host`-Query-Param, den die Middleware bei Custom-Domain-Rewrites
- * setzt — falls der durch Edge-Middleware-Quirks verloren geht (gab es
- * gestreute Reports in Next.js 14), faellt der Code auf den Request-
- * Host-Header zurueck. Eigener App-Host (`app.videocomet.de` etc.) wird
- * NICHT als Custom-Domain interpretiert — der Lookup laeuft dann auf
- * dem Default-Namespace wie bisher.
- */
-function resolveCustomDomainHost(req: NextRequest): string | null {
-  const queryHost = req.nextUrl.searchParams.get("_host");
-  if (queryHost && queryHost.trim() !== "") return queryHost;
-  const rawHost = req.headers.get("host");
-  if (!rawHost) return null;
-  const lower = rawHost.toLowerCase().split(":")[0];
-  // Localhost / app-eigene Hosts → kein Custom-Domain-Lookup.
-  if (
-    lower === "127.0.0.1" ||
-    lower === "0.0.0.0" ||
-    lower === "localhost" ||
-    lower === "app.videocomet.de" ||
-    lower === "lp.videocomet.de" ||
-    lower.endsWith(".vercel.app")
-  ) {
-    return null;
-  }
-  return rawHost;
 }
 
 export async function GET(
