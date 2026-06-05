@@ -22,10 +22,10 @@
  * renderer via the same path it would on `lp.videocomet.de`.
  */
 
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { leads, userDomains } from "@/lib/db/schema";
-import { generateSlug } from "@/lib/slug";
+import { generateSlug, slugHexSuffix } from "@/lib/slug";
 import { updateLeadStatus } from "@/lib/db/queries/leads";
 import type {
   LegacyMapping,
@@ -72,14 +72,19 @@ export interface LandingPageOutput {
  *   - Custom-Domain: unique innerhalb dieser domain_id (partial unique-Index)
  *   - Default:       unique innerhalb (domain_id IS NULL) — Backward-Compat
  * Schliesst den eigenen Lead aus, damit ein Retry idempotent ist.
+ *
+ * WICHTIG: `domainId` MUSS der EFFEKTIVE Wert sein, der spaeter in der DB
+ * landet. Sonst checken wir im falschen Namespace (Symptom: Slug "verfuegbar"
+ * laut Custom-Domain, schlaegt aber beim INSERT in den Default-Namespace
+ * gegen den partial unique index `leads_default_slug_uq` fehl).
  */
 async function buildAvailabilityCheck(
   leadId: string,
-  domainId: string | null,
+  effectiveDomainId: string | null,
 ): Promise<(candidate: string) => Promise<boolean>> {
   return async (candidate: string) => {
-    const where = domainId
-      ? and(eq(leads.slug, candidate), eq(leads.domainId, domainId))
+    const where = effectiveDomainId
+      ? and(eq(leads.slug, candidate), eq(leads.domainId, effectiveDomainId))
       : and(eq(leads.slug, candidate), isNull(leads.domainId));
     const [row] = await db
       .select({ id: leads.id })
@@ -92,53 +97,76 @@ async function buildAvailabilityCheck(
 }
 
 /**
- * Resolves the hostname to use for the page URL. If the campaign's domain
- * is set AND still active, use it; otherwise fall back to the default app
- * URL. This silently degrades when a customer deletes a domain that a
- * running campaign still references (variant B per product decision).
+ * Loest die effektive `domain_id` BEVOR der Slug generiert wird — damit
+ * Availability-Check und persistierter Wert garantiert im selben Namespace
+ * landen.
+ *
+ * Regeln (parallel zu `resolvePageUrl`):
+ *  - Kampagne hat eine `domainId` UND die Domain ist `active` → diese ID
+ *  - Sonst (keine Custom-Domain, Domain geloescht, Domain noch nicht aktiv)
+ *    → null (Default-Namespace, app.videocomet.de)
  */
-async function resolvePageUrl(
+async function resolveEffectiveDomainId(
   domainId: string | null,
-  defaultAppUrl: string,
-  slug: string,
-  customLpVersionId: string | null,
-  customLpHost: string,
-): Promise<{ pageUrl: string; effectiveDomainId: string | null }> {
-  if (domainId) {
-    const [d] = await db
-      .select({ id: userDomains.id, hostname: userDomains.hostname, status: userDomains.status })
-      .from(userDomains)
-      .where(eq(userDomains.id, domainId))
-      .limit(1);
-    if (d && d.status === "active") {
-      return {
-        pageUrl: `https://${d.hostname}/${slug}`,
-        effectiveDomainId: d.id,
-      };
-    }
-  }
-  if (customLpVersionId) {
-    return {
-      pageUrl: `https://${customLpHost}/${slug}`,
-      effectiveDomainId: null,
-    };
-  }
-  return {
-    pageUrl: `${defaultAppUrl.replace(/\/+$/, "")}/v/${slug}`,
-    effectiveDomainId: null,
-  };
+): Promise<string | null> {
+  if (!domainId) return null;
+  const [d] = await db
+    .select({ id: userDomains.id, status: userDomains.status })
+    .from(userDomains)
+    .where(eq(userDomains.id, domainId))
+    .limit(1);
+  if (d && d.status === "active") return d.id;
+  return null;
+}
+
+/**
+ * Postgres-Fehler-Detector fuer Slug-UNIQUE-Verletzungen. Wir matchen sowohl
+ * den Default- als auch den Custom-Domain-Partial-Index, damit Retries
+ * konsistent funktionieren.
+ */
+function isSlugUniqueViolation(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  // postgres-js wirft via DrizzleQueryError; der echte pg-Error sitzt als
+  // `cause` darauf. Wir checken beide Ebenen.
+  const inner =
+    (err as { cause?: unknown }).cause && typeof (err as { cause?: unknown }).cause === "object"
+      ? (err as { cause: Record<string, unknown> }).cause
+      : (err as Record<string, unknown>);
+  if (inner.code !== "23505") return false;
+  const constraint = String(inner.constraint_name ?? "");
+  return (
+    constraint === "leads_default_slug_uq" ||
+    constraint === "leads_custom_slug_uq"
+  );
 }
 
 /**
  * Generates a unique slug, persists it on the lead row, and returns the
  * full public URL.
+ *
+ * Schritte (in dieser Reihenfolge wichtig):
+ *  1. Effektive `domain_id` AUFLÖSEN — gleicher Wert wie spaeter im UPDATE
+ *  2. `isAvailable` im EFFECTIVE-Namespace bauen
+ *  3. Slug generieren (Suffix bei Konflikt)
+ *  4. URL bauen
+ *  5. ATOMARER Update: slug + domain_id in EINEM SQL-Statement
+ *  6. Bei seltener Race-Condition (concurrent INSERT desselben Slugs):
+ *     Hex-Suffix retry, bis zu 4×
  */
 export async function runLandingPageCreate(
   input: LandingPageInput,
 ): Promise<LandingPageOutput> {
-  const isAvailable = await buildAvailabilityCheck(input.leadId, input.domainId);
+  // 1) Effektive Domain — gleicher Wert in `isAvailable` UND im UPDATE.
+  const effectiveDomainId = await resolveEffectiveDomainId(input.domainId);
 
-  const slug = await generateSlug({
+  // 2) Availability-Check im KORREKTEN Namespace.
+  const isAvailable = await buildAvailabilityCheck(
+    input.leadId,
+    effectiveDomainId,
+  );
+
+  // 3) Slug aus Template + Daten generieren (mit Suffix-Versuchen bei Konflikt).
+  let slug = await generateSlug({
     template: input.slugTemplate,
     leadData: input.leadData,
     mapping: input.placeholderMapping,
@@ -146,23 +174,68 @@ export async function runLandingPageCreate(
     fallbackId: input.rowIndex,
   });
 
-  const { pageUrl, effectiveDomainId } = await resolvePageUrl(
-    input.domainId,
-    input.appUrl,
-    slug,
-    input.customLpVersionId,
-    input.customLpHost,
-  );
+  // 4) Atomarer Update mit Retry-Safety-Net gegen Race-Conditions (zwei
+  //    Worker, die exakt denselben Slug-Kandidaten zur gleichen Zeit checken).
+  const MAX_RETRIES = 4;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    try {
+      await updateLeadStatus(input.leadId, {
+        slug,
+        domainId: effectiveDomainId,
+      });
+      const pageUrl = buildPageUrl({
+        effectiveDomainId,
+        appUrl: input.appUrl,
+        slug,
+        customLpVersionId: input.customLpVersionId,
+        customLpHost: input.customLpHost,
+        domainHostname: await resolveActiveDomainHostname(effectiveDomainId),
+      });
+      return { slug, pageUrl };
+    } catch (err) {
+      if (!isSlugUniqueViolation(err) || attempt === MAX_RETRIES) throw err;
+      // Race-Condition: neuer Suffix, retry.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[landingpage-create] slug "${slug}" conflict (attempt ${attempt + 1}/${MAX_RETRIES}), retrying with hex suffix`,
+      );
+      slug = `${slug}-${slugHexSuffix()}`;
+    }
+  }
+  // Unerreichbar (Loop wirft oder returnt), aber TS will einen Return.
+  throw new Error("[landingpage-create] unreachable retry exit");
+}
 
-  await updateLeadStatus(input.leadId, { slug });
-  // Persist the effectiveDomainId on the lead so the public router can
-  // resolve `<hostname>/<slug>` later. If the campaign's domain has been
-  // deleted between scheduling and pipeline execution, we degrade to
-  // domain_id=NULL (default URL) instead of crashing.
-  await db
-    .update(leads)
-    .set({ domainId: effectiveDomainId ?? sql`NULL` })
-    .where(eq(leads.id, input.leadId));
+/** Liefert den Hostnamen einer aktiven Custom-Domain, sonst null. */
+async function resolveActiveDomainHostname(
+  effectiveDomainId: string | null,
+): Promise<string | null> {
+  if (!effectiveDomainId) return null;
+  const [d] = await db
+    .select({ hostname: userDomains.hostname })
+    .from(userDomains)
+    .where(eq(userDomains.id, effectiveDomainId))
+    .limit(1);
+  return d?.hostname ?? null;
+}
 
-  return { slug, pageUrl };
+/**
+ * Reine URL-Konstruktion ohne DB-Roundtrip — die effektive Domain wird
+ * vom Caller schon resolved übergeben.
+ */
+function buildPageUrl(args: {
+  effectiveDomainId: string | null;
+  appUrl: string;
+  slug: string;
+  customLpVersionId: string | null;
+  customLpHost: string;
+  domainHostname: string | null;
+}): string {
+  if (args.effectiveDomainId && args.domainHostname) {
+    return `https://${args.domainHostname}/${args.slug}`;
+  }
+  if (args.customLpVersionId) {
+    return `https://${args.customLpHost}/${args.slug}`;
+  }
+  return `${args.appUrl.replace(/\/+$/, "")}/v/${args.slug}`;
 }
