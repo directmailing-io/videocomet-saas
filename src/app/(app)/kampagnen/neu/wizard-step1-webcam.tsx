@@ -471,6 +471,26 @@ function SelectedWebcamPreview({
   const isPortrait =
     effectiveDims !== null && effectiveDims.height > effectiveDims.width;
 
+  /**
+   * Bunny-Stream-GUID aus der publicUrl extrahieren (Pattern:
+   * `vz-<hash>.b-cdn.net/<guid>/playlist.m3u8`). Wenn die URL kein
+   * Stream-Pattern matcht, ist es eine Storage-URL (Webcam-Recording)
+   * und wir streamen direkt via <video>.
+   */
+  const streamGuid = React.useMemo(() => {
+    const m = webcam.publicUrl.match(
+      /^https?:\/\/[^/]+\/([0-9a-f-]{36})\/playlist\.m3u8(?:\?.*)?$/i,
+    );
+    return m ? m[1] : null;
+  }, [webcam.publicUrl]);
+
+  // Bei iframe-Embed feuert onLoad selbst dann wenn ein Error-Page angezeigt
+  // wird — wir verlassen uns auf den Initial-Load und gehen sofort auf ready,
+  // sobald die iframe geladen ist (kein server-side Status-Check noetig).
+  React.useEffect(() => {
+    if (streamGuid) setLoadState("ready");
+  }, [streamGuid, reloadKey]);
+
   return (
     <div className="rounded-squircle-md border border-line bg-surface p-4">
       <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -509,29 +529,43 @@ function SelectedWebcamPreview({
             : "w-full max-w-[480px] aspect-video",
         )}
       >
-        <video
-          key={`${webcam.id}-${reloadKey}`}
-          src={webcam.publicUrl}
-          controls
-          controlsList="nodownload"
-          preload="metadata"
-          playsInline
-          className="h-full w-full object-contain bg-ink"
-          onLoadedMetadata={(e) => {
-            setLoadState("ready");
-            // Auto-Korrektur: wenn der Server NULL geliefert hat (Altbestand),
-            // versuchen wir per HTMLVideoElement nachträglich zu erkennen,
-            // welches Aspect wir wirklich rendern. Das hilft KEINER
-            // bestehenden Render-Pipeline (die liest aus der DB / probt
-            // server-seitig) — es macht nur die Preview lokal korrekt.
-            const v = e.currentTarget as HTMLVideoElement;
-            if ((webcam.width == null || webcam.height == null) && v.videoWidth > 0 && v.videoHeight > 0) {
-              setDetectedDims({ width: v.videoWidth, height: v.videoHeight });
-            }
-          }}
-          onLoadedData={() => setLoadState("ready")}
-          onError={() => setLoadState("error")}
-        />
+        {streamGuid ? (
+          // Bunny-Stream-URLs (Mediathek-Upload kind=video) haben Token-Auth +
+          // Hotlink-Protection — direktes <video src=...> bekommt 403/404.
+          // Wir nutzen Bunnys iframe-Player; der hat eigene Auth und braucht
+          // keinen Token-Key.
+          <iframe
+            key={`${webcam.id}-${reloadKey}`}
+            src={`https://iframe.mediadelivery.net/embed/670919/${streamGuid}`}
+            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+            className="h-full w-full bg-ink border-0"
+            title={webcam.name}
+            onLoad={() => setLoadState("ready")}
+            onError={() => setLoadState("error")}
+          />
+        ) : (
+          // Bunny-Storage-URLs (Webcam-Recording, kind=webcam) sind direkt
+          // streambar — kein iframe nötig.
+          <video
+            key={`${webcam.id}-${reloadKey}`}
+            src={webcam.publicUrl}
+            controls
+            controlsList="nodownload"
+            preload="metadata"
+            playsInline
+            className="h-full w-full object-contain bg-ink"
+            onLoadedMetadata={(e) => {
+              setLoadState("ready");
+              const v = e.currentTarget as HTMLVideoElement;
+              if ((webcam.width == null || webcam.height == null) && v.videoWidth > 0 && v.videoHeight > 0) {
+                setDetectedDims({ width: v.videoWidth, height: v.videoHeight });
+              }
+            }}
+            onLoadedData={() => setLoadState("ready")}
+            onError={() => setLoadState("error")}
+          />
+        )}
         {loadState === "loading" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/60 text-white pointer-events-none">
             <Loader2 className="size-5 animate-spin" />
