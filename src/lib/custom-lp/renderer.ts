@@ -58,6 +58,18 @@ export interface RenderCustomLpArgs {
    * styling-driven steuern können. `null` = unbekannt → 16/9.
    */
   videoOrientation?: "landscape" | "portrait" | "square" | null;
+  /**
+   * Globaler System-Platzhalter `{{pageUrl}}` — wird in der Custom-LP
+   * substituiert, damit Templates die abtippbare Kurzform der eigenen
+   * Lead-URL einbetten können (z.B. „Diese Seite: video.kunde.de/peter").
+   * NULL/undefined ⇒ Platzhalter bleibt leer (oder fällt auf inline-
+   * `{{pageUrl|fallback}}` zurück, wenn der Kunde einen gesetzt hat).
+   *
+   * System-Keys haben Vorrang vor gleichnamigen Lead-Daten — selbst wenn
+   * der Kunde versehentlich eine CSV-Spalte „pageUrl" hat, gewinnt der
+   * berechnete Wert.
+   */
+  pageUrl?: string | null;
 }
 
 /** HTML-escape minimum needed to prevent breaking attributes/text nodes. */
@@ -94,12 +106,32 @@ function safeScriptJson(value: unknown): string {
 
 const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_\-.]*)\s*(?:\|([^}]*))?\}\}/g;
 
+/**
+ * System-Context der dem Custom-LP-Renderer optional übergeben werden kann.
+ * Felder werden VOR Lead-Daten gematcht — siehe `resolvePlaceholder`.
+ *
+ * Wir spiegeln die Form aus `@/lib/placeholders/substitute.SubstitutionSystemContext`,
+ * importieren den Typ aber NICHT, weil der Renderer in einem rein client-
+ * sicheren Modul leben muss (kein DB-/Drizzle-Pulldown beim Bundle).
+ */
+interface CustomLpSystemContext {
+  pageUrl?: string | null;
+}
+
 /** Resolve a single placeholder against the lead data bag. */
 function resolvePlaceholder(
   key: string,
   fallback: string | undefined,
   leadData: Record<string, string>,
+  system?: CustomLpSystemContext,
 ): string {
+  // System-Platzhalter (z.B. `pageUrl`) GEWINNEN vor Lead-Daten — der
+  // berechnete Wert ist authoritativ. Fehlt der System-Wert, fällt der
+  // Lookup auf Lead-Daten / Fallback zurück (Bestandsverhalten).
+  if (system && key === "pageUrl") {
+    const v = system.pageUrl;
+    if (typeof v === "string" && v.length > 0) return v;
+  }
   if (Object.prototype.hasOwnProperty.call(leadData, key)) {
     const v = leadData[key];
     if (v !== undefined && v !== null && String(v).length > 0) return String(v);
@@ -131,10 +163,14 @@ function safeRanges(html: string): Array<[number, number]> {
  * Substitutes `{{key}}` / `{{key|fallback}}` tokens in the placeholder-safe
  * ranges of the input HTML. Substituted values are HTML-escaped so they
  * cannot break out of an attribute or inject markup.
+ *
+ * `system` enthält von der Pipeline berechnete Werte (z.B. `pageUrl`).
+ * System-Keys gewinnen vor Lead-Daten — siehe `resolvePlaceholder`.
  */
 function substitutePlaceholders(
   html: string,
   leadData: Record<string, string>,
+  system?: CustomLpSystemContext,
 ): string {
   const ranges = safeRanges(html);
   if (ranges.length === 0) return html;
@@ -148,7 +184,7 @@ function substitutePlaceholders(
     const replaced = slice.replace(
       PLACEHOLDER_RE,
       (_match, key: string, fallback?: string) => {
-        const value = resolvePlaceholder(key, fallback, leadData);
+        const value = resolvePlaceholder(key, fallback, leadData, system);
         return htmlEscape(value);
       },
     );
@@ -411,8 +447,13 @@ function buildAspectStyleSnippet(aspect: string): string {
 export function renderCustomLp(args: RenderCustomLpArgs): string {
   const baseHref = buildBaseHref(args.slug);
 
+  // System-Platzhalter (Paket A/E): `pageUrl` gewinnt vor Lead-Daten.
+  // NULL/undefined ⇒ kein System-Wert → Lead-Daten-Lookup wie bisher.
+  const system: CustomLpSystemContext | undefined =
+    args.pageUrl != null ? { pageUrl: args.pageUrl } : undefined;
+
   // 1. Placeholder substitution (skips script/style content).
-  let out = substitutePlaceholders(args.html, args.leadData);
+  let out = substitutePlaceholders(args.html, args.leadData, system);
 
   // 2. Video-Inject: leere <video src> mit der Lead-Video-URL füllen.
   out = injectVideoSources(out, {

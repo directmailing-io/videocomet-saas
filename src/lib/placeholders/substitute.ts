@@ -28,6 +28,52 @@ import type {
 } from "./types";
 
 /**
+ * System-Platzhalter sind reservierte Keys, die NICHT aus Lead-Daten
+ * stammen, sondern von der Pipeline pro Lead/Run berechnet werden
+ * (z.B. die Kurz-URL der Landingpage). System-Keys haben Vorrang vor
+ * gleichnamigen Lead-Daten — d.h. ein User kann keinen `pageUrl`-Wert
+ * aus dem CSV durchschieben, der die berechnete URL überschreibt.
+ *
+ * Wird zentral exportiert, damit Slug-Engine + UI-Validierung (Wizard)
+ * gegen dieselbe Liste prüfen können.
+ */
+export const SYSTEM_PLACEHOLDERS = ["pageUrl"] as const;
+export type SystemPlaceholderKey = (typeof SYSTEM_PLACEHOLDERS)[number];
+
+/**
+ * Erweiterter Substitution-Context. Lead-Daten sind weiterhin Pflicht;
+ * `system` enthält von der Pipeline berechnete Werte wie `pageUrl`.
+ *
+ * Felder sind alle optional — ein fehlender System-Wert bedeutet
+ * „nicht verfügbar", die normale Lookup-Kette greift dann (Lead-Daten
+ * oder Fallback). Ein explizit gesetzter `null`-Wert wird wie „nicht
+ * verfügbar" behandelt.
+ */
+export interface SubstitutionSystemContext {
+  /** Lead-Page-URL in Kurzform (ohne Protokoll). Berechnet via buildPageUrlShort. */
+  pageUrl?: string | null;
+}
+
+/**
+ * Liefert den aufgelösten System-Wert für einen Key — oder `null`, wenn
+ * der Key kein System-Key ist oder der Context den Wert nicht liefert.
+ *
+ * Case-sensitive: das Wording im Spec ist `{{pageUrl}}`. Wenn wir CI
+ * matchen würden, kollidieren wir potentiell mit Lead-Spalten "pageurl".
+ */
+function resolveSystemValue(
+  key: string,
+  system: SubstitutionSystemContext | undefined,
+): string | null {
+  if (!system) return null;
+  if (key === "pageUrl") {
+    const v = system.pageUrl;
+    return typeof v === "string" && v.length > 0 ? v : null;
+  }
+  return null;
+}
+
+/**
  * Helper: case-insensitive Lookup eines Wertes über `leadData`.
  * Liefert den ersten nicht-leeren Treffer oder `null`.
  */
@@ -81,7 +127,17 @@ function resolveValue(
   mapping: PlaceholderMapping | LegacyMapping | undefined,
   spanFallback?: string,
   inlineFallback?: string,
+  system?: SubstitutionSystemContext,
 ): string {
+  // System-Keys (z.B. `pageUrl`) gewinnen IMMER vor Lead-Daten — sie sind
+  // reserviert und werden von der Pipeline berechnet, nicht aus dem CSV
+  // gezogen. Wenn der System-Wert NICHT verfügbar ist (kein system-Arg
+  // oder Wert ist null/leer), fällt der Lookup auf die normale Lead-
+  // Daten-Kette zurück — so behält jeder bestehende Aufrufer ohne
+  // `system` sein altes Verhalten.
+  const sysVal = resolveSystemValue(key, system);
+  if (sysVal != null) return sysVal;
+
   // Mapping in der neuen Form: { column?, fallback? }
   if (mapping && !isLegacyMapping(mapping)) {
     const entry = (mapping as PlaceholderMapping)[key];
@@ -140,12 +196,25 @@ function escapeHtml(s: string): string {
  *
  * Niemals werfend — unbekannte Keys / leere Werte werden zum leeren String
  * (oder zum Fallback, sofern vorhanden).
+ *
+ * Backward-Compat: der optionale `system`-Parameter wurde mit Paket A
+ * eingeführt. Bestehende Aufrufer ohne `system` verhalten sich exakt wie
+ * vorher; System-Keys (siehe `SYSTEM_PLACEHOLDERS`) werden in dem Fall
+ * wie normale Lead-Keys aufgelöst (= leer, weil kein CSV-Feld so heißt).
+ *
+ * Resolution-Reihenfolge pro Token (kombiniert mit `resolveValue`):
+ *   1. System-Key über `system.pageUrl` etc. (wenn `system` gesetzt + Key matched)
+ *   2. Mapping-Eintrag (`column` → leadData, dann `fallback`)
+ *   3. leadData direkt (key === column, CI)
+ *   4. Inline-/Span-Fallback
+ *   5. ""
  */
 export function substitute(
   text: string | null | undefined,
   leadData: Record<string, string>,
   mapping: PlaceholderMapping | LegacyMapping | undefined,
   format: PlaceholderFormat,
+  system?: SubstitutionSystemContext,
 ): string {
   if (!text) return "";
 
@@ -154,7 +223,8 @@ export function substitute(
       // {{ key }} — Whitespace toleriert, Key: [a-zA-Z0-9_-]
       return text.replace(
         /\{\{\s*([\w-]+)\s*\}\}/g,
-        (_m, key: string) => resolveValue(key, leadData, mapping),
+        (_m, key: string) =>
+          resolveValue(key, leadData, mapping, undefined, undefined, system),
       );
     }
 
@@ -163,7 +233,7 @@ export function substitute(
       return text.replace(
         /\{\{\s*([a-zA-Z0-9_.]+)\s*(?:\|\s*([^}]*?)\s*)?\}\}/g,
         (_m, key: string, rawFallback?: string) =>
-          resolveValue(key, leadData, mapping, undefined, rawFallback),
+          resolveValue(key, leadData, mapping, undefined, rawFallback, system),
       );
     }
 
@@ -179,6 +249,8 @@ export function substitute(
             leadData,
             mapping,
             fb ? fb[1] : undefined,
+            undefined,
+            system,
           );
           return escapeHtml(value);
         },
@@ -186,7 +258,10 @@ export function substitute(
       // 2. Roh-{{key}} im HTML zusätzlich auflösen (Backward-Compat).
       out = out.replace(
         /\{\{\s*([\w-]+)\s*\}\}/g,
-        (_m, key: string) => escapeHtml(resolveValue(key, leadData, mapping)),
+        (_m, key: string) =>
+          escapeHtml(
+            resolveValue(key, leadData, mapping, undefined, undefined, system),
+          ),
       );
       return out;
     }
@@ -195,7 +270,8 @@ export function substitute(
       // { key } — Whitespace toleriert, Key: [a-zA-Z0-9_]
       return text.replace(
         /\{\s*([a-zA-Z0-9_]+)\s*\}/g,
-        (_m, key: string) => resolveValue(key, leadData, mapping),
+        (_m, key: string) =>
+          resolveValue(key, leadData, mapping, undefined, undefined, system),
       );
     }
 

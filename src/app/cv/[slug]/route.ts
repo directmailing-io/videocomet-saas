@@ -41,6 +41,7 @@ import { getDomainByHostname } from "@/lib/db/queries/user-domains";
 import { resolveCustomDomainHost } from "@/lib/custom-domain-host";
 import { getCustomLpStorageEnv } from "@/lib/custom-lp/storage";
 import { bunnyFetch, BunnyApiError } from "@/lib/bunny/_fetch";
+import { buildPageUrlShort } from "@/lib/placeholders/page-url";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -107,6 +108,15 @@ export async function GET(
   }
 
   // 3. Sanitise + render + inject tracking-bridge bootstrap.
+  // pageUrl-Short für den globalen `{{pageUrl}}`-Placeholder (Paket A/E).
+  // `hostParam` wird vom Middleware nur bei Custom-Domain-Requests gesetzt;
+  // sonst läuft die Custom-LP auf `lp.videocomet.de` (Default-Sandbox).
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    "https://app.videocomet.de";
+  const pageUrl = buildPageUrlShort(hostParam, slug, appUrl);
+
   let rewritten: string;
   try {
     const html = htmlBuffer.toString("utf-8");
@@ -121,6 +131,7 @@ export async function GET(
       videoMp4Url: context.videoMp4Url,
       thumbnailUrl: context.thumbnailUrl,
       videoOrientation: context.videoOrientation,
+      pageUrl,
     });
   } catch (err) {
     // eslint-disable-next-line no-console

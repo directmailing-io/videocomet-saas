@@ -29,6 +29,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toaster";
 import { ThumbnailFramePicker } from "@/components/editor/thumbnail-frame-picker";
+import {
+  ThumbnailImageEditor,
+  createDefaultThumbnailImage,
+} from "@/components/editor/thumbnail-image-editor";
+import type { CampaignThumbnailImage } from "@/lib/segments/types";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_SLUG_TEMPLATE,
@@ -92,6 +97,13 @@ export interface EditCampaignData {
     pdfQrEnabled: boolean;
     pdfThumbnailEnabled: boolean;
     pdfThumbnailFrameMs: number | null;
+    /**
+     * Paket C — Personalisiertes Vorschaubild. Optional, weil bestehende
+     * Server-Loader (vor Paket A) das Feld noch nicht selektieren. Wenn
+     * undefined behandeln wir es als „nicht konfiguriert".
+     */
+    thumbnailImageEnabled?: boolean;
+    thumbnailImage?: CampaignThumbnailImage | null;
   };
   webcams: EditCampaignWebcam[];
   templates: EditCampaignTemplate[];
@@ -116,6 +128,8 @@ interface FormState {
   pdfQrEnabled: boolean;
   pdfThumbnailEnabled: boolean;
   pdfThumbnailFrameMs: number | null;
+  thumbnailImageEnabled: boolean;
+  thumbnailImage: CampaignThumbnailImage | null;
 }
 
 type PatchBody = Partial<{
@@ -134,6 +148,8 @@ type PatchBody = Partial<{
   pdfQrEnabled: boolean;
   pdfThumbnailEnabled: boolean;
   pdfThumbnailFrameMs: number | null;
+  thumbnailImageEnabled: boolean;
+  thumbnailImage: CampaignThumbnailImage | null;
 }>;
 
 export function EditCampaignForm({ data }: { data: EditCampaignData }) {
@@ -156,6 +172,8 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
     pdfQrEnabled: data.campaign.pdfQrEnabled,
     pdfThumbnailEnabled: data.campaign.pdfThumbnailEnabled,
     pdfThumbnailFrameMs: data.campaign.pdfThumbnailFrameMs,
+    thumbnailImageEnabled: data.campaign.thumbnailImageEnabled ?? false,
+    thumbnailImage: data.campaign.thumbnailImage ?? null,
   });
 
   const [saving, setSaving] = React.useState(false);
@@ -230,6 +248,9 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
           pdfQrEnabled: state.pdfQrEnabled,
           pdfThumbnailEnabled: state.pdfThumbnailEnabled,
           pdfThumbnailFrameMs: state.pdfThumbnailFrameMs,
+          // Paket C — Backend ignoriert, solange API-Schema noch ungepatcht.
+          thumbnailImageEnabled: state.thumbnailImageEnabled,
+          thumbnailImage: state.thumbnailImage,
         }),
       });
       if (!res.ok) {
@@ -789,6 +810,97 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
                     />
                   </div>
                 )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Paket C — Vorschaubild im Brief (Edit-Spiegel der Wizard-Logik) */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Vorschaubild im Brief</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink">
+                  Personalisiertes Vorschaubild
+                </p>
+                <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+                  Statt Video-Frame. Mit Platzhaltern wie{" "}
+                  <code className="font-mono text-brand-deep">
+                    {"{{firstName}}"}
+                  </code>
+                  ,{" "}
+                  <code className="font-mono text-brand-deep">
+                    {"{{pageUrl}}"}
+                  </code>{" "}
+                  pro Lead unterschiedlich.
+                </p>
+              </div>
+              <Switch
+                checked={state.thumbnailImageEnabled}
+                onCheckedChange={(v) => {
+                  // Toggle-ON ohne bestehendes Layout → Default-Setup
+                  // einspielen, damit der Editor sofort etwas zeigt.
+                  // Bestehende Layouts bleiben beim Off-Toggle erhalten,
+                  // sodass Re-Aktivierung den gleichen Stand zeigt.
+                  if (v && state.thumbnailImage === null) {
+                    const seed = createDefaultThumbnailImage();
+                    setState((s) => ({
+                      ...s,
+                      thumbnailImageEnabled: true,
+                      thumbnailImage: seed,
+                    }));
+                    void patchAndSync(
+                      { thumbnailImageEnabled: true, thumbnailImage: seed },
+                      "Vorschaubild",
+                    );
+                    return;
+                  }
+                  setState((s) => ({ ...s, thumbnailImageEnabled: v }));
+                  void patchAndSync(
+                    { thumbnailImageEnabled: v },
+                    "Vorschaubild",
+                  );
+                }}
+              />
+            </div>
+
+            {state.thumbnailImageEnabled && state.thumbnailImage && (
+              <div className="mt-5 pt-5 border-t border-line">
+                <ThumbnailImageEditor
+                  value={state.thumbnailImage}
+                  onChange={(next) => {
+                    // Auto-Save bewusst NICHT pro Pixel-Tick: jede Drag-/
+                    // Resize-Bewegung würde sonst einen PATCH triggern.
+                    // Wir halten lokal und der „Layout speichern"-Button
+                    // (unten) bzw. der globale Save oben rechts pushen.
+                    setState((s) => ({ ...s, thumbnailImage: next }));
+                  }}
+                  mediaItems={data.media.map((m) => ({
+                    id: m.id,
+                    name: m.name,
+                    publicUrl: m.publicUrl,
+                    type: m.type,
+                  }))}
+                />
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    iconLeft={<Save className="size-4" />}
+                    loading={savingField === "Vorschaubild-Layout"}
+                    onClick={() => {
+                      void patchAndSync(
+                        { thumbnailImage: state.thumbnailImage },
+                        "Vorschaubild-Layout",
+                      );
+                    }}
+                  >
+                    Layout speichern
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>

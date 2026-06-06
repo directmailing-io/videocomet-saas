@@ -34,6 +34,7 @@ import {
 import { getDomainByHostname } from "@/lib/db/queries/user-domains";
 import { getCustomLpStorageEnv } from "@/lib/custom-lp/storage";
 import { bunnyFetch, BunnyApiError } from "@/lib/bunny/_fetch";
+import { buildPageUrlShort } from "@/lib/placeholders/page-url";
 
 // Siehe Begründung in /cv/[slug]/route.ts — absolute URL umgeht das
 // Middleware-Rewrite auf lp/Custom-Domain.
@@ -129,6 +130,7 @@ function errorPage(status: number, title: string): Response {
 async function renderCustomLpResponseInline(
   slug: string,
   context: CustomLpPublicContext,
+  pageUrl: string | null,
 ): Promise<Response> {
   let htmlBuffer: Buffer;
   try {
@@ -158,6 +160,7 @@ async function renderCustomLpResponseInline(
       videoMp4Url: context.videoMp4Url,
       thumbnailUrl: context.thumbnailUrl,
       videoOrientation: context.videoOrientation,
+      pageUrl,
     });
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -255,7 +258,19 @@ export async function GET(
 
   if (await hasCustomLpPin(slug, domainId)) {
     const context = await loadCustomLpContext(slug, hostParam);
-    if (context) return renderCustomLpResponseInline(slug, context);
+    if (context) {
+      // pageUrl-Short für den globalen `{{pageUrl}}`-Placeholder.
+      // `hostParam` ist vom Middleware bereits gesetzt, wenn der Request
+      // über eine Custom-Domain reinkam (→ `video.kunde.de/<slug>`).
+      // Ohne hostParam läuft der Request auf der Default-Domain
+      // (`app.videocomet.de/v/<slug>`).
+      const appUrl =
+        process.env.NEXT_PUBLIC_APP_URL ??
+        process.env.APP_URL ??
+        "https://app.videocomet.de";
+      const pageUrl = buildPageUrlShort(hostParam, slug, appUrl);
+      return renderCustomLpResponseInline(slug, context, pageUrl);
+    }
     // hasCustomLpPin sagte ja, der Context-Load liefert aber nichts → der
     // Lead existiert, hat aber kein bzw. ein anderes Custom-LP-Template
     // gebunden. Defensiv weiter zum Block-LP-Pfad, der den gleichen

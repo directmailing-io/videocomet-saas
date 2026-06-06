@@ -15,11 +15,34 @@
  * Wichtig: Diese Datei ist server-safe (keine "use client"). Wird in
  * Worker + API + UI-Validierung gleichermaßen genutzt.
  */
-import { substitute } from "./placeholders/substitute";
+import { SYSTEM_PLACEHOLDERS, substitute } from "./placeholders/substitute";
 import type {
   LegacyMapping,
   PlaceholderMapping,
 } from "./placeholders/types";
+
+/**
+ * System-Keys die in einem Slug-Template KEINE Bedeutung haben dürfen.
+ * `pageUrl` wäre zirkulär (der Slug IST Teil der Page-URL), die anderen
+ * werden präventiv blockiert für künftige System-Placeholder.
+ *
+ * Vorgehen: vor der zentralen `substitute()` werden diese Tokens aus dem
+ * Template gestrichen (durch leeren String ersetzt). Damit crasht der
+ * Slug-Render nicht und produziert auch keinen `Object Object`-artigen
+ * Müll, falls jemand versehentlich `{pageUrl}` einträgt.
+ */
+const SLUG_RESERVED_SYSTEM_KEYS = new Set<string>(SYSTEM_PLACEHOLDERS);
+
+/**
+ * Entfernt System-Tokens (`{pageUrl}`) aus einem Slug-Template, BEVOR
+ * die zentrale Substitution greift. Whitespace toleriert.
+ */
+function stripSystemTokens(template: string): string {
+  return template.replace(
+    /\{\s*([a-zA-Z0-9_]+)\s*\}/g,
+    (m, key: string) => (SLUG_RESERVED_SYSTEM_KEYS.has(key) ? "" : m),
+  );
+}
 
 // ── Basis-Slugify ──────────────────────────────────────────────────────────
 
@@ -154,7 +177,11 @@ export function renderSlugTemplate(
   data: Record<string, string | null | undefined>,
   mapping?: PlaceholderMapping | LegacyMapping,
 ): string {
-  const tpl = template && template.trim() !== "" ? template : DEFAULT_SLUG_TEMPLATE;
+  const rawTpl = template && template.trim() !== "" ? template : DEFAULT_SLUG_TEMPLATE;
+  // System-Tokens (`{pageUrl}`) wären zirkulär — der Slug ist Bestandteil
+  // der pageUrl. Vor der Substitution rausstreichen, damit kein „Object
+  // Object"-artiger Müll oder Endless-Recursion-Bug entsteht.
+  const tpl = stripSystemTokens(rawTpl);
   // Aliase + null-safe in einen reinen Record<string,string> giessen.
   const stringData: Record<string, string> = {};
   for (const [k, v] of Object.entries(data)) {

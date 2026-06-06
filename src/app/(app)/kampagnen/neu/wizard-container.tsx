@@ -52,7 +52,7 @@ export interface WizardDomain {
   kind: string;
 }
 
-import type { Segment } from "@/lib/segments/types";
+import type { CampaignThumbnailImage, Segment } from "@/lib/segments/types";
 
 /** @deprecated kept for back-compat with older callsites — use Segment. */
 export interface WizardSegment {
@@ -84,6 +84,14 @@ export interface WizardState {
   pdfQrEnabled: boolean;
   pdfThumbnailEnabled: boolean;
   pdfThumbnailFrameMs: number | null;
+  /**
+   * Paket C — Thumbnail-Generator (Personalisiertes Vorschaubild).
+   * Wird im PDF-Brief statt eines Video-Frames eingebettet. Beide Felder
+   * werden bei Submit mitgeschickt; das Backend ignoriert sie, solange
+   * Paket A (DB-Migration + API-Schema) noch nicht durchgeschaltet ist.
+   */
+  thumbnailImageEnabled: boolean;
+  thumbnailImage: CampaignThumbnailImage | null;
 }
 
 export interface MediathekItem {
@@ -154,6 +162,8 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
     pdfQrEnabled: false,
     pdfThumbnailEnabled: false,
     pdfThumbnailFrameMs: null,
+    thumbnailImageEnabled: false,
+    thumbnailImage: null,
   });
 
   const update = React.useCallback((patch: Partial<WizardState>) => {
@@ -217,6 +227,11 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
           pdfQrEnabled: state.pdfQrEnabled,
           pdfThumbnailEnabled: state.pdfThumbnailEnabled,
           pdfThumbnailFrameMs: state.pdfThumbnailFrameMs,
+          // Paket C: Frontend sendet immer mit; Backend-Validation kommt
+          // mit Paket A/E nach. Solange das Schema das Feld nicht kennt,
+          // wird es vom API-Handler einfach verworfen.
+          thumbnailImageEnabled: state.thumbnailImageEnabled,
+          thumbnailImage: state.thumbnailImage,
         }),
       });
       if (!res.ok) {
@@ -389,6 +404,9 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
               frameMs={state.pdfThumbnailFrameMs}
               webcamMediaId={state.webcamMediaId}
               webcamDurationSec={wc?.durationSec ?? null}
+              thumbnailImageEnabled={state.thumbnailImageEnabled}
+              thumbnailImage={state.thumbnailImage}
+              mediaItems={initialData.media ?? []}
               onChange={(patch) => update(patch)}
             />
           );

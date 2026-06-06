@@ -6,6 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { PlaceholderHelper } from "@/components/editor/placeholder-helper";
 import { ThumbnailFramePicker } from "@/components/editor/thumbnail-frame-picker";
+import {
+  ThumbnailImageEditor,
+  createDefaultThumbnailImage,
+} from "@/components/editor/thumbnail-image-editor";
+import type { SegmentEditorMediaItem } from "@/components/editor/segment-editor";
+import type { CampaignThumbnailImage } from "@/lib/segments/types";
 
 export interface WizardStep5PdfPatch {
   pdfEnabled?: boolean;
@@ -13,6 +19,8 @@ export interface WizardStep5PdfPatch {
   pdfQrEnabled?: boolean;
   pdfThumbnailEnabled?: boolean;
   pdfThumbnailFrameMs?: number | null;
+  thumbnailImageEnabled?: boolean;
+  thumbnailImage?: CampaignThumbnailImage | null;
 }
 
 export interface WizardStep5Props {
@@ -26,6 +34,10 @@ export interface WizardStep5Props {
   webcamMediaId: string | null;
   /** Duration of the selected webcam in seconds — for slider max + presets. */
   webcamDurationSec: number | null;
+  /** Paket C — Personalisiertes Vorschaubild. */
+  thumbnailImageEnabled: boolean;
+  thumbnailImage: CampaignThumbnailImage | null;
+  mediaItems: SegmentEditorMediaItem[];
   onChange: (patch: WizardStep5PdfPatch) => void;
 }
 
@@ -37,8 +49,26 @@ export function WizardStep5Pdf({
   frameMs,
   webcamMediaId,
   webcamDurationSec,
+  thumbnailImageEnabled,
+  thumbnailImage,
+  mediaItems,
   onChange,
 }: WizardStep5Props) {
+  // Wenn der User den Toggle einschaltet ohne dass schon eine Config
+  // existiert, initialisieren wir mit dem Default-Layer-Setup (Logo-
+  // Platzhalter + Begrüssung + URL-Zeile). Sobald die Config existiert,
+  // halten wir sie persistent — auch wenn der Toggle nochmal off geht.
+  // So gehen Layouts beim versehentlichen Toggeln nicht verloren.
+  function handleThumbnailToggle(next: boolean) {
+    if (next && thumbnailImage === null) {
+      onChange({
+        thumbnailImageEnabled: true,
+        thumbnailImage: createDefaultThumbnailImage(),
+      });
+      return;
+    }
+    onChange({ thumbnailImageEnabled: next });
+  }
   return (
     <div>
       <h2 className="text-lg font-semibold text-ink mb-1">PDF-Brief</h2>
@@ -156,6 +186,46 @@ export function WizardStep5Pdf({
           )}
         </div>
       )}
+
+      {/* ── Paket C — Personalisiertes Vorschaubild ─────────────────────── */}
+      {/* Sekundärer Card-Block (NICHT Tab), bewusst UNTER den bestehenden
+          PDF-Einstellungen, damit das Verhältnis „Standard-Frame vs.
+          Custom-Thumbnail" für den User klar ist (advanced/opt-in). */}
+      <div className="mt-4 bg-surface border border-line rounded-squircle-md p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-ink">
+              Vorschaubild im Brief
+            </p>
+            <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+              Personalisiertes Vorschaubild statt Video-Frame. Mit
+              Platzhaltern wie{" "}
+              <code className="font-mono text-brand-deep">
+                {"{{firstName}}"}
+              </code>
+              ,{" "}
+              <code className="font-mono text-brand-deep">
+                {"{{pageUrl}}"}
+              </code>{" "}
+              pro Lead unterschiedlich.
+            </p>
+          </div>
+          <Switch
+            checked={thumbnailImageEnabled}
+            onCheckedChange={handleThumbnailToggle}
+          />
+        </div>
+
+        {thumbnailImageEnabled && thumbnailImage && (
+          <div className="mt-5 pt-5 border-t border-line">
+            <ThumbnailImageEditor
+              value={thumbnailImage}
+              onChange={(next) => onChange({ thumbnailImage: next })}
+              mediaItems={mediaItems}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

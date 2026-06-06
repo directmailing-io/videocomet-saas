@@ -1,5 +1,6 @@
 import { pgTable, uuid, text, timestamp, boolean, integer, smallint, jsonb, pgEnum, index, unique, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { CampaignThumbnailImage } from "@/lib/segments/types";
 
 // ── Enums ───────────────────────────────────────────────────────────────────
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
@@ -153,6 +154,14 @@ export const campaigns = pgTable("campaigns", {
   pdfThumbnailEnabled: boolean("pdf_thumbnail_enabled").notNull().default(false),
   pdfThumbnailFrameMs: integer("pdf_thumbnail_frame_ms"),
 
+  // ── Thumbnail-Generator (Migration 0018) ─────────────────────────────
+  // Feature-Toggle + Slide-artige Konfiguration für ein eigenes Thumbnail-
+  // Bild der Kampagne. Wenn `thumbnailImage` Platzhalter enthält, rendert
+  // die Pipeline pro Lead (siehe `leads.customThumbnailUrl`); sonst genau
+  // einmal pro Run (siehe `runs.sharedThumbnailUrl`).
+  thumbnailImageEnabled: boolean("thumbnail_image_enabled").notNull().default(false),
+  thumbnailImage: jsonb("thumbnail_image").$type<CampaignThumbnailImage | null>(),
+
   /**
    * Optionaler Tenant-Suffix für Lead-Slugs dieser Kampagne (Migration 0014).
    * Format: `^[a-z0-9-]{1,32}$` (CHECK-Constraint). NULL = kein Suffix.
@@ -225,6 +234,14 @@ export const runs = pgTable("runs", {
   // resolved gerade).
   sharedBunnyVideoId: text("shared_bunny_video_id"),
   sharedVideoUrl: text("shared_video_url"),
+  /**
+   * Doppelte Nutzung (Migration 0012 + 0018):
+   *   - 0012: Bunny-Stream-Thumbnail des Shared-Webcam-Videos.
+   *   - 0018: Geteiltes Custom-Thumbnail aus dem Kampagnen-Thumbnail-
+   *     Generator, wenn dessen Template KEINE Lead-Platzhalter enthält
+   *     (ein Bild für alle Leads). Welche Bedeutung greift, ergibt sich
+   *     aus `campaigns.thumbnailImageEnabled` + Render-Mode.
+   */
   sharedThumbnailUrl: text("shared_thumbnail_url"),
   // Optimistic-Lock: erster Worker, der das setzt, ist verantwortlich fuer
   // den Upload. Andere Worker pollen `sharedBunnyVideoId`. Lock wird als
@@ -279,6 +296,14 @@ export const leads = pgTable("leads", {
   bunnyVideoId: text("bunny_video_id"),
   videoUrl: text("video_url"),
   thumbnailUrl: text("thumbnail_url"),
+  /**
+   * Per-Lead-gerendertes Custom-Thumbnail aus dem Kampagnen-Thumbnail-
+   * Generator (Migration 0018). Nur belegt, wenn das Kampagnen-Thumbnail-
+   * Template Platzhalter enthält und damit pro Lead personalisiert werden
+   * muss; sonst wird das geteilte Bild aus `runs.sharedThumbnailUrl`
+   * verwendet. NULL = Feature inaktiv ODER Lead nutzt den Run-Cache.
+   */
+  customThumbnailUrl: text("custom_thumbnail_url"),
   pdfUrl: text("pdf_url"),
   pdfExpiresAt: timestamp("pdf_expires_at", { withTimezone: true }),
 

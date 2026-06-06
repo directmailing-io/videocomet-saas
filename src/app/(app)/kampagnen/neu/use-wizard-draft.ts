@@ -95,7 +95,7 @@ function storageKey(userId: string): string {
 function isWizardState(value: unknown): value is WizardState {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
-  return (
+  const baseOk =
     typeof v.name === "string" &&
     (v.webcamMediaId === null || typeof v.webcamMediaId === "string") &&
     (v.mode === "webcam-only" || v.mode === "with-presentation") &&
@@ -115,8 +115,19 @@ function isWizardState(value: unknown): value is WizardState {
     typeof v.pdfQrEnabled === "boolean" &&
     typeof v.pdfThumbnailEnabled === "boolean" &&
     (v.pdfThumbnailFrameMs === null ||
-      typeof v.pdfThumbnailFrameMs === "number")
-  );
+      typeof v.pdfThumbnailFrameMs === "number");
+  if (!baseOk) return false;
+  // Paket-C-Felder: optional für Forward/Backward-Compat. Alte Drafts
+  // ohne diese Keys werden akzeptiert; beim Restore fallen wir in der
+  // Container-Komponente auf die Default-Initialwerte zurück.
+  const thumbEnabledOk =
+    v.thumbnailImageEnabled === undefined ||
+    typeof v.thumbnailImageEnabled === "boolean";
+  const thumbImgOk =
+    v.thumbnailImage === undefined ||
+    v.thumbnailImage === null ||
+    (typeof v.thumbnailImage === "object" && v.thumbnailImage !== null);
+  return thumbEnabledOk && thumbImgOk;
 }
 
 function isEnvelope(value: unknown): value is DraftEnvelope {
@@ -168,7 +179,9 @@ function isDefaultState(state: WizardState): boolean {
     state.pdfGoogleDocsUrl === "" &&
     !state.pdfQrEnabled &&
     !state.pdfThumbnailEnabled &&
-    state.pdfThumbnailFrameMs === null
+    state.pdfThumbnailFrameMs === null &&
+    !state.thumbnailImageEnabled &&
+    state.thumbnailImage === null
   );
 }
 
@@ -204,7 +217,16 @@ export function useWizardDraft(
   // Banner: Fortsetzen
   const restoreDraft = React.useCallback(() => {
     if (!existingDraft) return;
-    io.setState(existingDraft.state);
+    // Forward-Compat: alte Drafts (vor Paket C) hatten keine thumbnail-
+    // Felder. Wir füllen sie defensiv mit Defaults, sonst greift `undefined`
+    // bis in den Editor durch.
+    const migrated: WizardState = {
+      ...existingDraft.state,
+      thumbnailImageEnabled:
+        existingDraft.state.thumbnailImageEnabled ?? false,
+      thumbnailImage: existingDraft.state.thumbnailImage ?? null,
+    };
+    io.setState(migrated);
     io.setStep(existingDraft.step);
     setExistingDraft(null);
     setStatus("saved");

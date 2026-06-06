@@ -13,7 +13,10 @@
  * an EINER Stelle lebt.
  */
 
-import { substitute } from "../placeholders/substitute";
+import {
+  substitute,
+  type SubstitutionSystemContext,
+} from "../placeholders/substitute";
 import type {
   LegacyMapping,
   PlaceholderMapping,
@@ -29,8 +32,9 @@ export function resolvePlaceholders(
   html: string,
   leadData: Record<string, string>,
   mapping?: PlaceholderMapping | LegacyMapping,
+  system?: SubstitutionSystemContext,
 ): string {
-  return substitute(html, leadData, mapping, "tiptap-span");
+  return substitute(html, leadData, mapping, "tiptap-span", system);
 }
 
 /**

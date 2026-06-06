@@ -235,6 +235,25 @@ export interface SlideSegment extends SegmentBase {
   layers: Layer[];
 }
 
+/**
+ * Thumbnail-Bild einer Kampagne (Migration 0018).
+ *
+ * Strukturell identisch zur `SlideSegment`-Konfiguration (Background +
+ * Layers), aber OHNE `durationMs` / `kind` / `id` — das Thumbnail ist
+ * ein einzelnes statisches Bild, kein Segment im Timeline-Sinn. Wir
+ * re-usen denselben Stage-Bezugsrahmen 1280×720 und dieselben Layer-
+ * Typen, damit Editor und Render-Pipeline `SlideSegment`-Code direkt
+ * teilen können.
+ *
+ * Wird in `campaigns.thumbnail_image` als JSONB persistiert. NULL =
+ * Thumbnail-Generator deaktiviert oder noch nicht konfiguriert
+ * (Feature-Toggle: `campaigns.thumbnail_image_enabled`).
+ */
+export interface CampaignThumbnailImage {
+  background: SlideBackground;
+  layers: Layer[];
+}
+
 /** Diskriminierte Union aller Segment-Varianten. */
 export type Segment =
   | TextSegment

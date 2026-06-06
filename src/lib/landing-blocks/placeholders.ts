@@ -23,7 +23,10 @@
  */
 
 import type { LeadData } from "./types";
-import { substitute } from "../placeholders/substitute";
+import {
+  substitute,
+  type SubstitutionSystemContext,
+} from "../placeholders/substitute";
 import type {
   LegacyMapping,
   PlaceholderMapping,
@@ -46,14 +49,25 @@ function toStringMap(data: LeadData): Record<string, string> {
 /**
  * Replace `{{key}}` and `{{key|fallback}}` markers in `text` using `data`.
  * Returns the original string unchanged when no markers exist.
+ *
+ * Der optionale `system`-Parameter (Paket A/E) ermöglicht globale System-
+ * Platzhalter wie `{{pageUrl}}`. Bestehende Aufrufer ohne `system` bleiben
+ * vollständig backward-compatible.
  */
 export function renderPlaceholders(
   text: string | null | undefined,
   data: LeadData,
   mapping?: PlaceholderMapping | LegacyMapping,
+  system?: SubstitutionSystemContext,
 ): string {
   if (!text) return "";
-  return substitute(text, toStringMap(data), mapping, "double-brace-fallback");
+  return substitute(
+    text,
+    toStringMap(data),
+    mapping,
+    "double-brace-fallback",
+    system,
+  );
 }
 
 /**
@@ -65,7 +79,8 @@ export function renderPlaceholdersOr(
   data: LeadData,
   defaultValue: string,
   mapping?: PlaceholderMapping | LegacyMapping,
+  system?: SubstitutionSystemContext,
 ): string {
-  const out = renderPlaceholders(text, data, mapping);
+  const out = renderPlaceholders(text, data, mapping, system);
   return out.length > 0 ? out : defaultValue;
 }

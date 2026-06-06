@@ -34,7 +34,25 @@ export interface DocxModifyInput {
    */
   vars: Record<string, string>;
   qrPngPath: string | null;
+  /**
+   * Legacy: Pfad zum extrahierten Video-Frame (JPG). Wird genutzt, falls
+   * der neue Thumbnail-Generator (Paket E) KEIN Lead- bzw. Run-Thumbnail
+   * liefert. Wenn alle drei Quellen leer sind, bleibt der Bild-Slot im
+   * Brief leer (Bestandsverhalten bei keinem Video).
+   */
   thumbJpgPath: string | null;
+  /**
+   * Personalisiertes Thumbnail-PNG pro Lead (Thumbnail-Generator
+   * `leads.customThumbnailUrl`). Wenn gesetzt, hat es die höchste Prio
+   * über alle anderen Quellen.
+   */
+  customThumbnailUrl?: string | null;
+  /**
+   * Geteiltes Thumbnail-PNG pro Run (Thumbnail-Generator
+   * `runs.sharedThumbnailUrl`). Wird verwendet, wenn das Template keine
+   * Platzhalter enthält und damit für alle Leads identisch ist.
+   */
+  sharedThumbnailUrl?: string | null;
 }
 
 export interface DocxModifyOutput {
@@ -43,6 +61,14 @@ export interface DocxModifyOutput {
   qrReplaced: boolean;
   /** true when at least one media file matched the thumb marker hash. */
   thumbReplaced: boolean;
+  /**
+   * Quelle des eingebetteten Thumbnails — für Telemetry / Pipeline-Events.
+   *  - `custom`     : personalisiertes Thumbnail aus `customThumbnailUrl`
+   *  - `shared`     : geteiltes Thumbnail aus `sharedThumbnailUrl`
+   *  - `video-frame`: Legacy-Video-Frame (`thumbJpgPath`)
+   *  - `none`       : keine Quelle vorhanden, Bild-Slot bleibt leer
+   */
+  thumbSource: "custom" | "shared" | "video-frame" | "none";
 }
 
 /**
@@ -74,6 +100,67 @@ export function _clearMarkerHashCache(): void {
   cachedThumbSha = null;
 }
 
+/**
+ * Lädt eine URL und liefert den Body als Buffer. Genutzt, um die Bunny-
+ * gehosteten Thumbnail-PNGs (Paket E) in den DOCX-Stream einzuziehen.
+ */
+async function fetchAsBuffer(url: string): Promise<Buffer> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(
+      `thumbnail fetch HTTP ${res.status} ${res.statusText} url=${url}`,
+    );
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/**
+ * Wählt nach Priorität die Quelle des einzubettenden Thumbnails:
+ *   1. customThumbnailUrl (personalisiertes PNG pro Lead)
+ *   2. sharedThumbnailUrl (geteiltes PNG pro Run, ohne Platzhalter)
+ *   3. thumbJpgPath       (Legacy-Video-Frame-Extract)
+ *   4. null               (Bild-Slot bleibt leer)
+ *
+ * Fehler beim Bunny-Fetch eines Generator-Bildes werden gelogged und
+ * fallen STILLE auf die nächste Quelle zurück — der Brief soll trotzdem
+ * generiert werden, selbst wenn das hübsche Custom-Thumbnail nicht
+ * erreichbar ist.
+ */
+async function resolveThumbBytes(input: DocxModifyInput): Promise<
+  | {
+      source: "custom" | "shared" | "video-frame";
+      bytes: Buffer;
+      contentType: "image/png" | "image/jpeg";
+    }
+  | { source: "none" }
+> {
+  if (input.customThumbnailUrl) {
+    try {
+      const bytes = await fetchAsBuffer(input.customThumbnailUrl);
+      return { source: "custom", bytes, contentType: "image/png" };
+    } catch (err) {
+      console.warn(
+        `[docx-modify] customThumbnailUrl fetch failed (${(err as Error).message}); falling back to shared/video-frame`,
+      );
+    }
+  }
+  if (input.sharedThumbnailUrl) {
+    try {
+      const bytes = await fetchAsBuffer(input.sharedThumbnailUrl);
+      return { source: "shared", bytes, contentType: "image/png" };
+    } catch (err) {
+      console.warn(
+        `[docx-modify] sharedThumbnailUrl fetch failed (${(err as Error).message}); falling back to video-frame`,
+      );
+    }
+  }
+  if (input.thumbJpgPath) {
+    const bytes = await readFile(input.thumbJpgPath);
+    return { source: "video-frame", bytes, contentType: "image/jpeg" };
+  }
+  return { source: "none" };
+}
+
 export async function runDocxModify(
   input: DocxModifyInput,
 ): Promise<DocxModifyOutput> {
@@ -100,17 +187,22 @@ export async function runDocxModify(
     });
   }
 
-  // 5. Thumb-Marker swap. Dimensions-Fallback (640x360).
+  // 5. Thumb-Marker swap. Quelle nach Priorität wählen (Paket E):
+  //    customThumbnailUrl > sharedThumbnailUrl > thumbJpgPath > none.
+  //    Dimensions-Fallback bleibt 640x360 — das DOCX-Template wurde mit
+  //    diesem Slot-Format angelegt.
   let thumbReplaced = false;
-  if (input.thumbJpgPath) {
+  let thumbSource: DocxModifyOutput["thumbSource"] = "none";
+  const resolved = await resolveThumbBytes(input);
+  if (resolved.source !== "none") {
     const targetSha = await getThumbMarkerSha();
-    const thumbBytes = await readFile(input.thumbJpgPath);
     thumbReplaced = replaceImageByHash(zip, {
       targetSha256: targetSha,
-      newImageBuffer: thumbBytes,
-      contentType: "image/jpeg",
+      newImageBuffer: resolved.bytes,
+      contentType: resolved.contentType,
       matchDimensions: { width: 640, height: 360 },
     });
+    thumbSource = resolved.source;
   }
 
   // 6. Serialise + write to outDir.
@@ -118,5 +210,5 @@ export async function runDocxModify(
   const outPath = join(input.outDir, "letter.docx");
   await writeFile(outPath, outBuffer);
 
-  return { docxPath: outPath, qrReplaced, thumbReplaced };
+  return { docxPath: outPath, qrReplaced, thumbReplaced, thumbSource };
 }

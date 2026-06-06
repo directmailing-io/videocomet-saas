@@ -305,6 +305,96 @@ export async function updateRunCounts(
   return updateRun(runId, userId, patch);
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// ── Shared Thumbnail (Paket D, Thumbnail-Generator) ──────────────────────
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Liest die aktuell für den Run gecachte Shared-Thumbnail-URL aus dem
+ * Kampagnen-Thumbnail-Generator. NULL = noch nicht erzeugt.
+ *
+ * ACHTUNG: `runs.sharedThumbnailUrl` ist eine *poly*-Spalte:
+ *   - In webcam-only Runs hält der `runVideoResolveShared`-Pfad hier den
+ *     Bunny-Stream-Thumbnail des geteilten Webcam-Videos.
+ *   - In Runs mit aktivem Thumbnail-Generator (`campaigns.thumbnail_image_
+ *     enabled = true`) hält dieselbe Spalte das vom Generator gerenderte
+ *     Custom-Thumbnail (das, was wir hier lesen).
+ * Welcher Wert gilt, entscheidet das Lesen-aus-Kontext (Pipeline kennt
+ * `campaign.thumbnailImageEnabled`). Deswegen liefern wir hier nur den
+ * Roh-Wert; die Pipeline-Stage entscheidet, ob das die richtige Bedeutung
+ * hat.
+ */
+export async function getSharedThumbnailUrl(
+  runId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ url: runs.sharedThumbnailUrl })
+    .from(runs)
+    .where(eq(runs.id, runId))
+    .limit(1);
+  return row?.url ?? null;
+}
+
+/**
+ * Schreibt die geteilte Thumbnail-URL für den Run idempotent. Wird vom
+ * Lock-Owner nach erfolgreichem Render+Upload aufgerufen.
+ *
+ * Wir nutzen einen einfachen UPDATE — das WHERE-Filter auf NULL würde
+ * uns vor späten Doppelschreibungen schützen, ist aber problematisch
+ * (siehe Polymorphie oben: in webcam-only Runs ist die Spalte evtl.
+ * schon vom Shared-Video belegt). Deshalb: bedingungsloses UPDATE. Race-
+ * sicher ist die Stage durch den `pg_try_advisory_xact_lock` in
+ * `claimSharedThumbnailRender()` davor.
+ */
+export async function setSharedThumbnailUrl(
+  runId: string,
+  url: string,
+): Promise<void> {
+  await db
+    .update(runs)
+    .set({ sharedThumbnailUrl: url })
+    .where(eq(runs.id, runId));
+}
+
+/**
+ * Atomarer Lock-Claim für den Render eines geteilten Custom-Thumbnails.
+ *
+ * Implementierung: `pg_try_advisory_xact_lock(hashtext('shared-thumbnail:'
+ * || $runId))`. Liefert `true` wenn DIESER Caller exklusiv weiterarbeiten
+ * darf — Postgres serialisiert das pro Hash-Schlüssel über die gesamte
+ * Connection. Andere Worker, die parallel claimen wollen, bekommen
+ * `false` und sollen pollen (siehe `getSharedThumbnailUrl`).
+ *
+ * Warum advisory-lock und kein State-Spalten-Pattern wie bei shared-video?
+ *   `runs.sharedThumbnailUrl` ist polymorph (siehe oben). Ein eigenes
+ *   `sharedThumbnailState`-Feld würde das Schema unnötig duplizieren —
+ *   advisory locks sind genau für „kurzlebige, asset-billige Serialisierung
+ *   ohne State-Spalte" gemacht. Der Lock wird beim Transaktions-Ende
+ *   automatisch freigegeben, deshalb wrappen wir ihn in `db.transaction()`.
+ *
+ * Niemals werfend für den Fall „Lock nicht bekommen" — der Caller pollt
+ * dann auf `sharedThumbnailUrl`. Wirft nur bei echten DB-Fehlern.
+ */
+export async function withSharedThumbnailLock<T>(
+  runId: string,
+  fn: () => Promise<T>,
+): Promise<{ acquired: true; value: T } | { acquired: false }> {
+  return db.transaction(async (tx) => {
+    const result = (await tx.execute(
+      sql`SELECT pg_try_advisory_xact_lock(hashtext(${"shared-thumbnail:" + runId})) AS acquired`,
+    )) as unknown as Array<{ acquired: boolean }>;
+    const rows = Array.isArray(result)
+      ? result
+      : ((result as { rows?: Array<{ acquired: boolean }> }).rows ?? []);
+    const acquired = rows[0]?.acquired === true;
+    if (!acquired) {
+      return { acquired: false as const };
+    }
+    const value = await fn();
+    return { acquired: true as const, value };
+  });
+}
+
 export async function listCampaignRunsWithCounts(
   campaignId: string,
   userId: string,

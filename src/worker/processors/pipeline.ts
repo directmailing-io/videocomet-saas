@@ -53,11 +53,20 @@ import { runQrGenerate } from "./qr-generate";
 import { runLandingPageCreate } from "./landingpage-create";
 import { runDocxModify } from "./docx-modify";
 import { substitute as substitutePlaceholder } from "@/lib/placeholders/substitute";
+import { buildPageUrlShort } from "@/lib/placeholders/page-url";
 import { runDocxToPdf } from "./docx-to-pdf";
 import { runPdfCompress } from "./pdf-compress";
 import { runPdfUpload } from "./pdf-upload";
 import { addBunnyAssetRef } from "@/lib/db/queries/bunny-assets";
 import { trackAndRefAsset } from "../lib/bunny-asset-tracking";
+import { runThumbnailGenerate } from "./thumbnail-generate";
+import { hasPersonalization } from "../lib/has-personalization";
+import {
+  getSharedThumbnailUrl,
+  setSharedThumbnailUrl,
+  withSharedThumbnailLock,
+} from "@/lib/db/queries/runs";
+import { parseStorageUrl } from "@/lib/bunny/storage";
 
 /**
  * Per-stage hard-timeout values (ms). These bound each pipeline stage
@@ -74,6 +83,7 @@ const STAGE_TIMEOUTS_MS = {
   landingPageCreate: 10_000, // single DB write
   thumbnailExtract: 15_000, // ffmpeg single-frame extract
   qrGenerate: 5_000, // pure-CPU PNG generation
+  thumbnailGenerate: 30_000, // Puppeteer 1280x720 + Bunny storage PUT
   docxModify: 30_000, // docxtemplater + image inject
   docxToPdf: 60_000, // LibreOffice headless conversion
   pdfCompress: 20_000, // Ghostscript pass
@@ -259,6 +269,7 @@ function buildDocxVars(
   leadData: Record<string, string>,
   landingpageUrl: string,
   mapping?: Record<string, string> | Record<string, { column?: string; fallback?: string }>,
+  pageUrlShort?: string | null,
 ): Record<string, string> {
   const firstName = pickField(leadData, [
     "firstName",
@@ -279,16 +290,27 @@ function buildDocxVars(
     firstName,
     lastName,
   };
+  // `pageUrl` ist der globale System-Platzhalter (Paket A). Wir schreiben
+  // den aufgelösten Kurz-URL-Wert direkt in `base`, damit der nachgelagerte
+  // docxtemplater (der nur den Vars-Record kennt, NICHT die zentrale
+  // `substitute()`-Engine) `{{pageUrl}}` mit der korrekten Adresse ersetzt.
+  if (pageUrlShort) {
+    base.pageUrl = pageUrlShort;
+  }
   // Wenn der User explizit gemappt hat, schreiben wir die aufgelösten Werte
   // unter dem PLATZHALTER-Key in die Vars-Map — der nachgelagerte
-  // docxtemplater ersetzt `{{key}}` dann mit dem korrekten Wert.
+  // docxtemplater ersetzt `{{key}}` dann mit dem korrekten Wert. Der
+  // System-Context wird mitgegeben, damit ein gemappter Key, der zufällig
+  // `pageUrl` heißt, identisch aufgelöst wird wie der direkte System-Hit.
   if (mapping) {
+    const system = pageUrlShort ? { pageUrl: pageUrlShort } : undefined;
     for (const key of Object.keys(mapping)) {
       const v = substitutePlaceholder(
         `{{${key}}}`,
         leadData,
         mapping,
         "double-brace",
+        system,
       );
       if (v) base[key] = v;
     }
@@ -372,6 +394,14 @@ export async function pipelineProcessor(
     // thumbnail-extract stage handles that by downloading from Bunny.
     let renderedVideoPath: string | null = null;
     let renderedDurationSec: number | null = null;
+    // Lokale Sicht auf die Thumbnail-Generator-Outputs (Paket D). Wir
+    // mirror'n den DB-Zustand hier, damit der nachgelagerte PDF-Stage
+    // (Paket E) die jeweils richtige URL übergeben kann, ohne nochmal aus
+    // der DB zu lesen. Defaults reusen, was eine vorige Pipeline-Iteration
+    // schon persistiert hat (Idempotenz).
+    let leadCustomThumbnailUrl: string | null =
+      lead.customThumbnailUrl ?? null;
+    let runSharedThumbnailUrlForCustom: string | null = null;
 
     // ── Stages 1-2: Video render + upload ────────────────────────────
     if (!skipVideo) {
@@ -636,6 +666,29 @@ export async function pipelineProcessor(
       });
     }
 
+    // ── pageUrl-Short für System-Platzhalter (Paket A/E) ───────────────
+    // Wird in JEDEN substitute-Aufruf der Pipeline reingereicht, damit
+    // `{{pageUrl}}` global (PDF-Brief, Thumbnail-Template, Video-Slides,
+    // Custom-LP) zur Lead-Page-Kurzform aufgelöst wird. Custom-LP-Pin auf
+    // lp.videocomet.de UND Custom-Domains werden separat behandelt — die
+    // Kurzform soll abtippbar sein, nicht der mit `https://`-präfixierte
+    // CDN-Link.
+    const effectiveDomainId = lead.domainId ?? campaign.domainId ?? null;
+    let pageUrlDomainHostname: string | null = null;
+    if (effectiveDomainId) {
+      const [d] = await db
+        .select({ hostname: userDomains.hostname, status: userDomains.status })
+        .from(userDomains)
+        .where(eq(userDomains.id, effectiveDomainId))
+        .limit(1);
+      if (d && d.status === "active") {
+        pageUrlDomainHostname = d.hostname;
+      }
+    }
+    const pageUrlShort = slug
+      ? buildPageUrlShort(pageUrlDomainHostname, slug, appUrl)
+      : null;
+
     // ── Stage 3: Thumbnail extract ──────────────────────────────────
     // Only needed when the PDF pipeline runs (PDF embeds the thumb).
     // Three branches:
@@ -725,6 +778,191 @@ export async function pipelineProcessor(
       }
     }
 
+    // ── Stage: Thumbnail-Generate (Paket D) ──────────────────────────
+    // Wenn die Kampagne ein eigenes Thumbnail-Template hat, rendern wir
+    // hier ein 1280×720-PNG und legen es nach Bunny Edge Storage. Zwei
+    // Caching-Modi:
+    //
+    //   - personalisiert (`{{key}}` irgendwo im Template):
+    //       pro Lead rendern → `leads.customThumbnailUrl`
+    //   - nicht personalisiert (kein Token):
+    //       einmal pro Run rendern → `runs.sharedThumbnailUrl`
+    //       Race-Sicherheit via `pg_try_advisory_xact_lock` + Re-Check.
+    //
+    // Race-Strategie für den Shared-Pfad:
+    //   1. Read sharedThumbnailUrl. Hat sie unser Custom-Pfad-Muster
+    //      (`thumbnails/<runId>/shared.png`) → fertig, reuse.
+    //   2. Sonst try-lock; Lock-Owner rendert + uploaded + schreibt URL,
+    //      gibt Lock frei (Transaction-End). Alle anderen Worker pollen
+    //      auf sharedThumbnailUrl (max ~30s, sonst trotzdem weitermachen
+    //      und das eigene PDF ohne Custom-Thumb shippen — failsafe).
+    //
+    // Die Bunny-Zone ist die default-Storage-Zone (`videocomet-pdf`,
+    // identisch zum PDF-Upload) — kein extra Setup nötig.
+    if (
+      campaign.thumbnailImageEnabled &&
+      campaign.thumbnailImage &&
+      pageUrl
+    ) {
+      const thumbCfg = campaign.thumbnailImage;
+      const isPersonalized = hasPersonalization(thumbCfg);
+      const sharedRemotePath = `thumbnails/${data.runId}/shared.png`;
+
+      if (isPersonalized) {
+        // Per-Lead-Render. Idempotenz: wenn die URL schon am Lead hängt,
+        // skip (Retry-Pfad). NULL → frisch rendern.
+        if (!leadCustomThumbnailUrl) {
+          await setCurrentStage(data.leadId, "thumbnailGenerate");
+          const tStart = Date.now();
+          const out = await withStageTimeout(
+            () =>
+              runThumbnailGenerate({
+                leadId: data.leadId,
+                runId: data.runId,
+                leadData: (lead.data ?? {}) as Record<string, string>,
+                pageUrl,
+                thumbnailConfig: thumbCfg,
+                mapping: placeholderMapping,
+                outDir: workDir,
+                remotePath: `thumbnails/${data.runId}/${data.leadId}.png`,
+              }),
+            STAGE_TIMEOUTS_MS.thumbnailGenerate,
+            "thumbnailGenerate",
+          );
+          leadCustomThumbnailUrl = out.thumbnailUrl;
+          await updateLeadStatus(data.leadId, {
+            customThumbnailUrl: out.thumbnailUrl,
+          });
+          // Bunny-Asset-Tracking für späteres Cleanup (Paket B):
+          // 1 PNG pro Lead, owner=lead. Bunny-Stream existiert hier nicht
+          // (Storage-Zone), kind='storage' mit cdnUrl als bunnyId.
+          const parsedStorage = parseStorageUrl(out.thumbnailUrl);
+          if (parsedStorage) {
+            await trackAndRefAsset({
+              trackInput: {
+                userId: data.userId,
+                kind: "storage",
+                bunnyId: parsedStorage.path,
+                cdnUrl: out.thumbnailUrl,
+              },
+              ownerType: "lead",
+              ownerId: data.leadId,
+            });
+          }
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "info",
+            stage: "thumbnail",
+            message: `${leadLabel}: custom thumbnail rendered (per-lead) in ${((Date.now() - tStart) / 1000).toFixed(1)}s`,
+            durationMs: Date.now() - tStart,
+          });
+        } else {
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "info",
+            stage: "run",
+            message: `${leadLabel}: skipped thumbnailGenerate: already done (lead.customThumbnailUrl set)`,
+          });
+        }
+      } else {
+        // Run-Shared-Render. Erst gucken ob das Custom-Thumb schon im
+        // Cache liegt (URL-Pattern-Check: das geteilte Webcam-Thumbnail
+        // aus webcam-only Mode hat einen `vz-*.b-cdn.net`-Host und matcht
+        // unseren Storage-Pfad NICHT).
+        const existing = await getSharedThumbnailUrl(data.runId);
+        const looksLikeOurCustomThumb =
+          !!existing && existing.includes(sharedRemotePath);
+        if (looksLikeOurCustomThumb) {
+          runSharedThumbnailUrlForCustom = existing;
+        } else {
+          await setCurrentStage(data.leadId, "thumbnailGenerate");
+          const tStart = Date.now();
+          // Advisory-Lock: nur EIN Worker rendert pro Run; andere pollen.
+          const lockResult = await withSharedThumbnailLock(
+            data.runId,
+            async () => {
+              // Double-check inside the lock — vielleicht hat der andere
+              // Worker zwischen unserem ersten Read und unserem Lock fertig
+              // gemacht.
+              const fresh = await getSharedThumbnailUrl(data.runId);
+              if (fresh && fresh.includes(sharedRemotePath)) {
+                return { url: fresh, freshlyRendered: false };
+              }
+              const out = await runThumbnailGenerate({
+                leadId: data.leadId,
+                runId: data.runId,
+                leadData: {}, // shared = keine Lead-Daten nötig
+                pageUrl: null,
+                thumbnailConfig: thumbCfg,
+                mapping: placeholderMapping,
+                outDir: workDir,
+                remotePath: sharedRemotePath,
+              });
+              await setSharedThumbnailUrl(data.runId, out.thumbnailUrl);
+              // Bunny-Asset-Tracking auf `run` als Owner — beim Run-Delete
+              // räumt der Purge-Worker das einzelne PNG sauber weg.
+              const parsedStorage = parseStorageUrl(out.thumbnailUrl);
+              if (parsedStorage) {
+                await trackAndRefAsset({
+                  trackInput: {
+                    userId: data.userId,
+                    kind: "storage",
+                    bunnyId: parsedStorage.path,
+                    cdnUrl: out.thumbnailUrl,
+                  },
+                  ownerType: "run",
+                  ownerId: data.runId,
+                });
+              }
+              return { url: out.thumbnailUrl, freshlyRendered: true };
+            },
+          );
+          if (lockResult.acquired) {
+            runSharedThumbnailUrlForCustom = lockResult.value.url;
+            await insertPipelineEvent({
+              runId: data.runId,
+              leadId: data.leadId,
+              level: "info",
+              stage: "thumbnail",
+              message: lockResult.value.freshlyRendered
+                ? `${leadLabel}: custom thumbnail rendered (shared, first writer) in ${((Date.now() - tStart) / 1000).toFixed(1)}s`
+                : `${leadLabel}: custom thumbnail reused from run cache (in-lock check)`,
+              durationMs: Date.now() - tStart,
+            });
+          } else {
+            // Lock nicht bekommen — anderer Worker rendert gerade. Poll
+            // mit Timeout. Failsafe: nach Timeout shippen wir das PDF
+            // einfach ohne den Custom-Thumb (sharedThumbnailUrl bleibt
+            // null im Vars-Bag → docx-Stage faellt auf den nächst-besseren
+            // Wert in der Chain zurück).
+            const POLL_MS = 1500;
+            const POLL_TIMEOUT_MS = 30_000;
+            const pollStart = Date.now();
+            while (Date.now() - pollStart < POLL_TIMEOUT_MS) {
+              await new Promise((r) => setTimeout(r, POLL_MS));
+              const polled = await getSharedThumbnailUrl(data.runId);
+              if (polled && polled.includes(sharedRemotePath)) {
+                runSharedThumbnailUrlForCustom = polled;
+                break;
+              }
+            }
+            await insertPipelineEvent({
+              runId: data.runId,
+              leadId: data.leadId,
+              level: runSharedThumbnailUrlForCustom ? "info" : "warn",
+              stage: "thumbnail",
+              message: runSharedThumbnailUrlForCustom
+                ? `${leadLabel}: custom thumbnail polled from run cache in ${((Date.now() - tStart) / 1000).toFixed(1)}s`
+                : `${leadLabel}: custom thumbnail poll timed out — shipping PDF without shared thumb`,
+              durationMs: Date.now() - tStart,
+            });
+          }
+        }
+      }
+    }
+
     // ── Stages 6-9: PDF pipeline (only if enabled and not skipped) ──
     if (
       !skipPdf &&
@@ -741,9 +979,26 @@ export async function pipelineProcessor(
           runDocxModify({
             outDir: workDir,
             googleDocsUrl: campaign.pdfGoogleDocsUrl!,
-            vars: buildDocxVars(lead.data ?? {}, pageUrl!, placeholderMapping),
+            vars: buildDocxVars(
+              lead.data ?? {},
+              pageUrl!,
+              placeholderMapping,
+              pageUrlShort,
+            ),
             qrPngPath,
             thumbJpgPath: thumbFilePath,
+            // Thumbnail-Generator-Fallback-Chain (Paket E):
+            //   customThumbnailUrl (per Lead) >
+            //   sharedThumbnailUrl (per Run)  >
+            //   thumbJpgPath       (Legacy-Video-Frame)
+            // Wenn alle null sind, bleibt der Bild-Slot im Brief leer.
+            // Wir reichen die LOKAL gepflegten Variablen rein, damit der
+            // gerade vom Thumbnail-Generator gerenderte URL sofort greift
+            // — `lead.customThumbnailUrl` wäre stale (in-memory-Snapshot
+            // aus `loadJobContext` ganz oben).
+            customThumbnailUrl: leadCustomThumbnailUrl,
+            sharedThumbnailUrl:
+              runSharedThumbnailUrlForCustom ?? run.sharedThumbnailUrl ?? null,
           }),
         STAGE_TIMEOUTS_MS.docxModify,
         "docxModify",
@@ -753,7 +1008,7 @@ export async function pipelineProcessor(
         leadId: data.leadId,
         level: "info",
         stage: "docx",
-        message: `${leadLabel}: docx generated in ${((Date.now() - docxStart) / 1000).toFixed(1)}s`,
+        message: `${leadLabel}: docx generated in ${((Date.now() - docxStart) / 1000).toFixed(1)}s (thumb=${docx.thumbSource})`,
         durationMs: Date.now() - docxStart,
       });
 
