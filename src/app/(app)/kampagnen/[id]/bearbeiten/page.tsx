@@ -102,7 +102,10 @@ export default async function CampaignEditPage({
       hasActiveVersion: Boolean(t.activeVersion),
     })),
     media: allMedia
-      .filter((m) => m.type === "image" || m.type === "video")
+      .filter(
+        (m) =>
+          m.type === "image" || m.type === "video" || m.type === "logo",
+      )
       .map((m) => ({
         id: m.id,
         name: m.name,

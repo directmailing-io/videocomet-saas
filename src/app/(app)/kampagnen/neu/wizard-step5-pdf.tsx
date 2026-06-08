@@ -12,6 +12,7 @@ import {
 } from "@/components/editor/thumbnail-image-editor";
 import type { SegmentEditorMediaItem } from "@/components/editor/segment-editor";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
+import { cn } from "@/lib/utils";
 
 export interface WizardStep5PdfPatch {
   pdfEnabled?: boolean;
@@ -154,78 +155,125 @@ export function WizardStep5Pdf({
             />
           </div>
 
-          <div className="flex items-center justify-between pt-3 border-t border-line">
-            <div>
-              <p className="text-sm font-semibold text-ink">
-                Thumbnail einbetten
-              </p>
-              <p className="text-xs text-ink-muted mt-0.5">
-                Einzelnes Standbild aus dem Video.
-              </p>
-            </div>
-            <Switch
-              checked={thumbnailEnabled}
-              onCheckedChange={(v) =>
-                onChange({ pdfThumbnailEnabled: v })
-              }
-            />
-          </div>
-
-          {thumbnailEnabled && (
-            <div className="pt-3 border-t border-line">
-              <ThumbnailFramePicker
-                webcamMediaId={webcamMediaId}
-                webcamDurationSec={webcamDurationSec}
-                value={frameMs}
-                onChange={(ms) =>
-                  onChange({ pdfThumbnailFrameMs: ms })
-                }
-                inputId="pdf-frame"
+          {/* ── Vorschaubild im Brief: ein Toggle + 2-Modus-Switch ─── */}
+          <div className="pt-3 border-t border-line">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink">
+                  Thumbnail einbetten
+                </p>
+                <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+                  Vorschaubild auf der ersten Brief-Seite. Wähle entweder
+                  einen Standbild-Frame aus dem Video oder gestalte eine
+                  personalisierte Folie.
+                </p>
+              </div>
+              <Switch
+                checked={thumbnailEnabled}
+                onCheckedChange={(v) => {
+                  onChange({ pdfThumbnailEnabled: v });
+                  // Wenn ausgeschaltet, beide Modi resetten.
+                  if (!v) {
+                    onChange({ thumbnailImageEnabled: false });
+                  }
+                }}
               />
             </div>
-          )}
+
+            {thumbnailEnabled && (
+              <div className="mt-4 space-y-4">
+                {/* Modus-Switch: Frame aus Video vs. Folie gestalten */}
+                <div
+                  role="radiogroup"
+                  aria-label="Thumbnail-Modus"
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={!thumbnailImageEnabled}
+                    onClick={() => {
+                      if (thumbnailImageEnabled) {
+                        onChange({ thumbnailImageEnabled: false });
+                      }
+                    }}
+                    className={cn(
+                      "text-left rounded-squircle-sm border-2 px-3 py-3 transition-colors",
+                      !thumbnailImageEnabled
+                        ? "border-brand bg-brand-soft/40"
+                        : "border-line bg-surface hover:border-line-dark",
+                    )}
+                  >
+                    <p className="text-sm font-semibold text-ink">
+                      Frame aus Video wählen
+                    </p>
+                    <p className="text-[11px] text-ink-muted mt-0.5 leading-snug">
+                      Einzelnes Standbild zum gewählten Zeitpunkt.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={thumbnailImageEnabled}
+                    onClick={() => {
+                      if (!thumbnailImageEnabled) {
+                        handleThumbnailToggle(true);
+                      }
+                    }}
+                    className={cn(
+                      "text-left rounded-squircle-sm border-2 px-3 py-3 transition-colors",
+                      thumbnailImageEnabled
+                        ? "border-brand bg-brand-soft/40"
+                        : "border-line bg-surface hover:border-line-dark",
+                    )}
+                  >
+                    <p className="text-sm font-semibold text-ink">
+                      Thumbnail-Folie gestalten
+                    </p>
+                    <p className="text-[11px] text-ink-muted mt-0.5 leading-snug">
+                      Personalisierbar mit{" "}
+                      <code className="font-mono text-brand-deep">
+                        {"{{firstName}}"}
+                      </code>
+                      ,{" "}
+                      <code className="font-mono text-brand-deep">
+                        {"{{pageUrl}}"}
+                      </code>
+                      .
+                    </p>
+                  </button>
+                </div>
+
+                {/* Modus-Inhalt */}
+                {!thumbnailImageEnabled ? (
+                  <div className="pt-2">
+                    <ThumbnailFramePicker
+                      webcamMediaId={webcamMediaId}
+                      webcamDurationSec={webcamDurationSec}
+                      value={frameMs}
+                      onChange={(ms) =>
+                        onChange({ pdfThumbnailFrameMs: ms })
+                      }
+                      inputId="pdf-frame"
+                    />
+                  </div>
+                ) : thumbnailImage ? (
+                  <div className="pt-2">
+                    <ThumbnailImageEditor
+                      value={thumbnailImage}
+                      onChange={(next) =>
+                        onChange({ thumbnailImage: next })
+                      }
+                      mediaItems={mediaItems}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
         </div>
       )}
-
-      {/* ── Paket C — Personalisiertes Vorschaubild ─────────────────────── */}
-      {/* Sekundärer Card-Block (NICHT Tab), bewusst UNTER den bestehenden
-          PDF-Einstellungen, damit das Verhältnis „Standard-Frame vs.
-          Custom-Thumbnail" für den User klar ist (advanced/opt-in). */}
-      <div className="mt-4 bg-surface border border-line rounded-squircle-md p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-ink">
-              Vorschaubild im Brief
-            </p>
-            <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
-              Personalisiertes Vorschaubild statt Video-Frame. Mit
-              Platzhaltern wie{" "}
-              <code className="font-mono text-brand-deep">
-                {"{{firstName}}"}
-              </code>
-              ,{" "}
-              <code className="font-mono text-brand-deep">
-                {"{{pageUrl}}"}
-              </code>{" "}
-              pro Lead unterschiedlich.
-            </p>
-          </div>
-          <Switch
-            checked={thumbnailImageEnabled}
-            onCheckedChange={handleThumbnailToggle}
-          />
-        </div>
-
-        {thumbnailImageEnabled && thumbnailImage && (
-          <div className="mt-5 pt-5 border-t border-line">
-            <ThumbnailImageEditor
-              value={thumbnailImage}
-              onChange={(next) => onChange({ thumbnailImage: next })}
-              mediaItems={mediaItems}
-            />
-          </div>
-        )}
-      </div>
     </div>
   );
 }
