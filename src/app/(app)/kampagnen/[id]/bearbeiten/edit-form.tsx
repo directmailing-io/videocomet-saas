@@ -5,13 +5,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  Camera,
   Check,
-  Save,
-  Video,
-  LayoutTemplate,
+  Image as ImageIcon,
   Info,
   Globe,
+  LayoutTemplate,
+  MonitorPlay,
+  Play,
+  Save,
   Sparkles,
+  Video,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -104,6 +108,14 @@ export interface EditCampaignData {
      */
     thumbnailImageEnabled?: boolean;
     thumbnailImage?: CampaignThumbnailImage | null;
+    /**
+     * Migration 0019 — Single-Source-of-Truth für die Vorschaubild-
+     * Variante + globales Play-Icon-Overlay. Optional, damit ältere
+     * Server-Snapshots (vor Migration) das Feld nicht zwingend liefern
+     * müssen — Default-Mapping: undefined → 'frame', false.
+     */
+    thumbnailMode?: "frame" | "custom_image" | "landingpage_screenshot";
+    thumbnailPlayIcon?: boolean;
   };
   webcams: EditCampaignWebcam[];
   templates: EditCampaignTemplate[];
@@ -130,6 +142,8 @@ interface FormState {
   pdfThumbnailFrameMs: number | null;
   thumbnailImageEnabled: boolean;
   thumbnailImage: CampaignThumbnailImage | null;
+  thumbnailMode: "frame" | "custom_image" | "landingpage_screenshot";
+  thumbnailPlayIcon: boolean;
 }
 
 type PatchBody = Partial<{
@@ -150,6 +164,8 @@ type PatchBody = Partial<{
   pdfThumbnailFrameMs: number | null;
   thumbnailImageEnabled: boolean;
   thumbnailImage: CampaignThumbnailImage | null;
+  thumbnailMode: "frame" | "custom_image" | "landingpage_screenshot";
+  thumbnailPlayIcon: boolean;
 }>;
 
 export function EditCampaignForm({ data }: { data: EditCampaignData }) {
@@ -174,6 +190,9 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
     pdfThumbnailFrameMs: data.campaign.pdfThumbnailFrameMs,
     thumbnailImageEnabled: data.campaign.thumbnailImageEnabled ?? false,
     thumbnailImage: data.campaign.thumbnailImage ?? null,
+    // Migration 0019 — Defaults für Snapshots aus der Vor-Paket-A-Welt.
+    thumbnailMode: data.campaign.thumbnailMode ?? "frame",
+    thumbnailPlayIcon: data.campaign.thumbnailPlayIcon ?? false,
   });
 
   const [saving, setSaving] = React.useState(false);
@@ -251,6 +270,9 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
           // Paket C — Backend ignoriert, solange API-Schema noch ungepatcht.
           thumbnailImageEnabled: state.thumbnailImageEnabled,
           thumbnailImage: state.thumbnailImage,
+          // Migration 0019 — Single-Source-of-Truth + Play-Icon.
+          thumbnailMode: state.thumbnailMode,
+          thumbnailPlayIcon: state.thumbnailPlayIcon,
         }),
       });
       if (!res.ok) {
@@ -772,29 +794,169 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-ink">
-                      Thumbnail einbetten
-                    </p>
-                    <p className="text-xs text-ink-muted mt-0.5">
-                      Standbild aus dem Video.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={state.pdfThumbnailEnabled}
-                    onCheckedChange={(v) => {
-                      setState((s) => ({ ...s, pdfThumbnailEnabled: v }));
+                {/* Vorschaubild-Konfiguration ist in die untenstehende
+                    Card „Vorschaubild im Brief" gewandert — dort kannst
+                    du Modus (Frame / Folie / Landingpage-Screenshot) und
+                    Play-Icon-Overlay einstellen. */}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Vorschaubild im Brief — Edit-Spiegel der Wizard-Step-5-Logik
+            (Migration 0019). Drei Modi + globales Play-Icon-Overlay; nur
+            sichtbar, wenn der PDF-Brief aktiv und Thumbnail eingebettet ist. */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Vorschaubild im Brief</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink">
+                  Thumbnail einbetten
+                </p>
+                <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+                  Vorschaubild auf der ersten Brief-Seite. Wähle Standbild
+                  aus dem Video, eine personalisierte Folie oder einen
+                  automatischen Screenshot der Landingpage.
+                </p>
+              </div>
+              <Switch
+                checked={state.pdfThumbnailEnabled}
+                onCheckedChange={(v) => {
+                  setState((s) => ({ ...s, pdfThumbnailEnabled: v }));
+                  // computed mirror für Pipeline-Code zurücksetzen, wenn off.
+                  const patch: PatchBody = { pdfThumbnailEnabled: v };
+                  if (!v) {
+                    patch.thumbnailImageEnabled = false;
+                    setState((s) => ({ ...s, thumbnailImageEnabled: false }));
+                  }
+                  void patchAndSync(patch, "Thumbnail");
+                }}
+              />
+            </div>
+
+            {state.pdfThumbnailEnabled && (
+              <div className="mt-5 pt-5 border-t border-line space-y-4">
+                {/* 3 Modus-Karten */}
+                <div
+                  role="radiogroup"
+                  aria-label="Thumbnail-Modus"
+                  className="grid grid-cols-1 md:grid-cols-3 gap-2"
+                >
+                  <EditModeCard
+                    active={state.thumbnailMode === "frame"}
+                    onClick={() => {
+                      if (state.thumbnailMode === "frame") return;
+                      setState((s) => ({
+                        ...s,
+                        thumbnailMode: "frame",
+                        thumbnailImageEnabled: false,
+                      }));
                       void patchAndSync(
-                        { pdfThumbnailEnabled: v },
-                        "Thumbnail",
+                        {
+                          thumbnailMode: "frame",
+                          thumbnailImageEnabled: false,
+                        },
+                        "Thumbnail-Modus",
                       );
                     }}
+                    icon={<Camera className="size-4" />}
+                    title="Frame aus Video wählen"
+                    description="Standbild zum gewählten Zeitpunkt aus dem Video."
+                  />
+                  <EditModeCard
+                    active={state.thumbnailMode === "custom_image"}
+                    onClick={() => {
+                      if (state.thumbnailMode === "custom_image") return;
+                      const seed =
+                        state.thumbnailImage ?? createDefaultThumbnailImage();
+                      setState((s) => ({
+                        ...s,
+                        thumbnailMode: "custom_image",
+                        thumbnailImageEnabled: true,
+                        thumbnailImage: seed,
+                      }));
+                      void patchAndSync(
+                        {
+                          thumbnailMode: "custom_image",
+                          thumbnailImageEnabled: true,
+                          thumbnailImage: seed,
+                        },
+                        "Thumbnail-Modus",
+                      );
+                    }}
+                    icon={<ImageIcon className="size-4" />}
+                    title="Thumbnail-Folie gestalten"
+                    description={
+                      <>
+                        Personalisierbar mit{" "}
+                        <code className="font-mono text-brand-deep">
+                          {"{{firstName}}"}
+                        </code>
+                        ,{" "}
+                        <code className="font-mono text-brand-deep">
+                          {"{{pageUrl}}"}
+                        </code>
+                        .
+                      </>
+                    }
+                  />
+                  <EditModeCard
+                    active={state.thumbnailMode === "landingpage_screenshot"}
+                    onClick={() => {
+                      if (state.thumbnailMode === "landingpage_screenshot")
+                        return;
+                      setState((s) => ({
+                        ...s,
+                        thumbnailMode: "landingpage_screenshot",
+                        thumbnailImageEnabled: false,
+                      }));
+                      void patchAndSync(
+                        {
+                          thumbnailMode: "landingpage_screenshot",
+                          thumbnailImageEnabled: false,
+                        },
+                        "Thumbnail-Modus",
+                      );
+                    }}
+                    icon={<MonitorPlay className="size-4" />}
+                    title="Screenshot der Landingpage"
+                    description="Automatisch erzeugt — kein Editor nötig. Zeigt die personalisierte Landingpage."
                   />
                 </div>
 
-                {state.pdfThumbnailEnabled && (
-                  <div className="pt-3 border-t border-line">
+                {/* Play-Icon-Overlay (gilt für alle 3 Modi) */}
+                <label
+                  className="flex items-start gap-2 cursor-pointer select-none"
+                  title="Halbtransparenter Play-Button über dem Thumbnail."
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-brand"
+                    checked={state.thumbnailPlayIcon}
+                    onChange={(e) => {
+                      const v = e.target.checked;
+                      setState((s) => ({ ...s, thumbnailPlayIcon: v }));
+                      void patchAndSync(
+                        { thumbnailPlayIcon: v },
+                        "Play-Icon-Overlay",
+                      );
+                    }}
+                  />
+                  <span className="text-xs text-ink-muted italic leading-snug inline-flex items-center gap-1.5">
+                    <Play className="size-3 shrink-0" />
+                    Play-Icon-Overlay einblenden
+                    <span className="text-ink-muted/70 not-italic">
+                      — halbtransparenter Play-Button über dem Thumbnail.
+                    </span>
+                  </span>
+                </label>
+
+                {/* Modus-spezifischer Editor-Bereich */}
+                {state.thumbnailMode === "frame" && (
+                  <div className="pt-2">
                     <ThumbnailFramePicker
                       webcamMediaId={state.webcamMediaId}
                       webcamDurationSec={currentWebcam?.durationSec ?? null}
@@ -810,103 +972,106 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
                     />
                   </div>
                 )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
-        {/* Paket C — Vorschaubild im Brief (Edit-Spiegel der Wizard-Logik) */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Vorschaubild im Brief</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-ink">
-                  Personalisiertes Vorschaubild
-                </p>
-                <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
-                  Statt Video-Frame. Mit Platzhaltern wie{" "}
-                  <code className="font-mono text-brand-deep">
-                    {"{{firstName}}"}
-                  </code>
-                  ,{" "}
-                  <code className="font-mono text-brand-deep">
-                    {"{{pageUrl}}"}
-                  </code>{" "}
-                  pro Lead unterschiedlich.
-                </p>
-              </div>
-              <Switch
-                checked={state.thumbnailImageEnabled}
-                onCheckedChange={(v) => {
-                  // Toggle-ON ohne bestehendes Layout → Default-Setup
-                  // einspielen, damit der Editor sofort etwas zeigt.
-                  // Bestehende Layouts bleiben beim Off-Toggle erhalten,
-                  // sodass Re-Aktivierung den gleichen Stand zeigt.
-                  if (v && state.thumbnailImage === null) {
-                    const seed = createDefaultThumbnailImage();
-                    setState((s) => ({
-                      ...s,
-                      thumbnailImageEnabled: true,
-                      thumbnailImage: seed,
-                    }));
-                    void patchAndSync(
-                      { thumbnailImageEnabled: true, thumbnailImage: seed },
-                      "Vorschaubild",
-                    );
-                    return;
-                  }
-                  setState((s) => ({ ...s, thumbnailImageEnabled: v }));
-                  void patchAndSync(
-                    { thumbnailImageEnabled: v },
-                    "Vorschaubild",
-                  );
-                }}
-              />
-            </div>
+                {state.thumbnailMode === "custom_image" &&
+                  state.thumbnailImage && (
+                    <div className="pt-2">
+                      <ThumbnailImageEditor
+                        value={state.thumbnailImage}
+                        onChange={(next) => {
+                          // Auto-Save bewusst NICHT pro Pixel-Tick — wir
+                          // halten lokal und der „Layout speichern"-Button
+                          // unten pusht den finalen Stand.
+                          setState((s) => ({ ...s, thumbnailImage: next }));
+                        }}
+                        mediaItems={data.media.map((m) => ({
+                          id: m.id,
+                          name: m.name,
+                          publicUrl: m.publicUrl,
+                          type: m.type,
+                        }))}
+                      />
+                      <div className="mt-4 flex justify-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          iconLeft={<Save className="size-4" />}
+                          loading={savingField === "Vorschaubild-Layout"}
+                          onClick={() => {
+                            void patchAndSync(
+                              { thumbnailImage: state.thumbnailImage },
+                              "Vorschaubild-Layout",
+                            );
+                          }}
+                        >
+                          Layout speichern
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
-            {state.thumbnailImageEnabled && state.thumbnailImage && (
-              <div className="mt-5 pt-5 border-t border-line">
-                <ThumbnailImageEditor
-                  value={state.thumbnailImage}
-                  onChange={(next) => {
-                    // Auto-Save bewusst NICHT pro Pixel-Tick: jede Drag-/
-                    // Resize-Bewegung würde sonst einen PATCH triggern.
-                    // Wir halten lokal und der „Layout speichern"-Button
-                    // (unten) bzw. der globale Save oben rechts pushen.
-                    setState((s) => ({ ...s, thumbnailImage: next }));
-                  }}
-                  mediaItems={data.media.map((m) => ({
-                    id: m.id,
-                    name: m.name,
-                    publicUrl: m.publicUrl,
-                    type: m.type,
-                  }))}
-                />
-                <div className="mt-4 flex justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    iconLeft={<Save className="size-4" />}
-                    loading={savingField === "Vorschaubild-Layout"}
-                    onClick={() => {
-                      void patchAndSync(
-                        { thumbnailImage: state.thumbnailImage },
-                        "Vorschaubild-Layout",
-                      );
-                    }}
-                  >
-                    Layout speichern
-                  </Button>
-                </div>
+                {state.thumbnailMode === "landingpage_screenshot" && (
+                  <div className="pt-2">
+                    <div className="rounded-squircle-sm border border-dashed border-line bg-surface-muted/50 p-4 text-xs text-ink-muted leading-relaxed">
+                      Die Pipeline rendert pro Lead einen Screenshot der
+                      personalisierten Landingpage und bettet ihn als
+                      Thumbnail in den Brief ein. Kein weiterer Editor
+                      nötig — die Vorlage ist die LP selbst.
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
         </Card>
       </div>
     </>
+  );
+}
+
+// ── Vorschaubild-Modus-Karte ──────────────────────────────────────────────
+// Spiegelt visuell die Wizard-Step-5-Karten, damit der Edit-Modus und der
+// Neu-Wizard sich gleich anfühlen.
+
+function EditModeCard({
+  active,
+  onClick,
+  icon,
+  title,
+  description,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  title: string;
+  description: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      className={cn(
+        "text-left rounded-squircle-sm border-2 px-3 py-3 transition-colors h-full",
+        active
+          ? "border-brand bg-brand-soft/40"
+          : "border-line bg-surface hover:border-line-dark",
+      )}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <span
+          className={cn(
+            "inline-flex size-6 items-center justify-center rounded-squircle-sm",
+            active ? "bg-brand text-white" : "bg-surface-muted text-ink-muted",
+          )}
+        >
+          {icon}
+        </span>
+        <p className="text-sm font-semibold text-ink leading-tight">{title}</p>
+      </div>
+      <p className="text-[11px] text-ink-muted leading-snug">{description}</p>
+    </button>
   );
 }
 

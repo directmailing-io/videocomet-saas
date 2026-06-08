@@ -81,6 +81,12 @@ export default async function CampaignEditPage({
       pdfQrEnabled: campaign.pdfQrEnabled,
       pdfThumbnailEnabled: campaign.pdfThumbnailEnabled,
       pdfThumbnailFrameMs: campaign.pdfThumbnailFrameMs ?? null,
+      // Paket C — Personalisiertes Vorschaubild (Migration 0018).
+      thumbnailImageEnabled: campaign.thumbnailImageEnabled,
+      thumbnailImage: campaign.thumbnailImage ?? null,
+      // Migration 0019 — Modus + Play-Icon-Overlay.
+      thumbnailMode: campaign.thumbnailMode,
+      thumbnailPlayIcon: campaign.thumbnailPlayIcon,
     },
     webcams: webcams.map((w) => ({
       id: w.id,

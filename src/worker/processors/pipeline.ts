@@ -60,6 +60,7 @@ import { runPdfUpload } from "./pdf-upload";
 import { addBunnyAssetRef } from "@/lib/db/queries/bunny-assets";
 import { trackAndRefAsset } from "../lib/bunny-asset-tracking";
 import { runThumbnailGenerate } from "./thumbnail-generate";
+import { runLandingpageScreenshot } from "./landingpage-screenshot";
 import { hasPersonalization } from "../lib/has-personalization";
 import {
   getSharedThumbnailUrl,
@@ -84,6 +85,7 @@ const STAGE_TIMEOUTS_MS = {
   thumbnailExtract: 15_000, // ffmpeg single-frame extract
   qrGenerate: 5_000, // pure-CPU PNG generation
   thumbnailGenerate: 30_000, // Puppeteer 1280x720 + Bunny storage PUT
+  landingpageScreenshot: 45_000, // Puppeteer goto + networkidle + screenshot + upload
   docxModify: 30_000, // docxtemplater + image inject
   docxToPdf: 60_000, // LibreOffice headless conversion
   pdfCompress: 20_000, // Ghostscript pass
@@ -778,6 +780,129 @@ export async function pipelineProcessor(
       }
     }
 
+    // ── Stage: Thumbnail-Mode-Branch (Pakete B + D) ────────────────────
+    // Drei Modi, gewaehlt im Kampagnen-Wizard (Paket A schema):
+    //
+    //   - 'frame' (Default / Legacy):
+    //       Keine eigene Render-Stage hier. Der PDF-Brief embedded den vom
+    //       Video extrahierten Frame-JPG (siehe `thumbFilePath` weiter
+    //       oben, Stage 3 `thumbnailExtract`). `customThumbnailUrl` bleibt
+    //       unangetastet → docx-modify-Fallback-Chain trifft den Frame.
+    //
+    //   - 'custom_image' (Paket D):
+    //       Eigenes Slide-artiges Thumbnail-Template (Background + Layers)
+    //       wird via `runThumbnailGenerate` zu 1280×720 PNG gerendert.
+    //       Personalisiertes Template → pro Lead, sonst run-shared mit
+    //       Advisory-Lock (Details unten).
+    //
+    //   - 'landingpage_screenshot' (Paket B):
+    //       LIVE-Landingpage in Headless-Chromium laden und 1280×720-PNG-
+    //       Screenshot anfertigen. IMMER per-Lead (LP enthaelt Lead-Daten),
+    //       kein Cross-Lead-Caching.
+    //
+    // `thumbnailMode` kommt aus dem Kampagnen-Schema (Paket A). Bestehende
+    // Kampagnen ohne Migration → wir leiten den Modus aus den vorhandenen
+    // Flags ab (`thumbnailImageEnabled` → 'custom_image', sonst 'frame')
+    // damit Paket B unabhaengig deployed werden kann.
+    type ThumbnailMode = "frame" | "custom_image" | "landingpage_screenshot";
+    const campaignWithMode = campaign as typeof campaign & {
+      thumbnailMode?: ThumbnailMode | null;
+      thumbnailPlayIcon?: boolean | null;
+    };
+    const thumbnailMode: ThumbnailMode =
+      campaignWithMode.thumbnailMode ??
+      (campaign.thumbnailImageEnabled ? "custom_image" : "frame");
+    const thumbnailPlayIcon = campaignWithMode.thumbnailPlayIcon === true;
+    const pdfThumbWantedForBranch =
+      !skipPdf && campaign.pdfEnabled && campaign.pdfThumbnailEnabled;
+
+    // ── Stage: Landingpage-Screenshot (Paket B) ──────────────────────
+    // Nur wenn der User explizit 'landingpage_screenshot' gewaehlt hat UND
+    // ein PDF-Brief mit Thumbnail erzeugt wird. Idempotenz: customThumbnailUrl
+    // schon gesetzt → skip (Retry-Pfad). Pipeline-Timeout 45 s — die LP
+    // sollte in <10 s navigieren + <2 s rendern + <5 s uploaden.
+    if (
+      thumbnailMode === "landingpage_screenshot" &&
+      pdfThumbWantedForBranch &&
+      pageUrl
+    ) {
+      if (!leadCustomThumbnailUrl) {
+        await setCurrentStage(data.leadId, "landingpageScreenshot");
+        const tStart = Date.now();
+        // `pageUrl` aus `runLandingPageCreate` ist bereits voll qualifiziert
+        // (`https://…/…`). `pageUrlShort` (ohne Protokoll) reichen wir als
+        // Display-Variante mit; der LP-Screenshot-Stage hangt `?preview=1`
+        // intern an, damit das LP-Tracking sich abschaltet und keine
+        // Falsch-Aufrufe zaehlt.
+        try {
+          const screenshot = await withStageTimeout(
+            () =>
+              runLandingpageScreenshot({
+                leadId: data.leadId,
+                userId: data.userId,
+                runId: data.runId,
+                pageUrl: pageUrlShort ?? pageUrl!,
+                fullPageUrl: pageUrl!,
+                playIconOverlay: thumbnailPlayIcon,
+                outDir: workDir,
+              }),
+            STAGE_TIMEOUTS_MS.landingpageScreenshot,
+            "landingpageScreenshot",
+          );
+          leadCustomThumbnailUrl = screenshot.thumbnailUrl;
+          await updateLeadStatus(data.leadId, {
+            customThumbnailUrl: screenshot.thumbnailUrl,
+          });
+          // Bunny-Asset-Tracking — 1 PNG pro Lead, owner=lead. Identisches
+          // Pattern wie der custom_image-Pfad weiter unten.
+          const parsedStorage = parseStorageUrl(screenshot.thumbnailUrl);
+          if (parsedStorage) {
+            await trackAndRefAsset({
+              trackInput: {
+                userId: data.userId,
+                kind: "storage",
+                bunnyId: parsedStorage.path,
+                cdnUrl: screenshot.thumbnailUrl,
+              },
+              ownerType: "lead",
+              ownerId: data.leadId,
+            });
+          }
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "info",
+            stage: "thumbnail",
+            message: `${leadLabel}: landingpage screenshot rendered in ${((Date.now() - tStart) / 1000).toFixed(1)}s${thumbnailPlayIcon ? " (play-icon overlay)" : ""}`,
+            durationMs: Date.now() - tStart,
+          });
+        } catch (err) {
+          // Logging vor dem Rethrow — der globale catch-Block markiert den
+          // Lead als 'failed' und schreibt das Event auf Stage 'run'. Hier
+          // wollen wir die Stage-Attribution sauber auf 'thumbnail' setzen,
+          // damit man im Live-Log sieht, was geknallt hat.
+          const msg = err instanceof Error ? err.message : String(err);
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "error",
+            stage: "thumbnail",
+            message: `${leadLabel}: landingpage screenshot failed: ${msg.slice(0, 400)}`,
+            durationMs: Date.now() - tStart,
+          });
+          throw err;
+        }
+      } else {
+        await insertPipelineEvent({
+          runId: data.runId,
+          leadId: data.leadId,
+          level: "info",
+          stage: "run",
+          message: `${leadLabel}: skipped landingpageScreenshot: already done (lead.customThumbnailUrl set)`,
+        });
+      }
+    }
+
     // ── Stage: Thumbnail-Generate (Paket D) ──────────────────────────
     // Wenn die Kampagne ein eigenes Thumbnail-Template hat, rendern wir
     // hier ein 1280×720-PNG und legen es nach Bunny Edge Storage. Zwei
@@ -799,7 +924,13 @@ export async function pipelineProcessor(
     //
     // Die Bunny-Zone ist die default-Storage-Zone (`videocomet-pdf`,
     // identisch zum PDF-Upload) — kein extra Setup nötig.
+    //
+    // Play-Icon-Overlay fuer 'custom_image': Paket B (LP-Screenshot) macht
+    // den Composite direkt im LP-Stage. Fuer 'custom_image' wird das
+    // Composite-Hook in `runThumbnailGenerate` separat in Paket D
+    // nachgeschaerft — Out-of-Scope hier (siehe Paket B Spec, Pragmatik).
     if (
+      thumbnailMode === "custom_image" &&
       campaign.thumbnailImageEnabled &&
       campaign.thumbnailImage &&
       pageUrl

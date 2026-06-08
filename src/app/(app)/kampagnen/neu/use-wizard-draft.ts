@@ -127,7 +127,18 @@ function isWizardState(value: unknown): value is WizardState {
     v.thumbnailImage === undefined ||
     v.thumbnailImage === null ||
     (typeof v.thumbnailImage === "object" && v.thumbnailImage !== null);
-  return thumbEnabledOk && thumbImgOk;
+  // Migration-0019-Felder: ebenfalls optional, damit Drafts aus der
+  // Vor-Paket-A-Zeit weiterhin restoren — der Migrate-Pfad in
+  // `restoreDraft` füllt die Defaults nach.
+  const modeOk =
+    v.thumbnailMode === undefined ||
+    v.thumbnailMode === "frame" ||
+    v.thumbnailMode === "custom_image" ||
+    v.thumbnailMode === "landingpage_screenshot";
+  const playIconOk =
+    v.thumbnailPlayIcon === undefined ||
+    typeof v.thumbnailPlayIcon === "boolean";
+  return thumbEnabledOk && thumbImgOk && modeOk && playIconOk;
 }
 
 function isEnvelope(value: unknown): value is DraftEnvelope {
@@ -181,7 +192,9 @@ function isDefaultState(state: WizardState): boolean {
     !state.pdfThumbnailEnabled &&
     state.pdfThumbnailFrameMs === null &&
     !state.thumbnailImageEnabled &&
-    state.thumbnailImage === null
+    state.thumbnailImage === null &&
+    state.thumbnailMode === "frame" &&
+    !state.thumbnailPlayIcon
   );
 }
 
@@ -219,12 +232,23 @@ export function useWizardDraft(
     if (!existingDraft) return;
     // Forward-Compat: alte Drafts (vor Paket C) hatten keine thumbnail-
     // Felder. Wir füllen sie defensiv mit Defaults, sonst greift `undefined`
-    // bis in den Editor durch.
+    // bis in den Editor durch. Migration-0019-Felder ebenfalls defaults:
+    // Drafts vor Paket A kennen `thumbnailMode`/`thumbnailPlayIcon` nicht,
+    // wir mappen Bestands-`thumbnailImageEnabled=true` auf 'custom_image',
+    // sonst 'frame' — analog zum SQL-Backfill der Migration.
+    const prev = existingDraft.state as WizardState & {
+      thumbnailMode?: WizardState["thumbnailMode"];
+      thumbnailPlayIcon?: boolean;
+    };
+    const fallbackMode: WizardState["thumbnailMode"] = prev.thumbnailImageEnabled
+      ? "custom_image"
+      : "frame";
     const migrated: WizardState = {
       ...existingDraft.state,
-      thumbnailImageEnabled:
-        existingDraft.state.thumbnailImageEnabled ?? false,
-      thumbnailImage: existingDraft.state.thumbnailImage ?? null,
+      thumbnailImageEnabled: prev.thumbnailImageEnabled ?? false,
+      thumbnailImage: prev.thumbnailImage ?? null,
+      thumbnailMode: prev.thumbnailMode ?? fallbackMode,
+      thumbnailPlayIcon: prev.thumbnailPlayIcon ?? false,
     };
     io.setState(migrated);
     io.setStep(existingDraft.step);

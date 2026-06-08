@@ -14,6 +14,7 @@ import {
 } from "@/lib/db/queries/campaigns";
 import { removeBunnyAssetRefsForOwner } from "@/lib/db/queries/bunny-assets";
 import { triggerBunnyPurgeTick } from "@/lib/bunny/purge-trigger";
+import type { CampaignThumbnailImage } from "@/lib/segments/types";
 
 const patchSchema = z.object({
   name: z.string().min(1).max(120).optional(),
@@ -42,6 +43,18 @@ const patchSchema = z.object({
   pdfQrEnabled: z.boolean().optional(),
   pdfThumbnailEnabled: z.boolean().optional(),
   pdfThumbnailFrameMs: z.number().int().nonnegative().nullable().optional(),
+  // ── Thumbnail-Generator (Migration 0018 + 0019) ─────────────────────────
+  // Spiegel zur POST-Validierung. `thumbnailImage` als `unknown` (Editor
+  // garantiert Form). `thumbnailMode` ist die Single-Source-of-Truth für
+  // die drei Vorschaubild-Varianten; `thumbnailImageEnabled` bleibt als
+  // computed mirror in der API (Frontend hält beides synchron) bis der
+  // Pipeline-Code in Paket B/C konsequent auf `thumbnailMode` umzieht.
+  thumbnailImageEnabled: z.boolean().optional(),
+  thumbnailImage: z.unknown().nullable().optional(),
+  thumbnailMode: z
+    .enum(["frame", "custom_image", "landingpage_screenshot"])
+    .optional(),
+  thumbnailPlayIcon: z.boolean().optional(),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -67,8 +80,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       { status: 400 },
     );
   }
+  // `thumbnailImage` ist als `unknown` validiert — die Drizzle-UPDATE-
+  // Types wollen `CampaignThumbnailImage | null | undefined`. Wir cast'en
+  // nur, wenn der Key tatsächlich gesetzt war, damit Drizzle's „nur
+  // gesetzte Spalten anfassen"-Semantik erhalten bleibt.
+  const { thumbnailImage, ...rest } = body;
+  const patch =
+    thumbnailImage === undefined
+      ? rest
+      : {
+          ...rest,
+          thumbnailImage: thumbnailImage as CampaignThumbnailImage | null,
+        };
   try {
-    const campaign = await updateCampaign(params.id, auth.user.id, body);
+    const campaign = await updateCampaign(params.id, auth.user.id, patch);
     return NextResponse.json({ campaign });
   } catch {
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });

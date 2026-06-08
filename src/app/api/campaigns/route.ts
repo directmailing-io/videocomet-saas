@@ -8,6 +8,7 @@ import {
   createCampaign,
   listUserCampaigns,
 } from "@/lib/db/queries/campaigns";
+import type { CampaignThumbnailImage } from "@/lib/segments/types";
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -35,6 +36,17 @@ const createSchema = z.object({
   pdfQrEnabled: z.boolean().optional(),
   pdfThumbnailEnabled: z.boolean().optional(),
   pdfThumbnailFrameMs: z.number().int().nonnegative().nullable().optional(),
+  // ── Thumbnail-Generator (Migration 0018 + 0019) ─────────────────────────
+  // `thumbnailImage` ist die Slide-Konfiguration für den Modus
+  // 'custom_image'. Bei den anderen Modi wird das Feld ignoriert. Wir
+  // erlauben `unknown`, weil das vollständige Schema des Folien-Editors
+  // hier kein Validation-Wert bringt — der Renderer prüft Form selbst.
+  thumbnailImageEnabled: z.boolean().optional(),
+  thumbnailImage: z.unknown().nullable().optional(),
+  thumbnailMode: z
+    .enum(["frame", "custom_image", "landingpage_screenshot"])
+    .optional(),
+  thumbnailPlayIcon: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -56,6 +68,17 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const campaign = await createCampaign(auth.user.id, body);
+  // `thumbnailImage` ist als `unknown` validiert — der Drizzle-Insert-
+  // Type erwartet `CampaignThumbnailImage | null | undefined`. Wir cast'en
+  // hier bewusst, weil die Folien-Struktur vom Editor garantiert wird;
+  // ein invaliderer Renderer-Pfad fängt Schema-Drift später ab.
+  const { thumbnailImage, ...rest } = body;
+  const campaign = await createCampaign(auth.user.id, {
+    ...rest,
+    thumbnailImage:
+      thumbnailImage === undefined
+        ? undefined
+        : (thumbnailImage as CampaignThumbnailImage | null),
+  });
   return NextResponse.json({ campaign }, { status: 201 });
 }

@@ -92,6 +92,21 @@ export interface WizardState {
    */
   thumbnailImageEnabled: boolean;
   thumbnailImage: CampaignThumbnailImage | null;
+  /**
+   * Migration 0019 — Single-Source-of-Truth für die Thumbnail-Variante.
+   *  • 'frame'                  → Standbild aus dem Video (`pdfThumbnailFrameMs`)
+   *  • 'custom_image'           → personalisierte Folie (`thumbnailImage`)
+   *  • 'landingpage_screenshot' → Auto-Screenshot der Lead-LP
+   * `thumbnailImageEnabled` wird vom Wizard konsistent zum Modus gehalten:
+   * `(thumbnailMode === 'custom_image')`.
+   */
+  thumbnailMode: "frame" | "custom_image" | "landingpage_screenshot";
+  /**
+   * Globales Play-Icon-Overlay (halbtransparenter Play-Button auf dem
+   * Vorschaubild). Gilt für alle 3 Modi gleichermaßen. Composite-Logik
+   * landet in Paket C.
+   */
+  thumbnailPlayIcon: boolean;
 }
 
 export interface MediathekItem {
@@ -164,6 +179,8 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
     pdfThumbnailFrameMs: null,
     thumbnailImageEnabled: false,
     thumbnailImage: null,
+    thumbnailMode: "frame",
+    thumbnailPlayIcon: false,
   });
 
   const update = React.useCallback((patch: Partial<WizardState>) => {
@@ -232,6 +249,9 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
           // wird es vom API-Handler einfach verworfen.
           thumbnailImageEnabled: state.thumbnailImageEnabled,
           thumbnailImage: state.thumbnailImage,
+          // Migration 0019 — Single-Source-of-Truth + globales Play-Icon.
+          thumbnailMode: state.thumbnailMode,
+          thumbnailPlayIcon: state.thumbnailPlayIcon,
         }),
       });
       if (!res.ok) {
@@ -406,6 +426,8 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
               webcamDurationSec={wc?.durationSec ?? null}
               thumbnailImageEnabled={state.thumbnailImageEnabled}
               thumbnailImage={state.thumbnailImage}
+              thumbnailMode={state.thumbnailMode}
+              thumbnailPlayIcon={state.thumbnailPlayIcon}
               mediaItems={initialData.media ?? []}
               onChange={(patch) => update(patch)}
             />

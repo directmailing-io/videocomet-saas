@@ -162,6 +162,22 @@ export const campaigns = pgTable("campaigns", {
   thumbnailImageEnabled: boolean("thumbnail_image_enabled").notNull().default(false),
   thumbnailImage: jsonb("thumbnail_image").$type<CampaignThumbnailImage | null>(),
 
+  // ── Thumbnail-Modus (Migration 0019) ──────────────────────────────────
+  // Single-Source-of-Truth für die Art des Vorschaubilds. Drei Modi:
+  //   • 'frame'                  → Standbild aus dem Video
+  //   • 'custom_image'           → personalisierte Folie (siehe `thumbnailImage`)
+  //   • 'landingpage_screenshot' → Auto-Screenshot der Lead-LP
+  // Frontend hält `thumbnailImageEnabled` als computed mirror von
+  // (thumbnailMode === 'custom_image'), bis Paket B/C den Pipeline-Code
+  // konsequent auf `thumbnailMode` umzieht.
+  thumbnailMode: text("thumbnail_mode")
+    .notNull()
+    .default("frame")
+    .$type<"frame" | "custom_image" | "landingpage_screenshot">(),
+  // Globales Play-Icon-Overlay (gilt für alle 3 Modi). Composite-Logik
+  // landet in Paket C (Sharp-Komposition).
+  thumbnailPlayIcon: boolean("thumbnail_play_icon").notNull().default(false),
+
   /**
    * Optionaler Tenant-Suffix für Lead-Slugs dieser Kampagne (Migration 0014).
    * Format: `^[a-z0-9-]{1,32}$` (CHECK-Constraint). NULL = kein Suffix.
