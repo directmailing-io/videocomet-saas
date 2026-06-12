@@ -119,6 +119,16 @@ export async function claimSharedVideoUpload(
               sql`${runs.sharedVideoUploadStartedAt} < ${staleBoundary}`,
             ),
           ),
+          // Zombie-Heilung: state='ready' ohne tatsaechliche bunnyVideoId
+          // ist ein konsistenz-Bruch (Worker-Crash mitten im atomic-
+          // Commit). Ohne diese Klausel haengen alle weiteren Worker
+          // im Poll-Timeout, weil getSharedRunVideoState `ready` sieht
+          // aber NULL bekommt. Mit diesem Re-Claim heilt sich der Run
+          // beim naechsten Versuch automatisch.
+          and(
+            eq(runs.sharedVideoState, "ready"),
+            isNull(runs.sharedBunnyVideoId),
+          ),
         ),
       ),
     )
