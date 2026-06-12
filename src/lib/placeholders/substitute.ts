@@ -41,6 +41,38 @@ export const SYSTEM_PLACEHOLDERS = ["pageUrl"] as const;
 export type SystemPlaceholderKey = (typeof SYSTEM_PLACEHOLDERS)[number];
 
 /**
+ * Schreibweisen-Aliase für System-Keys. User tippen den Platzhalter im
+ * Google-Docs oft anders als unsere canonical-Form ({{pageUrl}}).
+ * Wir akzeptieren alle gängigen Varianten — Bindestrich, Underscore,
+ * Lowercase, mit/ohne "url"-Suffix, deutsche Schreibweise.
+ *
+ * Lookup ist case-insensitive (siehe `resolveSystemValue`).
+ */
+const SYSTEM_PLACEHOLDER_ALIASES: Record<string, SystemPlaceholderKey> = {
+  // pageUrl — canonical
+  pageurl: "pageUrl",
+  "page-url": "pageUrl",
+  page_url: "pageUrl",
+  // Englisch — Landingpage
+  landingpageurl: "pageUrl",
+  "landingpage-url": "pageUrl",
+  landingpage_url: "pageUrl",
+  landingpageUrl: "pageUrl",
+  // Mit "URL" am Ende getrennt
+  "landing-page-url": "pageUrl",
+  landing_page_url: "pageUrl",
+  landingPageUrl: "pageUrl",
+  // Deutsch — Landingpage / Webseite
+  "landingpage-link": "pageUrl",
+  landingpagelink: "pageUrl",
+  landingpage: "pageUrl",
+  "landing-page": "pageUrl",
+  // Generisch
+  url: "pageUrl",
+  link: "pageUrl",
+};
+
+/**
  * Erweiterter Substitution-Context. Lead-Daten sind weiterhin Pflicht;
  * `system` enthält von der Pipeline berechnete Werte wie `pageUrl`.
  *
@@ -66,7 +98,17 @@ function resolveSystemValue(
   system: SubstitutionSystemContext | undefined,
 ): string | null {
   if (!system) return null;
-  if (key === "pageUrl") {
+  // Canonical match first, dann case-insensitive Alias-Lookup. So bleiben
+  // bestehende Caller mit `{{pageUrl}}` unverändert schnell, neue
+  // Schreibweisen funktionieren transparent mit.
+  let canonical: SystemPlaceholderKey | null =
+    key === "pageUrl" ? "pageUrl" : null;
+  if (!canonical) {
+    const lower = key.toLowerCase();
+    canonical = SYSTEM_PLACEHOLDER_ALIASES[lower] ?? null;
+  }
+  if (!canonical) return null;
+  if (canonical === "pageUrl") {
     const v = system.pageUrl;
     return typeof v === "string" && v.length > 0 ? v : null;
   }
