@@ -8,8 +8,8 @@ import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
 import {
+  deleteRun,
   getRun,
-  softDeleteRun,
   updateRun,
 } from "@/lib/db/queries/runs";
 import { countByStatus } from "@/lib/db/queries/leads";
@@ -74,18 +74,43 @@ export async function PATCH(
 }
 
 /**
- * DELETE /api/runs/[id] — Soft-Delete + Bunny-Cleanup-Cascade.
+ * DELETE /api/runs/[id] — HARD-Delete + Bunny-Cleanup-Cascade.
  *
- * Ablöse für den alten inline Lead-für-Lead Bunny-Delete (zog Stream-API
- * synchron im Request-Pfad, ignorierte Shared-Video-Refs zwischen Leads).
- * Neuer Flow:
- *  1. Lead-IDs vor dem Soft-Delete snapshot'en (Tenant-Guard über Run-Join).
- *  2. `softDeleteRun` setzt `deletedAt` — der Run ist sofort aus dem UI.
- *  3. `bunny_asset_refs` für jeden Lead-Owner sowie den Run-Owner (Shared-
- *     Video-Ref) entfernen. Refs für Assets, die NOCH von anderen Runs/Leads
- *     verwendet werden (z.B. Shared-Webcam zwischen Runs), bleiben am
- *     Asset hängen und schützen die GUID vor dem Purge.
- *  4. Trigger einen sofortigen Purge-Tick; Cron alle 60s ist Fallback.
+ * Migration 0023:
+ *   Bis hierhin war das ein Soft-Delete (nur `runs.deleted_at` gesetzt).
+ *   Folge war ein Slug-Leak: die Leads des „gelöschten" Runs blieben
+ *   physisch in der Tabelle, ihre `slug`-Werte zählten weiter im
+ *   campaign-scoped Slug-Uniqueness-Check (`findSlugInCampaign`), und
+ *   ein Folge-Run derselben Kampagne bekam `-2`, `-3`, … Suffixe an die
+ *   neuen Lead-Slugs. Wir löschen jetzt hart.
+ *
+ * Reihenfolge ist wichtig — die FK-Cascade räumt Leads/Events erst NACH
+ * dem `delete(runs)` auf:
+ *
+ *   1. Ownership prüfen (`getRun`) + Lead-IDs snapshot'en. Letzteres
+ *      brauchen wir BEVOR der Hard-Delete die Lead-Rows wegräumt.
+ *   2. `bunny_asset_refs` für jeden Lead-Owner und den Run-Owner
+ *      entfernen. Muss VOR dem Hard-Delete passieren, weil die Refs
+ *      über (owner_type, owner_id) referenzieren — gibt es den Lead
+ *      nicht mehr, wären die Refs danach „verwaiste Ref-Rows" und
+ *      würden den Asset trotzdem am Leben halten, bis der Sweeper sie
+ *      einsammelt.
+ *      Refs für Assets, die NOCH von anderen Runs/Leads verwendet
+ *      werden (z.B. Shared-Webcam zwischen Runs), bleiben am Asset
+ *      hängen und schützen die GUID vor dem Purge.
+ *   3. `db.delete(runs)` — die FK-Cascade nuked dann `leads`,
+ *      `lead_events`, `pipeline_events`, `analytics_events` in einem
+ *      Rutsch (Migration 0023 stellt die ON DELETE CASCADE produktiv
+ *      defensiv sicher). Damit sind die Lead-Slugs frei.
+ *   4. Bunny-Purge-Tick triggern; Cron alle 60s ist Fallback.
+ *
+ * Bunny-Assets selbst werden NICHT hart gelöscht: der zentrale Purge-
+ * Worker erkennt orphane Assets (`NOT EXISTS (SELECT 1 FROM
+ * bunny_asset_refs …)`) und stellt damit sicher, dass ein zwischen
+ * Runs geteiltes Video (z.B. webcam-only Shared-Webcam, Campaign-
+ * Webcam-Media oder ein neuer Run mit derselben GUID) NICHT versehentlich
+ * weggeworfen wird. Per-Lead-gerenderte Videos verlieren mit dem letzten
+ * Ref ihre Existenzberechtigung und werden vom Worker entfernt.
  */
 export async function DELETE(
   _req: NextRequest,
@@ -99,6 +124,8 @@ export async function DELETE(
     // Verify ownership first.
     await getRun(params.id, auth.user.id);
     // Snapshot Lead-IDs scoped auf den Run und (via Join) auf den User.
+    // Muss VOR dem Hard-Delete passieren — der Cascade räumt sonst die
+    // Lead-Rows weg, bevor wir ihre IDs für die Bunny-Ref-Cleanup haben.
     const leadRows = await db
       .select({ id: leads.id })
       .from(leads)
@@ -110,22 +137,32 @@ export async function DELETE(
   }
 
   try {
-    await softDeleteRun(params.id, auth.user.id);
-  } catch {
-    return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
-  }
-
-  try {
+    // 1. Bunny-Asset-Refs für Leads + Run abräumen (vor dem Cascade!).
+    //    Polymorpher Owner_id → keine echte FK, der Cascade greift hier
+    //    nicht. Ohne dieses Cleanup würden die Refs dangle'en und den
+    //    Purge-Worker am Erkennen orphaner Assets hindern.
     await Promise.all([
       ...leadIds.map((id) => removeBunnyAssetRefsForOwner("lead", id)),
       // `run`-Owner deckt sharedBunnyVideoId der Webcam-only-Optimierung
-      // ab. Refs werden vom Worker-Cron sowieso nachsweep'ed, aber das
-      // direkte Remove hier macht den Purge-Trigger unten effektiv.
+      // ab. Refs für das Shared-Webcam-Video, das NUR dieser Run nutzte,
+      // werden hier entfernt; teilen sich mehrere Runs dieselbe GUID,
+      // bleibt der Asset über die Refs der anderen Runs geschützt.
       removeBunnyAssetRefsForOwner("run", params.id),
     ]);
   } catch (err) {
+    // Soft-Fail: Cleanup darf den eigentlichen Run-Delete nicht blockieren.
+    // Übriggebliebene Refs holt der Sweeper im nächsten Cron-Tick auf.
     // eslint-disable-next-line no-console
     console.warn("[runs:delete] ref cleanup partial failure:", err);
+  }
+
+  try {
+    // 2. HARD-Delete. FK ON DELETE CASCADE räumt leads + lead_events +
+    //    analytics_events + pipeline_events automatisch ab. Lead-Slugs
+    //    sind danach wieder frei.
+    await deleteRun(params.id, auth.user.id);
+  } catch {
+    return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
 
   void triggerBunnyPurgeTick("runs:delete");

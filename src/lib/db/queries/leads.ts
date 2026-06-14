@@ -100,6 +100,24 @@ export async function bulkInsertLeads(
  * Lead selbst gerade neu vergibt und sein eigener alter Slug nicht als
  * Kollision zählen soll — Retry-Idempotenz).
  *
+ * Active-only:
+ *   - Leads, deren Run soft-deleted ist (`runs.deleted_at IS NOT NULL`),
+ *     dürfen den Namespace NICHT mehr blockieren. Vor Migration 0023 hat
+ *     der Run-Delete nur `deleted_at` gesetzt; die Lead-Rows blieben mit
+ *     ihren Slugs in der Tabelle und sorgten für falsche `-2`/`-3`-
+ *     Suffixe in neuen Runs derselben Kampagne. Ab 0023 löscht der
+ *     Delete-Endpoint hart — die Bestandsorphans bleiben aber bis zum
+ *     Cleanup-Sweep liegen, und der Filter hier hält den Slug-Namespace
+ *     trotzdem sauber.
+ *   - Soft-removed Leads (`leads.removed_at IS NOT NULL`, z.B. via
+ *     Preflight-Reject / Duplicate / User-Reject) blockieren den Slug
+ *     ebenfalls nicht mehr. Ihre Slugs sind aus User-Sicht nicht
+ *     vergeben.
+ *
+ * Tenant-Sicherheit: der Slug-Namespace ist seit Migration 0014
+ * campaign-scoped (`leads.campaign_id`); Leads anderer Kampagnen bleiben
+ * ausgeschlossen wie bisher.
+ *
  * Returns: `{ id }` des kollidierenden Leads, oder `null` wenn der Slug frei
  * ist. Caller entscheidet, ob die ID weiterverwendet wird (Logging, Retry).
  */
@@ -113,12 +131,20 @@ export async function findSlugInCampaign(
     eq(leads.campaignId, campaignId),
     eq(leads.slug, slug),
     domainId ? eq(leads.domainId, domainId) : isNull(leads.domainId),
+    // Nur lebende Leads zählen — Soft-Remove (Preflight/Duplicate/User-
+    // Reject) gibt den Slug-Namespace wieder frei.
+    isNull(leads.removedAt),
   ];
   if (excludeLeadId) conditions.push(ne(leads.id, excludeLeadId));
   const [row] = await db
     .select({ id: leads.id })
     .from(leads)
-    .where(and(...conditions))
+    // JOIN auf runs, um Bestands-Orphans aus soft-deleted Runs aus dem
+    // Namespace rauszufiltern (Pre-0023-Hangover). innerJoin ist hier
+    // korrekt — ein Lead ohne validen Run-Parent existiert nicht
+    // (FK NOT NULL).
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(and(...conditions, isNull(runs.deletedAt)))
     .limit(1);
   return row ?? null;
 }
