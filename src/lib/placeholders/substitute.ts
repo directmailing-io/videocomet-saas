@@ -67,6 +67,13 @@ const SYSTEM_PLACEHOLDER_ALIASES: Record<string, SystemPlaceholderKey> = {
   landingpagelink: "pageUrl",
   landingpage: "pageUrl",
   "landing-page": "pageUrl",
+  // Kurzformen (uname = url-name)
+  uname: "pageUrl",
+  "u-name": "pageUrl",
+  u_name: "pageUrl",
+  urlname: "pageUrl",
+  "url-name": "pageUrl",
+  url_name: "pageUrl",
   // Generisch
   url: "pageUrl",
   link: "pageUrl",
