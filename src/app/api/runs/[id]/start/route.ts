@@ -150,6 +150,13 @@ export async function POST(
     // worker pipeline can look up `data.firstName` etc. AND keep `data.<col>`.
     const data: Record<string, string> = { ...row };
     for (const [placeholder, columnName] of Object.entries(mapping)) {
+      // System-Sentinel (z.B. `@system:pageUrl`) wird NICHT aus den CSV-
+      // Daten befüllt — der Wert kommt erst beim Render aus der Pipeline
+      // (siehe buildDocxVars in pipeline.ts). Wir lassen das `data`-Feld
+      // leer, damit kein CSV-Lookup auf `@system:...` läuft.
+      if (typeof columnName === "string" && columnName.startsWith("@system:")) {
+        continue;
+      }
       if (columnName && row[columnName] !== undefined) {
         data[placeholder] = row[columnName];
       }
@@ -262,8 +269,13 @@ export async function POST(
   // `removedReason`-Stempel (wäre semantisch falsch; deshalb prüfen wir vor
   // dem Update via `isNull(leads.removedAt)`).
   let incompleteCount = 0;
+  // System-Sentinel (z.B. `@system:pageUrl`) sind KEINE Pflicht-CSV-Spalten —
+  // die werden zur Render-Zeit befüllt. Aus der required-Liste filtern,
+  // damit Leads NICHT als „Daten unvollständig" markiert werden, nur weil
+  // die System-Spalte natürlich nicht in der CSV vorkommt.
   const requiredCols = Object.values(mapping).filter(
-    (v): v is string => typeof v === "string" && v.trim() !== "",
+    (v): v is string =>
+      typeof v === "string" && v.trim() !== "" && !v.startsWith("@system:"),
   );
   if (requiredCols.length > 0) {
     const incompleteByRowIndex = new Map<number, string[]>();

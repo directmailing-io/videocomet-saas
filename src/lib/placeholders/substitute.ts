@@ -41,6 +41,25 @@ export const SYSTEM_PLACEHOLDERS = ["pageUrl"] as const;
 export type SystemPlaceholderKey = (typeof SYSTEM_PLACEHOLDERS)[number];
 
 /**
+ * Magic-Mapping-Werte: Wenn der User im Run-Wizard beim Mapping diesen
+ * Sentinel als „Spalte" wählt, wird der Platzhalter NICHT aus den CSV-
+ * Daten befüllt, sondern beim Render mit dem System-Wert ersetzt.
+ *
+ * Format `@system:<key>`. So bleibt der Sentinel vom CSV-Namespace
+ * eindeutig getrennt (CSV-Spalten dürfen kein `@` enthalten).
+ */
+export const SYSTEM_MAPPING_PAGE_URL = "@system:pageUrl" as const;
+export const SYSTEM_MAPPING_VALUES = [SYSTEM_MAPPING_PAGE_URL] as const;
+
+/** Liefert den System-Key, wenn der Mapping-Wert ein Sentinel ist. */
+export function parseSystemMappingValue(
+  v: string | null | undefined,
+): SystemPlaceholderKey | null {
+  if (v === SYSTEM_MAPPING_PAGE_URL) return "pageUrl";
+  return null;
+}
+
+/**
  * Schreibweisen-Aliase für System-Keys. User tippen den Platzhalter im
  * Google-Docs oft anders als unsere canonical-Form ({{pageUrl}}).
  * Wir akzeptieren alle gängigen Varianten — Bindestrich, Underscore,

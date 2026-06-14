@@ -41,6 +41,10 @@ import type {
  */
 const NO_COLUMN = "__none__";
 const LEAVE_EMPTY = "__empty__";
+// Sentinel — entspricht SYSTEM_MAPPING_PAGE_URL in lib/placeholders.
+// Wir duplizieren das hardcoded, weil die Datei strikt UI ist und der
+// Import aus dem worker-orientierten Modul Build-Side-Effects einsammelt.
+const SYSTEM_PAGE_URL = "@system:pageUrl";
 
 /** Status-Pille analog zum Draft-Save in `wizard-draft-ui.tsx`. */
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -641,6 +645,8 @@ function PlaceholderRow({
   const fallback = entry?.fallback ?? "";
 
   // Aktueller Select-Wert (mit Sentinel-Mapping).
+  // System-Werte (@system:…) werden 1:1 gezeigt — der Select-Eintrag
+  // mit gleichem `value` wird automatisch selected.
   const selectValue =
     column && column.length > 0
       ? column
@@ -730,6 +736,7 @@ function PlaceholderRow({
                 // den Eintrag als „intentionally empty" (Fallback greift).
                 onChangeColumn(undefined);
               } else {
+                // CSV-Spalte ODER System-Sentinel (@system:pageUrl)
                 onChangeColumn(v);
               }
             }}
@@ -740,6 +747,10 @@ function PlaceholderRow({
             <SelectContent>
               <SelectItem value={NO_COLUMN}>— wählen —</SelectItem>
               <SelectItem value={LEAVE_EMPTY}>(leer lassen)</SelectItem>
+              {/* System-Werte zuoberst, optisch abgesetzt. */}
+              <SelectItem value={SYSTEM_PAGE_URL}>
+                🔗 Landingpage-URL (automatisch)
+              </SelectItem>
               {csvColumns.map((c) => (
                 <SelectItem key={c} value={c}>
                   {c}

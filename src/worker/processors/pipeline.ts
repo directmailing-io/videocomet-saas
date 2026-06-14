@@ -308,6 +308,19 @@ function buildDocxVars(
   if (mapping) {
     const system = pageUrlShort ? { pageUrl: pageUrlShort } : undefined;
     for (const key of Object.keys(mapping)) {
+      // SYSTEM-MAPPING: User hat im Wizard „🔗 Landingpage-URL (automatisch)"
+      // ausgewählt → Wert kommt direkt aus pageUrlShort, ohne CSV-Lookup.
+      const mappedRaw = (mapping as Record<string, unknown>)[key];
+      const mappedStr =
+        typeof mappedRaw === "string"
+          ? mappedRaw
+          : typeof mappedRaw === "object" && mappedRaw !== null
+            ? (mappedRaw as { column?: string }).column ?? ""
+            : "";
+      if (mappedStr === "@system:pageUrl") {
+        if (pageUrlShort) base[key] = pageUrlShort;
+        continue;
+      }
       const v = substitutePlaceholder(
         `{{${key}}}`,
         leadData,
