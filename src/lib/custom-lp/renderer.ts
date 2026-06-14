@@ -440,6 +440,30 @@ function buildAspectStyleSnippet(aspect: string): string {
 }
 
 /**
+ * Zwingt Customer-Templates dazu, den Video-Container an die ECHTE
+ * Aspect-Ratio des Lead-Videos anzupassen — überschreibt hartkodierte
+ * `.video-portrait { aspect-ratio: 9/16 }`-Regeln. Hintergrund:
+ * Templates wurden teils auf eine fixe Orientation designt (z.B.
+ * DigiSpace-Template hat `.video-portrait { aspect-ratio: 9/16 }` mit
+ * `object-fit: cover`). Hochkant-Templates × Landscape-Lead-Video
+ * croppen sonst nur den mittleren Vertikalstreifen → Kunde meint, das
+ * falsche Video sei eingebettet.
+ *
+ * Selektor `[data-vc-video]` ist die Konvention für unsere
+ * Video-Container; das !important schlägt jede Customer-CSS-Regel.
+ * `object-fit: cover` bleibt — der Container hat jetzt die richtige
+ * Aspect-Ratio, also füllt das Video pixelgenau, ohne Letterboxing.
+ */
+function buildVideoContainerOverrideSnippet(): string {
+  return (
+    `<style data-vc-video-container>` +
+    `[data-vc-video]{aspect-ratio:var(--vc-video-aspect,9/16)!important;}` +
+    `[data-vc-video] video,[data-vc-video] iframe{width:100%!important;height:100%!important;object-fit:cover!important;}` +
+    `</style>`
+  );
+}
+
+/**
  * Public entry point — combines all rewrite steps. Idempotent up to
  * placeholder values: calling this twice with the same input produces
  * identical output.
@@ -476,6 +500,11 @@ export function renderCustomLp(args: RenderCustomLpArgs): string {
     annotations: args.annotations ?? null,
   });
   out = injectIntoHead(out, buildAspectStyleSnippet(aspectValue));
+
+  // 4b. Video-Container-Override: zwingt jede `[data-vc-video]`-Wrapper
+  //     auf die echte Aspect-Ratio. Verhindert Crop bei Templates mit
+  //     hartkodiertem `.video-portrait { aspect-ratio: 9/16 }`.
+  out = injectIntoHead(out, buildVideoContainerOverrideSnippet());
 
   // 5. Tracking-bridge bootstrap right before </body>.
   out = injectBeforeBodyEnd(
