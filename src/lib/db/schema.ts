@@ -184,6 +184,14 @@ export const campaigns = pgTable("campaigns", {
    */
   slugSuffix: text("slug_suffix"),
 
+  /**
+   * Migration 0020 — kommagetrennte User-Aliase fuer {{pageUrl}}.
+   * Beispiel: "lp,kundenlink,seite". Wird zusaetzlich zu den built-in
+   * Aliasen (pageUrl, landingpage-url, uname, ...) case-insensitive
+   * erkannt. NULL/leer = nur built-in Aliase aktiv.
+   */
+  pageUrlAliases: text("page_url_aliases"),
+
   /** Soft-Delete-Marker (Migration 0015). NULL = aktiv. Queries werden
    * in Paket G angepasst — bis dahin keine Verhaltensänderung. */
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -205,6 +213,14 @@ export const runs = pgTable("runs", {
 
   // Mapping
   columnMapping: jsonb("column_mapping").$type<Record<string, string>>(),
+  /**
+   * Persistierte Duplikat-Erkennungs-Regeln für diesen Run (Migration 0021).
+   * Format wird von Paket A (`@/lib/dedupe/types`) definiert; bis Paket A
+   * gemerged ist, wird der Typ hier lokal als `unknown` gehalten.
+   * NULL = noch nicht konfiguriert (Default-Regeln des Dedupe-Detectors).
+   */
+  // TODO Paket A: ersetze `unknown` durch `DedupeConfig` aus "@/lib/dedupe/types"
+  dedupeConfig: jsonb("dedupe_config").$type<DedupeConfig | null>(),
   totalLeads: integer("total_leads").notNull().default(0),
   completedLeads: integer("completed_leads").notNull().default(0),
   failedLeads: integer("failed_leads").notNull().default(0),
@@ -367,8 +383,18 @@ export const leads = pgTable("leads", {
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   /** Soft-Delete-Marker. */
   removedAt: timestamp("removed_at", { withTimezone: true }),
-  /** user_rejected | auto_failed | duplicate */
-  removedReason: text("removed_reason"),
+  /**
+   * Grund für das Entfernen aus dem Run-Export. CHECK-Constraint in DB
+   * (Migration 0021) hält die Werte synchron mit `RemovedReason` unten.
+   */
+  removedReason: text("removed_reason").$type<RemovedReason | null>(),
+  /**
+   * Strukturierte Zusatzdaten zum `removedReason` (Migration 0021). Form
+   * hängt vom `reason` ab — siehe `RemovedDetail` unten. Wird vom Duplikat-
+   * Detector (Paket A) sowie der Pipeline (Paket D) befüllt; Lead-Export
+   * (Paket C) liest es für strukturierte CSV-Spalten aus.
+   */
+  removedDetail: jsonb("removed_detail").$type<RemovedDetail | null>(),
 
   // ── Denormalized Tracking-Aggregate ────────────────────────────────────
   // Aggregiert aus lead_events bei jedem insert (siehe queries/lead-events).
@@ -670,3 +696,50 @@ export const LEADS_CAMPAIGN_CUSTOM_SLUG_UQ = "leads_campaign_custom_slug_uq";
 export const LEGACY_LEADS_DEFAULT_SLUG_UQ = "leads_default_slug_uq";
 /** @deprecated Pre-Migration-0014. Hier für Bestandsschutz (z.B. Branching). */
 export const LEGACY_LEADS_CUSTOM_SLUG_UQ = "leads_custom_slug_uq";
+
+// ── Dedupe & Exclusion Types (Migration 0021) ───────────────────────────────
+//
+// Werden sowohl vom Schema (jsonb-`$type<>`-Anker) als auch von Pipeline-,
+// Export- und UI-Code (Paket A/C/D) konsumiert. Single-Source-of-Truth liegt
+// hier am Schema, damit DB-Werte und TS-Typen synchron bleiben.
+
+/**
+ * Erlaubte Werte für `leads.removed_reason`. Synchron mit dem CHECK-Constraint
+ * `leads_removed_reason_check` aus Migration 0021.
+ */
+export type RemovedReason =
+  | "user_rejected"
+  | "auto_failed"
+  | "duplicate"
+  | "pipeline_failed"
+  | "incomplete_data";
+
+/**
+ * Strukturierte Begründung in `leads.removed_detail`. Form hängt vom `reason`
+ * ab. Reine Statusgründe (`pipeline_failed`, `user_rejected`, `auto_failed`)
+ * tragen kein Zusatzpayload; `duplicate` und `incomplete_data` liefern die
+ * Daten, die der Export (Paket C) für strukturierte Spalten braucht.
+ */
+export type RemovedDetail =
+  | {
+      reason: "duplicate";
+      matchedRule: { id: string; label: string; columns: string[] };
+      duplicateOfRowIndex: number;
+    }
+  | {
+      reason: "incomplete_data";
+      missingColumns: string[];
+    }
+  | {
+      reason: "pipeline_failed" | "user_rejected" | "auto_failed";
+    };
+
+/**
+ * Persistierte Duplikat-Erkennungs-Regeln pro Run (`runs.dedupe_config`).
+ *
+ * TODO Paket A: Diese lokale Definition wird durch den Import aus
+ *   `@/lib/dedupe/types` ersetzt, sobald Paket A gemerged ist. Bis dahin
+ *   bleibt der Typ bewusst offen (`unknown`-Record), damit das Schema
+ *   ohne Paket-A-Abhängigkeit typecheckt.
+ */
+export type DedupeConfig = Record<string, unknown>;

@@ -91,6 +91,13 @@ const SYSTEM_PLACEHOLDER_ALIASES: Record<string, SystemPlaceholderKey> = {
 export interface SubstitutionSystemContext {
   /** Lead-Page-URL in Kurzform (ohne Protokoll). Berechnet via buildPageUrlShort. */
   pageUrl?: string | null;
+  /**
+   * Kampagnen-spezifische User-Aliase für `pageUrl` — zusaetzlich zu
+   * den built-in Aliasen. Werden case-insensitive geprueft. Beispiel:
+   * `["lp", "kundenlink", "meine-seite"]` → `{{lp}}` etc. landen auf
+   * der Landingpage-URL.
+   */
+  pageUrlAliases?: ReadonlyArray<string> | null;
 }
 
 /**
@@ -100,6 +107,29 @@ export interface SubstitutionSystemContext {
  * Case-sensitive: das Wording im Spec ist `{{pageUrl}}`. Wenn wir CI
  * matchen würden, kollidieren wir potentiell mit Lead-Spalten "pageurl".
  */
+/**
+ * Normalisiert einen User-Alias (z. B. " LP ", "Kunden-Link!") auf eine
+ * vergleichbare Form: trim, lowercase, alphanumerisch+`-_`. Damit kann
+ * der User in der UI tippen wie er will und wir matchen robust.
+ */
+function normalizeUserAlias(raw: string): string {
+  return raw.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+}
+
+function isPageUrlUserAlias(
+  key: string,
+  system: SubstitutionSystemContext,
+): boolean {
+  if (!system.pageUrlAliases || system.pageUrlAliases.length === 0) return false;
+  const target = normalizeUserAlias(key);
+  if (!target) return false;
+  for (const a of system.pageUrlAliases) {
+    if (typeof a !== "string") continue;
+    if (normalizeUserAlias(a) === target) return true;
+  }
+  return false;
+}
+
 function resolveSystemValue(
   key: string,
   system: SubstitutionSystemContext | undefined,
@@ -110,6 +140,12 @@ function resolveSystemValue(
   // Schreibweisen funktionieren transparent mit.
   let canonical: SystemPlaceholderKey | null =
     key === "pageUrl" ? "pageUrl" : null;
+  if (!canonical) {
+    // User-konfigurierte Aliase haben hoechste Prioritaet ueber den
+    // built-in-Aliasen — der User darf seinen eigenen Schreibstil
+    // explizit registrieren, ohne dass wir das Codebase erweitern.
+    if (isPageUrlUserAlias(key, system)) canonical = "pageUrl";
+  }
   if (!canonical) {
     const lower = key.toLowerCase();
     canonical = SYSTEM_PLACEHOLDER_ALIASES[lower] ?? null;

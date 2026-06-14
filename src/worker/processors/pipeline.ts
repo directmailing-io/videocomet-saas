@@ -272,6 +272,7 @@ function buildDocxVars(
   landingpageUrl: string,
   mapping?: Record<string, string> | Record<string, { column?: string; fallback?: string }>,
   pageUrlShort?: string | null,
+  pageUrlUserAliases?: ReadonlyArray<string> | null,
 ): Record<string, string> {
   const firstName = pickField(leadData, [
     "firstName",

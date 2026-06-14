@@ -27,6 +27,12 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { RunWizardStepPlaceholders } from "./run-wizard-step-placeholders";
+import {
+  RUN_WIZARD_DEDUPE_DEFAULT,
+  RunWizardDedupeCard,
+} from "./run-wizard-dedupe-card";
+import { detectDuplicates } from "@/lib/dedupe/engine";
+import type { DedupeConfig } from "@/lib/dedupe/types";
 
 export interface RunWizardProps {
   campaignId: string;
@@ -71,6 +77,15 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
   const [preview, setPreview] = React.useState<ParsedPreview | null>(null);
 
   const [mapping, setMapping] = React.useState<Record<string, string>>({});
+
+  /**
+   * Dedupe-Config für die Card "Duplikate erkennen". Default: enabled mit
+   * `keep-first`-Strategie und LEEREN Regeln — die Card ruft beim ersten
+   * Mount selbst `suggestRules` auf und schreibt das Ergebnis hier rein.
+   */
+  const [dedupeConfig, setDedupeConfig] = React.useState<DedupeConfig>(
+    RUN_WIZARD_DEDUPE_DEFAULT,
+  );
 
   /**
    * Steuert, welche Variante des Mapping-Steps angezeigt wird:
@@ -212,6 +227,34 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
     }
   }
 
+  /**
+   * Persistiert die aktuelle DedupeConfig in `runs.dedupe_config`. Wird beim
+   * Wechsel Step 1 → Step 2 aufgerufen. Fehler werden tolerant geloggt — der
+   * User soll wegen eines (vorübergehend) nicht erreichbaren Endpoints nicht
+   * im Wizard hängen bleiben. Bei Bedarf greift im Start-Endpoint ein
+   * Server-Side-Fallback auf die Default-Config zurück.
+   */
+  async function persistDedupeConfig() {
+    if (!runId) return;
+    try {
+      const res = await fetch(`/api/runs/${runId}/dedupe-config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dedupeConfig),
+      });
+      if (!res.ok) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[wizard] dedupe-config PUT failed:",
+          await res.text().catch(() => ""),
+        );
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[wizard] dedupe-config PUT errored:", err);
+    }
+  }
+
   async function handleNext() {
     if (step === 0) {
       const ok = await uploadAndPreview();
@@ -220,6 +263,7 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
     }
     if (step === 1) {
       // Validate: at least firstName/lastName/website is mapped (optional v1)
+      await persistDedupeConfig();
       setStep(2);
       return;
     }
@@ -388,6 +432,20 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
           </Card>
 
           {/*
+            Duplikat-Erkennung (Paket C). Lebt zwischen Vorschau und
+            Mapping, weil der User die Ergebnisse direkt nach dem Upload
+            sehen will ("Ich habe X Leads, wovon Y Duplikate sind").
+            Persistiert wird erst beim "Weiter"-Klick (sowohl im Legacy-
+            als auch im Placeholder-Mapping-Pfad).
+          */}
+          <RunWizardDedupeCard
+            rows={preview.rows}
+            headers={preview.headers}
+            value={dedupeConfig}
+            onChange={setDedupeConfig}
+          />
+
+          {/*
             Neuer einheitlicher Platzhalter-Mapping-Step (Agent A's Backend).
             Wenn der GET-Endpoint einen Fehler liefert (z. B. weil das
             Backend noch nicht deployed ist), wechseln wir transparent auf
@@ -397,7 +455,10 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
             <RunWizardStepPlaceholders
               runId={runId}
               previewRows={preview.rows}
-              onContinue={() => setStep(2)}
+              onContinue={async () => {
+                await persistDedupeConfig();
+                setStep(2);
+              }}
               onFallbackRequested={(reason) => {
                 setMappingMode("legacy");
                 setFallbackReason(reason);
@@ -460,31 +521,52 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
         </div>
       )}
 
-      {step === 2 && preview && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Zusammenfassung</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-ink-muted">
-              Du startest <strong className="text-ink">{preview.totalRows}</strong>{" "}
-              Lead{preview.totalRows === 1 ? "" : "s"} für die Kampagne{" "}
-              <strong className="text-ink">{campaignName}</strong>.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(mapping).map(([k, v]) => (
-                <Badge key={k} variant="brand">
-                  {k} -&gt; {v}
-                </Badge>
-              ))}
-              {Object.keys(mapping).length === 0 && (
-                <Badge variant="warn">Kein Mapping gesetzt</Badge>
+      {step === 2 && preview && (() => {
+        // Lokales Preview der Dedupe-Auswirkung. Das endgültige Soft-Remove
+        // läuft Server-side im Start-Endpoint — wir zeigen hier nur das, was
+        // der User auch in Step 1 schon gesehen hat, damit es vor dem Klick
+        // nicht "vergisst" wirkt.
+        const dedupeWillRun =
+          dedupeConfig.enabled &&
+          dedupeConfig.rules.some((r) => r.enabled) &&
+          preview.rows.length > 0;
+        const dedupeStats = dedupeWillRun
+          ? detectDuplicates(preview.rows, dedupeConfig).stats
+          : null;
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Zusammenfassung</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-ink-muted">
+                Du startest{" "}
+                <strong className="text-ink">{preview.totalRows}</strong>{" "}
+                Lead{preview.totalRows === 1 ? "" : "s"} für die Kampagne{" "}
+                <strong className="text-ink">{campaignName}</strong>.
+              </p>
+              {dedupeStats && dedupeStats.excluded > 0 && (
+                <p className="text-sm text-warn">
+                  <strong>{dedupeStats.excluded}</strong> Duplikat
+                  {dedupeStats.excluded === 1 ? "" : "e"} werden vor dem Start
+                  entfernt.
+                </p>
               )}
-              {pdfEnabled && <Badge variant="success">PDF-Brief aktiv</Badge>}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(mapping).map(([k, v]) => (
+                  <Badge key={k} variant="brand">
+                    {k} -&gt; {v}
+                  </Badge>
+                ))}
+                {Object.keys(mapping).length === 0 && (
+                  <Badge variant="warn">Kein Mapping gesetzt</Badge>
+                )}
+                {pdfEnabled && <Badge variant="success">PDF-Brief aktiv</Badge>}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       <div className="flex items-center justify-between mt-8 pt-6 border-t border-line">
         <Button

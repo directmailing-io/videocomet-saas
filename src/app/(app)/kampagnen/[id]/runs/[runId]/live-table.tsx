@@ -596,6 +596,11 @@ export function LiveTable({
                       CSV herunterladen
                     </a>
                   </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <a href={`/api/runs/${runId}/lead-export`} download>
+                      Lead-Liste mit Begründungen (XLSX)
+                    </a>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               {pdfEnabled && (

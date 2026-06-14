@@ -1,6 +1,7 @@
-import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
+import type { RemovedDetail, RemovedReason } from "@/lib/db/schema";
 import type {
   PreflightCounts,
   PreflightLeadRow,
@@ -414,6 +415,74 @@ export async function markLeadsRemoved(
 }
 
 /**
+ * Soft-Remove mit strukturiertem `removedDetail` (Migration 0021). Wird
+ * vom Start-Endpoint nach `bulkInsertLeads` aufgerufen, um die vom
+ * `detectDuplicates`-Engine erkannten Duplikate aus der Verarbeitung zu
+ * nehmen, OHNE den Audit-Trail zu verlieren.
+ *
+ * Im Gegensatz zu `markLeadsRemoved`:
+ *   - akzeptiert beliebige `RemovedReason`-Werte (nicht das eingeschränkte
+ *     Tupel der UI-Reject-Pfade)
+ *   - schreibt `removed_detail` (jsonb) mit der vom Caller gelieferten
+ *     strukturierten Payload (z.B. `matchedRule` + `duplicateOfRowIndex`)
+ *
+ * Tenant-Guard via Sub-Select auf `runs.userId`. Idempotent — bereits
+ * entfernte Leads werden geskipt.
+ *
+ * Returns: Anzahl tatsächlich frisch entfernter Leads.
+ */
+export async function softRemoveLeads(
+  leadIds: string[],
+  runId: string,
+  userId: string,
+  reason: RemovedReason,
+  detailByLeadId: Map<string, RemovedDetail>,
+): Promise<number> {
+  if (leadIds.length === 0) return 0;
+  const ownedIds = await db
+    .select({ id: leads.id })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        inArray(leads.id, leadIds),
+        eq(leads.runId, runId),
+        eq(runs.userId, userId),
+        isNull(leads.removedAt),
+      ),
+    );
+  const ids = ownedIds.map((r) => r.id);
+  if (ids.length === 0) return 0;
+
+  // Drizzle hat kein natives Bulk-Update-with-Different-Values. Da die
+  // Anzahl Duplikate üblicherweise <= einige hundert ist, sind Pro-ID-
+  // Updates in einer Transaktion (<100ms) der einfachste Pfad.
+  let updated = 0;
+  await db.transaction(async (tx) => {
+    const now = new Date();
+    for (const id of ids) {
+      // Caller MUSS für jeden Lead ein passendes Detail liefern. Fehlt es,
+      // schreiben wir NULL statt einer reason-only-Stub-Form — die
+      // discriminated-union zwingt sonst eine Verengung auf "no-payload"-
+      // Reasons (pipeline_failed/user_rejected/auto_failed), und das ist
+      // nicht das was der Caller (z.B. Dedupe mit 'duplicate') will.
+      const detail = detailByLeadId.get(id) ?? null;
+      const res = await tx
+        .update(leads)
+        .set({
+          removedAt: now,
+          removedReason: reason,
+          removedDetail: detail,
+        })
+        .where(eq(leads.id, id))
+        .returning({ id: leads.id });
+      updated += res.length;
+    }
+  });
+  return updated;
+}
+
+/**
  * Atomic Approval-Schritt. Setzt `approved_at = NOW()` auf alle nicht-removed
  * Leads des Runs.
  *
@@ -566,5 +635,158 @@ export async function listChangedPreflightLeads(
     )
     .orderBy(asc(leads.rowIndex));
   return rows.map((r) => projectPreflightLead(r.lead));
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// ── Lead-Export "Nicht durchgegangen" (Paket D) ───────────────────────────
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Schmale Row-Shape für den Excluded-Leads-Export. Enthält genau die Felder,
+ * die der Export braucht, um pro Lead eine menschenlesbare Begründung zu
+ * synthetisieren — ohne die volle `Lead`-Shape durch die Route zu schleifen.
+ */
+export interface ExcludedLeadRow {
+  id: string;
+  rowIndex: number;
+  data: Record<string, string>;
+  status: Lead["status"];
+  errorMessage: string | null;
+  removedAt: Date | null;
+  removedReason: RemovedReason | null;
+  removedDetail: RemovedDetail | null;
+  preflightStatus: string;
+  preflightErrorMessage: string | null;
+}
+
+/**
+ * Listet alle "nicht durchgegangenen" Leads eines Runs für den XLSX-Export.
+ *
+ * "Nicht durchgegangen" = entweder soft-deleted (`removed_at IS NOT NULL`,
+ * z.B. via Preflight-Reject / Duplikat / User-Reject) ODER pipeline-failed
+ * (`status='failed'` ohne explizites Remove — der Lead steckt also rohstatus-
+ * mäßig im Fehler-Bucket, wird vom Standard-Export aber bereits ausgefiltert).
+ *
+ * Tenant-Guard über JOIN auf `runs.user_id`.
+ */
+export async function listExcludedLeadsByRun(
+  runId: string,
+  userId: string,
+): Promise<ExcludedLeadRow[]> {
+  const rows = await db
+    .select({
+      id: leads.id,
+      rowIndex: leads.rowIndex,
+      data: leads.data,
+      status: leads.status,
+      errorMessage: leads.errorMessage,
+      removedAt: leads.removedAt,
+      removedReason: leads.removedReason,
+      removedDetail: leads.removedDetail,
+      preflightStatus: leads.preflightStatus,
+      preflightErrorMessage: leads.preflightErrorMessage,
+    })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        eq(leads.runId, runId),
+        eq(runs.userId, userId),
+        or(isNotNull(leads.removedAt), eq(leads.status, "failed")),
+      ),
+    )
+    .orderBy(asc(leads.rowIndex));
+
+  return rows.map((r) => ({
+    id: r.id,
+    rowIndex: r.rowIndex,
+    data: (r.data ?? {}) as Record<string, string>,
+    status: r.status,
+    errorMessage: r.errorMessage,
+    removedAt: r.removedAt,
+    removedReason: r.removedReason,
+    removedDetail: r.removedDetail,
+    preflightStatus: r.preflightStatus,
+    preflightErrorMessage: r.preflightErrorMessage,
+  }));
+}
+
+/**
+ * Aggregierte Zähler pro Ausschluss-Grund. Wird vom Run-Detail UI (Paket D)
+ * für die Stats-Pille genutzt: "17 entfernt (12 Duplikate · 3 Pipeline · 2
+ * unvollständig)".
+ *
+ * `pipelineFailed` zählt zwei Quellen: (a) leads mit `removed_reason =
+ * 'pipeline_failed'`, (b) leads mit `status='failed'` UND `removed_at IS
+ * NULL` (Roh-Pipeline-Fehler, die der Sweeper noch nicht soft-deleted hat).
+ */
+export interface ExclusionCounts {
+  duplicate: number;
+  pipelineFailed: number;
+  incompleteData: number;
+  userRejected: number;
+  other: number;
+  total: number;
+}
+
+export async function getExclusionCounts(
+  runId: string,
+  userId: string,
+): Promise<ExclusionCounts> {
+  const rows = await db
+    .select({
+      removedReason: leads.removedReason,
+      removedAt: leads.removedAt,
+      status: leads.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        eq(leads.runId, runId),
+        eq(runs.userId, userId),
+        or(isNotNull(leads.removedAt), eq(leads.status, "failed")),
+      ),
+    )
+    .groupBy(leads.removedReason, leads.removedAt, leads.status);
+
+  const counts: ExclusionCounts = {
+    duplicate: 0,
+    pipelineFailed: 0,
+    incompleteData: 0,
+    userRejected: 0,
+    other: 0,
+    total: 0,
+  };
+
+  for (const r of rows) {
+    const c = r.count ?? 0;
+    counts.total += c;
+    if (r.removedAt === null && r.status === "failed") {
+      // Roh-Pipeline-Fehler ohne explizites Soft-Delete.
+      counts.pipelineFailed += c;
+      continue;
+    }
+    switch (r.removedReason) {
+      case "duplicate":
+        counts.duplicate += c;
+        break;
+      case "incomplete_data":
+        counts.incompleteData += c;
+        break;
+      case "pipeline_failed":
+      case "auto_failed":
+        counts.pipelineFailed += c;
+        break;
+      case "user_rejected":
+        counts.userRejected += c;
+        break;
+      default:
+        counts.other += c;
+        break;
+    }
+  }
+  return counts;
 }
 
