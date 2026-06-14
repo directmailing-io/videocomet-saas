@@ -34,7 +34,12 @@ interface ShareDashboardProps {
   campaignName: string;
   initialLeads: ShareLeadRow[];
   initialEvents: ShareEventRow[];
-  appUrl: string;
+  /**
+   * Bereits zusammengesetzte URL-Basis pro Lead. Vanity-Host → `https://host`
+   * (Middleware rewrited `/<slug>`); Default → `${appUrl}/v`. In beiden
+   * Fällen baut der Konsument `${leadBaseUrl}/${slug}`.
+   */
+  leadBaseUrl: string;
 }
 
 type TabKey = "leads" | "live" | "engagement";
@@ -55,7 +60,7 @@ export function ShareDashboard({
   campaignName,
   initialLeads,
   initialEvents,
-  appUrl,
+  leadBaseUrl,
 }: ShareDashboardProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -126,19 +131,23 @@ export function ShareDashboard({
         </TabsList>
 
         <TabsContent value="leads">
-          <ShareLeadsTab leads={leads} appUrl={appUrl} />
+          <ShareLeadsTab leads={leads} leadBaseUrl={leadBaseUrl} />
         </TabsContent>
 
         <TabsContent value="live">
           <ShareLiveTrackingTab
             token={token}
             initialEvents={events}
-            appUrl={appUrl}
+            leadBaseUrl={leadBaseUrl}
           />
         </TabsContent>
 
         <TabsContent value="engagement">
-          <ShareEngagementTab leads={leads} appUrl={appUrl} />
+          <ShareEngagementTab
+            leads={leads}
+            leadBaseUrl={leadBaseUrl}
+            campaignName={campaignName}
+          />
         </TabsContent>
       </Tabs>
     </div>

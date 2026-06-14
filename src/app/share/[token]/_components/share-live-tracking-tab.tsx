@@ -12,129 +12,77 @@ import { formatRelativeDE, formatTimeDE } from "../share-dashboard";
 interface ShareLiveTrackingTabProps {
   token: string;
   initialEvents: SerializableShareEvent[];
-  appUrl: string;
+  /** Bereits zusammengesetzte URL-Basis pro Lead — `${leadBaseUrl}/${slug}`. */
+  leadBaseUrl: string;
 }
 
 /**
- * Bucket-Map: rohe Event-Kinds → grobe UI-Kategorie. Die Filter unten sind
- * nach diesen Buckets gruppiert (statt nach den 13+ einzelnen kinds), damit
- * der Empfänger drei einfache Toggles statt einer Wand aus Checkboxen sieht.
+ * Bucket-Map: rohe Event-Kinds → grobe UI-Kategorie. Die Public-Share-Sicht
+ * zeigt bewusst nur drei Buckets — alle anderen Kinds werden serverseitig
+ * bereits gefiltert (siehe `SHARE_ALLOWED_EVENT_KINDS`).
  */
-type Bucket = "view" | "video" | "cta" | "other";
+type Bucket = "open" | "play" | "cta";
 
 const KIND_BUCKET: Record<string, Bucket> = {
-  // View
-  page_view: "view",
-  lead_open: "view",
-  section_view: "view",
-  scroll_depth: "view",
-  time_on_page: "view",
-  // Video
-  video_play: "video",
-  video_progress: "video",
-  video_ended: "video",
-  video_mute: "video",
-  video_unmute: "video",
-  // CTA
+  // Page open
+  page_view: "open",
+  lead_open: "open",
+  landingpage_open: "open",
+  view: "open",
+  // Video play
+  video_play: "play",
+  video_start: "play",
+  play: "play",
+  // CTA click
   cta_click: "cta",
-  cta_hover: "cta",
-  cta_view: "cta",
-  link_click: "cta",
 };
 
-function bucketFor(kind: string): Bucket {
-  return KIND_BUCKET[kind] ?? "other";
+function bucketFor(kind: string): Bucket | null {
+  return KIND_BUCKET[kind] ?? null;
 }
 
 const BUCKET_DOT_COLOR: Record<Bucket, string> = {
-  view: "bg-ink-muted",
-  video: "bg-brand",
+  open: "bg-ink-muted",
+  play: "bg-brand",
   cta: "bg-warn",
-  other: "bg-line",
+};
+
+const BUCKET_LABEL: Record<Bucket, string> = {
+  open: "Seite geöffnet",
+  play: "Video abgespielt",
+  cta: "CTA-Klick",
 };
 
 /**
- * Mensch-lesbare Beschreibung pro Event-Kind. Bewusst auf Recipient-Sprache
- * getrimmt — keine internen Begriffe wie "section_view" oder "scroll_depth"
- * im UI sichtbar.
+ * Mensch-lesbare Beschreibung pro Event-Kind. Nur die drei Whitelist-Buckets
+ * tauchen hier auf — alles andere ist serverseitig schon weg.
  */
 function describeKind(
   kind: string,
   payload?: Record<string, unknown> | null,
 ): string {
-  switch (kind) {
-    case "page_view":
-    case "lead_open":
-      return "hat die Landingpage geöffnet";
-    case "section_view":
-      return "hat einen Abschnitt betrachtet";
-    case "scroll_depth": {
-      const raw =
-        payload && typeof payload.maxPct === "number"
-          ? (payload.maxPct as number)
-          : payload && typeof payload.percent === "number"
-            ? (payload.percent as number)
-            : null;
-      return raw !== null
-        ? `hat ${Math.round(raw)} % der Seite gescrollt`
-        : "hat weit gescrollt";
-    }
-    case "time_on_page": {
-      const sec =
-        payload && typeof payload.seconds === "number"
-          ? Math.round(payload.seconds as number)
-          : null;
-      return sec !== null ? `war ${sec} s auf der Seite` : "verweilte auf der Seite";
-    }
-    case "video_play":
-      return "hat das Video gestartet";
-    case "video_progress": {
-      const atSec =
-        payload && typeof payload.atSec === "number"
-          ? (payload.atSec as number)
-          : null;
-      const duration =
-        payload && typeof payload.duration === "number"
-          ? (payload.duration as number)
-          : null;
-      if (atSec !== null && duration && duration > 0) {
-        const pct = Math.min(100, Math.round((atSec / duration) * 100));
-        return `hat ${pct} % des Videos gesehen`;
-      }
-      return "hat das Video weitergesehen";
-    }
-    case "video_ended":
-      return "hat das Video komplett gesehen";
-    case "video_mute":
-      return "hat den Ton stumm geschaltet";
-    case "video_unmute":
-      return "hat den Ton eingeschaltet";
-    case "cta_click": {
+  const bucket = bucketFor(kind);
+  switch (bucket) {
+    case "open":
+      return "hat die Seite geöffnet";
+    case "play":
+      return "hat das Video abgespielt";
+    case "cta": {
       const label =
         payload && typeof payload.label === "string"
           ? (payload.label as string)
           : null;
       return label ? `hat den CTA „${label}" geklickt` : "hat den CTA geklickt";
     }
-    case "cta_view":
-      return "hat den CTA gesehen";
-    case "cta_hover":
-      return "hat den CTA überflogen";
-    case "link_click": {
-      const href =
-        payload && typeof payload.href === "string"
-          ? (payload.href as string)
-          : null;
-      return href ? `hat einen Link geklickt: ${href}` : "hat einen Link geklickt";
-    }
     default:
+      // Sollte serverseitig schon herausgefiltert sein.
       return `Aktivität: ${kind.replace(/_/g, " ")}`;
   }
 }
 
 interface BucketFilters {
-  view: boolean;
-  video: boolean;
+  open: boolean;
+  play: boolean;
   cta: boolean;
 }
 
@@ -150,13 +98,13 @@ const MAX_EVENTS_IN_MEMORY = 500;
 export function ShareLiveTrackingTab({
   token,
   initialEvents,
-  appUrl,
+  leadBaseUrl,
 }: ShareLiveTrackingTabProps) {
   const [events, setEvents] = React.useState<SerializableShareEvent[]>(initialEvents);
   const [search, setSearch] = React.useState("");
   const [filters, setFilters] = React.useState<BucketFilters>({
-    view: true,
-    video: true,
+    open: true,
+    play: true,
     cta: true,
   });
   const [newIds, setNewIds] = React.useState<Set<string>>(new Set());
@@ -260,12 +208,10 @@ export function ShareLiveTrackingTab({
     const term = search.trim().toLowerCase();
     return events.filter((e) => {
       const b = bucketFor(e.kind);
-      if (b === "other" && !(filters.view || filters.video || filters.cta)) {
-        // alles aus → other auch raus
-        return false;
-      }
-      if (b === "view" && !filters.view) return false;
-      if (b === "video" && !filters.video) return false;
+      // Events außerhalb der Whitelist (sollten nicht ankommen) ausblenden.
+      if (b === null) return false;
+      if (b === "open" && !filters.open) return false;
+      if (b === "play" && !filters.play) return false;
       if (b === "cta" && !filters.cta) return false;
       if (!term) return true;
       const fullName = `${e.leadFirstName ?? ""} ${e.leadLastName ?? ""}`
@@ -290,21 +236,21 @@ export function ShareLiveTrackingTab({
           />
           <div className="flex flex-wrap items-center gap-4">
             <FilterCheckbox
-              checked={filters.view}
-              onCheckedChange={() => setFilter("view")}
-              label="View"
-              dotClass={BUCKET_DOT_COLOR.view}
+              checked={filters.open}
+              onCheckedChange={() => setFilter("open")}
+              label={BUCKET_LABEL.open}
+              dotClass={BUCKET_DOT_COLOR.open}
             />
             <FilterCheckbox
-              checked={filters.video}
-              onCheckedChange={() => setFilter("video")}
-              label="Video"
-              dotClass={BUCKET_DOT_COLOR.video}
+              checked={filters.play}
+              onCheckedChange={() => setFilter("play")}
+              label={BUCKET_LABEL.play}
+              dotClass={BUCKET_DOT_COLOR.play}
             />
             <FilterCheckbox
               checked={filters.cta}
               onCheckedChange={() => setFilter("cta")}
-              label="CTA"
+              label={BUCKET_LABEL.cta}
               dotClass={BUCKET_DOT_COLOR.cta}
             />
           </div>
@@ -321,7 +267,7 @@ export function ShareLiveTrackingTab({
             <EventRow
               key={event.id}
               event={event}
-              appUrl={appUrl}
+              leadBaseUrl={leadBaseUrl}
               isNew={newIds.has(event.id)}
             />
           ))}
@@ -335,14 +281,17 @@ export function ShareLiveTrackingTab({
 
 function EventRow({
   event,
-  appUrl,
+  leadBaseUrl,
   isNew,
 }: {
   event: SerializableShareEvent;
-  appUrl: string;
+  leadBaseUrl: string;
   isNew: boolean;
 }) {
   const bucket = bucketFor(event.kind);
+  // Falls ein nicht-Whitelist-Kind durch alte Caches kommt: defensive
+  // Fallback-Farbe, damit der Render nicht crasht.
+  const dotClass = bucket ? BUCKET_DOT_COLOR[bucket] : "bg-line";
   const fullName = [event.leadFirstName, event.leadLastName]
     .filter(Boolean)
     .join(" ")
@@ -357,7 +306,7 @@ function EventRow({
       <span
         className={cn(
           "mt-2 size-2 shrink-0 rounded-full",
-          BUCKET_DOT_COLOR[bucket],
+          dotClass,
         )}
         aria-hidden
       />
@@ -365,7 +314,7 @@ function EventRow({
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           {event.leadSlug ? (
             <a
-              href={`${appUrl}/v/${event.leadSlug}`}
+              href={`${leadBaseUrl}/${event.leadSlug}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm font-semibold text-ink hover:text-brand-deep hover:underline"

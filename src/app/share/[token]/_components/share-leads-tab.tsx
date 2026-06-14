@@ -38,6 +38,9 @@ const PAGE_SIZE = 50;
 type SortKey =
   | "firstName"
   | "lastName"
+  | "phone"
+  | "email"
+  | "address"
   | "run"
   | "status"
   | "views"
@@ -48,7 +51,8 @@ type SortKey =
 
 interface ShareLeadsTabProps {
   leads: SerializableShareLead[];
-  appUrl: string;
+  /** Bereits zusammengesetzte URL-Basis: `${leadBaseUrl}/${slug}` ergibt die Lead-URL. */
+  leadBaseUrl: string;
 }
 
 /**
@@ -57,7 +61,7 @@ interface ShareLeadsTabProps {
  * Pattern bewusst aus `campaign-leads-table.tsx` übernommen (Ergonomie-
  * Konsistenz), aber gekappt um Owner-spezifische Aktionen.
  */
-export function ShareLeadsTab({ leads, appUrl }: ShareLeadsTabProps) {
+export function ShareLeadsTab({ leads, leadBaseUrl }: ShareLeadsTabProps) {
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [runFilter, setRunFilter] = React.useState<string>("all");
@@ -90,11 +94,17 @@ export function ShareLeadsTab({ leads, appUrl }: ShareLeadsTabProps) {
       const last = (l.lastName ?? "").toLowerCase();
       const run = l.runName.toLowerCase();
       const slug = (l.slug ?? "").toLowerCase();
+      const phone = (l.phone ?? "").toLowerCase();
+      const email = (l.email ?? "").toLowerCase();
+      const address = (l.address ?? "").toLowerCase();
       return (
         first.includes(term) ||
         last.includes(term) ||
         run.includes(term) ||
-        slug.includes(term)
+        slug.includes(term) ||
+        phone.includes(term) ||
+        email.includes(term) ||
+        address.includes(term)
       );
     });
     return out.slice().sort((a, b) => sortCmp(a, b, sortKey, sortDir));
@@ -127,7 +137,7 @@ export function ShareLeadsTab({ leads, appUrl }: ShareLeadsTabProps) {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,180px,200px,auto] gap-3 items-end">
           <Input
             icon={<Search />}
-            placeholder="Suche nach Vorname, Nachname, Run oder Slug…"
+            placeholder="Suche nach Name, Telefon, E-Mail, Adresse, Run, Slug…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -189,6 +199,30 @@ export function ShareLeadsTab({ leads, appUrl }: ShareLeadsTabProps) {
                   onSort={toggleSort}
                 >
                   Nachname
+                </SortableTh>
+                <SortableTh
+                  sortKey="phone"
+                  current={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                >
+                  Telefon
+                </SortableTh>
+                <SortableTh
+                  sortKey="email"
+                  current={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                >
+                  E-Mail
+                </SortableTh>
+                <SortableTh
+                  sortKey="address"
+                  current={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                >
+                  Adresse
                 </SortableTh>
                 <SortableTh
                   sortKey="run"
@@ -257,7 +291,7 @@ export function ShareLeadsTab({ leads, appUrl }: ShareLeadsTabProps) {
               {pageRows.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={10}
+                    colSpan={13}
                     className="text-center py-12 text-ink-muted text-sm"
                   >
                     Keine Leads für die aktuellen Filter.
@@ -272,20 +306,48 @@ export function ShareLeadsTab({ leads, appUrl }: ShareLeadsTabProps) {
                     <TableCell className="text-ink">
                       {l.lastName ?? "—"}
                     </TableCell>
+                    <TableCell className="text-xs">
+                      {l.phone ? (
+                        <a
+                          href={`tel:${l.phone}`}
+                          className="text-brand-deep hover:underline whitespace-nowrap"
+                        >
+                          {l.phone}
+                        </a>
+                      ) : (
+                        <span className="text-ink-muted">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {l.email ? (
+                        <a
+                          href={`mailto:${l.email}`}
+                          className="text-brand-deep hover:underline truncate inline-block max-w-[200px]"
+                          title={l.email}
+                        >
+                          {l.email}
+                        </a>
+                      ) : (
+                        <span className="text-ink-muted">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-ink-soft truncate max-w-[200px]" title={l.address ?? undefined}>
+                      {l.address ?? <span className="text-ink-muted">—</span>}
+                    </TableCell>
                     <TableCell className="text-ink-muted text-xs truncate max-w-[180px]">
                       {l.runName}
                     </TableCell>
                     <TableCell>
                       {l.slug ? (
                         <a
-                          href={`${appUrl}/v/${l.slug}`}
+                          href={`${leadBaseUrl}/${l.slug}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-brand-deep hover:underline text-xs"
-                          title={`${appUrl}/v/${l.slug}`}
+                          title={`${leadBaseUrl}/${l.slug}`}
                         >
                           <ExternalLink className="size-3" />
-                          /v/{l.slug}
+                          /{l.slug}
                         </a>
                       ) : (
                         <span className="text-ink-muted text-xs">—</span>
@@ -415,6 +477,12 @@ function sortCmp(
       return (a.firstName ?? "").localeCompare(b.firstName ?? "") * sign;
     case "lastName":
       return (a.lastName ?? "").localeCompare(b.lastName ?? "") * sign;
+    case "phone":
+      return (a.phone ?? "").localeCompare(b.phone ?? "") * sign;
+    case "email":
+      return (a.email ?? "").localeCompare(b.email ?? "") * sign;
+    case "address":
+      return (a.address ?? "").localeCompare(b.address ?? "") * sign;
     case "run":
       return a.runName.localeCompare(b.runName) * sign;
     case "status":

@@ -25,6 +25,7 @@ import {
   leadEvents,
   leads,
   runs,
+  userDomains,
 } from "@/lib/db/schema";
 import { hashPassword } from "@/lib/db/queries/users";
 import { generateShareToken } from "@/lib/share-token";
@@ -38,6 +39,13 @@ export interface ActiveShare {
   passwordHash: string;
   label: string | null;
   lastAccessedAt: Date | null;
+  /**
+   * Hostname der Custom-Domain der Kampagne, falls verknüpft UND `active`.
+   * Für die Public-Share-Sicht bauen wir damit Lead-URLs der Form
+   * `https://<hostname>/<slug>` statt der Default-URL `${appUrl}/v/<slug>`.
+   * NULL → keine Vanity-Domain, Fallback auf Default.
+   */
+  campaignDomainHostname: string | null;
 }
 
 export interface ShareLeadRow {
@@ -45,6 +53,12 @@ export interface ShareLeadRow {
   slug: string | null;
   firstName: string | null;
   lastName: string | null;
+  /** E-Mail des Leads aus `data` (case-insensitive Lookup). */
+  email: string | null;
+  /** Telefonnummer des Leads. */
+  phone: string | null;
+  /** Zusammengesetzte Adresse: "Strasse, PLZ Stadt[, Land]" oder NULL. */
+  address: string | null;
   runId: string;
   runName: string;
   status: string;
@@ -76,7 +90,35 @@ export interface ShareEventRow {
 export interface ShareEngagement {
   opened: ShareLeadRow[];
   played: ShareLeadRow[];
+  clicked: ShareLeadRow[];
 }
+
+/**
+ * Whitelist der Event-Kinds, die auf der Public-Share-Sicht gezeigt werden.
+ * Bewusst minimal: nur Seite-geöffnet, Video-Play und CTA-Klick. Alle übrigen
+ * Kinds (Watch-Progress, Scroll-Depth, Time-on-Page, etc.) sind interner
+ * Tracking-Detail und werden vor dem Verlassen der Query gefiltert.
+ *
+ * Quellen:
+ *   - `leadEvents.kind`: `page_view`, `video_play`, `cta_click`
+ *   - `analyticsEvents.eventType` (legacy): `page_view`, `video_start`, `cta_click`
+ *     sowie potentielle Bridge-Aliase (`lead_open`, `landingpage_open`, `view`,
+ *     `play`) — alle Aliase werden mitgenommen, damit ältere Tracker nichts
+ *     verschlucken.
+ */
+export const SHARE_ALLOWED_EVENT_KINDS = [
+  // Page open / view
+  "page_view",
+  "lead_open",
+  "landingpage_open",
+  "view",
+  // Video play
+  "video_play",
+  "video_start",
+  "play",
+  // CTA click
+  "cta_click",
+] as const;
 
 export interface ShareSummaryRow {
   id: string;
@@ -112,6 +154,84 @@ const LEAD_LASTNAME_SQL = sql<string | null>`
     NULLIF(${leads.data} ->> 'last_name', '')
   )
 `;
+
+// Case-insensitive Lookup für E-Mail, Telefon und die Adress-Bestandteile.
+// Die Reihenfolge spiegelt das gebräuchlichste Formular-Feld pro Mandant —
+// `E-Mail` vor `email` vor `Email`. Leere Strings → NULL.
+const LEAD_EMAIL_SQL = sql<string | null>`
+  COALESCE(
+    NULLIF(${leads.data} ->> 'E-Mail', ''),
+    NULLIF(${leads.data} ->> 'email', ''),
+    NULLIF(${leads.data} ->> 'Email', ''),
+    NULLIF(${leads.data} ->> 'e-mail', ''),
+    NULLIF(${leads.data} ->> 'EMail', '')
+  )
+`;
+
+const LEAD_PHONE_SQL = sql<string | null>`
+  COALESCE(
+    NULLIF(${leads.data} ->> 'Telefon', ''),
+    NULLIF(${leads.data} ->> 'telefon', ''),
+    NULLIF(${leads.data} ->> 'phone', ''),
+    NULLIF(${leads.data} ->> 'Phone', ''),
+    NULLIF(${leads.data} ->> 'Tel', ''),
+    NULLIF(${leads.data} ->> 'tel', '')
+  )
+`;
+
+const LEAD_STREET_SQL = sql<string | null>`
+  COALESCE(
+    NULLIF(${leads.data} ->> 'Strasse', ''),
+    NULLIF(${leads.data} ->> 'strasse', ''),
+    NULLIF(${leads.data} ->> 'strae', ''),
+    NULLIF(${leads.data} ->> 'Straße', ''),
+    NULLIF(${leads.data} ->> 'street', '')
+  )
+`;
+
+const LEAD_ZIP_SQL = sql<string | null>`
+  COALESCE(
+    NULLIF(${leads.data} ->> 'PLZ', ''),
+    NULLIF(${leads.data} ->> 'plz', ''),
+    NULLIF(${leads.data} ->> 'zip', ''),
+    NULLIF(${leads.data} ->> 'postalCode', '')
+  )
+`;
+
+const LEAD_CITY_SQL = sql<string | null>`
+  COALESCE(
+    NULLIF(${leads.data} ->> 'Stadt', ''),
+    NULLIF(${leads.data} ->> 'stadt', ''),
+    NULLIF(${leads.data} ->> 'city', ''),
+    NULLIF(${leads.data} ->> 'Ort', '')
+  )
+`;
+
+const LEAD_COUNTRY_SQL = sql<string | null>`
+  COALESCE(
+    NULLIF(${leads.data} ->> 'Land', ''),
+    NULLIF(${leads.data} ->> 'land', ''),
+    NULLIF(${leads.data} ->> 'country', '')
+  )
+`;
+
+/**
+ * Setzt "Strasse, PLZ Stadt[, Land]" aus den vier Bausteinen zusammen.
+ * Leere Teile werden ausgelassen; ergibt der ganze String "—" wenn alles leer.
+ */
+function composeAddress(
+  street: string | null,
+  zip: string | null,
+  city: string | null,
+  country: string | null,
+): string | null {
+  const cityLine = [zip, city].filter(Boolean).join(" ").trim();
+  const parts = [street, cityLine, country].filter(
+    (p): p is string => !!p && p.length > 0,
+  );
+  if (parts.length === 0) return null;
+  return parts.join(", ");
+}
 
 // Felder, die vor dem Ausliefern aus jedem Payload entfernt werden müssen
 // (Privacy-Strip). Wir filtern in JS statt im SQL-`->>` damit der jsonb
@@ -149,6 +269,9 @@ function stripPayload(
 export async function getActiveShareByToken(
   token: string,
 ): Promise<ActiveShare | null> {
+  // LEFT-JOIN auf campaigns (für domain_id) und user_domains (für hostname).
+  // Der Domain-Join filtert auf `status = 'active'`, damit pending/failed
+  // Domains keine Lead-URLs verseuchen — Fallback bleibt die Default-URL.
   const [row] = await db
     .select({
       id: campaignShares.id,
@@ -157,8 +280,17 @@ export async function getActiveShareByToken(
       passwordHash: campaignShares.passwordHash,
       label: campaignShares.label,
       lastAccessedAt: campaignShares.lastAccessedAt,
+      campaignDomainHostname: userDomains.hostname,
     })
     .from(campaignShares)
+    .leftJoin(campaigns, eq(campaigns.id, campaignShares.campaignId))
+    .leftJoin(
+      userDomains,
+      and(
+        eq(userDomains.id, campaigns.domainId),
+        eq(userDomains.status, "active"),
+      ),
+    )
     .where(
       and(eq(campaignShares.token, token), isNull(campaignShares.revokedAt)),
     )
@@ -182,6 +314,12 @@ export async function listShareLeads(
       slug: leads.slug,
       firstName: LEAD_FIRSTNAME_SQL.as("first_name"),
       lastName: LEAD_LASTNAME_SQL.as("last_name"),
+      email: LEAD_EMAIL_SQL.as("email"),
+      phone: LEAD_PHONE_SQL.as("phone"),
+      street: LEAD_STREET_SQL.as("street"),
+      zip: LEAD_ZIP_SQL.as("zip"),
+      city: LEAD_CITY_SQL.as("city"),
+      country: LEAD_COUNTRY_SQL.as("country"),
       runId: runs.id,
       runName: runs.name,
       status: leads.status,
@@ -206,6 +344,9 @@ export async function listShareLeads(
     slug: r.slug,
     firstName: r.firstName,
     lastName: r.lastName,
+    email: r.email,
+    phone: r.phone,
+    address: composeAddress(r.street, r.zip, r.city, r.country),
     runId: r.runId,
     runName: r.runName,
     status: r.status,
@@ -243,6 +384,15 @@ export async function listShareEvents(
   const since = opts.sinceTs ?? null;
   const sinceIso = since ? since.toISOString() : null;
 
+  // Whitelist als SQL-Array-Literal. Hart kodiert (kein Parameter) — siehe
+  // `SHARE_ALLOWED_EVENT_KINDS`-Kommentar oben. Postgres' `= ANY(ARRAY[...])`
+  // ist hier äquivalent zu `IN (...)`, lässt sich aber sauber in den
+  // raw-SQL-Block einsetzen.
+  const allowedKindsSql = sql.join(
+    SHARE_ALLOWED_EVENT_KINDS.map((k) => sql`${k}`),
+    sql`, `,
+  );
+
   // Wir bauen die UNION als raw-SQL, damit beide Quellen mit identischen
   // Spalten zusammenkommen und Postgres die ORDER+LIMIT global auswerten
   // kann. Die Joins enforcen den Campaign-Tenant-Guard via runs.campaign_id.
@@ -275,6 +425,7 @@ export async function listShareEvents(
       INNER JOIN ${runs} ON ${runs.id} = ${leads.runId}
       WHERE ${runs.campaignId} = ${campaignId}
         AND ${leads.removedAt} IS NULL
+        AND ${leadEvents.kind} = ANY(ARRAY[${allowedKindsSql}]::text[])
         ${sinceIso ? sql`AND ${leadEvents.ts} > ${sinceIso}` : sql``}
 
       UNION ALL
@@ -295,6 +446,7 @@ export async function listShareEvents(
       INNER JOIN ${runs} ON ${runs.id} = ${leads.runId}
       WHERE ${runs.campaignId} = ${campaignId}
         AND ${leads.removedAt} IS NULL
+        AND ${analyticsEvents.eventType} = ANY(ARRAY[${allowedKindsSql}]::text[])
         ${sinceIso ? sql`AND ${analyticsEvents.createdAt} > ${sinceIso}` : sql``}
     ) u
     ORDER BY u.ts DESC
@@ -354,7 +506,14 @@ export async function listShareEngagement(
       const bt = b.lastViewedAt ? b.lastViewedAt.getTime() : 0;
       return bt - at;
     });
-  return { opened, played };
+  const clicked = all
+    .filter((l) => (l.ctaClickCount ?? 0) > 0)
+    .sort((a, b) => {
+      const at = a.lastCtaAt ? a.lastCtaAt.getTime() : 0;
+      const bt = b.lastCtaAt ? b.lastCtaAt.getTime() : 0;
+      return bt - at;
+    });
+  return { opened, played, clicked };
 }
 
 // ── Rate-Limit + Audit-Log ───────────────────────────────────────────────────

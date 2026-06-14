@@ -44,6 +44,14 @@ export default async function SharePage({
     .catch(() => "Kampagne");
   const appUrl = process.env.APP_URL ?? "https://app.videocomet.de";
 
+  // Lead-URL-Basis:
+  //   - mit Vanity-Domain → `https://<hostname>` (Middleware rewrited `/<slug>`)
+  //   - ohne              → `${appUrl}/v`
+  // In beiden Fällen wird im Client `${leadBaseUrl}/${slug}` zusammengebaut.
+  const leadBaseUrl = share.campaignDomainHostname
+    ? `https://${share.campaignDomainHostname}`
+    : `${appUrl}/v`;
+
   if (!authenticated) {
     return (
       <section className="mx-auto w-full max-w-md px-5 py-16">
@@ -64,7 +72,7 @@ export default async function SharePage({
         campaignName={campaignName}
         initialLeads={leads}
         initialEvents={events}
-        appUrl={appUrl}
+        leadBaseUrl={leadBaseUrl}
       />
     </section>
   );
