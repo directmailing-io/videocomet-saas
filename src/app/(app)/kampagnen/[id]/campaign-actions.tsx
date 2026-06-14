@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { Pencil, Trash2, AlertTriangle, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,20 +16,27 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toaster";
+import { ShareDialog } from "./share-dialog";
 
 type DeleteStage = "closed" | "stage1" | "stage2";
 
 export interface CampaignActionsProps {
   campaignId: string;
   campaignName: string;
+  appUrl: string;
 }
 
-export function CampaignActions({ campaignId, campaignName }: CampaignActionsProps) {
+export function CampaignActions({
+  campaignId,
+  campaignName,
+  appUrl,
+}: CampaignActionsProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [stage, setStage] = React.useState<DeleteStage>("closed");
   const [confirmText, setConfirmText] = React.useState("");
   const [deleting, setDeleting] = React.useState(false);
+  const [shareOpen, setShareOpen] = React.useState(false);
 
   function openDelete() {
     setConfirmText("");
@@ -81,6 +88,14 @@ export function CampaignActions({ campaignId, campaignName }: CampaignActionsPro
     <>
       <Button
         variant="ghost"
+        iconLeft={<Share2 className="size-4" />}
+        onClick={() => setShareOpen(true)}
+        type="button"
+      >
+        Teilen
+      </Button>
+      <Button
+        variant="ghost"
         iconLeft={<Pencil className="size-4" />}
         asChild
       >
@@ -94,6 +109,14 @@ export function CampaignActions({ campaignId, campaignName }: CampaignActionsPro
       >
         Löschen
       </Button>
+
+      <ShareDialog
+        campaignId={campaignId}
+        campaignName={campaignName}
+        appUrl={appUrl}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+      />
 
       {/* Stage 1: Warning */}
       <Dialog

@@ -685,6 +685,58 @@ export const bunnyAssetRefs = pgTable("bunny_asset_refs", {
   ownerIdx: index("bunny_asset_refs_owner_idx").on(t.ownerType, t.ownerId),
 }));
 
+// ── Campaign-Shares (Public Password-Protected Campaign-Share) ──────────────
+// Owner generiert einen Token + Passwort, der über `/share/<token>` einem
+// nicht-eingeloggten Besucher Read-Only-Zugriff auf Engagement + Event-
+// Stream einer ganzen Kampagne gibt. Migration 0022.
+//
+// Sicherheits-Invarianten:
+//   - `token` ist global eindeutig (UNIQUE-Index).
+//   - `passwordHash` wird via Argon2id erzeugt (hashPassword/verifyPassword
+//     aus queries/users.ts).
+//   - `revoked_at IS NULL` ist die Owner-sichtbare "aktive"-Bedingung;
+//     Public-Lookups filtern darauf.
+//   - `campaign_share_attempts` speichert nur `ip_hash` (sha256(ip)[:16]),
+//     niemals raw-IP — DSGVO.
+export const campaignShares = pgTable("campaign_shares", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  campaignId: uuid("campaign_id")
+    .notNull()
+    .references(() => campaigns.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  label: text("label"),
+  lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tokenUq: uniqueIndex("campaign_shares_token_uq").on(t.token),
+  campaignIdx: index("campaign_shares_campaign_idx")
+    .on(t.campaignId)
+    .where(sql`${t.revokedAt} IS NULL`),
+  userIdx: index("campaign_shares_user_idx").on(t.userId),
+}));
+
+// Audit-Log der Login-Versuche pro Token. Wird für Rate-Limiting ausgelesen
+// (≥10 fails in 15 min → 429). Append-only, kein FK auf `campaign_shares`
+// (Token ist hier Naturschlüssel, damit auch Versuche auf nicht-existente
+// oder bereits hartgelöschte Tokens loggen / zählen).
+export const campaignShareAttempts = pgTable("campaign_share_attempts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  token: text("token").notNull(),
+  ipHash: text("ip_hash").notNull(),
+  ok: boolean("ok").notNull(),
+  ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // Index ist in der Migration als (token, ts DESC) angelegt; Drizzle-Side
+  // braucht die DESC-Reihenfolge nicht, da Index-Lookups auf BTREE in
+  // beide Richtungen genauso schnell sind.
+  tokenTsIdx: index("campaign_share_attempts_token_ts_idx").on(t.token, t.ts),
+}));
+
 // ── Index-Namen als Konstanten ────────────────────────────────────────────
 //
 // Werden vom Worker (`landingpage-create.ts`) zur Erkennung von

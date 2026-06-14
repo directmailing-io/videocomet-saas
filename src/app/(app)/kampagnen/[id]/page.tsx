@@ -203,6 +203,7 @@ export default async function CampaignDetailPage({
           <CampaignActions
             campaignId={campaign.id}
             campaignName={campaign.name}
+            appUrl={appUrl}
           />
         }
       />

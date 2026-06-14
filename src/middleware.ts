@@ -44,6 +44,12 @@ const SANDBOX_LP_HOST = "lp.videocomet.de";
 /**
  * Pfade die NIE durch das Custom-Domain-Rewrite gehen — sonst zerlegen wir
  * /api-Calls, Next-Static, das Tracking-Pixel etc.
+ *
+ * Hinweis: `/share/` ist der Public-Password-Protected-Campaign-Share
+ * (Migration 0022, Route `/share/[token]`). Der Token-Pfad darf weder
+ * vom Custom-Domain-Rewrite noch vom App-Session-Guard angefasst werden —
+ * Besucher haben keine Lucia-Session, sondern ein eigenes signiertes
+ * Cookie (siehe `src/lib/share-cookie.ts`).
  */
 function isPassthroughPath(pathname: string): boolean {
   return (
@@ -51,6 +57,8 @@ function isPassthroughPath(pathname: string): boolean {
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/static/") ||
+    pathname.startsWith("/share/") ||
+    pathname.startsWith("/api/share/") ||
     // Stealth-Tracking-Endpoint. Wird auf lp.videocomet.de und Custom-
     // Domains direkt zur App durchgereicht — first-party-Tracking ohne
     // CORS-Trigger und ohne AdBlocker-Match auf /api/track/event.
