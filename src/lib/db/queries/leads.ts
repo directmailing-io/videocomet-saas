@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
 import type { RemovedDetail, RemovedReason } from "@/lib/db/schema";
@@ -176,6 +176,9 @@ export async function getLeadBySlugForDefaultDomain(
     .select()
     .from(leads)
     .where(and(eq(leads.slug, slug), isNull(leads.domainId)))
+    // Aktuellster Lead gewinnt — Slug-Kollisionen zwischen Kampagnen
+    // sind seit der Lockerung der Uniqueness (campaign-scoped) moeglich.
+    .orderBy(desc(leads.createdAt))
     .limit(1);
   return projectPublicLead(row ?? null);
 }
@@ -198,6 +201,8 @@ export async function getLeadBySlugAndDomain(
     .select()
     .from(leads)
     .where(and(eq(leads.slug, slug), eq(leads.domainId, domainId)))
+    // Siehe Begruendung in getLeadBySlugForDefaultDomain.
+    .orderBy(desc(leads.createdAt))
     .limit(1);
   return projectPublicLead(row ?? null);
 }

@@ -18,7 +18,7 @@
  *   3. NULL → 404
  */
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   campaigns,
@@ -89,6 +89,12 @@ export async function getCustomLpContextBySlugForDefaultDomain(
       eq(customLpTemplates.id, campaigns.customLpTemplateId),
     )
     .where(and(eq(leads.slug, slug), isNull(leads.domainId)))
+    // Bei Slug-Kollisionen zwischen mehreren Kampagnen desselben Users
+    // (z.B. richard-bartosch in Kampagne A UND B) gewinnt der zuletzt
+    // erstellte Lead — die aktuelle Outreach. Ohne ORDER BY wuerde
+    // Postgres den ersten Scan-Treffer (idR. aelteren) zurueckgeben
+    // → Empfaenger sieht das Layout der alten Kampagne.
+    .orderBy(desc(leads.createdAt))
     .limit(1);
 
   return materialise(row[0]);
@@ -128,6 +134,8 @@ export async function getCustomLpContextBySlugAndDomain(
       eq(customLpTemplates.id, campaigns.customLpTemplateId),
     )
     .where(and(eq(leads.slug, slug), eq(leads.domainId, domainId)))
+    // Siehe Begruendung in `getCustomLpContextBySlugForDefaultDomain`.
+    .orderBy(desc(leads.createdAt))
     .limit(1);
 
   return materialise(row[0]);

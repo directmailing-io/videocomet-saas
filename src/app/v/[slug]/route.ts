@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
 import { buildCustomLpCspHeader } from "@/lib/custom-lp/csp";
@@ -65,6 +65,9 @@ async function hasCustomLpPin(
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
     .where(slugCondition)
+    // Aktuellster Lead gewinnt bei Slug-Kollisionen — analog zur
+    // Public-LP-Lookup-Logik in queries/custom-lp-public.ts.
+    .orderBy(desc(leads.createdAt))
     .limit(1);
   return Boolean(row?.pinnedVersionId);
 }
