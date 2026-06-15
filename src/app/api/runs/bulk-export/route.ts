@@ -207,10 +207,14 @@ export async function POST(req: NextRequest) {
   const zipFilename = `${baseName}.zip`;
 
   // ── archiver vorbereiten + Stream zur Response durchschleifen ─────────
-  const archiverMod = (await import("archiver")) as unknown as {
-    default?: typeof ArchiverNs;
-  } & typeof ArchiverNs;
-  const archiver = archiverMod.default ?? (archiverMod as unknown as typeof ArchiverNs);
+  // Native Node-require statt webpack-Import — der Bundler verformt sowohl
+  // statisches `import archiver from "archiver"` ALS AUCH dynamic
+  // `await import("archiver")` zu einem Namespace-Objekt ohne callable
+  // default (Error im Bundle: `(P.default ?? P) is not a function`).
+  // `createRequire` umgeht den Bundler komplett.
+  const { createRequire } = await import("node:module");
+  const requireFn = createRequire(import.meta.url);
+  const archiver = requireFn("archiver") as typeof ArchiverNs;
   const archive = archiver("zip", { zlib: { level: 6 } });
   const passthrough = new PassThrough();
   archive.pipe(passthrough);
