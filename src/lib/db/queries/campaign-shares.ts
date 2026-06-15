@@ -15,7 +15,7 @@
  *  - `revokeShare` ist tenant-guarded via `userId` und idempotent.
  */
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   analyticsEvents,
@@ -70,6 +70,37 @@ export interface ShareLeadRow {
   lastCtaAt: Date | null;
   watchTimeSec: number;
   createdAt: Date;
+}
+
+/**
+ * Werte gemäß `leads_removed_reason_check` (Migration 0021) — synchron mit
+ * `RemovedReason` in schema.ts. Reicht von der DB hochgereicht; das UI mappt
+ * jeden Wert auf ein deutsches Label + Badge-Variant.
+ */
+export type ShareRemovedReason =
+  | "user_rejected"
+  | "auto_failed"
+  | "duplicate"
+  | "pipeline_failed"
+  | "incomplete_data";
+
+export interface ShareRemovedLeadRow {
+  leadId: string;
+  runId: string;
+  runName: string;
+  /** Vorname aus `leads.data` via case-insensitive Lookup. */
+  firstName: string | null;
+  /** Nachname aus `leads.data` via case-insensitive Lookup. */
+  lastName: string | null;
+  /** E-Mail aus `leads.data`. */
+  email: string | null;
+  /** Telefonnummer aus `leads.data`. */
+  phone: string | null;
+  /** Zusammengesetzte Adresse: "Strasse, PLZ Stadt[, Land]" oder NULL. */
+  address: string | null;
+  removedAt: Date;
+  removedReason: ShareRemovedReason | null;
+  removedDetail: Record<string, unknown> | null;
 }
 
 export type ShareEventSource = "lead" | "analytics";
@@ -358,6 +389,60 @@ export async function listShareLeads(
     lastCtaAt: r.lastCtaAt,
     watchTimeSec: r.watchTimeSec ?? 0,
     createdAt: r.createdAt,
+  }));
+}
+
+/**
+ * Listet alle aussortierten (soft-removed) Leads einer Kampagne — d.h. Leads
+ * mit `removed_at IS NOT NULL`. Inverses Filter-Pendant zu `listShareLeads`.
+ *
+ * Tenant-Scope via JOIN auf `runs.campaign_id`; KEIN zusätzlicher User-Filter
+ * nötig, weil der Caller bereits den Share-Auth-Schritt durchlaufen hat und
+ * den `campaignId` aus dem Share-Row holt (siehe page.tsx).
+ *
+ * Sortierung: jüngste Entfernung zuerst (`removed_at DESC`).
+ */
+export async function listShareRemovedLeads(
+  campaignId: string,
+): Promise<ShareRemovedLeadRow[]> {
+  const rows = await db
+    .select({
+      leadId: leads.id,
+      firstName: LEAD_FIRSTNAME_SQL.as("first_name"),
+      lastName: LEAD_LASTNAME_SQL.as("last_name"),
+      email: LEAD_EMAIL_SQL.as("email"),
+      phone: LEAD_PHONE_SQL.as("phone"),
+      street: LEAD_STREET_SQL.as("street"),
+      zip: LEAD_ZIP_SQL.as("zip"),
+      city: LEAD_CITY_SQL.as("city"),
+      country: LEAD_COUNTRY_SQL.as("country"),
+      runId: runs.id,
+      runName: runs.name,
+      removedAt: leads.removedAt,
+      removedReason: leads.removedReason,
+      removedDetail: leads.removedDetail,
+    })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(eq(runs.campaignId, campaignId), isNotNull(leads.removedAt)),
+    )
+    .orderBy(desc(leads.removedAt));
+
+  return rows.map((r) => ({
+    leadId: r.leadId,
+    runId: r.runId,
+    runName: r.runName,
+    firstName: r.firstName,
+    lastName: r.lastName,
+    email: r.email,
+    phone: r.phone,
+    address: composeAddress(r.street, r.zip, r.city, r.country),
+    // Die `WHERE`-Bedingung filtert auf `removedAt IS NOT NULL` — der
+    // non-null-assert ist daher safe und reflektiert die Domain-Invariante.
+    removedAt: r.removedAt as Date,
+    removedReason: (r.removedReason ?? null) as ShareRemovedReason | null,
+    removedDetail: (r.removedDetail ?? null) as Record<string, unknown> | null,
   }));
 }
 

@@ -6,10 +6,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   ShareEventRow,
   ShareLeadRow,
+  ShareRemovedLeadRow,
 } from "@/lib/db/queries/campaign-shares";
 import { ShareLeadsTab } from "./_components/share-leads-tab";
 import { ShareLiveTrackingTab } from "./_components/share-live-tracking-tab";
 import { ShareEngagementTab } from "./_components/share-engagement-tab";
+import { ShareRemovedTab } from "./_components/share-removed-tab";
 
 // Serialisierte Variante des Lead-Rows: Dates → ISO-Strings, weil das Server-
 // Component → Client-Component-Boundary nur JSON-fähige Werte erlaubt.
@@ -29,11 +31,19 @@ export interface SerializableShareEvent
   ts: string;
 }
 
+// Removed-Lead-Row serialisiert: `removedAt` als ISO-String über die
+// Server→Client-Boundary. Reason / Detail bleiben strukturell identisch.
+export interface SerializableShareRemovedLead
+  extends Omit<ShareRemovedLeadRow, "removedAt"> {
+  removedAt: string;
+}
+
 interface ShareDashboardProps {
   token: string;
   campaignName: string;
   initialLeads: ShareLeadRow[];
   initialEvents: ShareEventRow[];
+  initialRemoved: ShareRemovedLeadRow[];
   /**
    * Bereits zusammengesetzte URL-Basis pro Lead. Vanity-Host → `https://host`
    * (Middleware rewrited `/<slug>`); Default → `${appUrl}/v`. In beiden
@@ -42,10 +52,15 @@ interface ShareDashboardProps {
   leadBaseUrl: string;
 }
 
-type TabKey = "leads" | "live" | "engagement";
+type TabKey = "leads" | "live" | "engagement" | "removed";
 
 function isTabKey(value: string | null | undefined): value is TabKey {
-  return value === "leads" || value === "live" || value === "engagement";
+  return (
+    value === "leads" ||
+    value === "live" ||
+    value === "engagement" ||
+    value === "removed"
+  );
 }
 
 /**
@@ -60,6 +75,7 @@ export function ShareDashboard({
   campaignName,
   initialLeads,
   initialEvents,
+  initialRemoved,
   leadBaseUrl,
 }: ShareDashboardProps) {
   const router = useRouter();
@@ -88,6 +104,15 @@ export function ShareDashboard({
         ts: e.ts.toISOString(),
       })),
     [initialEvents],
+  );
+
+  const removed: SerializableShareRemovedLead[] = React.useMemo(
+    () =>
+      initialRemoved.map((r) => ({
+        ...r,
+        removedAt: r.removedAt.toISOString(),
+      })),
+    [initialRemoved],
   );
 
   const tabFromUrl: TabKey = (() => {
@@ -128,6 +153,9 @@ export function ShareDashboard({
           <TabsTrigger value="leads">Leads</TabsTrigger>
           <TabsTrigger value="live">Live-Tracking</TabsTrigger>
           <TabsTrigger value="engagement">Engagement</TabsTrigger>
+          <TabsTrigger value="removed">
+            Aussortiert ({removed.length.toLocaleString("de-DE")})
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="leads">
@@ -148,6 +176,10 @@ export function ShareDashboard({
             leadBaseUrl={leadBaseUrl}
             campaignName={campaignName}
           />
+        </TabsContent>
+
+        <TabsContent value="removed">
+          <ShareRemovedTab leads={removed} leadBaseUrl={leadBaseUrl} />
         </TabsContent>
       </Tabs>
     </div>

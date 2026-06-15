@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { leads, runs } from "@/lib/db/schema";
+import { analyticsEvents, leadEvents, leads, runs } from "@/lib/db/schema";
 
 /**
  * Erlaubte Run-Status-Übergänge für die Preflight-Pipeline.
@@ -442,4 +442,86 @@ export async function listCampaignRunsWithCounts(
     completedAt: r.completedAt,
     createdAt: r.createdAt,
   }));
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// ── Tracking-Reset ────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Wipes all collected tracking data for a single run:
+ *   - Deletes every `lead_events` row whose lead belongs to the run
+ *   - Deletes every `analytics_events` row whose lead belongs to the run
+ *   - Resets the denormalized per-lead counters on `leads`
+ *     (view_count, play_count, watch_time_sec, cta_click_count) back to 0
+ *     and clears the first/last-viewed and last-cta timestamps
+ *
+ * Does NOT touch pipeline-execution logs (`pipeline_events`), run-level
+ * pipeline counters (`runs.completed_leads` / `failed_leads` / `total_leads`),
+ * exclusion state (`leads.removed_at` / `removed_reason`) or rendered
+ * artefacts (`leads.pdf_url`, `video_url`, `thumbnail_url`, `slug`, `status`).
+ *
+ * Tenant-Guard: `getRun()` throws if the run does not belong to `userId`,
+ * so foreign run IDs surface as 404 in the API.
+ *
+ * Runs as one transaction so a partial failure can never leave aggregates
+ * out of sync with the underlying event tables.
+ */
+export async function resetRunTracking(
+  runId: string,
+  userId: string,
+): Promise<{
+  leadsReset: number;
+  leadEventsDeleted: number;
+  analyticsEventsDeleted: number;
+}> {
+  // Tenant-Guard: 404 wenn der Run nicht zum User gehört (wirft).
+  await getRun(runId, userId);
+
+  return db.transaction(async (tx) => {
+    // 1. lead_events löschen (alle Events für Leads dieses Runs).
+    const leadEventsDeleted = await tx
+      .delete(leadEvents)
+      .where(
+        inArray(
+          leadEvents.leadId,
+          tx.select({ id: leads.id }).from(leads).where(eq(leads.runId, runId)),
+        ),
+      )
+      .returning({ id: leadEvents.id });
+
+    // 2. analytics_events löschen (analog).
+    const analyticsEventsDeleted = await tx
+      .delete(analyticsEvents)
+      .where(
+        inArray(
+          analyticsEvents.leadId,
+          tx.select({ id: leads.id }).from(leads).where(eq(leads.runId, runId)),
+        ),
+      )
+      .returning({ id: analyticsEvents.id });
+
+    // 3. Denormalisierte Aggregat-Spalten auf den Leads zurücksetzen.
+    //    URLs / Status / Exclusion-Felder bleiben unangetastet — der Run
+    //    bleibt aus Pipeline-Sicht „fertig", nur das Tracking wird geleert.
+    const leadsReset = await tx
+      .update(leads)
+      .set({
+        viewCount: 0,
+        playCount: 0,
+        watchTimeSec: 0,
+        ctaClickCount: 0,
+        firstViewedAt: null,
+        lastViewedAt: null,
+        lastCtaAt: null,
+      })
+      .where(eq(leads.runId, runId))
+      .returning({ id: leads.id });
+
+    return {
+      leadsReset: leadsReset.length,
+      leadEventsDeleted: leadEventsDeleted.length,
+      analyticsEventsDeleted: analyticsEventsDeleted.length,
+    };
+  });
 }

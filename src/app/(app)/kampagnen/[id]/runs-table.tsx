@@ -3,7 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, MoreVertical, ExternalLink, Trash2 } from "lucide-react";
+import {
+  Archive,
+  MoreVertical,
+  ExternalLink,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -39,6 +45,7 @@ import {
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { BulkExportDialog } from "./bulk-export-dialog";
+import { ResetTrackingDialog } from "./reset-tracking-dialog";
 
 export interface RunRow {
   id: string;
@@ -181,6 +188,7 @@ export function RunsTable({
   const [runs, setRuns] = React.useState<RunRow[]>(initialRuns);
   const [deleteTarget, setDeleteTarget] = React.useState<RunRow | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+  const [resetTarget, setResetTarget] = React.useState<RunRow | null>(null);
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
     () => new Set(),
   );
@@ -526,6 +534,15 @@ export function RunsTable({
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          setResetTarget(r);
+                        }}
+                      >
+                        <RotateCcw className="size-4" />
+                        Tracking zurücksetzen
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
                         danger
                         onSelect={(e) => {
                           e.preventDefault();
@@ -582,6 +599,22 @@ export function RunsTable({
         runs={selectedRunsForDialog}
         campaignName={campaignName}
         onSuccess={clearSelection}
+      />
+
+      <ResetTrackingDialog
+        open={resetTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setResetTarget(null);
+        }}
+        runId={resetTarget?.id ?? null}
+        runName={resetTarget?.name ?? null}
+        onSuccess={() => {
+          // Server-Daten neu laden, damit die Run-Liste die zurückgesetzten
+          // Zähler aus dem Tracking spiegelt. Die Run-Pipeline-Counter (z.B.
+          // completedLeads) ändern sich dadurch nicht — die werden weiterhin
+          // live aus den Lead-Status berechnet.
+          router.refresh();
+        }}
       />
 
       <Dialog

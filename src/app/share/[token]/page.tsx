@@ -4,6 +4,7 @@ import {
   getActiveShareByToken,
   listShareLeads,
   listShareEvents,
+  listShareRemovedLeads,
 } from "@/lib/db/queries/campaign-shares";
 import { getCampaign } from "@/lib/db/queries/campaigns";
 import { cookieName, verifyShareCookie } from "@/lib/share-cookie";
@@ -60,9 +61,10 @@ export default async function SharePage({
     );
   }
 
-  const [leads, events] = await Promise.all([
+  const [leads, events, removed] = await Promise.all([
     listShareLeads(share.campaignId),
     listShareEvents(share.campaignId, { limit: 200 }),
+    listShareRemovedLeads(share.campaignId),
   ]);
 
   return (
@@ -72,6 +74,7 @@ export default async function SharePage({
         campaignName={campaignName}
         initialLeads={leads}
         initialEvents={events}
+        initialRemoved={removed}
         leadBaseUrl={leadBaseUrl}
       />
     </section>
