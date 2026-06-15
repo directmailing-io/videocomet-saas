@@ -59,7 +59,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@img ./node_modules/
 # eval('require'), Next-Tracer findet ihn nicht. Direktkopie aller
 # transitiv benoetigten Module.
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/archiver ./node_modules/archiver
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/archiver-utils ./node_modules/archiver-utils
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/async ./node_modules/async
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/buffer-crc32 ./node_modules/buffer-crc32
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/compress-commons ./node_modules/compress-commons
