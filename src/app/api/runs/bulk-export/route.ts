@@ -207,14 +207,14 @@ export async function POST(req: NextRequest) {
   const zipFilename = `${baseName}.zip`;
 
   // ── archiver vorbereiten + Stream zur Response durchschleifen ─────────
-  // Native Node-require statt webpack-Import — der Bundler verformt sowohl
-  // statisches `import archiver from "archiver"` ALS AUCH dynamic
-  // `await import("archiver")` zu einem Namespace-Objekt ohne callable
-  // default (Error im Bundle: `(P.default ?? P) is not a function`).
-  // `createRequire` umgeht den Bundler komplett.
-  const { createRequire } = await import("node:module");
-  const requireFn = createRequire(import.meta.url);
-  const archiver = requireFn("archiver") as typeof ArchiverNs;
+  // Webpack mangled sowohl statischen import als auch dynamic import(),
+  // selbst `createRequire(import.meta.url)` wird im Next-Bundle so
+  // verformt dass der returnierte requireFn nicht callable ist
+  // ("P is not a function"). `eval('require')` umgeht den Static-Analyzer
+  // komplett und greift auf Node's eingebauten require zu.
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  const nativeRequire = eval("require") as NodeRequire;
+  const archiver = nativeRequire("archiver") as typeof ArchiverNs;
   const archive = archiver("zip", { zlib: { level: 6 } });
   const passthrough = new PassThrough();
   archive.pipe(passthrough);
