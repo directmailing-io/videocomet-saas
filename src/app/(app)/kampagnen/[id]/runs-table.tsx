@@ -264,7 +264,13 @@ export function RunsTable({
     [runs, selectedIds],
   );
 
-  const hasActive = runs.some((r) => ACTIVE_STATUSES.has(r.status));
+  const hasActive = runs.some(
+    (r) =>
+      ACTIVE_STATUSES.has(r.status) ||
+      (r.status === "completed" &&
+        r.completedLeads === 0 &&
+        r.totalLeads > 0),
+  );
 
   // Live polling: while at least one run is mapping/generating we re-fetch
   // counts every POLL_INTERVAL_MS. We poll each active run individually via
@@ -275,7 +281,16 @@ export function RunsTable({
 
     let cancelled = false;
     const tick = async () => {
-      const active = runs.filter((r) => ACTIVE_STATUSES.has(r.status));
+      // Aktive Runs + Completed-Runs mit stale-aussehenden Countern
+      // (z.B. nach einem Pipeline-Regenerate, das die Run-Counter
+      // resettet aber Leads aktualisiert hat). Einmaliges Resync
+      // genuegt — sobald der Counter > 0 ist, hoert er auf zu pollen.
+      const needsSync = (r: RunRow): boolean =>
+        ACTIVE_STATUSES.has(r.status) ||
+        (r.status === "completed" &&
+          r.completedLeads === 0 &&
+          r.totalLeads > 0);
+      const active = runs.filter(needsSync);
       if (active.length === 0) return;
 
       const results = await Promise.all(
