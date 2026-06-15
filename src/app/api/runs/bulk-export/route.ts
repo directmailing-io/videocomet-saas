@@ -206,181 +206,145 @@ export async function POST(req: NextRequest) {
   const baseName = sanitizeBaseName(body.baseName, `bulk-export-${today}`);
   const zipFilename = `${baseName}.zip`;
 
-  // ── archiver vorbereiten + Stream zur Response durchschleifen ─────────
-  // Webpack mangled sowohl statischen import als auch dynamic import(),
-  // selbst `createRequire(import.meta.url)` wird im Next-Bundle so
-  // verformt dass der returnierte requireFn nicht callable ist
-  // ("P is not a function"). `eval('require')` umgeht den Static-Analyzer
-  // komplett und greift auf Node's eingebauten require zu.
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
-  const nativeRequire = eval("require") as NodeRequire;
-  const archiver = nativeRequire("archiver") as typeof ArchiverNs;
-  const archive = archiver("zip", { zlib: { level: 6 } });
-  const passthrough = new PassThrough();
-  archive.pipe(passthrough);
+  // ── ZIP via JSZip (in-memory) ─────────────────────────────────────────
+  // Wir hatten archiver-Streaming probiert, scheiterte am Next-Standalone-
+  // Tracer (kette an Webpack-Bundle-Bugs + fehlenden Transitives bei jeder
+  // Iteration). JSZip ist hier schon im Einsatz fuer /api/runs/[id]/pdf-
+  // bundle, in-memory aber fuer die typische Customer-Last (< 2 GB ZIP)
+  // unproblematisch. Kein Streaming, dafuer bullet-proof.
+  const JSZipMod = (await import("jszip")) as unknown as {
+    default?: typeof import("jszip");
+  } & typeof import("jszip");
+  const JSZip = JSZipMod.default ?? (JSZipMod as unknown as typeof import("jszip"));
+  const zip = new JSZip();
 
-  archive.on("warning", (err) => {
-    if (err.code !== "ENOENT") {
-      // eslint-disable-next-line no-console
-      console.warn("[bulk-export] archive warning:", err.message);
-    }
-  });
-  archive.on("error", (err) => {
-    // eslint-disable-next-line no-console
-    console.error("[bulk-export] archive error:", err);
-    passthrough.destroy(err);
-  });
+  const bundleMetas: BundleMeta[] = [];
+  const skipped: SkippedRun[] = [];
 
-  // Den ZIP-Build laufen wir parallel zur HTTP-Response-Stream-Ausgabe;
-  // Fehler werden via passthrough.destroy() propagiert und enden im
-  // Client als abgebrochener Download.
-  (async () => {
-    const bundleMetas: BundleMeta[] = [];
-    const skipped: SkippedRun[] = [];
-    try {
-      for (const rt of runtimes) {
-        const leads = await getCompletedLeadsForBundle(
-          rt.run.id,
-          auth.user.id,
+  try {
+    for (const rt of runtimes) {
+      const leads = await getCompletedLeadsForBundle(rt.run.id, auth.user.id);
+      if (leads.length === 0) {
+        skipped.push({
+          runName: rt.run.name,
+          reason: "Keine fertigen Leads mit PDF.",
+        });
+        continue;
+      }
+      const chunks = chunkBy(leads, body.pdfsPerFile);
+      for (let i = 0; i < chunks.length; i += 1) {
+        const chunk = chunks[i] as Lead[];
+        const bundleNumber = i + 1;
+        const bundleFilename = `${rt.slug}-Bundle-${String(bundleNumber).padStart(3, "0")}.pdf`;
+        const sheetName = buildBundleSheetName(rt.slug, bundleNumber);
+
+        const { pdfBytes, perLeadResults } = await mergePdfsInBundle(chunk, 8);
+
+        zip.file(
+          `${baseName}/${rt.slug}/${bundleFilename}`,
+          Buffer.from(pdfBytes),
         );
-        if (leads.length === 0) {
-          skipped.push({
-            runName: rt.run.name,
-            reason: "Keine fertigen Leads mit PDF.",
-          });
-          continue;
-        }
-        const chunks = chunkBy(leads, body.pdfsPerFile);
-        for (let i = 0; i < chunks.length; i += 1) {
-          const chunk = chunks[i] as Lead[];
-          const bundleNumber = i + 1;
-          const bundleFilename = `${rt.slug}-Bundle-${String(bundleNumber).padStart(3, "0")}.pdf`;
-          const sheetName = buildBundleSheetName(rt.slug, bundleNumber);
 
-          const { pdfBytes, perLeadResults } = await mergePdfsInBundle(
-            chunk,
-            8,
-          );
+        const rows: string[][] = perLeadResults.map((r, idx) =>
+          leadToRow(
+            r.lead,
+            idx + 1,
+            rt,
+            appUrl,
+            r.included
+              ? "OK"
+              : `PDF nicht verfuegbar${r.reason ? ` (${r.reason})` : ""}`,
+          ),
+        );
 
-          // PDF in ZIP einhaengen (als Buffer — pdf-lib gibt Uint8Array).
-          archive.append(Buffer.from(pdfBytes), {
-            name: `${baseName}/${rt.slug}/${bundleFilename}`,
-          });
-
-          // Excel-Rows fuer dieses Bundle bauen — INCLUDIERT auch
-          // fehlgeschlagene Leads (mit Status „PDF nicht verfuegbar").
-          const rows: string[][] = perLeadResults.map((r, idx) => {
-            const row = leadToRow(
-              r.lead,
-              idx + 1,
-              rt,
-              appUrl,
-              r.included
-                ? "OK"
-                : `PDF nicht verfuegbar${r.reason ? ` (${r.reason})` : ""}`,
-            );
-            return row;
-          });
-
-          bundleMetas.push({
-            runName: rt.run.name,
-            runSlug: rt.slug,
-            bundleFilename,
-            sheetName,
-            rows,
-            totalIncluded: perLeadResults.filter((p) => p.included).length,
-          });
-        }
+        bundleMetas.push({
+          runName: rt.run.name,
+          runSlug: rt.slug,
+          bundleFilename,
+          sheetName,
+          rows,
+          totalIncluded: perLeadResults.filter((p) => p.included).length,
+        });
       }
+    }
 
-      // ── Adressliste.xlsx bauen ────────────────────────────────────────
-      const wb = XLSX.utils.book_new();
+    // ── Adressliste.xlsx bauen ────────────────────────────────────────
+    const wb = XLSX.utils.book_new();
 
-      // Wenn welche ausgelassen wurden, kommt das als ERSTES Sheet —
-      // Spec verlangt das als „Ausgelassen"-Sheet vor allen Bundles.
-      if (skipped.length > 0) {
-        const skippedHeader = ["Run", "Grund"];
-        const skippedRows = skipped.map((s) => [s.runName, s.reason]);
-        const wsSkipped = XLSX.utils.aoa_to_sheet([
-          skippedHeader,
-          ...skippedRows,
-        ]);
-        wsSkipped["!cols"] = [{ wch: 32 }, { wch: 40 }];
-        applyBoldHeader(wsSkipped, skippedHeader.length);
-        appendSheetSafe(wb, wsSkipped, "Ausgelassen");
-      }
+    if (skipped.length > 0) {
+      const skippedHeader = ["Run", "Grund"];
+      const wsSkipped = XLSX.utils.aoa_to_sheet([
+        skippedHeader,
+        ...skipped.map((s) => [s.runName, s.reason]),
+      ]);
+      wsSkipped["!cols"] = [{ wch: 32 }, { wch: 40 }];
+      applyBoldHeader(wsSkipped, skippedHeader.length);
+      appendSheetSafe(wb, wsSkipped, "Ausgelassen");
+    }
 
-      // 1 Sheet pro Bundle, Reihenfolge wie im ZIP.
-      const usedSheetNames = new Set<string>();
-      if (skipped.length > 0) usedSheetNames.add("Ausgelassen");
-      for (const meta of bundleMetas) {
-        const uniqueName = makeUniqueSheetName(usedSheetNames, meta.sheetName);
-        const ws = XLSX.utils.aoa_to_sheet([
-          [...ADRESSLISTE_HEADER],
-          ...meta.rows,
-        ]);
-        ws["!cols"] = ADRESSLISTE_COL_WIDTHS.map((wch) => ({ wch }));
-        applyBoldHeader(ws, ADRESSLISTE_HEADER.length);
-        appendSheetSafe(wb, ws, uniqueName);
-      }
+    const usedSheetNames = new Set<string>();
+    if (skipped.length > 0) usedSheetNames.add("Ausgelassen");
+    for (const meta of bundleMetas) {
+      const uniqueName = makeUniqueSheetName(usedSheetNames, meta.sheetName);
+      const ws = XLSX.utils.aoa_to_sheet([
+        [...ADRESSLISTE_HEADER],
+        ...meta.rows,
+      ]);
+      ws["!cols"] = ADRESSLISTE_COL_WIDTHS.map((wch) => ({ wch }));
+      applyBoldHeader(ws, ADRESSLISTE_HEADER.length);
+      appendSheetSafe(wb, ws, uniqueName);
+    }
 
-      // Uebersicht ans Ende — Index Bundle ↔ PDF-Datei ↔ Sheet.
-      const overviewHeader = [
-        "Run-Name",
-        "Bundle-Datei",
-        "Anzahl Leads",
-        "Sheet-Name",
-      ];
-      const overviewRows = bundleMetas.map((m) => [
+    const overviewHeader = [
+      "Run-Name",
+      "Bundle-Datei",
+      "Anzahl Leads",
+      "Sheet-Name",
+    ];
+    const wsOverview = XLSX.utils.aoa_to_sheet([
+      overviewHeader,
+      ...bundleMetas.map((m) => [
         m.runName,
         m.bundleFilename,
         String(m.rows.length),
         m.sheetName,
-      ]);
-      const wsOverview = XLSX.utils.aoa_to_sheet([
-        overviewHeader,
-        ...overviewRows,
-      ]);
-      wsOverview["!cols"] = [
-        { wch: 28 },
-        { wch: 38 },
-        { wch: 14 },
-        { wch: 32 },
-      ];
-      applyBoldHeader(wsOverview, overviewHeader.length);
-      appendSheetSafe(wb, wsOverview, "Uebersicht");
+      ]),
+    ]);
+    wsOverview["!cols"] = [{ wch: 28 }, { wch: 38 }, { wch: 14 }, { wch: 32 }];
+    applyBoldHeader(wsOverview, overviewHeader.length);
+    appendSheetSafe(wb, wsOverview, "Uebersicht");
 
-      const xlsxBuffer = XLSX.write(wb, {
-        type: "buffer",
-        bookType: "xlsx",
-      }) as Buffer;
-      archive.append(xlsxBuffer, {
-        name: `${baseName}/Adressliste.xlsx`,
-      });
+    const xlsxBuffer = XLSX.write(wb, {
+      type: "buffer",
+      bookType: "xlsx",
+    }) as Buffer;
+    zip.file(`${baseName}/Adressliste.xlsx`, xlsxBuffer);
 
-      await archive.finalize();
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error("[bulk-export] build failure:", err);
-      passthrough.destroy(err instanceof Error ? err : new Error(String(err)));
-    }
-  })();
+    const zipBuffer = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
 
-  // Node-Readable → Web-ReadableStream fuer NextResponse.
-  const webStream = Readable.toWeb(passthrough) as unknown as ReadableStream<
-    Uint8Array
-  >;
-
-  return new NextResponse(webStream, {
-    status: 200,
-    headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${zipFilename}"`,
-      "Cache-Control": "no-store",
-      // Soft-Hinweis fuer Reverse-Proxies und Browser: das kann dauern.
-      "X-Accel-Buffering": "no",
-    },
-  });
+    return new NextResponse(new Blob([new Uint8Array(zipBuffer)]), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="${zipFilename}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[bulk-export] build failure:", err);
+    return NextResponse.json(
+      {
+        error: "Bulk-Export fehlgeschlagen.",
+        details: err instanceof Error ? err.message : null,
+      },
+      { status: 500 },
+    );
+  }
 }
 
 /**
