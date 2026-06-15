@@ -55,6 +55,30 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/argon2 ./node_modules/argon2
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/sharp ./node_modules/sharp
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@img ./node_modules/@img
+# archiver + Transitives: /api/runs/bulk-export laed archiver via
+# eval('require'), Next-Tracer findet ihn nicht. Direktkopie aller
+# transitiv benoetigten Module.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/archiver ./node_modules/archiver
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/archiver-utils ./node_modules/archiver-utils
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/async ./node_modules/async
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/buffer-crc32 ./node_modules/buffer-crc32
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/compress-commons ./node_modules/compress-commons
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/core-util-is ./node_modules/core-util-is
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/crc-32 ./node_modules/crc-32
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/crc32-stream ./node_modules/crc32-stream
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/inherits ./node_modules/inherits
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/is-stream ./node_modules/is-stream
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/isarray ./node_modules/isarray
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/lazystream ./node_modules/lazystream
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/normalize-path ./node_modules/normalize-path
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/process-nextick-args ./node_modules/process-nextick-args
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/readable-stream ./node_modules/readable-stream
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/readdir-glob ./node_modules/readdir-glob
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/safe-buffer ./node_modules/safe-buffer
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/string_decoder ./node_modules/string_decoder
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/tar-stream ./node_modules/tar-stream
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/util-deprecate ./node_modules/util-deprecate
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/zip-stream ./node_modules/zip-stream
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
