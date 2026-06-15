@@ -7,6 +7,28 @@ const nextConfig = {
   // server-component / route-handler runtime.
   experimental: {
     serverComponentsExternalPackages: ["archiver", "xlsx", "pdf-lib"],
+    // Standalone-Build via `output: "standalone"` traced den archiver-
+    // require nicht weil wir ihn ueber `eval('require')` lazy-laden
+    // (Webpack mangled sowohl statischen import als auch createRequire
+    // zu nicht-callable Code). Explizite Trace-Inclusion sichert dass
+    // archiver + Transitives in den standalone-Bundle kopiert wird.
+    outputFileTracingIncludes: {
+      "/api/runs/bulk-export": [
+        "./node_modules/archiver/**/*",
+        "./node_modules/archiver-utils/**/*",
+        "./node_modules/zip-stream/**/*",
+        "./node_modules/compress-commons/**/*",
+        "./node_modules/crc-32/**/*",
+        "./node_modules/crc32-stream/**/*",
+        "./node_modules/buffer-crc32/**/*",
+        "./node_modules/normalize-path/**/*",
+        "./node_modules/readdir-glob/**/*",
+        "./node_modules/lazystream/**/*",
+        "./node_modules/lodash/**/*",
+        "./node_modules/glob/**/*",
+        "./node_modules/minimatch/**/*",
+      ],
+    },
   },
   // ESLint im Container-Build NICHT aktivieren — die .eslintrc.json wird
   // lokal + via `npm run lint` gepflegt. Im Docker-Build laeuft `npm ci`
