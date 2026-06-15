@@ -336,7 +336,11 @@ export default async function CampaignDetailPage({
               }
             />
           ) : (
-            <RunsTable campaignId={campaign.id} initialRuns={initialRuns} />
+            <RunsTable
+              campaignId={campaign.id}
+              campaignName={campaign.name}
+              initialRuns={initialRuns}
+            />
           )}
         </TabsContent>
 

@@ -3,9 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MoreVertical, ExternalLink, Trash2 } from "lucide-react";
+import { Archive, MoreVertical, ExternalLink, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import {
   Table,
@@ -29,8 +30,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
+import { BulkExportDialog } from "./bulk-export-dialog";
 
 export interface RunRow {
   id: string;
@@ -55,7 +63,18 @@ export interface RunRow {
 
 interface RunsTableProps {
   campaignId: string;
+  campaignName: string;
   initialRuns: RunRow[];
+}
+
+/**
+ * A run is eligible for the bulk-PDF export when it is completed AND has at
+ * least one successfully generated lead. Other statuses (draft, generating,
+ * failed-with-zero-leads, …) may not be selected; the checkbox renders
+ * disabled with a tooltip in that case.
+ */
+function canBulkExport(r: RunRow): boolean {
+  return r.status === "completed" && r.completedLeads > 0;
 }
 
 type FinalStatus = "completed" | "failed" | "cancelled" | "draft";
@@ -152,18 +171,98 @@ function StatusBadge({ status }: { status: RunRow["status"] }) {
   );
 }
 
-export function RunsTable({ campaignId, initialRuns }: RunsTableProps) {
+export function RunsTable({
+  campaignId,
+  campaignName,
+  initialRuns,
+}: RunsTableProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [runs, setRuns] = React.useState<RunRow[]>(initialRuns);
   const [deleteTarget, setDeleteTarget] = React.useState<RunRow | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
+    () => new Set(),
+  );
+  const [bulkExportOpen, setBulkExportOpen] = React.useState(false);
 
   // Reseed local state when the server-rendered initial data changes
   // (e.g. after a router.refresh() following a delete or a navigation back).
   React.useEffect(() => {
     setRuns(initialRuns);
   }, [initialRuns]);
+
+  // Drop any selections that no longer correspond to a visible run (e.g. when
+  // a selected run is deleted or polling reveals that it lost eligibility).
+  React.useEffect(() => {
+    setSelectedIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const r of runs) {
+        if (prev.has(r.id) && canBulkExport(r)) {
+          next.add(r.id);
+        } else if (prev.has(r.id)) {
+          changed = true;
+        }
+      }
+      if (next.size !== prev.size) changed = true;
+      return changed ? next : prev;
+    });
+  }, [runs]);
+
+  const eligibleRuns = React.useMemo(
+    () => runs.filter(canBulkExport),
+    [runs],
+  );
+  const selectableCount = eligibleRuns.length;
+  const selectedCount = selectedIds.size;
+  const masterState: boolean | "indeterminate" =
+    selectableCount > 0 && selectedCount === selectableCount
+      ? true
+      : selectedCount > 0
+        ? "indeterminate"
+        : false;
+  const masterDisabled = selectableCount === 0;
+
+  function toggleRun(id: string, eligible: boolean) {
+    if (!eligible) return;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleMaster() {
+    if (masterDisabled) return;
+    setSelectedIds((prev) => {
+      if (prev.size === selectableCount) return new Set();
+      return new Set(eligibleRuns.map((r) => r.id));
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  // Memoise the array of selected ids so the dialog doesn't re-mount on every
+  // poll-induced re-render of `runs`.
+  const selectedIdsList = React.useMemo(
+    () => Array.from(selectedIds),
+    [selectedIds],
+  );
+  const selectedRunsForDialog = React.useMemo(
+    () =>
+      runs
+        .filter((r) => selectedIds.has(r.id))
+        .map((r) => ({
+          id: r.id,
+          name: r.name,
+          completedLeads: r.completedLeads,
+        })),
+    [runs, selectedIds],
+  );
 
   const hasActive = runs.some((r) => ACTIVE_STATUSES.has(r.status));
 
@@ -286,10 +385,18 @@ export function RunsTable({ campaignId, initialRuns }: RunsTableProps) {
   }
 
   return (
-    <>
+    <TooltipProvider delayDuration={150}>
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-8">
+              <Checkbox
+                checked={masterState}
+                disabled={masterDisabled}
+                onCheckedChange={() => toggleMaster()}
+                aria-label="Alle Runden auswählen"
+              />
+            </TableHead>
             <TableHead>Name</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Fortschritt</TableHead>
@@ -305,10 +412,15 @@ export function RunsTable({ campaignId, initialRuns }: RunsTableProps) {
                 : 0;
             const detailHref = `/kampagnen/${campaignId}/runs/${r.id}`;
             const final = isFinal(r.status);
+            const eligible = canBulkExport(r);
+            const checked = selectedIds.has(r.id);
             return (
               <TableRow
                 key={r.id}
-                className="group cursor-pointer"
+                className={cn(
+                  "group cursor-pointer",
+                  checked ? "bg-brand-soft/40" : "",
+                )}
                 onClick={(e) => {
                   // Allow native clicks on inner interactive elements to
                   // proceed without our row-navigation hijacking them.
@@ -317,6 +429,34 @@ export function RunsTable({ campaignId, initialRuns }: RunsTableProps) {
                   router.push(detailHref);
                 }}
               >
+                <TableCell
+                  className="w-8"
+                  data-row-action
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {eligible ? (
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => toggleRun(r.id, true)}
+                      aria-label={`Run ${r.name} auswählen`}
+                    />
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                          <Checkbox
+                            checked={false}
+                            disabled
+                            aria-label={`Run ${r.name} kann nicht exportiert werden`}
+                          />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Keine fertigen Leads zum Exportieren
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </TableCell>
                 <TableCell className="font-medium text-ink">
                   <Link
                     href={detailHref}
@@ -389,6 +529,46 @@ export function RunsTable({ campaignId, initialRuns }: RunsTableProps) {
         </TableBody>
       </Table>
 
+      {/* Sticky bulk-action bar -------------------------------------- */}
+      {selectedCount > 0 && (
+        <div
+          className="sticky bottom-4 z-30 mt-4 flex items-center gap-3 rounded-squircle-xl border border-line bg-surface px-4 py-3 shadow-lift"
+          role="region"
+          aria-label="Auswahl-Aktionen"
+        >
+          <span className="text-sm font-semibold text-ink">
+            {selectedCount}{" "}
+            {selectedCount === 1 ? "Runde" : "Runden"} ausgewählt
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="text-xs font-semibold text-ink-muted hover:text-ink underline-offset-2 hover:underline"
+            >
+              Auswahl aufheben
+            </button>
+            <Button
+              size="sm"
+              variant="brand"
+              iconLeft={<Archive className="size-4" />}
+              onClick={() => setBulkExportOpen(true)}
+            >
+              Bulk-Export
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <BulkExportDialog
+        open={bulkExportOpen}
+        onOpenChange={setBulkExportOpen}
+        runIds={selectedIdsList}
+        runs={selectedRunsForDialog}
+        campaignName={campaignName}
+        onSuccess={clearSelection}
+      />
+
       <Dialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
@@ -434,6 +614,6 @@ export function RunsTable({ campaignId, initialRuns }: RunsTableProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </TooltipProvider>
   );
 }

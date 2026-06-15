@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getRun } from "@/lib/db/queries/runs";
-import { listLeadsByRun } from "@/lib/db/queries/leads";
+import { getCompletedLeadsForBundle } from "@/lib/db/queries/leads";
 
 /**
  * POST /api/runs/[id]/pdf-bundle
@@ -115,10 +115,9 @@ async function buildBundle(
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
 
-  const allLeads = await listLeadsByRun(runId, userId);
-  const completed = allLeads.filter(
-    (l) => l.status === "completed" && !!l.pdfUrl,
-  );
+  // Geteilter Ordering-Helper — identisch zur Reihenfolge des Bulk-Export-
+  // Endpoints, damit die Excel-Spalten 1:1 zur PDF-Seite passen.
+  const completed = await getCompletedLeadsForBundle(runId, userId);
 
   if (completed.length === 0) {
     return NextResponse.json(
@@ -129,8 +128,6 @@ async function buildBundle(
       { status: 404 },
     );
   }
-
-  completed.sort((a, b) => a.rowIndex - b.rowIndex);
 
   const baseName = sanitizeBaseName(baseNameInput, run.name);
   const zipFilename = `${baseName}_pdf-bundle.zip`;

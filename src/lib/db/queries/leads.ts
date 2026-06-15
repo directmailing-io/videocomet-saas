@@ -225,6 +225,46 @@ export async function listLeadsByRun(runId: string, userId: string): Promise<Lea
   return rows.map((r) => r.lead);
 }
 
+/**
+ * Liefert die fertig gerenderten Leads eines Runs in *deterministischer*
+ * Reihenfolge, die sowohl der PDF-Merge als auch die XLSX-Spalten für das
+ * Bulk-Export-Bundle identisch verwenden. Wichtig, damit die n-te Excel-Zeile
+ * dem n-ten gemergten PDF-Eintrag entspricht.
+ *
+ * Filter:
+ *   - `status = 'completed'`
+ *   - `pdf_url IS NOT NULL` (kein PDF generiert → kann nicht gebundelt werden)
+ *   - `removed_at IS NULL` (soft-deleted Leads bleiben aussen vor)
+ *
+ * Tenant-Guard via JOIN auf `runs.user_id`.
+ *
+ * Sortier-Schluessel:
+ *   1. `row_index ASC`  — CSV-Reihenfolge (Hauptkriterium)
+ *   2. `created_at ASC` — Tie-Break wenn zwei Leads gleiche Zeile haben
+ *      (legacy-Daten, Re-Runs etc.)
+ *   3. `id ASC`         — letzte Garantie fuer absolute Determinismus
+ */
+export async function getCompletedLeadsForBundle(
+  runId: string,
+  userId: string,
+): Promise<Lead[]> {
+  const rows = await db
+    .select({ lead: leads })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        eq(leads.runId, runId),
+        eq(runs.userId, userId),
+        eq(leads.status, "completed"),
+        isNotNull(leads.pdfUrl),
+        isNull(leads.removedAt),
+      ),
+    )
+    .orderBy(asc(leads.rowIndex), asc(leads.createdAt), asc(leads.id));
+  return rows.map((r) => r.lead);
+}
+
 export async function countByStatus(
   runId: string,
   userId: string,
