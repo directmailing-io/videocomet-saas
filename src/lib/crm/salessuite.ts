@@ -124,7 +124,9 @@ export const salessuiteProvider: CrmProvider = {
   async listContactFields(apiKey) {
     const res = await crmFetch(
       "salessuite",
-      `${BASE_URL}/v1/property?cardType=contact`,
+      // Salessuite Zod-Validator: enum 'ContactPerson' | 'Contact' | 'Deal' —
+      // case-sensitive (lowercase wirft 400).
+      `${BASE_URL}/v1/property?cardType=Contact`,
       { headers: authHeaders(apiKey) },
     );
     const data = (await res.json()) as SalessuitePropertyRaw[];
