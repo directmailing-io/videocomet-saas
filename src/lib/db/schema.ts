@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, smallint, jsonb, pgEnum, index, unique, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, boolean, integer, smallint, jsonb, pgEnum, index, unique, uniqueIndex, bigserial, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
 
@@ -736,6 +736,97 @@ export const campaignShareAttempts = pgTable("campaign_share_attempts", {
   // beide Richtungen genauso schnell sind.
   tokenTsIdx: index("campaign_share_attempts_token_ts_idx").on(t.token, t.ts),
 }));
+
+// ── CRM-Integrations (Phase 1 — Datenlayer, Migration 0024) ────────────────
+// Eine Connection-Konfiguration pro User für einen externen CRM-Provider
+// (HubSpot, Salessuite, Close). Mehrere Connections pro Provider sind
+// erlaubt, müssen sich pro User aber im `name` unterscheiden. Der API-Key
+// wird via AES-256-GCM mit `CRM_KEY_SECRET` verschlüsselt abgelegt
+// (Format `<iv>:<authTag>:<ciphertext>` base64) — siehe
+// `src/lib/crm/crypto.ts`. `apiKeyHint` speichert nur die letzten 4
+// Zeichen für die UI ("…ab12").
+//
+// `lastTestOk` / `lastTestError` werden vom Provider-`testConnection()`
+// Aufruf befüllt und gibt dem User im UI Aufschluss darüber, ob die
+// Connection noch lebt. `metadata` darf Provider-spezifischen Kontext
+// halten (z.B. HubSpot-Account-Id, Salessuite-Tenant-Info).
+export const crmIntegrations = pgTable("crm_integrations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** 'hubspot' | 'salessuite' | 'close' — CHECK-Constraint in DB. */
+  provider: text("provider").notNull().$type<"hubspot" | "salessuite" | "close">(),
+  name: text("name").notNull(),
+  apiKeyEncrypted: text("api_key_encrypted").notNull(),
+  /** Letzte 4 Zeichen des Klartext-API-Keys für UI-Anzeige. */
+  apiKeyHint: text("api_key_hint").notNull(),
+  metadata: jsonb("metadata").notNull().$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),
+  lastTestOk: boolean("last_test_ok"),
+  lastTestError: text("last_test_error"),
+  /** Soft-Disable-Marker. NULL = aktiv. */
+  disabledAt: timestamp("disabled_at", { withTimezone: true }),
+}, (t) => ({
+  userIdx: index("crm_integrations_user_idx").on(t.userId),
+  userNameUq: unique("crm_integrations_user_name_uq").on(t.userId, t.name),
+}));
+
+// ── Campaign ↔ CRM-Settings (Migration 0024) ──────────────────────────────
+// Genau ein Eintrag pro Kampagne (PK = campaignId). Verweist auf eine
+// `crm_integrations`-Row und konfiguriert pro Kampagne, wie Leads im CRM
+// gematcht werden (`leadMatch`), welche Lead-Events Phase 2 nach drüben
+// pushen soll (`enabledEvents`) und welche Lead-Datenfelder auf welche
+// CRM-Felder gemappt werden (`fieldMapping`). ON DELETE RESTRICT auf der
+// FK verhindert das versehentliche Löschen einer genutzten Integration.
+export const campaignCrmSettings = pgTable("campaign_crm_settings", {
+  campaignId: uuid("campaign_id").primaryKey().references(() => campaigns.id, { onDelete: "cascade" }),
+  crmIntegrationId: uuid("crm_integration_id").notNull().references(() => crmIntegrations.id, { onDelete: "restrict" }),
+  enabled: boolean("enabled").notNull().default(true),
+  /**
+   * Beschreibt, welches Feld des Leads (z.B. "email" / "phone") auf welches
+   * CRM-Lookup-Feld gemappt wird — Form wird von Phase 2 (Worker + UI)
+   * festgenagelt. Erwartet ein Objekt; wir typisieren bewusst offen.
+   */
+  leadMatch: jsonb("lead_match").notNull().$type<Record<string, unknown>>(),
+  /** Liste der aktivierten Lead-Event-Kinds (`page_view`, `video_play`, …). */
+  enabledEvents: jsonb("enabled_events").notNull().$type<string[]>().default(["page_view", "video_play", "cta_click"]),
+  /** Mapping `<crmFieldKey> → <leadFieldOrTemplate>`. Form wird in Phase 2 verfeinert. */
+  fieldMapping: jsonb("field_mapping").notNull().$type<Record<string, unknown>>().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ── CRM-Event-Log (Migration 0024) ─────────────────────────────────────────
+// Append-only Audit-Log aller Push-Versuche zum CRM (1 Row pro HTTP-Call
+// inkl. Retries). Hilft dem Support-Team bei "Warum ist mein Lead nicht
+// in HubSpot aufgetaucht?". `lead_id` / `integration_id` sind ON DELETE
+// SET NULL — der Log überlebt das Löschen der referenzierten Rows.
+export const crmEventLog = pgTable("crm_event_log", {
+  id: bigserial("id", { mode: "bigint" }).primaryKey(),
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+  integrationId: uuid("integration_id").references(() => crmIntegrations.id, { onDelete: "set null" }),
+  eventKind: text("event_kind").notNull(),
+  lookupField: text("lookup_field"),
+  lookupValue: text("lookup_value"),
+  contactId: text("contact_id"),
+  httpStatus: smallint("http_status"),
+  requestBody: jsonb("request_body").$type<unknown>(),
+  responseBody: jsonb("response_body").$type<unknown>(),
+  errorMessage: text("error_message"),
+  attempt: smallint("attempt").notNull().default(1),
+  ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  campaignTsIdx: index("crm_event_log_campaign_ts_idx").on(t.campaignId, t.ts),
+  leadIdx: index("crm_event_log_lead_idx").on(t.leadId),
+  integrationTsIdx: index("crm_event_log_integration_idx").on(t.integrationId, t.ts),
+}));
+
+export type CrmIntegration = typeof crmIntegrations.$inferSelect;
+export type NewCrmIntegration = typeof crmIntegrations.$inferInsert;
+export type CampaignCrmSettings = typeof campaignCrmSettings.$inferSelect;
+export type NewCampaignCrmSettings = typeof campaignCrmSettings.$inferInsert;
+export type CrmEventLogRow = typeof crmEventLog.$inferSelect;
+export type NewCrmEventLogRow = typeof crmEventLog.$inferInsert;
 
 // ── Index-Namen als Konstanten ────────────────────────────────────────────
 //
