@@ -75,16 +75,24 @@ const PROVIDER_TILE_CLASS: Record<CrmProviderId, string> = {
 };
 
 // Padding pro Logo — die Aspect-Ratios variieren stark (HubSpot Sprocket
-// ist square, Salessuite + Close sind breite Wortmarken).
+// ist square, Salessuite + Close sind breite Wortmarken). Padding ist
+// proportional, damit die Wortmarken auch bei groesseren Tiles voll
+// lesbar bleiben.
 const PROVIDER_LOGO_PADDING: Record<CrmProviderId, string> = {
-  hubspot: "p-1.5",
-  salessuite: "p-1",
+  hubspot: "p-2",
+  salessuite: "p-1.5",
   close: "p-1.5",
 };
 
+/**
+ * Provider-Logo als Tile. `size` ist die Tile-Kante in px; das Logo selbst
+ * passt sich dank `object-contain` an. Wir nutzen 48 als Default fuer die
+ * Liste und 56 fuer den Picker-Dialog, damit die Wortmarken (Salessuite,
+ * Close) auch fuer Laien sofort erkennbar sind.
+ */
 function ProviderLogo({
   provider,
-  size = 40,
+  size = 48,
 }: {
   provider: CrmProviderId;
   size?: number;
@@ -311,6 +319,7 @@ export function IntegrationsList() {
       <AddIntegrationDialog
         open={addOpen}
         onOpenChange={setAddOpen}
+        existingRows={rows ?? []}
         onCreated={() => {
           void fetchRows();
         }}
@@ -349,7 +358,7 @@ function IntegrationCard({
   return (
     <div className="rounded-squircle-md border border-line bg-surface p-4 flex flex-col gap-3">
       <div className="flex items-start gap-3 min-w-0">
-        <ProviderLogo provider={row.provider} size={40} />
+        <ProviderLogo provider={row.provider} size={56} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-semibold text-ink truncate">{row.name}</p>
@@ -452,18 +461,35 @@ function formatLastTested(iso: string | null): string {
 
 // ── Add-Dialog ──────────────────────────────────────────────────────────────
 
+/**
+ * Naechste freie Nummer fuer einen Provider — beruecksichtigt sowohl die
+ * Bestandszahl als auch Kollisionen mit existierenden manuell vergebenen
+ * Namen ("HubSpot #2" gibt es schon → naechster Vorschlag "HubSpot #3").
+ */
+function nextAutoName(
+  provider: CrmProviderId,
+  existingRows: CrmIntegrationRow[],
+): string {
+  const label = PROVIDER_LABEL[provider];
+  const existingNames = new Set(existingRows.map((r) => r.name));
+  let n = existingRows.filter((r) => r.provider === provider).length + 1;
+  while (existingNames.has(`${label} #${n}`)) n += 1;
+  return `${label} #${n}`;
+}
+
 function AddIntegrationDialog({
   open,
   onOpenChange,
+  existingRows,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  existingRows: CrmIntegrationRow[];
   onCreated: () => void;
 }) {
   const { toast } = useToast();
   const [provider, setProvider] = React.useState<CrmProviderId>("hubspot");
-  const [name, setName] = React.useState("");
   const [apiKey, setApiKey] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -472,7 +498,6 @@ function AddIntegrationDialog({
     if (!open) {
       const t = setTimeout(() => {
         setProvider("hubspot");
-        setName("");
         setApiKey("");
         setError(null);
         setSubmitting(false);
@@ -484,10 +509,11 @@ function AddIntegrationDialog({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!name.trim() || !apiKey.trim()) {
-      setError("Bitte Name und API-Key angeben.");
+    if (!apiKey.trim()) {
+      setError("Bitte API-Key angeben.");
       return;
     }
+    const autoName = nextAutoName(provider, existingRows);
     setSubmitting(true);
     try {
       const res = await fetch("/api/crm/integrations", {
@@ -495,14 +521,14 @@ function AddIntegrationDialog({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           provider,
-          name: name.trim(),
+          name: autoName,
           apiKey: apiKey.trim(),
         }),
       });
       if (res.ok) {
         toast({
           title: "Integration angelegt",
-          description: name.trim(),
+          description: autoName,
           variant: "success",
         });
         onCreated();
@@ -552,7 +578,7 @@ function AddIntegrationDialog({
                       : "border-line bg-surface hover:bg-surface-muted",
                   )}
                 >
-                  <ProviderLogo provider={p} size={32} />
+                  <ProviderLogo provider={p} size={56} />
                   <span className="text-sm font-medium text-ink">
                     {PROVIDER_LABEL[p]}
                   </span>
@@ -561,20 +587,6 @@ function AddIntegrationDialog({
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="crm-integration-name">Name</Label>
-            <Input
-              id="crm-integration-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="z.B. Prod HubSpot"
-              autoComplete="off"
-              disabled={submitting}
-            />
-            <p className="mt-1 text-xs text-ink-muted">
-              Frei wählbar — hilft Ihnen, mehrere Integrationen zu unterscheiden.
-            </p>
-          </div>
 
           <div>
             <Label htmlFor="crm-integration-key">API-Key</Label>
