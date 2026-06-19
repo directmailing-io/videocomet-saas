@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ProfileForm, BillingForm } from "./profile-form";
 import { PasswordForm } from "./password-form";
 import { DomainsTab } from "./domains-tab";
+import { IntegrationsList } from "./integrationen/integrations-list";
 
 export default async function EinstellungenPage() {
   const { user: sessionUser } = await requireUser();
@@ -24,6 +25,7 @@ export default async function EinstellungenPage() {
           <TabsTrigger value="passwort">Passwort</TabsTrigger>
           <TabsTrigger value="rechnung">Rechnungsadresse</TabsTrigger>
           <TabsTrigger value="domains">Domains</TabsTrigger>
+          <TabsTrigger value="crm">CRM-Integrationen</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profil">
@@ -68,6 +70,10 @@ export default async function EinstellungenPage() {
 
         <TabsContent value="domains">
           <DomainsTab />
+        </TabsContent>
+
+        <TabsContent value="crm">
+          <IntegrationsList />
         </TabsContent>
       </Tabs>
     </>

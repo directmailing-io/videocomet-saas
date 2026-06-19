@@ -19,8 +19,10 @@ import { hostname } from "node:os";
 import { and, eq, lt, inArray, sql } from "drizzle-orm";
 import { pipelineWorker, pipelineQueue } from "./queue";
 import { screenshotWorker, type ScreenshotJobData } from "./screenshot-queue";
+import { crmSyncWorker, type CrmSyncJob } from "./crm-queue";
 import { pipelineProcessor } from "./processors/pipeline";
 import { screenshotProcessor } from "./processors/screenshot";
+import { processCrmSyncJob } from "./processors/crm-sync";
 import { closeBrowserPool } from "./lib/browser-pool";
 import { startDomainVerifier } from "./jobs/domain-verifier";
 import { startDomainMonitor } from "./jobs/domain-monitor";
@@ -574,6 +576,43 @@ async function main(): Promise<void> {
     log("error", "screenshot worker error:", err.message);
   });
 
+  // CRM-Sync worker — pushes lead-event aggregates to external CRMs
+  // (HubSpot/Salessuite/Close) on a 30s debounce. Concurrency is
+  // deliberately small (default 2) to stay inside Salessuite's
+  // 3-concurrent-request quota per tenant; tunable via
+  // CRM_WORKER_CONCURRENCY env. See `worker/crm-queue.ts` + the
+  // processor at `processors/crm-sync.ts`.
+  const crmSyncW = crmSyncWorker(async (job: Job<CrmSyncJob>) => {
+    incrementInFlight();
+    try {
+      log(
+        "info",
+        `crm-sync start job=${job.id} lead=${job.data.leadId} kind=${job.data.kind}`,
+      );
+      await processCrmSyncJob(job);
+      log(
+        "info",
+        `crm-sync done  job=${job.id} lead=${job.data.leadId} kind=${job.data.kind}`,
+      );
+    } catch (err) {
+      log(
+        "error",
+        `crm-sync fail  job=${job?.id} lead=${job?.data?.leadId} kind=${job?.data?.kind}`,
+        err,
+      );
+      throw err;
+    } finally {
+      decrementInFlight();
+    }
+  });
+
+  crmSyncW.on("failed", (job, err) => {
+    log("error", `crm-sync job ${job?.id} failed:`, err?.message);
+  });
+  crmSyncW.on("error", (err) => {
+    log("error", "crm-sync worker error:", err.message);
+  });
+
   // Preflight-Worker mit-booten. Agent 2 liefert `bootPreflightWorker()` aus
   // `src/worker/preflight-worker-setup.ts` — der Return ist ein BullMQ-
   // Worker, dessen `.close()` wir im Shutdown aufrufen. Wir umschließen den
@@ -607,6 +646,11 @@ async function main(): Promise<void> {
       await screenshotW.close();
     } catch (err) {
       log("error", "screenshot worker close failed:", err);
+    }
+    try {
+      await crmSyncW.close();
+    } catch (err) {
+      log("error", "crm-sync worker close failed:", err);
     }
     try {
       await closeBrowserPool();

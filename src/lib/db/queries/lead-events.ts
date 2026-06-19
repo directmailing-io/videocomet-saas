@@ -14,6 +14,7 @@
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { leadEvents, leads, runs } from "@/lib/db/schema";
+import { enqueueCrmSync, mapEventKindToCrm } from "@/lib/crm/enqueue";
 
 export type LeadEventKind =
   | "page_view"
@@ -83,6 +84,14 @@ export async function insertLeadEvent(input: InsertLeadEventInput): Promise<void
       ipHash: input.ipHash ?? null,
     });
     await aggregateLeadStats(input.leadId);
+    // CRM-Sync-Hook: after the event row + aggregate update commit, kick
+    // off a debounced CRM push for the 3 kinds we sync (page_view /
+    // video_play / cta_click). `enqueueCrmSync` is fire-and-forget and
+    // never throws — failures are swallowed there with a console.error.
+    const crmKind = mapEventKindToCrm(input.kind);
+    if (crmKind) {
+      void enqueueCrmSync({ leadId: input.leadId, kind: crmKind });
+    }
   } catch (err) {
     console.warn(
       `[lead-events] insert failed for lead=${input.leadId} kind=${input.kind}:`,

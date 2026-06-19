@@ -60,6 +60,7 @@ import {
   type CampaignLeadRowSerialized,
 } from "./campaign-leads-table";
 import { ActivityCenter } from "@/app/(app)/aktivitaet/activity-center";
+import { CrmTab } from "./crm-tab";
 
 function formatDate(d: Date | null): string {
   if (!d) return "";
@@ -218,6 +219,7 @@ export default async function CampaignDetailPage({
             Runden {initialRuns.length > 0 && `(${initialRuns.length})`}
           </TabsTrigger>
           <TabsTrigger value="aktivität">Aktivität</TabsTrigger>
+          <TabsTrigger value="crm">CRM</TabsTrigger>
           <TabsTrigger value="einstellungen">Einstellungen</TabsTrigger>
         </TabsList>
 
@@ -351,6 +353,14 @@ export default async function CampaignDetailPage({
             campaignId={campaign.id}
             campaignName={campaign.name}
             embedded
+          />
+        </TabsContent>
+
+        {/* ── CRM ────────────────────────────────────────────────── */}
+        <TabsContent value="crm">
+          <CrmTab
+            campaignId={campaign.id}
+            campaignName={campaign.name}
           />
         </TabsContent>
 
