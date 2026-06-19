@@ -114,14 +114,6 @@ const STATIC_FIELDS = [
 
 type StaticFieldId = (typeof STATIC_FIELDS)[number]["id"];
 
-const COMMON_SOURCE_KEYS = [
-  "data.email",
-  "data.Email",
-  "data.E-Mail",
-  "data.phone",
-  "data.Telefon",
-];
-
 type LeadMatchTarget = "email" | "phone";
 
 interface LeadMatchRow {
@@ -607,51 +599,15 @@ export function CrmSettingsForm({
 
         {selectedIntegration && (
           <>
-            {/* (b) Lead-Matching */}
+            {/* (b) Lead-Matching — Laien-freundliche Preset-Auswahl */}
             <Section
-              title="Lead-Matching"
-              description="Wir suchen den passenden CRM-Kontakt anhand dieser Felder in der angegebenen Reihenfolge."
+              title="Wie finden wir den Kontakt im CRM?"
+              description="Wir gleichen jeden Lead mit deinem CRM ab, damit wir das Tracking dort eintragen können."
             >
-              <div className="flex flex-col gap-2">
-                {leadMatch.map((row, idx) => (
-                  <LeadMatchRowEditor
-                    key={idx}
-                    row={row}
-                    onChange={(next) => {
-                      setLeadMatch((prev) => {
-                        const out = [...prev];
-                        out[idx] = next;
-                        return out;
-                      });
-                    }}
-                    onRemove={
-                      leadMatch.length > 1
-                        ? () => {
-                            setLeadMatch((prev) =>
-                              prev.filter((_, i) => i !== idx),
-                            );
-                          }
-                        : undefined
-                    }
-                  />
-                ))}
-                <div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    iconLeft={<Plus className="size-3.5" />}
-                    onClick={() =>
-                      setLeadMatch((prev) => [
-                        ...prev,
-                        { source: "", target: "email" },
-                      ])
-                    }
-                  >
-                    Fallback hinzufügen
-                  </Button>
-                </div>
-              </div>
+              <LeadMatchPresetPicker
+                value={leadMatch}
+                onChange={setLeadMatch}
+              />
             </Section>
 
             {/* (c) Events */}
@@ -804,83 +760,97 @@ function Section({
   );
 }
 
-function LeadMatchRowEditor({
-  row,
-  onChange,
-  onRemove,
-}: {
-  row: LeadMatchRow;
-  onChange: (next: LeadMatchRow) => void;
-  onRemove?: () => void;
-}) {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_180px_auto] gap-2 items-center">
-      <div>
-        <SourceCombobox
-          value={row.source}
-          onChange={(v) => onChange({ ...row, source: v })}
-        />
-      </div>
-      <span className="text-xs text-ink-muted text-center hidden sm:block">
-        →
-      </span>
-      <div>
-        <Select
-          value={row.target}
-          onValueChange={(v) =>
-            onChange({ ...row, target: v as LeadMatchTarget })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Ziel" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="email">E-Mail (CRM)</SelectItem>
-            <SelectItem value="phone">Telefon (CRM)</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div>
-        {onRemove && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onRemove}
-            iconLeft={<X className="size-3.5" />}
-            className="text-ink-muted"
-            aria-label="Fallback entfernen"
-          >
-            Entfernen
-          </Button>
-        )}
-      </div>
-    </div>
-  );
+/**
+ * Laien-freundlicher Lead-Match-Picker: 3 Presets als Radio-Buttons. Die
+ * technische source→target-Struktur lebt hinter den Kulissen weiter — der
+ * User sieht nur "per E-Mail / per Telefon / beides". Die Worker-Lookup-
+ * Helper (`resolveLeadMatchValue`) sind case-insensitive, daher genuegt
+ * EIN Eintrag pro Kanal, der dann gegen `Email`, `E-Mail`, `EMAIL` etc.
+ * matcht.
+ */
+type MatchPreset = "email" | "phone" | "email_then_phone";
+
+const PRESETS: ReadonlyArray<{
+  id: MatchPreset;
+  title: string;
+  description: string;
+  rows: LeadMatchRow[];
+}> = [
+  {
+    id: "email",
+    title: "Per E-Mail-Adresse",
+    description: "Wir suchen den CRM-Kontakt mit der gleichen E-Mail-Adresse. (Empfohlen)",
+    rows: [{ source: "data.email", target: "email" }],
+  },
+  {
+    id: "phone",
+    title: "Per Telefonnummer",
+    description: "Wir suchen den CRM-Kontakt mit der gleichen Telefonnummer.",
+    rows: [{ source: "data.phone", target: "phone" }],
+  },
+  {
+    id: "email_then_phone",
+    title: "Per E-Mail — sonst Telefonnummer",
+    description: "Wir versuchen zuerst die E-Mail. Wenn sie fehlt, dann die Telefonnummer.",
+    rows: [
+      { source: "data.email", target: "email" },
+      { source: "data.phone", target: "phone" },
+    ],
+  },
+];
+
+function detectPreset(rows: LeadMatchRow[]): MatchPreset {
+  // Match nach Reihenfolge der target-Felder; ignoriere source-Casing.
+  const targets = rows.map((r) => r.target).join(",");
+  if (targets === "email") return "email";
+  if (targets === "phone") return "phone";
+  if (targets === "email,phone") return "email_then_phone";
+  return "email"; // Fallback: alles unbekannte interpretieren wir als email
 }
 
-function SourceCombobox({
+function LeadMatchPresetPicker({
   value,
   onChange,
 }: {
-  value: string;
-  onChange: (v: string) => void;
+  value: LeadMatchRow[];
+  onChange: (next: LeadMatchRow[]) => void;
 }) {
-  const listId = React.useId();
+  const current = detectPreset(value);
   return (
-    <div>
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="data.email"
-        list={listId}
-        autoComplete="off"
-      />
-      <datalist id={listId}>
-        {COMMON_SOURCE_KEYS.map((k) => (
-          <option key={k} value={k} />
-        ))}
-      </datalist>
+    <div role="radiogroup" aria-label="Lead-Matching" className="grid gap-2 sm:grid-cols-1">
+      {PRESETS.map((p) => {
+        const active = current === p.id;
+        return (
+          <button
+            type="button"
+            key={p.id}
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(p.rows)}
+            className={cn(
+              "flex items-start gap-3 rounded-squircle-md border p-3 text-left transition-all",
+              active
+                ? "border-brand bg-brand-soft/40 ring-2 ring-brand/20"
+                : "border-line bg-surface hover:border-brand/40",
+            )}
+          >
+            <span
+              className={cn(
+                "mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full border-2",
+                active ? "border-brand" : "border-line",
+              )}
+            >
+              {active && <span className="size-2.5 rounded-full bg-brand" />}
+            </span>
+            <div className="flex-1">
+              <p className={cn("text-sm font-semibold", active ? "text-ink" : "text-ink")}>
+                {p.title}
+              </p>
+              <p className="text-xs text-ink-muted mt-0.5">{p.description}</p>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }

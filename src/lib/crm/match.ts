@@ -44,6 +44,20 @@ function lookupCaseInsensitive(
   return undefined;
 }
 
+/**
+ * Synonyme pro `target`-Kanal. Deutsche CSV-Uploads schreiben "E-Mail"
+ * (mit Bindestrich) ebenso oft wie "Email" oder "email". Beim
+ * Preset-Picker auf der UI waehlt der User nur "per Email" / "per
+ * Telefon" — wir muessen hier intern eine ganze Familie probieren.
+ *
+ * Reihenfolge: vom expliziten User-Source-Pfad zuerst, dann generische
+ * Synonyme. Erster Treffer mit nicht-leerem Wert gewinnt.
+ */
+const TARGET_SYNONYMS: Record<"email" | "phone", readonly string[]> = {
+  email: ["email", "e-mail", "e_mail", "mail", "emailaddress", "email_address"],
+  phone: ["phone", "telefon", "tel", "phonenumber", "phone_number", "mobile", "mobil", "handy"],
+};
+
 export function resolveLeadMatchValue(
   leadData: Record<string, string>,
   leadMatch: LeadMatchRule[],
@@ -54,11 +68,15 @@ export function resolveLeadMatchValue(
     if (!rule.source.startsWith("data.")) continue;
     const path = rule.source.slice("data.".length);
     if (!path) continue;
-    const raw = lookupCaseInsensitive(leadData, path);
-    if (typeof raw !== "string") continue;
-    const value = raw.trim();
-    if (value.length === 0) continue;
-    return { target: rule.target, value };
+    // Kandidaten in Suchreihenfolge: explizit, dann Synonyme.
+    const candidates = [path, ...TARGET_SYNONYMS[rule.target]];
+    for (const cand of candidates) {
+      const raw = lookupCaseInsensitive(leadData, cand);
+      if (typeof raw !== "string") continue;
+      const value = raw.trim();
+      if (value.length === 0) continue;
+      return { target: rule.target, value };
+    }
   }
   return null;
 }
