@@ -65,17 +65,49 @@ const PROVIDER_LABEL: Record<CrmProviderId, string> = {
   close: "Close",
 };
 
-const PROVIDER_BADGE_CLASS: Record<CrmProviderId, string> = {
-  hubspot: "bg-[#FF7A59]/15 text-[#C13B1B] border border-[#FF7A59]/30",
-  salessuite: "bg-[#1F6FEB]/15 text-[#1F4FA8] border border-[#1F6FEB]/30",
-  close: "bg-[#16A34A]/15 text-[#15803D] border border-[#16A34A]/30",
+// Brand-Tile-Farben (helles Tint + Border in der Marken-Farbe). Logos
+// liegen in /public/brand-logos/<provider>.svg — gefetcht von den
+// offiziellen Brand-Seiten der Anbieter.
+const PROVIDER_TILE_CLASS: Record<CrmProviderId, string> = {
+  hubspot: "bg-[#FF7A59]/10 border-[#FF7A59]/25",
+  salessuite: "bg-white border-[#171717]/15",
+  close: "bg-white border-[#16A34A]/25",
 };
 
-const PROVIDER_INITIAL: Record<CrmProviderId, string> = {
-  hubspot: "H",
-  salessuite: "S",
-  close: "C",
+// Padding pro Logo — die Aspect-Ratios variieren stark (HubSpot Sprocket
+// ist square, Salessuite + Close sind breite Wortmarken).
+const PROVIDER_LOGO_PADDING: Record<CrmProviderId, string> = {
+  hubspot: "p-1.5",
+  salessuite: "p-1",
+  close: "p-1.5",
 };
+
+function ProviderLogo({
+  provider,
+  size = 40,
+}: {
+  provider: CrmProviderId;
+  size?: number;
+}) {
+  return (
+    <span
+      className={cn(
+        "flex items-center justify-center rounded-squircle-sm shrink-0 border",
+        PROVIDER_TILE_CLASS[provider],
+        PROVIDER_LOGO_PADDING[provider],
+      )}
+      style={{ width: size, height: size }}
+      aria-hidden="true"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/brand-logos/${provider}.svg`}
+        alt=""
+        className="max-h-full max-w-full object-contain"
+      />
+    </span>
+  );
+}
 
 // ── Komponente ──────────────────────────────────────────────────────────────
 
@@ -317,14 +349,7 @@ function IntegrationCard({
   return (
     <div className="rounded-squircle-md border border-line bg-surface p-4 flex flex-col gap-3">
       <div className="flex items-start gap-3 min-w-0">
-        <span
-          className={cn(
-            "flex size-10 items-center justify-center rounded-squircle-sm shrink-0 text-base font-bold",
-            PROVIDER_BADGE_CLASS[row.provider],
-          )}
-        >
-          {PROVIDER_INITIAL[row.provider]}
-        </span>
+        <ProviderLogo provider={row.provider} size={40} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-semibold text-ink truncate">{row.name}</p>
@@ -527,14 +552,7 @@ function AddIntegrationDialog({
                       : "border-line bg-surface hover:bg-surface-muted",
                   )}
                 >
-                  <span
-                    className={cn(
-                      "flex size-8 items-center justify-center rounded-squircle-sm shrink-0 text-sm font-bold",
-                      PROVIDER_BADGE_CLASS[p],
-                    )}
-                  >
-                    {PROVIDER_INITIAL[p]}
-                  </span>
+                  <ProviderLogo provider={p} size={32} />
                   <span className="text-sm font-medium text-ink">
                     {PROVIDER_LABEL[p]}
                   </span>
