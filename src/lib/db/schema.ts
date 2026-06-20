@@ -828,6 +828,88 @@ export type NewCampaignCrmSettings = typeof campaignCrmSettings.$inferInsert;
 export type CrmEventLogRow = typeof crmEventLog.$inferSelect;
 export type NewCrmEventLogRow = typeof crmEventLog.$inferInsert;
 
+// ── Outgoing-Webhooks (Phase A — Datenlayer, Migration 0025) ──────────────
+// Eine Endpoint-Konfiguration pro User (optional auf eine Kampagne gescoped).
+// `secret` wird beim Erstellen vom Server erzeugt (csprng-Hex) und EINMAL
+// dem User angezeigt — der Worker nutzt ihn für die HMAC-SHA256-Signatur
+// (`signature.ts`). `enabledEvents` ist die Liste der aktivierten
+// `WebhookEventKind`s; leeres Array → kein Push. `customHeaders` erlaubt
+// dem Kunden, statische Auth-Header an sein Webhook-Relay mitzugeben
+// (Verbot von `X-VideoComet-*` setzt die Route durch).
+//
+// `consecutiveFailures` + `disabledAt`/`disabledReason` werden vom Worker
+// nach N Fehlversuchen gesetzt (Soft-Disable); UI zeigt das als Banner.
+// `lastDeliveryAt`/`lastDeliveryOk`/`lastDeliveryError` sind Caches für die
+// Listen-Ansicht, damit die UI nicht jedes Mal `webhook_deliveries`
+// aggregieren muss.
+export const webhookEndpoints = pgTable("webhook_endpoints", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** Scope-Anker. NULL = account-weit (gilt für alle Kampagnen des Users). */
+  campaignId: uuid("campaign_id").references(() => campaigns.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  /** HMAC-Secret im Klartext (Hex). Vom Worker für Stripe-style Signaturen genutzt. */
+  secret: text("secret").notNull(),
+  /** Liste der aktivierten `WebhookEventKind`s. Single-Source-of-Truth in `src/lib/webhooks/types.ts`. */
+  enabledEvents: jsonb("enabled_events").notNull().$type<string[]>().default([]),
+  /** Zusätzliche statische Header pro Request. `X-VideoComet-*` sind verboten (Route-Validator). */
+  customHeaders: jsonb("custom_headers").notNull().$type<Record<string, string>>().default({}),
+  active: boolean("active").notNull().default(true),
+  /** Vom Worker nach N Fehlversuchen gesetzt (Soft-Disable). NULL = aktiv. */
+  disabledAt: timestamp("disabled_at", { withTimezone: true }),
+  disabledReason: text("disabled_reason"),
+  consecutiveFailures: smallint("consecutive_failures").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Letzte Delivery (Erfolg ODER Fehler) — Cache für UI-Liste. */
+  lastDeliveryAt: timestamp("last_delivery_at", { withTimezone: true }),
+  lastDeliveryOk: boolean("last_delivery_ok"),
+  lastDeliveryError: text("last_delivery_error"),
+}, (t) => ({
+  userIdx: index("webhook_endpoints_user_idx").on(t.userId),
+  userNameUq: unique("webhook_endpoints_user_name_uq").on(t.userId, t.name),
+}));
+
+// ── Webhook-Deliveries (Migration 0025) ────────────────────────────────────
+// Append-only Audit-Log aller Delivery-Versuche (1 Row pro HTTP-Call inkl.
+// Retries). `eventId` ist der `evt_…`-Identifier aus dem Payload und
+// ermöglicht Empfängern Idempotenz (sie können auf `evt_…`-Wiederholungen
+// dedupen). `nextRetryAt` ist nur während des Backoff-Fensters gesetzt;
+// der Worker pollt darauf. `deliveredAt` ODER `failedAt` (nicht beide).
+// `lead_id`/`run_id`/`campaign_id` sind ON DELETE SET NULL — Log überlebt
+// das Löschen der referenzierten Rows.
+export const webhookDeliveries = pgTable("webhook_deliveries", {
+  id: bigserial("id", { mode: "bigint" }).primaryKey(),
+  endpointId: uuid("endpoint_id").notNull().references(() => webhookEndpoints.id, { onDelete: "cascade" }),
+  eventKind: text("event_kind").notNull(),
+  /** `evt_<base32-uuidv7>` aus dem Payload. Empfänger nutzen das für Idempotenz. */
+  eventId: text("event_id").notNull(),
+  leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+  runId: uuid("run_id").references(() => runs.id, { onDelete: "set null" }),
+  campaignId: uuid("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
+  payload: jsonb("payload").notNull().$type<unknown>(),
+  requestHeaders: jsonb("request_headers").$type<Record<string, string> | null>(),
+  httpStatus: smallint("http_status"),
+  responseBody: text("response_body"),
+  errorMessage: text("error_message"),
+  attempt: smallint("attempt").notNull().default(1),
+  /** Nur während Backoff gesetzt; Worker pollt auf diesen Index. */
+  nextRetryAt: timestamp("next_retry_at", { withTimezone: true }),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  failedAt: timestamp("failed_at", { withTimezone: true }),
+  ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  endpointTsIdx: index("webhook_deliveries_endpoint_ts_idx").on(t.endpointId, t.ts),
+  retryIdx: index("webhook_deliveries_retry_idx").on(t.nextRetryAt),
+  eventIdIdx: index("webhook_deliveries_event_id_idx").on(t.endpointId, t.eventId),
+}));
+
+export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
+export type NewWebhookEndpoint = typeof webhookEndpoints.$inferInsert;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;
+
 // ── Index-Namen als Konstanten ────────────────────────────────────────────
 //
 // Werden vom Worker (`landingpage-create.ts`) zur Erkennung von

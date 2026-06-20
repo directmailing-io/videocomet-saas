@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { analyticsEvents, leadEvents, leads, runs } from "@/lib/db/schema";
+import { enqueueWebhooksForRunFinalized } from "@/lib/webhooks/lead-event-hook";
 
 /**
  * Erlaubte Run-Status-Übergänge für die Preflight-Pipeline.
@@ -101,7 +102,28 @@ export async function finalizeRunIfAllLeadsDone(runId: string): Promise<{
       ),
     )
     .returning({ id: runs.id });
-  return { finalized: result.length > 0, total, done };
+  const finalized = result.length > 0;
+  // Outgoing-Webhook-Hook: bei tatsächlichem Übergang nach 'completed'
+  // den `run.completed`-Webhook feuern. Idempotent durch die WHERE-Klausel
+  // oben — nur der erste finalisierende Aufruf bekommt eine zurückgegebene
+  // Row und feuert. Fire-and-forget; nie blocking.
+  if (finalized) {
+    void enqueueWebhooksForRunFinalized({ runId, kind: "run.completed" });
+  }
+  return { finalized, total, done };
+}
+
+/**
+ * Fire-and-forget Webhook-Hook für den `run.failed`-Pfad. Wird vom
+ * Caller (Pipeline-Worker bzw. Recovery-Logik) explizit aufgerufen,
+ * wenn der Run auf `status='failed'` gesetzt wird. Nicht in
+ * `finalizeRunIfAllLeadsDone` integriert, weil "alle Leads done" ein
+ * Erfolg ist (auch wenn einzelne failed sind) — `run.failed` ist
+ * spezifisch für den Fall, dass der gesamte Run einen Fatal-Fehler
+ * trifft.
+ */
+export function notifyRunFailed(runId: string): void {
+  void enqueueWebhooksForRunFinalized({ runId, kind: "run.failed" });
 }
 
 export async function deleteRun(id: string, userId: string): Promise<void> {

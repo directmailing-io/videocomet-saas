@@ -8,6 +8,7 @@ import type {
   PreflightStatus,
 } from "@/lib/preflight/types";
 import { PREFLIGHT_PROBLEMATIC_STATUSES } from "@/lib/preflight/types";
+import { enqueueWebhooksForLeadCreated } from "@/lib/webhooks/lead-event-hook";
 
 export type Lead = typeof leads.$inferSelect;
 export type NewLead = typeof leads.$inferInsert;
@@ -89,6 +90,14 @@ export async function bulkInsertLeads(
       })),
     )
     .returning({ id: leads.id });
+  // Outgoing-Webhook-Hook: feuert `lead.created` für jeden neu
+  // eingefügten Lead. Lead-Erzeugung ist selten (CSV-Bulk-Insert) und
+  // pro-Lead-Cost ist akzeptabel. Fire-and-forget; nie blocking.
+  if (inserted.length > 0) {
+    void enqueueWebhooksForLeadCreated({
+      leadIds: inserted.map((r) => r.id),
+    });
+  }
   return inserted.length;
 }
 

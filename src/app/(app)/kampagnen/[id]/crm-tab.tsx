@@ -16,6 +16,7 @@ import * as React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { CrmSettingsForm } from "./crm-settings-form";
 import { CrmLogViewer } from "./crm-log-viewer";
+import { WebhooksList } from "@/app/(app)/einstellungen/webhooks/webhooks-list";
 
 export interface CrmTabProps {
   campaignId: string;
@@ -36,6 +37,22 @@ export function CrmTab({ campaignId, campaignName }: CrmTabProps) {
           />
         </CardContent>
       </Card>
+
+      {/*
+       * Webhooks-Sektion direkt unter den CRM-Settings — bewusst inline und
+       * nicht als eigener Tab, damit Operator alle Outbound-Integrationen
+       * (CRM + Webhooks) für diese Kampagne an einer Stelle sehen.
+       *
+       * Wir reichen `campaignFilterId` herein, damit die Liste nur Endpoints
+       * zeigt, die a) account-weit (campaignId = null) ODER b) genau diese
+       * Kampagne adressieren — und das CTA das Form mit der Kampagnen-ID
+       * vorbelegt + sperrt.
+       */}
+      <WebhooksList
+        campaignFilterId={campaignId}
+        campaignFilterName={campaignName}
+        variant="embedded"
+      />
 
       <section id="crm-log" className="flex flex-col gap-3">
         <div>

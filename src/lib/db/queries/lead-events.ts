@@ -15,6 +15,7 @@ import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { leadEvents, leads, runs } from "@/lib/db/schema";
 import { enqueueCrmSync, mapEventKindToCrm } from "@/lib/crm/enqueue";
+import { enqueueWebhooksForLeadEvent } from "@/lib/webhooks/lead-event-hook";
 
 export type LeadEventKind =
   | "page_view"
@@ -92,6 +93,17 @@ export async function insertLeadEvent(input: InsertLeadEventInput): Promise<void
     if (crmKind) {
       void enqueueCrmSync({ leadId: input.leadId, kind: crmKind });
     }
+    // Outgoing-Webhook-Hook: feuert pro Lead-Event den passenden
+    // `WebhookEventKind` (lead.opened / lead.video_played /
+    // lead.video_progress / lead.cta_clicked) an alle aktiven Endpoints
+    // des Users. Fire-and-forget; Quartile-Dedup macht die Bridge
+    // intern, damit `video_progress` nur EINMAL pro Quartile feuert.
+    void enqueueWebhooksForLeadEvent({
+      leadId: input.leadId,
+      kind: input.kind,
+      payload: input.payload ?? null,
+      sessionId: input.sessionId ?? null,
+    });
   } catch (err) {
     console.warn(
       `[lead-events] insert failed for lead=${input.leadId} kind=${input.kind}:`,

@@ -17,12 +17,18 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { and, eq, lt, inArray, sql } from "drizzle-orm";
-import { pipelineWorker, pipelineQueue } from "./queue";
+import { pipelineWorker, pipelineQueue, getRedisConnection } from "./queue";
 import { screenshotWorker, type ScreenshotJobData } from "./screenshot-queue";
 import { crmSyncWorker, type CrmSyncJob } from "./crm-queue";
+import {
+  WEBHOOK_DELIVERY_QUEUE,
+  type WebhookDeliveryJob,
+} from "./webhook-queue";
+import { Worker, type ConnectionOptions } from "bullmq";
 import { pipelineProcessor } from "./processors/pipeline";
 import { screenshotProcessor } from "./processors/screenshot";
 import { processCrmSyncJob } from "./processors/crm-sync";
+import { processWebhookDelivery } from "./processors/webhook-delivery";
 import { closeBrowserPool } from "./lib/browser-pool";
 import { startDomainVerifier } from "./jobs/domain-verifier";
 import { startDomainMonitor } from "./jobs/domain-monitor";
@@ -613,6 +619,55 @@ async function main(): Promise<void> {
     log("error", "crm-sync worker error:", err.message);
   });
 
+  // Outgoing-Webhook-Delivery worker — pushes signed JSON payloads to
+  // customer-configured endpoints. Concurrency default 8 (tunable via
+  // WEBHOOK_WORKER_CONCURRENCY) — most pushes are <500ms; per-endpoint
+  // rate-limit (`webhook:inflight:<endpointId>`) caps to 4 parallel
+  // pushes per endpoint regardless of global concurrency.
+  const webhookW = new Worker<WebhookDeliveryJob>(
+    WEBHOOK_DELIVERY_QUEUE,
+    async (job) => {
+      incrementInFlight();
+      try {
+        log(
+          "info",
+          `webhook start job=${job.id} delivery=${job.data.deliveryId}`,
+        );
+        await processWebhookDelivery(job);
+        log(
+          "info",
+          `webhook done  job=${job.id} delivery=${job.data.deliveryId}`,
+        );
+      } catch (err) {
+        log(
+          "error",
+          `webhook fail  job=${job?.id} delivery=${job?.data?.deliveryId}`,
+          err,
+        );
+        throw err;
+      } finally {
+        decrementInFlight();
+      }
+    },
+    {
+      connection: getRedisConnection() as unknown as ConnectionOptions,
+      concurrency: Number(process.env.WEBHOOK_WORKER_CONCURRENCY ?? "8"),
+      stalledInterval: 30_000,
+      maxStalledCount: 2,
+      lockDuration: 60_000,
+      lockRenewTime: 20_000,
+      removeOnComplete: { count: 500 },
+      removeOnFail: { count: 2000 },
+    },
+  );
+
+  webhookW.on("failed", (job, err) => {
+    log("error", `webhook job ${job?.id} failed:`, err?.message);
+  });
+  webhookW.on("error", (err) => {
+    log("error", "webhook worker error:", err.message);
+  });
+
   // Preflight-Worker mit-booten. Agent 2 liefert `bootPreflightWorker()` aus
   // `src/worker/preflight-worker-setup.ts` — der Return ist ein BullMQ-
   // Worker, dessen `.close()` wir im Shutdown aufrufen. Wir umschließen den
@@ -651,6 +706,11 @@ async function main(): Promise<void> {
       await crmSyncW.close();
     } catch (err) {
       log("error", "crm-sync worker close failed:", err);
+    }
+    try {
+      await webhookW.close();
+    } catch (err) {
+      log("error", "webhook worker close failed:", err);
     }
     try {
       await closeBrowserPool();
