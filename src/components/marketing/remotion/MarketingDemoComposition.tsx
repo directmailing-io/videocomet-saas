@@ -42,37 +42,42 @@ const GOOGLE_SANS =
   "'Google Sans', 'Roboto', 'Helvetica Neue', Arial, sans-serif";
 
 /**
- * Realistische "menschliche" Scroll-Keyframes: jeder echte Mensch scrollt
- * ein Stueck, haelt mehrere Sekunden um zu lesen, scrollt manchmal kurz
- * zurueck um was nochmal anzuschauen, dann weiter. Keine konstante
- * Bewegung. Gesamt-Loop = 60s. Pausen >50 % der Zeit, damit man wirklich
- * "mitlesen" kann.
+ * Echtes Scroll-Verhalten: Wheel-Bursts (200–800 ms), kurze Lese-Pausen
+ * (1–2,5 s), gelegentlich kleine Rueck-Scrolls, manchmal harte Spruenge
+ * (Page Down). Kein Anfangs-Delay — direkt beim Loop-Start geht's los.
+ * Gesamt-Loop = 38 s.
  *
- * Image-Hoehe = 1920 * (8000/1200) = 12800. Visible = 1080. Max sinnvoller
- * Scroll bis ca. -10500 (zeigt Footer noch sauber).
+ * Image-Hoehe = 1920 * (8000/1200) = 12800. Visible = 1080.
  */
 const WEBSITE_SCROLL_KEYFRAMES = `
   @keyframes vc-demo-scroll {
     0%   { transform: translateY(0); }
-    6%   { transform: translateY(0); }
-    9%   { transform: translateY(-900px); }
-    18%  { transform: translateY(-900px); }
-    20%  { transform: translateY(-1300px); }
-    28%  { transform: translateY(-1300px); }
-    30%  { transform: translateY(-1050px); }
-    34%  { transform: translateY(-1050px); }
-    38%  { transform: translateY(-2800px); }
-    47%  { transform: translateY(-2800px); }
-    49%  { transform: translateY(-3200px); }
-    55%  { transform: translateY(-3200px); }
-    57%  { transform: translateY(-2900px); }
-    61%  { transform: translateY(-2900px); }
-    65%  { transform: translateY(-5800px); }
-    74%  { transform: translateY(-5800px); }
-    76%  { transform: translateY(-6300px); }
-    82%  { transform: translateY(-6300px); }
-    86%  { transform: translateY(-9200px); }
-    94%  { transform: translateY(-9200px); }
+    2%   { transform: translateY(-450px); }
+    6%   { transform: translateY(-450px); }
+    8%   { transform: translateY(-1300px); }
+    12%  { transform: translateY(-1300px); }
+    13%  { transform: translateY(-1750px); }
+    17%  { transform: translateY(-1750px); }
+    19%  { transform: translateY(-1500px); }
+    21%  { transform: translateY(-1500px); }
+    24%  { transform: translateY(-3100px); }
+    29%  { transform: translateY(-3100px); }
+    31%  { transform: translateY(-3650px); }
+    35%  { transform: translateY(-3650px); }
+    38%  { transform: translateY(-5000px); }
+    43%  { transform: translateY(-5000px); }
+    46%  { transform: translateY(-6500px); }
+    51%  { transform: translateY(-6500px); }
+    53%  { transform: translateY(-6200px); }
+    55%  { transform: translateY(-6200px); }
+    59%  { transform: translateY(-8000px); }
+    64%  { transform: translateY(-8000px); }
+    66%  { transform: translateY(-8700px); }
+    70%  { transform: translateY(-8700px); }
+    74%  { transform: translateY(-10100px); }
+    80%  { transform: translateY(-10100px); }
+    82%  { transform: translateY(-9700px); }
+    84%  { transform: translateY(-9700px); }
     100% { transform: translateY(0); }
   }
 `;
@@ -99,23 +104,26 @@ function GoogleDocsBackground({
       <style>{`
         @keyframes vc-demo-gdocs-scroll {
           0%   { transform: translateY(0); }
-          7%   { transform: translateY(0); }
-          11%  { transform: translateY(-220px); }
-          20%  { transform: translateY(-220px); }
-          22%  { transform: translateY(-380px); }
-          32%  { transform: translateY(-380px); }
-          34%  { transform: translateY(-300px); }
-          38%  { transform: translateY(-300px); }
-          42%  { transform: translateY(-820px); }
-          54%  { transform: translateY(-820px); }
-          56%  { transform: translateY(-720px); }
-          60%  { transform: translateY(-720px); }
-          64%  { transform: translateY(-1180px); }
-          76%  { transform: translateY(-1180px); }
-          78%  { transform: translateY(-1080px); }
-          82%  { transform: translateY(-1080px); }
-          86%  { transform: translateY(-1500px); }
-          94%  { transform: translateY(-1500px); }
+          3%   { transform: translateY(-140px); }
+          7%   { transform: translateY(-140px); }
+          9%   { transform: translateY(-320px); }
+          13%  { transform: translateY(-320px); }
+          15%  { transform: translateY(-490px); }
+          22%  { transform: translateY(-490px); }
+          24%  { transform: translateY(-440px); }
+          26%  { transform: translateY(-440px); }
+          29%  { transform: translateY(-720px); }
+          35%  { transform: translateY(-720px); }
+          37%  { transform: translateY(-900px); }
+          43%  { transform: translateY(-900px); }
+          45%  { transform: translateY(-1080px); }
+          53%  { transform: translateY(-1080px); }
+          55%  { transform: translateY(-1020px); }
+          57%  { transform: translateY(-1020px); }
+          60%  { transform: translateY(-1280px); }
+          68%  { transform: translateY(-1280px); }
+          70%  { transform: translateY(-1480px); }
+          77%  { transform: translateY(-1480px); }
           100% { transform: translateY(0); }
         }
       `}</style>
@@ -274,7 +282,7 @@ function GoogleDocsBackground({
             width: 880,
             maxWidth: "100%",
             animation: scrollEnabled
-              ? "vc-demo-gdocs-scroll 55s ease-in-out infinite"
+              ? "vc-demo-gdocs-scroll 40s cubic-bezier(0.18,0.85,0.25,1) infinite"
               : "none",
             transform: scrollEnabled ? undefined : "translateY(0)",
             willChange: "transform",
@@ -576,7 +584,8 @@ function ScreenshotBackground({
           top: 0,
           width: "100%",
           height: "auto",
-          animation: "vc-demo-scroll 60s ease-in-out infinite",
+          animation:
+            "vc-demo-scroll 38s cubic-bezier(0.18,0.85,0.25,1) infinite",
           willChange: "transform",
           display: "block",
         }}
@@ -637,6 +646,7 @@ export default function MarketingDemoComposition({
           muted
           playsInline
           loop
+          volume={0}
           style={{
             width: "100%",
             height: "100%",

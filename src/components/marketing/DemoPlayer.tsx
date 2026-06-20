@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import * as React from "react";
-import { Volume2, VolumeX } from "lucide-react";
 import type { Player as PlayerType, PlayerRef } from "@remotion/player";
 import { cn } from "@/lib/utils";
 import { DemoToggleGroup } from "./DemoToggleGroup";
@@ -42,7 +41,6 @@ const PRELOAD_IMAGES = [
 
 export function DemoPlayer() {
   const [mode, setMode] = React.useState<DemoMode>("screenshot");
-  const [muted, setMuted] = React.useState(true);
   const [scrollEnabled, setScrollEnabled] = React.useState(false);
   const playerRef = React.useRef<PlayerRef>(null);
 
@@ -57,22 +55,19 @@ export function DemoPlayer() {
   }, []);
 
   // Force-start playback. Remotion Player's `autoPlay` prop is unreliable in
-  // some browsers (Safari + strict Chrome policies) — without this, the Player
-  // stays paused on frame 0 and the timeline never advances, so scroll-mode
-  // looks static and slides start at opacity 0 (= blank). The Player is muted
-  // so play() is allowed even without user gesture.
+  // some browsers (Safari + strict Chrome policies). Player is permanently
+  // muted, play() works without user gesture.
   React.useEffect(() => {
     const tryPlay = () => {
       const p = playerRef.current;
       if (!p) return;
       try {
+        p.mute();
         p.play();
       } catch {
         /* noop — Player may not be ready yet */
       }
     };
-    // First attempt right after mount, retry shortly after in case Player
-    // wasn't ready yet (dynamic import).
     tryPlay();
     const t1 = window.setTimeout(tryPlay, 300);
     const t2 = window.setTimeout(tryPlay, 1000);
@@ -80,25 +75,6 @@ export function DemoPlayer() {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
-  }, []);
-
-  const handleToggleMute = React.useCallback(() => {
-    setMuted((prev) => {
-      const next = !prev;
-      const p = playerRef.current;
-      if (p) {
-        try {
-          if (next) {
-            p.mute();
-          } else {
-            p.unmute();
-          }
-        } catch {
-          /* noop — Player may not be ready yet */
-        }
-      }
-      return next;
-    });
   }, []);
 
   return (
@@ -146,19 +122,6 @@ export function DemoPlayer() {
             Scrollen aktivieren
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={handleToggleMute}
-          className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/60 backdrop-blur px-3 py-1.5 text-xs font-medium text-white hover:bg-black/80 transition-colors"
-          aria-label={muted ? "Ton an" : "Ton aus"}
-        >
-          {muted ? (
-            <VolumeX className="size-3.5" />
-          ) : (
-            <Volume2 className="size-3.5" />
-          )}
-          {muted ? "Ton an" : "Ton aus"}
-        </button>
       </div>
       <p className="text-center text-xs text-ink-muted">
         Demo. Echte Videos werden in deinem Account erzeugt.
