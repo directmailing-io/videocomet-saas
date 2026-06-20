@@ -46,22 +46,18 @@ const GOOGLE_SANS =
   "'Google Sans', 'Roboto', 'Helvetica Neue', Arial, sans-serif";
 
 function ScrollBackground() {
-  const frame = useCurrentFrame();
-  // Bild 1200x8000 → bei width:100% (1920) ist es 12800 hoch.
-  // Triangle-Wave: 0 → -10000 (runter) → 0 (hoch). Keine Pausen am Anfang/
-  // Ende → der User sieht IMMER Bewegung, auch wenn er nur kurz reinguckt.
-  const translateY = interpolate(
-    frame,
-    [0, 300, 600],
-    [0, -10000, 0],
-    {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    },
-  );
-
+  // CSS-Keyframes statt useCurrentFrame: laeuft IMMER, auch wenn der
+  // Remotion-Player aus irgendeinem Grund nicht spielt (Browser-Autoplay-
+  // Block, Tab-Throttling, etc.). Browser-driven, nicht React-driven.
   return (
     <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#FFFFFF" }}>
+      <style>{`
+        @keyframes vc-demo-scroll {
+          0%   { transform: translateY(0); }
+          50%  { transform: translateY(-10000px); }
+          100% { transform: translateY(0); }
+        }
+      `}</style>
       <Img
         src={staticFile(SCREENSHOT_SRC)}
         style={{
@@ -70,7 +66,7 @@ function ScrollBackground() {
           top: 0,
           width: "100%",
           height: "auto",
-          transform: `translateY(${translateY}px)`,
+          animation: "vc-demo-scroll 20s linear infinite",
           willChange: "transform",
           display: "block",
         }}
@@ -85,18 +81,7 @@ function ScrollBackground() {
  * Check fuer "Max" mit 3 roten Findings. Scrollt langsam hoch und runter.
  */
 function GoogleDocsBackground() {
-  const frame = useCurrentFrame();
-  // Triangle-Wave: 0 → -1400 → 0. Immer in Bewegung.
-  const translateY = interpolate(
-    frame,
-    [0, 300, 600],
-    [0, -1400, 0],
-    {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    },
-  );
-
+  // Wie ScrollBackground: CSS-Keyframes statt frame-getriebener Animation.
   return (
     <AbsoluteFill
       style={{
@@ -104,6 +89,13 @@ function GoogleDocsBackground() {
         fontFamily: GOOGLE_SANS,
       }}
     >
+      <style>{`
+        @keyframes vc-demo-gdocs-scroll {
+          0%   { transform: translateY(0); }
+          50%  { transform: translateY(-1400px); }
+          100% { transform: translateY(0); }
+        }
+      `}</style>
       {/* Top bar */}
       <div
         style={{
@@ -258,7 +250,7 @@ function GoogleDocsBackground() {
           style={{
             width: 880,
             maxWidth: "100%",
-            transform: `translateY(${translateY}px)`,
+            animation: "vc-demo-gdocs-scroll 20s linear infinite",
             willChange: "transform",
           }}
         >
@@ -309,8 +301,7 @@ function DocumentPaper() {
         Schnell-Check für{" "}
         <span style={{ color: "#1A73E8", textDecoration: "underline" }}>
           mustermann-industrie.de
-        </span>{" "}
-        · 20. Juni 2026 · Christoph Skuk
+        </span>
       </div>
 
       <div
