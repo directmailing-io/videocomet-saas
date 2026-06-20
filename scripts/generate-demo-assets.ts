@@ -33,6 +33,19 @@ const COLORS = {
   chromeGrey: "#F1F5F9",
   greyMedium: "#CBD5E1",
   greyLight: "#F8FAFC",
+  // Industrie-Webseite-Accents (bunter Stil)
+  industrieNavy: "#0C2F5C",
+  industrieOrange: "#FF6B35",
+  industrieOrangeLight: "#FFA177",
+  industrieTeal: "#00B4A6",
+  industrieTealLight: "#5FE0D5",
+  industrieYellow: "#FBBF24",
+  industrieYellowSoft: "#FEF3C7",
+  industrieBeige: "#FDF6EC",
+  industrieCoral: "#F87171",
+  industrieMint: "#D1FAE5",
+  industrieSlateBlue: "#475569",
+  industrieSkyLight: "#DBEAFE",
 } as const;
 
 const FONT_FAMILY = "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
@@ -376,69 +389,83 @@ function buildWebsiteScreenshot(): string {
     </g>
   `;
 
-  // ---- Hero (200 - 1200) ----
+  // ---- Hero (200 - 1200) — bunter Industrie-Stil mit Navy-Hintergrund + Orange-Akzent ----
   const hero = `
     <g transform="translate(0, 200)">
-      <rect x="0" y="0" width="${W}" height="1000" fill="${COLORS.surface}" />
+      <defs>
+        <linearGradient id="heroBg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${COLORS.industrieNavy}" />
+          <stop offset="100%" stop-color="${COLORS.brandDeep}" />
+        </linearGradient>
+        <linearGradient id="heroImg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${COLORS.industrieOrangeLight}" />
+          <stop offset="100%" stop-color="${COLORS.industrieOrange}" />
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="${W}" height="1000" fill="url(#heroBg)" />
+      <!-- decorative shapes -->
+      <circle cx="100" cy="940" r="60" fill="${COLORS.industrieOrange}" opacity="0.7" />
+      <rect x="1060" y="80" width="80" height="80" rx="20" fill="${COLORS.industrieTeal}" opacity="0.8" />
+      <circle cx="1100" cy="900" r="40" fill="${COLORS.industrieYellow}" opacity="0.9" />
+
       <!-- left text -->
-      <text x="80" y="320" font-family="${FONT_FAMILY}" font-weight="500"
-            font-size="20" fill="${COLORS.brandDeep}" letter-spacing="3">SEIT 1985</text>
+      <text x="80" y="320" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="20" fill="${COLORS.industrieYellow}" letter-spacing="3">SEIT 1985</text>
       <text x="80" y="410" font-family="${FONT_FAMILY}" font-weight="800"
-            font-size="64" fill="${COLORS.textDark}">Persönlicher</text>
+            font-size="64" fill="${COLORS.surface}">Persönlicher</text>
       <text x="80" y="490" font-family="${FONT_FAMILY}" font-weight="800"
-            font-size="64" fill="${COLORS.textDark}">Service</text>
+            font-size="64" fill="${COLORS.surface}">Service</text>
       <text x="80" y="570" font-family="${FONT_FAMILY}" font-weight="800"
-            font-size="64" fill="${COLORS.brandDeep}">seit 1985.</text>
+            font-size="64" fill="${COLORS.industrieOrange}">seit 1985.</text>
       <text x="80" y="650" font-family="${FONT_FAMILY}" font-weight="400"
-            font-size="22" fill="${COLORS.textMuted}">Wir betreuen Familien und Unternehmen in der Region</text>
+            font-size="22" fill="${COLORS.surface}" opacity="0.85">Wir betreuen Familien und Unternehmen in der Region</text>
       <text x="80" y="685" font-family="${FONT_FAMILY}" font-weight="400"
-            font-size="22" fill="${COLORS.textMuted}">mit handgemachter Beratung und einem festen Ansprechpartner.</text>
+            font-size="22" fill="${COLORS.surface}" opacity="0.85">mit handgemachter Beratung und einem festen Ansprechpartner.</text>
 
       <!-- CTA -->
       <g>
-        <rect x="80" y="740" width="280" height="64" rx="12" fill="${COLORS.brandPurple}" />
+        <rect x="80" y="740" width="280" height="64" rx="12" fill="${COLORS.industrieOrange}" />
         <text x="220" y="780" text-anchor="middle" font-family="${FONT_FAMILY}"
               font-weight="700" font-size="20" fill="${COLORS.surface}">Termin vereinbaren</text>
       </g>
       <g>
         <rect x="380" y="740" width="220" height="64" rx="12"
-              fill="${COLORS.surface}" stroke="${COLORS.border}" stroke-width="1.5" />
+              fill="transparent" stroke="${COLORS.surface}" stroke-width="2" />
         <text x="490" y="780" text-anchor="middle" font-family="${FONT_FAMILY}"
-              font-weight="600" font-size="20" fill="${COLORS.textDark}">Mehr erfahren</text>
+              font-weight="600" font-size="20" fill="${COLORS.surface}">Mehr erfahren</text>
       </g>
 
-      <!-- right image placeholder -->
-      <defs>
-        <linearGradient id="heroImg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${COLORS.brandSoft}" />
-          <stop offset="100%" stop-color="${COLORS.greyLight}" />
-        </linearGradient>
-      </defs>
-      <rect x="640" y="200" width="500" height="600" rx="20" fill="url(#heroImg)"
-            stroke="${COLORS.border}" stroke-width="1" />
-      <circle cx="890" cy="450" r="120" fill="${COLORS.brandPurple}" opacity="0.25" />
-      <circle cx="980" cy="560" r="80" fill="${COLORS.brandDeep}" opacity="0.18" />
+      <!-- right image placeholder mit Orange-Gradient -->
+      <rect x="640" y="200" width="500" height="600" rx="20" fill="url(#heroImg)" />
+      <circle cx="890" cy="450" r="120" fill="${COLORS.surface}" opacity="0.18" />
+      <circle cx="980" cy="560" r="80" fill="${COLORS.industrieYellow}" opacity="0.6" />
+      <rect x="700" y="630" width="80" height="80" rx="14" fill="${COLORS.surface}" opacity="0.25" />
     </g>
   `;
 
-  // ---- Features (1200 - 2400) ----
-  const featuresCards = [0, 1, 2]
-    .map((i) => {
+  // ---- Features (1200 - 2400) — bunt mit 3 verschiedenen Akzentfarben ----
+  const featurePalettes = [
+    { tile: COLORS.industrieOrange, soft: "#FFE8DD", title: "Beratung" },
+    { tile: COLORS.industrieTeal, soft: "#CCFBF1", title: "Service" },
+    { tile: COLORS.industrieYellow, soft: COLORS.industrieYellowSoft, title: "Wartung" },
+  ];
+  const featuresCards = featurePalettes
+    .map((p, i) => {
       const x = 80 + i * 360;
       return `
         <g>
           <rect x="${x}" y="1700" width="320" height="380" rx="16"
                 fill="${COLORS.surface}" stroke="${COLORS.border}" stroke-width="1" />
-          <rect x="${x + 32}" y="1732" width="64" height="64" rx="14" fill="${COLORS.brandSoft}" />
-          <circle cx="${x + 64}" cy="1764" r="18" fill="${COLORS.brandPurple}" />
+          <rect x="${x + 32}" y="1732" width="64" height="64" rx="14" fill="${p.soft}" />
+          <circle cx="${x + 64}" cy="1764" r="18" fill="${p.tile}" />
           <text x="${x + 32}" y="1850" font-family="${FONT_FAMILY}" font-weight="700"
-                font-size="22" fill="${COLORS.textDark}">Leistung ${i + 1}</text>
+                font-size="22" fill="${COLORS.textDark}">${p.title}</text>
           <text x="${x + 32}" y="1900" font-family="${FONT_FAMILY}" font-weight="400"
                 font-size="16" fill="${COLORS.textMuted}">Persönliche Beratung mit jahre-</text>
           <text x="${x + 32}" y="1924" font-family="${FONT_FAMILY}" font-weight="400"
                 font-size="16" fill="${COLORS.textMuted}">langer Erfahrung in unserer Region.</text>
           <text x="${x + 32}" y="2000" font-family="${FONT_FAMILY}" font-weight="600"
-                font-size="16" fill="${COLORS.brandDeep}">Mehr →</text>
+                font-size="16" fill="${p.tile}">Mehr →</text>
         </g>
       `;
     })
@@ -446,14 +473,17 @@ function buildWebsiteScreenshot(): string {
 
   const features = `
     <g>
-      <rect x="0" y="1200" width="${W}" height="1200" fill="${COLORS.greyLight}" />
+      <rect x="0" y="1200" width="${W}" height="1200" fill="${COLORS.industrieBeige}" />
       <text x="${W / 2}" y="1380" text-anchor="middle" font-family="${FONT_FAMILY}"
-            font-weight="500" font-size="18" fill="${COLORS.brandDeep}" letter-spacing="3">WAS WIR BIETEN</text>
+            font-weight="600" font-size="18" fill="${COLORS.industrieOrange}" letter-spacing="3">WAS WIR BIETEN</text>
       <text x="${W / 2}" y="1470" text-anchor="middle" font-family="${FONT_FAMILY}"
             font-weight="800" font-size="48" fill="${COLORS.textDark}">Unsere Leistungen</text>
       <text x="${W / 2}" y="1530" text-anchor="middle" font-family="${FONT_FAMILY}"
             font-weight="400" font-size="20" fill="${COLORS.textMuted}">Massgeschneidert für Ihre Anforderungen</text>
       ${featuresCards}
+      <!-- decorative -->
+      <circle cx="120" cy="2280" r="32" fill="${COLORS.industrieOrange}" opacity="0.6" />
+      <rect x="1040" y="2240" width="60" height="60" rx="12" fill="${COLORS.industrieTeal}" opacity="0.5" />
     </g>
   `;
 
@@ -527,11 +557,13 @@ function buildWebsiteScreenshot(): string {
 
   const testimonials = `
     <g>
-      <rect x="0" y="3600" width="${W}" height="1200" fill="${COLORS.greyLight}" />
+      <rect x="0" y="3600" width="${W}" height="1200" fill="${COLORS.industrieYellowSoft}" />
       <text x="${W / 2}" y="3780" text-anchor="middle" font-family="${FONT_FAMILY}"
-            font-weight="500" font-size="18" fill="${COLORS.brandDeep}" letter-spacing="3">REFERENZEN</text>
+            font-weight="600" font-size="18" fill="${COLORS.industrieOrange}" letter-spacing="3">REFERENZEN</text>
       <text x="${W / 2}" y="3870" text-anchor="middle" font-family="${FONT_FAMILY}"
             font-weight="800" font-size="48" fill="${COLORS.textDark}">Was unsere Kunden sagen</text>
+      <circle cx="80" cy="4720" r="50" fill="${COLORS.industrieYellow}" opacity="0.7" />
+      <rect x="1040" y="4680" width="70" height="70" rx="14" fill="${COLORS.industrieTeal}" opacity="0.6" />
       ${testimonialCards}
     </g>
   `;
@@ -543,15 +575,16 @@ function buildWebsiteScreenshot(): string {
     { big: "98%", small: "Empfehlungsrate" },
     { big: "24/7", small: "Service" },
   ];
+  const statColors = [COLORS.industrieOrange, COLORS.industrieTeal, COLORS.industrieYellow, COLORS.brandPurple];
   const statBlocks = stats
     .map((s, i) => {
       const x = 80 + i * 270;
       return `
         <g>
           <text x="${x + 110}" y="5230" text-anchor="middle" font-family="${FONT_FAMILY}"
-                font-weight="800" font-size="60" fill="${COLORS.brandDeep}">${s.big}</text>
+                font-weight="800" font-size="60" fill="${statColors[i]}">${s.big}</text>
           <text x="${x + 110}" y="5280" text-anchor="middle" font-family="${FONT_FAMILY}"
-                font-weight="500" font-size="18" fill="${COLORS.textMuted}">${s.small}</text>
+                font-weight="500" font-size="18" fill="${COLORS.surface}" opacity="0.85">${s.small}</text>
         </g>
       `;
     })
@@ -559,14 +592,16 @@ function buildWebsiteScreenshot(): string {
 
   const statistics = `
     <g>
-      <rect x="0" y="4800" width="${W}" height="800" fill="${COLORS.surface}" />
+      <rect x="0" y="4800" width="${W}" height="800" fill="${COLORS.industrieNavy}" />
       <text x="${W / 2}" y="5020" text-anchor="middle" font-family="${FONT_FAMILY}"
-            font-weight="500" font-size="18" fill="${COLORS.brandDeep}" letter-spacing="3">ZAHLEN, DIE WIR LIEBEN</text>
+            font-weight="600" font-size="18" fill="${COLORS.industrieYellow}" letter-spacing="3">ZAHLEN, DIE WIR LIEBEN</text>
       <text x="${W / 2}" y="5110" text-anchor="middle" font-family="${FONT_FAMILY}"
-            font-weight="800" font-size="40" fill="${COLORS.textDark}">In Kürze</text>
+            font-weight="800" font-size="40" fill="${COLORS.surface}">In Kürze</text>
       <rect x="80" y="5160" width="1040" height="200" rx="20"
-            fill="${COLORS.brandSoft}" />
+            fill="${COLORS.surface}" opacity="0.07" />
       ${statBlocks}
+      <circle cx="60" cy="5460" r="40" fill="${COLORS.industrieOrange}" opacity="0.5" />
+      <circle cx="1140" cy="5500" r="50" fill="${COLORS.industrieTeal}" opacity="0.4" />
     </g>
   `;
 
@@ -629,22 +664,29 @@ function buildWebsiteScreenshot(): string {
     </g>
   `;
 
-  // ---- CTA section (6800 - 7600) ----
+  // ---- CTA section (6800 - 7600) — Orange-Industrie-Band ----
   const cta = `
     <g>
+      <defs>
+        <linearGradient id="ctaBg" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="${COLORS.industrieOrange}" />
+          <stop offset="100%" stop-color="${COLORS.industrieCoral}" />
+        </linearGradient>
+      </defs>
       <rect x="0" y="6800" width="${W}" height="800" fill="${COLORS.surface}" />
-      <rect x="80" y="6960" width="1040" height="480" rx="24"
-            fill="${COLORS.brandSoft}" />
+      <rect x="80" y="6960" width="1040" height="480" rx="24" fill="url(#ctaBg)" />
+      <circle cx="180" cy="7390" r="60" fill="${COLORS.surface}" opacity="0.18" />
+      <circle cx="1020" cy="7020" r="40" fill="${COLORS.industrieYellow}" opacity="0.7" />
       <text x="${W / 2}" y="7100" text-anchor="middle" font-family="${FONT_FAMILY}"
-            font-weight="500" font-size="18" fill="${COLORS.brandDeep}" letter-spacing="3">UNVERBINDLICH</text>
+            font-weight="600" font-size="18" fill="${COLORS.industrieYellow}" letter-spacing="3">UNVERBINDLICH</text>
       <text x="${W / 2}" y="7200" text-anchor="middle" font-family="${FONT_FAMILY}"
-            font-weight="800" font-size="48" fill="${COLORS.textDark}">Jetzt unverbindlich anfragen</text>
+            font-weight="800" font-size="48" fill="${COLORS.surface}">Jetzt unverbindlich anfragen</text>
       <text x="${W / 2}" y="7250" text-anchor="middle" font-family="${FONT_FAMILY}"
-            font-weight="400" font-size="20" fill="${COLORS.textMuted}">Antwort innerhalb von 24 Stunden — versprochen.</text>
+            font-weight="400" font-size="20" fill="${COLORS.surface}" opacity="0.9">Antwort innerhalb von 24 Stunden — versprochen.</text>
 
-      <rect x="${(W - 280) / 2}" y="7310" width="280" height="68" rx="14" fill="${COLORS.brandPurple}" />
+      <rect x="${(W - 280) / 2}" y="7310" width="280" height="68" rx="14" fill="${COLORS.surface}" />
       <text x="${W / 2}" y="7352" text-anchor="middle" font-family="${FONT_FAMILY}"
-            font-weight="700" font-size="20" fill="${COLORS.surface}">Kontakt aufnehmen</text>
+            font-weight="700" font-size="20" fill="${COLORS.industrieOrange}">Kontakt aufnehmen</text>
     </g>
   `;
 

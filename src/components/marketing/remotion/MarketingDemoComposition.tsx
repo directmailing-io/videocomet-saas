@@ -11,8 +11,12 @@ import {
   staticFile,
 } from "remotion";
 
+// Composition-Dauer = 600 Frames (20 s @ 30 fps) — knapp ueber die echte
+// Webcam-Laenge (19,9 s), damit der `<Video loop>`-Cut sauber mit dem
+// Composition-Loop zusammenfaellt. Vorher: 360 Frames (12 s) → Webcam wurde
+// frueh abgeschnitten und der Restart sah hart aus.
 export const DEMO_FPS = 30;
-export const DEMO_DURATION_IN_FRAMES = 360;
+export const DEMO_DURATION_IN_FRAMES = 600;
 export const DEMO_WIDTH = 1920;
 export const DEMO_HEIGHT = 1080;
 
@@ -30,17 +34,20 @@ const SLIDE_SRCS = [1, 2, 3, 4, 5].map(
   (n) => `/demo-assets/slide-${n}.png`,
 );
 
-// Crossfade for slides: each slide visible for 75 frames, next slide starts 70
-// frames after the previous one (so we get a 5-frame overlap for the fade).
-const SLIDE_DURATION = 75;
-const SLIDE_STEP = 70;
+// 5 Slides × 120 Frames (4 s) = 600 Frames → fuellt die ganze Composition
+// gleichmaessig. Crossfade 12 Frames Overlap.
+const SLIDE_DURATION = 132;
+const SLIDE_STEP = 120;
 
 function ScrollBackground() {
   const frame = useCurrentFrame();
+  // Symmetrischer Auf-/Ab-Scroll ueber die volle Composition-Laenge:
+  // 0 → -2000 → -2000 (kurze Pause) → 0
+  // 0   300     330                   600
   const translateY = interpolate(
     frame,
-    [0, 90, 180, 360],
-    [0, -800, -800, -2000],
+    [0, 300, 330, 600],
+    [0, -2000, -2000, 0],
     {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
@@ -70,11 +77,11 @@ function ScrollBackground() {
   );
 }
 
-function SlideFrame({ src }: { src: string }) {
+function SlideFrame({ src, index }: { src: string; index: number }) {
   const frame = useCurrentFrame();
   const opacity = interpolate(
     frame,
-    [0, 8, SLIDE_DURATION - 10, SLIDE_DURATION],
+    [0, 12, SLIDE_DURATION - 14, SLIDE_DURATION],
     [0, 1, 1, 0],
     {
       extrapolateLeft: "clamp",
@@ -82,23 +89,274 @@ function SlideFrame({ src }: { src: string }) {
     },
   );
 
+  // Slide-Bild + Google-Slides-aehnliches Chrome drumherum, damit der User
+  // sofort erkennt: "das ist eine Praesentation".
   return (
-    <AbsoluteFill style={{ opacity }}>
-      <Img
-        src={staticFile(src)}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-        }}
-      />
+    <AbsoluteFill style={{ opacity, backgroundColor: "#F1F3F4" }}>
+      <GoogleSlidesChrome slideNumber={index + 1} totalSlides={SLIDE_SRCS.length}>
+        <Img
+          src={staticFile(src)}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            backgroundColor: "#FFFFFF",
+          }}
+        />
+      </GoogleSlidesChrome>
     </AbsoluteFill>
+  );
+}
+
+/**
+ * Google-Slides-Chrome: realistischer Tab-Bar + Toolbar + Sidebar mit
+ * Slide-Thumbnails. Das Slide selbst landet im grossen Stage-Bereich.
+ */
+function GoogleSlidesChrome({
+  children,
+  slideNumber,
+  totalSlides,
+}: {
+  children: React.ReactNode;
+  slideNumber: number;
+  totalSlides: number;
+}) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        flexDirection: "column",
+        backgroundColor: "#F1F3F4",
+        fontFamily:
+          "'Google Sans', Roboto, Arial, sans-serif",
+        color: "#3C4043",
+      }}
+    >
+      {/* Top bar — title + Google-Konto */}
+      <div
+        style={{
+          height: 56,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          padding: "0 20px",
+          backgroundColor: "#FFFFFF",
+          borderBottom: "1px solid #DADCE0",
+        }}
+      >
+        <div
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 6,
+            backgroundColor: "#FBBC04",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 22,
+            fontWeight: 700,
+            color: "#FFFFFF",
+          }}
+        >
+          ▱
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 18, fontWeight: 500, color: "#202124" }}>
+            VideoComet Pitch
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              color: "#5F6368",
+              display: "flex",
+              gap: 18,
+              marginTop: 4,
+            }}
+          >
+            <span>Datei</span>
+            <span>Bearbeiten</span>
+            <span>Ansicht</span>
+            <span>Einfügen</span>
+            <span>Folie</span>
+            <span>Format</span>
+            <span>Hilfe</span>
+          </div>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              padding: "8px 20px",
+              borderRadius: 4,
+              backgroundColor: "#1A73E8",
+              color: "#FFFFFF",
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            Präsentieren
+          </div>
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, #AA8CF5, #7C5CE8)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#FFFFFF",
+              fontWeight: 600,
+              fontSize: 14,
+            }}
+          >
+            CS
+          </div>
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div
+        style={{
+          height: 40,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "0 20px",
+          backgroundColor: "#FFFFFF",
+          borderBottom: "1px solid #DADCE0",
+          fontSize: 12,
+          color: "#5F6368",
+        }}
+      >
+        {["↶", "↷", "🖨", "🔍 100 %", "🅰", "B", "I", "U", "🎨", "▦", "—", "🔗"].map(
+          (k) => (
+            <div
+              key={k}
+              style={{
+                padding: "4px 8px",
+                borderRadius: 4,
+                fontWeight: k === "B" ? 700 : 400,
+                fontStyle: k === "I" ? "italic" : "normal",
+                textDecoration: k === "U" ? "underline" : "none",
+              }}
+            >
+              {k}
+            </div>
+          ),
+        )}
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+        {/* Sidebar with slide thumbnails */}
+        <div
+          style={{
+            width: 200,
+            flexShrink: 0,
+            backgroundColor: "#FFFFFF",
+            borderRight: "1px solid #DADCE0",
+            padding: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            overflow: "hidden",
+          }}
+        >
+          {Array.from({ length: totalSlides }).map((_, i) => {
+            const idx = i + 1;
+            const active = idx === slideNumber;
+            return (
+              <div
+                key={idx}
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "stretch",
+                }}
+              >
+                <div
+                  style={{
+                    width: 16,
+                    color: active ? "#1A73E8" : "#5F6368",
+                    fontSize: 13,
+                    fontWeight: active ? 600 : 400,
+                    textAlign: "right",
+                  }}
+                >
+                  {idx}
+                </div>
+                <div
+                  style={{
+                    flex: 1,
+                    aspectRatio: "16/9",
+                    borderRadius: 4,
+                    backgroundColor: active ? "#E8F0FE" : "#FFFFFF",
+                    border: active
+                      ? "2px solid #1A73E8"
+                      : "1px solid #DADCE0",
+                    overflow: "hidden",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#9AA0A6",
+                    fontSize: 10,
+                    fontWeight: 500,
+                  }}
+                >
+                  Slide {idx}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Main stage */}
+        <div
+          style={{
+            flex: 1,
+            backgroundColor: "#F8F9FA",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 28,
+            minWidth: 0,
+            minHeight: 0,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "100%",
+              aspectRatio: "16/9",
+              backgroundColor: "#FFFFFF",
+              boxShadow:
+                "0 1px 3px rgba(60,64,67,0.15), 0 4px 8px rgba(60,64,67,0.1)",
+              borderRadius: 2,
+              overflow: "hidden",
+              position: "relative",
+            }}
+          >
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function SlidesBackground() {
   return (
-    <AbsoluteFill style={{ backgroundColor: "#0F172A" }}>
+    <AbsoluteFill style={{ backgroundColor: "#F1F3F4" }}>
       {SLIDE_SRCS.map((src, i) => (
         <Sequence
           key={src}
@@ -106,7 +364,7 @@ function SlidesBackground() {
           durationInFrames={SLIDE_DURATION}
           layout="none"
         >
-          <SlideFrame src={src} />
+          <SlideFrame src={src} index={i} />
         </Sequence>
       ))}
     </AbsoluteFill>
@@ -139,6 +397,8 @@ function Background({ mode }: { mode: MarketingDemoMode }) {
 export default function MarketingDemoComposition({
   mode,
 }: MarketingDemoProps) {
+  // Webcam-PiP: bottom-LEFT statt right, perfekter KREIS (square + 50%).
+  // In solo-Mode wird daraus fullscreen via CSS-Transition.
   const wrapperStyle: React.CSSProperties =
     mode === "solo"
       ? {
@@ -147,19 +407,19 @@ export default function MarketingDemoComposition({
           borderRadius: 0,
           boxShadow: "none",
           overflow: "hidden",
-          transition: "all 400ms cubic-bezier(0.2,0.8,0.2,1)",
+          transition: "all 450ms cubic-bezier(0.2,0.8,0.2,1)",
         }
       : {
           position: "absolute",
-          bottom: 48,
-          right: 48,
-          width: 420,
-          height: 315,
-          borderRadius: 24,
+          bottom: 56,
+          left: 56,
+          width: 360,
+          height: 360,
+          borderRadius: 9999,
           boxShadow:
-            "0 30px 60px -15px rgba(0,0,0,0.55), 0 0 0 4px rgba(255,255,255,0.9)",
+            "0 30px 60px -15px rgba(0,0,0,0.55), 0 0 0 6px rgba(255,255,255,0.95)",
           overflow: "hidden",
-          transition: "all 400ms cubic-bezier(0.2,0.8,0.2,1)",
+          transition: "all 450ms cubic-bezier(0.2,0.8,0.2,1)",
         };
 
   return (
