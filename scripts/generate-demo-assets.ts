@@ -102,38 +102,57 @@ function slideBackground(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Slide 1 — Was wir machen
+// Slide 1 — Personalisierte Titelfolie "Video für Max Mustermann"
 // ---------------------------------------------------------------------------
 
 function buildSlide1(): string {
-  const bullets = [
-    "Du nimmst 1× ein 30-Sekunden-Webcam-Video auf",
-    "Wir personalisieren es für 100, 500, 1000 Empfänger",
-    "Jeder bekommt seine eigene Landingpage + Brief",
-  ];
-
-  const bulletItems = bullets
-    .map((line, i) => {
-      const y = 470 + i * 110;
-      return `
-        <g transform="translate(220, ${y})">
-          <circle cx="0" cy="0" r="22" fill="${COLORS.brandPurple}" />
-          <text x="0" y="8" text-anchor="middle" font-family="${FONT_FAMILY}"
-                font-weight="700" font-size="22" fill="${COLORS.surface}">${i + 1}</text>
-          <text x="56" y="9" font-family="${FONT_FAMILY}" font-weight="500"
-                font-size="40" fill="${COLORS.textDark}">${esc(line)}</text>
-        </g>
-      `;
-    })
-    .join("");
-
+  // Stilisierter Kunde-Avatar (Initialen) + Datum + Begruessung
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
-    ${slideBackground()}
+    <defs>
+      <linearGradient id="s1Bg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="${COLORS.brandSoft}" />
+        <stop offset="100%" stop-color="${COLORS.surface}" />
+      </linearGradient>
+      <linearGradient id="s1Avatar" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="${COLORS.brandPurple}" />
+        <stop offset="100%" stop-color="${COLORS.brandDeep}" />
+      </linearGradient>
+    </defs>
+    <rect width="1920" height="1080" fill="url(#s1Bg)" />
+    <rect x="0" y="0" width="1920" height="6" fill="${COLORS.brandPurple}" />
     ${slideHeaderLogo()}
-    <text x="220" y="330" font-family="${FONT_FAMILY}" font-weight="700"
-          font-size="92" fill="${COLORS.textDark}">Was wir machen</text>
-    <rect x="220" y="360" width="120" height="6" rx="3" fill="${COLORS.brandPurple}" />
-    ${bulletItems}
+
+    <!-- decorative dots -->
+    <circle cx="200" cy="900" r="60" fill="${COLORS.industrieOrange}" opacity="0.18" />
+    <circle cx="1750" cy="200" r="80" fill="${COLORS.industrieTeal}" opacity="0.18" />
+    <rect x="1640" y="800" width="80" height="80" rx="16" fill="${COLORS.industrieYellow}" opacity="0.4" />
+
+    <!-- Avatar + Name -->
+    <g transform="translate(220, 360)">
+      <circle cx="100" cy="100" r="100" fill="url(#s1Avatar)" />
+      <text x="100" y="120" text-anchor="middle" font-family="${FONT_FAMILY}"
+            font-weight="700" font-size="72" fill="${COLORS.surface}">MM</text>
+    </g>
+
+    <!-- Hauptueberschrift -->
+    <text x="460" y="430" font-family="${FONT_FAMILY}" font-weight="600"
+          font-size="32" fill="${COLORS.brandDeep}" letter-spacing="3">PERSÖNLICHES VIDEO</text>
+    <text x="460" y="540" font-family="${FONT_FAMILY}" font-weight="800"
+          font-size="92" fill="${COLORS.textDark}">Video für</text>
+    <text x="460" y="640" font-family="${FONT_FAMILY}" font-weight="800"
+          font-size="92" fill="${COLORS.brandDeep}">Max Mustermann</text>
+
+    <!-- Untertitel + Datum -->
+    <text x="460" y="730" font-family="${FONT_FAMILY}" font-weight="400"
+          font-size="32" fill="${COLORS.textMuted}">Mustermann Industrie GmbH · München</text>
+    <text x="460" y="785" font-family="${FONT_FAMILY}" font-weight="400"
+          font-size="28" fill="${COLORS.textMuted}">20. Juni 2026 · Christoph Skuk</text>
+
+    <!-- Slide-Footer -->
+    <rect x="220" y="900" width="1480" height="2" fill="${COLORS.border}" />
+    <text x="220" y="970" font-family="${FONT_FAMILY}" font-weight="500"
+          font-size="22" fill="${COLORS.textMuted}">5 Minuten · Vertraulich · Mustermann Industrie GmbH</text>
+
     ${slideFooterPageNumber(1, 5)}
   </svg>`;
 }
@@ -162,25 +181,35 @@ function buildSlide2(): string {
   const axisLeft = chartLeft - 40;
   const axisRight = chartLeft + barHeights.length * (barWidth + barGap);
 
+  // Slide 2: Ihre Situation — schmerzpunkte als grosse Zahlen
+  const painPoints = [
+    { number: "73 %", text: "Standardvideos werden übersprungen" },
+    { number: "2,4 ×", text: "längere Vertriebszyklen ohne Persönlichkeit" },
+    { number: "< 5 %", text: "Konversionsrate bei Kalt-E-Mails" },
+  ];
+  const painItems = painPoints
+    .map((p, i) => {
+      const y = 460 + i * 160;
+      return `
+        <g transform="translate(220, ${y})">
+          <text x="0" y="0" font-family="${FONT_FAMILY}" font-weight="800"
+                font-size="78" fill="${COLORS.industrieOrange}">${esc(p.number)}</text>
+          <text x="380" y="-12" font-family="${FONT_FAMILY}" font-weight="500"
+                font-size="36" fill="${COLORS.textDark}">${esc(p.text)}</text>
+          <line x1="380" y1="14" x2="1700" y2="14" stroke="${COLORS.border}" stroke-width="2" />
+        </g>
+      `;
+    })
+    .join("");
+
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
     ${slideBackground()}
     ${slideHeaderLogo()}
-    <text x="220" y="340" font-family="${FONT_FAMILY}" font-weight="500"
-          font-size="32" fill="${COLORS.textMuted}">Status Quo</text>
-    <text x="220" y="430" font-family="${FONT_FAMILY}" font-weight="700"
-          font-size="84" fill="${COLORS.textDark}">Vorher:</text>
-    <text x="220" y="540" font-family="${FONT_FAMILY}" font-weight="700"
-          font-size="84" fill="${COLORS.textDark}">1 Lead pro Tag</text>
-    <text x="220" y="630" font-family="${FONT_FAMILY}" font-weight="400"
-          font-size="28" fill="${COLORS.textMuted}">Mühsam. Skaliert nicht.</text>
-
-    <!-- chart -->
-    <line x1="${axisLeft}" y1="${baseline}" x2="${axisRight}" y2="${baseline}"
-          stroke="${COLORS.border}" stroke-width="3" />
-    ${bars}
-    <text x="${chartLeft}" y="${baseline + 50}" font-family="${FONT_FAMILY}"
-          font-weight="500" font-size="22" fill="${COLORS.textMuted}">5 Tage</text>
-
+    <text x="220" y="280" font-family="${FONT_FAMILY}" font-weight="600"
+          font-size="28" fill="${COLORS.brandDeep}" letter-spacing="3">IHRE SITUATION</text>
+    <text x="220" y="380" font-family="${FONT_FAMILY}" font-weight="800"
+          font-size="76" fill="${COLORS.textDark}">Was uns auffällt …</text>
+    ${painItems}
     ${slideFooterPageNumber(2, 5)}
   </svg>`;
 }
@@ -208,24 +237,51 @@ function buildSlide3(): string {
   const axisLeft = chartLeft - 40;
   const axisRight = chartLeft + barHeights.length * (barWidth + barGap);
 
+  // Slide 3: Wachstumskurve "vorher vs. nachher"
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
     ${slideBackground()}
     ${slideHeaderLogo()}
-    <text x="220" y="340" font-family="${FONT_FAMILY}" font-weight="500"
-          font-size="32" fill="${COLORS.brandDeep}">Mit VideoComet</text>
-    <text x="220" y="430" font-family="${FONT_FAMILY}" font-weight="700"
-          font-size="84" fill="${COLORS.textDark}">Nachher:</text>
-    <text x="220" y="540" font-family="${FONT_FAMILY}" font-weight="700"
-          font-size="84" fill="${COLORS.brandDeep}">50 Leads pro Tag</text>
-    <text x="220" y="630" font-family="${FONT_FAMILY}" font-weight="400"
-          font-size="28" fill="${COLORS.textMuted}">Skalierbar. Persönlich. Automatisch.</text>
+    <text x="220" y="280" font-family="${FONT_FAMILY}" font-weight="600"
+          font-size="28" fill="${COLORS.brandDeep}" letter-spacing="3">UNSER VORSCHLAG</text>
+    <text x="220" y="380" font-family="${FONT_FAMILY}" font-weight="800"
+          font-size="76" fill="${COLORS.textDark}">Ihre Zahlen in 90 Tagen</text>
 
-    <!-- chart -->
-    <line x1="${axisLeft}" y1="${baseline}" x2="${axisRight}" y2="${baseline}"
-          stroke="${COLORS.border}" stroke-width="3" />
-    ${bars}
-    <text x="${chartLeft}" y="${baseline + 50}" font-family="${FONT_FAMILY}"
-          font-weight="500" font-size="22" fill="${COLORS.textMuted}">5 Tage</text>
+    <!-- Kurve: vorher (orange flach) vs. nachher (purple steigend) -->
+    <g transform="translate(220, 470)">
+      <!-- axes -->
+      <line x1="60" y1="500" x2="1480" y2="500" stroke="${COLORS.textMuted}" stroke-width="2" />
+      <line x1="60" y1="40" x2="60" y2="500" stroke="${COLORS.textMuted}" stroke-width="2" />
+
+      <!-- y-grid -->
+      <line x1="60" y1="380" x2="1480" y2="380" stroke="${COLORS.border}" stroke-width="1" stroke-dasharray="6,8" />
+      <line x1="60" y1="260" x2="1480" y2="260" stroke="${COLORS.border}" stroke-width="1" stroke-dasharray="6,8" />
+      <line x1="60" y1="140" x2="1480" y2="140" stroke="${COLORS.border}" stroke-width="1" stroke-dasharray="6,8" />
+
+      <!-- y-axis labels -->
+      <text x="40" y="500" text-anchor="end" font-family="${FONT_FAMILY}" font-weight="500" font-size="20" fill="${COLORS.textMuted}">0</text>
+      <text x="40" y="385" text-anchor="end" font-family="${FONT_FAMILY}" font-weight="500" font-size="20" fill="${COLORS.textMuted}">25</text>
+      <text x="40" y="265" text-anchor="end" font-family="${FONT_FAMILY}" font-weight="500" font-size="20" fill="${COLORS.textMuted}">50</text>
+      <text x="40" y="145" text-anchor="end" font-family="${FONT_FAMILY}" font-weight="500" font-size="20" fill="${COLORS.textMuted}">75</text>
+
+      <!-- Vorher: flat orange -->
+      <path d="M 80 480 L 350 478 L 620 482 L 890 479 L 1160 480 L 1440 481"
+            fill="none" stroke="${COLORS.industrieOrange}" stroke-width="6" stroke-linecap="round" />
+      <text x="1480" y="475" font-family="${FONT_FAMILY}" font-weight="600" font-size="24" fill="${COLORS.industrieOrange}">Vorher</text>
+
+      <!-- Nachher: steigend purple -->
+      <path d="M 80 480 L 350 420 L 620 320 L 890 220 L 1160 120 L 1440 60"
+            fill="none" stroke="${COLORS.brandPurple}" stroke-width="8" stroke-linecap="round" />
+      <text x="1480" y="55" font-family="${FONT_FAMILY}" font-weight="700" font-size="28" fill="${COLORS.brandDeep}">Nachher</text>
+
+      <!-- end point dot -->
+      <circle cx="1440" cy="60" r="14" fill="${COLORS.brandDeep}" />
+      <circle cx="1440" cy="60" r="6" fill="${COLORS.surface}" />
+
+      <!-- x-axis labels -->
+      <text x="80" y="540" font-family="${FONT_FAMILY}" font-weight="500" font-size="22" fill="${COLORS.textMuted}">Tag 0</text>
+      <text x="760" y="540" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="500" font-size="22" fill="${COLORS.textMuted}">Tag 45</text>
+      <text x="1440" y="540" text-anchor="end" font-family="${FONT_FAMILY}" font-weight="500" font-size="22" fill="${COLORS.textMuted}">Tag 90</text>
+    </g>
 
     ${slideFooterPageNumber(3, 5)}
   </svg>`;
@@ -304,10 +360,10 @@ function buildSlide4(): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
     ${slideBackground()}
     ${slideHeaderLogo()}
-    <text x="960" y="290" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="500"
-          font-size="28" fill="${COLORS.brandDeep}" letter-spacing="4">SOCIAL PROOF</text>
-    <text x="960" y="390" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="700"
-          font-size="68" fill="${COLORS.textDark}">Über 180 zufriedene Kunden vertrauen uns</text>
+    <text x="960" y="280" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="600"
+          font-size="28" fill="${COLORS.brandDeep}" letter-spacing="3">REFERENZEN AUS IHRER BRANCHE</text>
+    <text x="960" y="380" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800"
+          font-size="64" fill="${COLORS.textDark}">Wer uns bereits vertraut</text>
     ${cells}
     ${slideFooterPageNumber(4, 5)}
   </svg>`;
@@ -318,30 +374,32 @@ function buildSlide4(): string {
 // ---------------------------------------------------------------------------
 
 function buildSlide5(): string {
-  const buttonW = 420;
-  const buttonH = 96;
+  const buttonW = 480;
+  const buttonH = 110;
   const buttonX = (1920 - buttonW) / 2;
-  const buttonY = 800;
+  const buttonY = 760;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
     ${slideBackground()}
     ${slideHeaderLogo()}
 
-    <text x="960" y="430" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800"
-          font-size="120" fill="${COLORS.textDark}">Jetzt starten →</text>
+    <text x="960" y="320" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="600"
+          font-size="32" fill="${COLORS.brandDeep}" letter-spacing="4">NÄCHSTER SCHRITT</text>
 
-    <text x="960" y="540" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="500"
-          font-size="44" fill="${COLORS.brandDeep}">videocomet.de</text>
+    <text x="960" y="450" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800"
+          font-size="100" fill="${COLORS.textDark}">Lassen Sie uns sprechen,</text>
+    <text x="960" y="560" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800"
+          font-size="100" fill="${COLORS.brandDeep}">Herr Mustermann.</text>
 
-    <text x="960" y="640" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="400"
-          font-size="26" fill="${COLORS.textMuted}">Kein Setup. Keine Kreditkarte. Sofort loslegen.</text>
+    <text x="960" y="660" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="400"
+          font-size="30" fill="${COLORS.textMuted}">30 Minuten · unverbindlich · per Video</text>
 
     <!-- CTA Button -->
     <g>
-      <rect x="${buttonX}" y="${buttonY}" width="${buttonW}" height="${buttonH}" rx="14"
+      <rect x="${buttonX}" y="${buttonY}" width="${buttonW}" height="${buttonH}" rx="16"
             fill="${COLORS.brandPurple}" />
-      <text x="960" y="${buttonY + buttonH / 2 + 14}" text-anchor="middle"
-            font-family="${FONT_FAMILY}" font-weight="700" font-size="38" fill="${COLORS.surface}">Kostenlos testen</text>
+      <text x="960" y="${buttonY + buttonH / 2 + 16}" text-anchor="middle"
+            font-family="${FONT_FAMILY}" font-weight="700" font-size="42" fill="${COLORS.surface}">Termin vereinbaren →</text>
     </g>
 
     ${slideFooterPageNumber(5, 5)}
@@ -746,6 +804,240 @@ function buildWebsiteScreenshot(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Google-Docs Dokument — 1100 x 6000 (tall, scrollable)
+// ---------------------------------------------------------------------------
+
+function buildGoogleDocsDocument(): string {
+  const W = 1100;
+  const H = 6000;
+
+  // Paper centered with margins
+  const paperX = 100;
+  const paperW = W - 200;
+
+  const sections: string[] = [];
+
+  // Title block
+  sections.push(`
+    <g>
+      <text x="${paperX + 40}" y="180" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="18" fill="#5F6368">Persönliches Angebot · Vertraulich</text>
+      <text x="${paperX + 40}" y="260" font-family="${FONT_FAMILY}" font-weight="700"
+            font-size="48" fill="#202124">Angebot für Mustermann GmbH</text>
+      <text x="${paperX + 40}" y="320" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="22" fill="#5F6368">Vorbereitet für Max Mustermann · 20. Juni 2026</text>
+      <rect x="${paperX + 40}" y="350" width="200" height="3" fill="#1A73E8" />
+    </g>
+  `);
+
+  // Section: Zusammenfassung
+  sections.push(`
+    <g>
+      <text x="${paperX + 40}" y="500" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="28" fill="#202124">Zusammenfassung</text>
+      <text x="${paperX + 40}" y="560" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">Sehr geehrter Herr Mustermann,</text>
+      <text x="${paperX + 40}" y="600" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">vielen Dank für Ihr Interesse an unseren Industrie-Lösungen. Auf</text>
+      <text x="${paperX + 40}" y="630" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">den folgenden Seiten finden Sie unser massgeschneidertes Angebot,</text>
+      <text x="${paperX + 40}" y="660" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">abgestimmt auf die in unserem Vorgespräch besprochenen</text>
+      <text x="${paperX + 40}" y="690" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">Anforderungen Ihres Maschinenparks in München-Riem.</text>
+    </g>
+  `);
+
+  // Section: Leistungsumfang
+  sections.push(`
+    <g>
+      <text x="${paperX + 40}" y="840" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="28" fill="#202124">1. Leistungsumfang</text>
+
+      <text x="${paperX + 40}" y="900" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="22" fill="#202124">1.1 Wartung &amp; Inspektion</text>
+      <text x="${paperX + 60}" y="940" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="19" fill="#3C4043">• Vierteljährliche Sichtprüfung aller Anlagen</text>
+      <text x="${paperX + 60}" y="970" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="19" fill="#3C4043">• Schmierung und Verschleißteil-Tausch</text>
+      <text x="${paperX + 60}" y="1000" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="19" fill="#3C4043">• Schwingungsanalyse mit digitalem Protokoll</text>
+
+      <text x="${paperX + 40}" y="1070" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="22" fill="#202124">1.2 24/7-Notfall-Service</text>
+      <text x="${paperX + 60}" y="1110" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="19" fill="#3C4043">• Reaktionszeit ≤ 4 Stunden im DACH-Raum</text>
+      <text x="${paperX + 60}" y="1140" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="19" fill="#3C4043">• Direkter Draht zu Ihrem zugewiesenen Techniker</text>
+      <text x="${paperX + 60}" y="1170" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="19" fill="#3C4043">• Ersatzteile aus eigenem Zentrallager Stuttgart</text>
+
+      <text x="${paperX + 40}" y="1240" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="22" fill="#202124">1.3 Schulungspaket</text>
+      <text x="${paperX + 60}" y="1280" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="19" fill="#3C4043">• 2 Schulungstage vor Ort jährlich</text>
+      <text x="${paperX + 60}" y="1310" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="19" fill="#3C4043">• Online-Zugriff auf unser Lernportal für 5 Mitarbeiter</text>
+    </g>
+  `);
+
+  // Section: Kostenübersicht (Tabelle)
+  sections.push(`
+    <g>
+      <text x="${paperX + 40}" y="1480" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="28" fill="#202124">2. Kostenübersicht</text>
+
+      <!-- Table -->
+      <rect x="${paperX + 40}" y="1520" width="${paperW - 80}" height="60" fill="#F1F3F4" />
+      <text x="${paperX + 60}" y="1560" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="18" fill="#3C4043">Position</text>
+      <text x="${paperX + 500}" y="1560" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="18" fill="#3C4043">Häufigkeit</text>
+      <text x="${paperX + paperW - 240}" y="1560" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="18" fill="#3C4043" text-anchor="end">Preis (netto)</text>
+
+      ${[
+        ["Wartung & Inspektion", "4× pro Jahr", "4.200 €"],
+        ["24/7-Notfall-Service", "Jahres-Flatrate", "8.400 €"],
+        ["Schulungspaket", "Jährlich", "2.800 €"],
+        ["Reisekosten Pauschale", "Inklusive", "0 €"],
+      ].map(([pos, freq, price], i) => `
+        <g>
+          <rect x="${paperX + 40}" y="${1580 + i * 60}" width="${paperW - 80}" height="60" fill="${i % 2 === 1 ? "#F8F9FA" : "#FFFFFF"}" />
+          <text x="${paperX + 60}" y="${1620 + i * 60}" font-family="${FONT_FAMILY}" font-weight="400" font-size="18" fill="#202124">${esc(pos)}</text>
+          <text x="${paperX + 500}" y="${1620 + i * 60}" font-family="${FONT_FAMILY}" font-weight="400" font-size="18" fill="#3C4043">${esc(freq)}</text>
+          <text x="${paperX + paperW - 240}" y="${1620 + i * 60}" font-family="${FONT_FAMILY}" font-weight="600" font-size="18" fill="#202124" text-anchor="end">${esc(price)}</text>
+        </g>
+      `).join("")}
+
+      <!-- Total -->
+      <rect x="${paperX + 40}" y="1840" width="${paperW - 80}" height="70" fill="#E8F0FE" />
+      <text x="${paperX + 60}" y="1885" font-family="${FONT_FAMILY}" font-weight="700"
+            font-size="22" fill="#1967D2">Gesamtpreis pro Jahr (netto)</text>
+      <text x="${paperX + paperW - 240}" y="1885" font-family="${FONT_FAMILY}" font-weight="700"
+            font-size="22" fill="#1967D2" text-anchor="end">15.400 €</text>
+    </g>
+  `);
+
+  // Section: Leistungsabgrenzung
+  sections.push(`
+    <g>
+      <text x="${paperX + 40}" y="2080" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="28" fill="#202124">3. Leistungsabgrenzung</text>
+      <text x="${paperX + 40}" y="2140" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">Nicht im Festpreis enthalten sind:</text>
+      <text x="${paperX + 60}" y="2185" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="19" fill="#3C4043">• Schäden durch unsachgemäße Bedienung</text>
+      <text x="${paperX + 60}" y="2215" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="19" fill="#3C4043">• Anlagen ausserhalb der vereinbarten Liste (Annex A)</text>
+      <text x="${paperX + 60}" y="2245" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="19" fill="#3C4043">• Umbau- und Erweiterungsarbeiten</text>
+      <text x="${paperX + 40}" y="2310" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">Diese Punkte rechnen wir nach Aufwand zum Stundensatz</text>
+      <text x="${paperX + 40}" y="2340" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">von 95 € (netto) ab.</text>
+    </g>
+  `);
+
+  // Section: Vertragsbedingungen
+  sections.push(`
+    <g>
+      <text x="${paperX + 40}" y="2520" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="28" fill="#202124">4. Vertragsbedingungen</text>
+
+      <text x="${paperX + 40}" y="2580" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="22" fill="#202124">Laufzeit</text>
+      <text x="${paperX + 40}" y="2620" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">12 Monate ab Vertragsbeginn, danach jährlich kündbar mit</text>
+      <text x="${paperX + 40}" y="2650" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">3-monatiger Frist.</text>
+
+      <text x="${paperX + 40}" y="2730" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="22" fill="#202124">Zahlungsbedingungen</text>
+      <text x="${paperX + 40}" y="2770" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">Quartalsweise im Voraus, Zahlungsziel 14 Tage netto.</text>
+
+      <text x="${paperX + 40}" y="2850" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="22" fill="#202124">SLA-Garantie</text>
+      <text x="${paperX + 40}" y="2890" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">Bei Überschreitung der 4-Stunden-Reaktionszeit erstatten wir</text>
+      <text x="${paperX + 40}" y="2920" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">20 % der Monatspauschale.</text>
+    </g>
+  `);
+
+  // Section: Unterschrift
+  sections.push(`
+    <g>
+      <text x="${paperX + 40}" y="3100" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="28" fill="#202124">5. Annahme</text>
+      <text x="${paperX + 40}" y="3160" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">Wir freuen uns über Ihr Vertrauen. Bitte gegenzeichnen und</text>
+      <text x="${paperX + 40}" y="3190" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="20" fill="#3C4043">zurücksenden an angebot@mustermann-industrie.de.</text>
+
+      <!-- Sign-off boxes -->
+      <line x1="${paperX + 40}" y1="3360" x2="${paperX + 440}" y2="3360" stroke="#3C4043" stroke-width="1" />
+      <text x="${paperX + 40}" y="3390" font-family="${FONT_FAMILY}" font-weight="500"
+            font-size="16" fill="#5F6368">Max Mustermann, Geschäftsführung</text>
+
+      <line x1="${paperX + 540}" y1="3360" x2="${paperX + 940}" y2="3360" stroke="#3C4043" stroke-width="1" />
+      <text x="${paperX + 540}" y="3390" font-family="${FONT_FAMILY}" font-weight="500"
+            font-size="16" fill="#5F6368">Datum</text>
+    </g>
+  `);
+
+  // Section: Annex A — Anlagenliste
+  sections.push(`
+    <g>
+      <text x="${paperX + 40}" y="3580" font-family="${FONT_FAMILY}" font-weight="600"
+            font-size="28" fill="#202124">Annex A: Anlagenliste</text>
+      <text x="${paperX + 40}" y="3630" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="18" fill="#5F6368">Die folgenden 8 Anlagen sind im Vertragsumfang enthalten.</text>
+
+      ${[
+        ["Hydraulik-Pressen Typ HP-280", "Halle 1, Standort A-12 / A-14", "2 Stück"],
+        ["CNC-Fräsen DMG MORI", "Halle 2, Standort B-3 / B-4", "2 Stück"],
+        ["Schweißroboter KUKA KR-300", "Halle 2, Standort B-7", "1 Stück"],
+        ["Lackieranlage Dürr EcoBell", "Halle 3, Standort C-1", "1 Stück"],
+        ["Förderband-System Typ FB-12", "Übergreifend Halle 1-3", "1 Linie"],
+        ["Lager-Stapler Linde H35", "Außenbereich", "1 Stück"],
+      ].map(([name, loc, count], i) => `
+        <g>
+          <rect x="${paperX + 40}" y="${3680 + i * 110}" width="${paperW - 80}" height="100" rx="6" fill="${i % 2 === 1 ? "#F8F9FA" : "#FFFFFF"}" stroke="#DADCE0" stroke-width="1" />
+          <text x="${paperX + 60}" y="${3720 + i * 110}" font-family="${FONT_FAMILY}" font-weight="600" font-size="20" fill="#202124">${esc(name)}</text>
+          <text x="${paperX + 60}" y="${3750 + i * 110}" font-family="${FONT_FAMILY}" font-weight="400" font-size="16" fill="#5F6368">${esc(loc)}</text>
+          <text x="${paperX + paperW - 100}" y="${3735 + i * 110}" font-family="${FONT_FAMILY}" font-weight="600" font-size="20" fill="#1967D2" text-anchor="end">${esc(count)}</text>
+        </g>
+      `).join("")}
+    </g>
+  `);
+
+  // Footer
+  sections.push(`
+    <g>
+      <line x1="${paperX + 40}" y1="${H - 240}" x2="${paperX + paperW - 40}" y2="${H - 240}" stroke="#DADCE0" stroke-width="1" />
+      <text x="${paperX + 40}" y="${H - 200}" font-family="${FONT_FAMILY}" font-weight="600" font-size="16" fill="#202124">Mustermann Industrie GmbH</text>
+      <text x="${paperX + 40}" y="${H - 175}" font-family="${FONT_FAMILY}" font-weight="400" font-size="14" fill="#5F6368">Industriestraße 42 · 85737 Ismaning · Deutschland</text>
+      <text x="${paperX + 40}" y="${H - 150}" font-family="${FONT_FAMILY}" font-weight="400" font-size="14" fill="#5F6368">+49 89 / 123 456 78 · angebot@mustermann-industrie.de</text>
+      <text x="${paperX + paperW - 40}" y="${H - 200}" text-anchor="end" font-family="${FONT_FAMILY}" font-weight="400" font-size="14" fill="#5F6368">Vertraulich · Nur für den Adressaten</text>
+    </g>
+  `);
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <rect width="${W}" height="${H}" fill="#F8F9FA" />
+    <!-- Paper -->
+    <rect x="${paperX}" y="40" width="${paperW}" height="${H - 80}" fill="#FFFFFF" filter="url(#paperShadow)" />
+    <defs>
+      <filter id="paperShadow" x="-2%" y="-2%" width="104%" height="104%">
+        <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#000000" flood-opacity="0.08" />
+      </filter>
+    </defs>
+    ${sections.join("\n")}
+  </svg>`;
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -763,6 +1055,7 @@ const ASSETS: AssetSpec[] = [
   { name: "slide-3.png", width: 1920, height: 1080, build: buildSlide3 },
   { name: "slide-4.png", width: 1920, height: 1080, build: buildSlide4 },
   { name: "slide-5.png", width: 1920, height: 1080, build: buildSlide5 },
+  { name: "gdocs-document.png", width: 1100, height: 6000, build: buildGoogleDocsDocument },
 ];
 
 function formatBytes(bytes: number): string {

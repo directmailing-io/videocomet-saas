@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  FileText,
   Image as ImageIcon,
   MousePointerClick,
   Presentation,
@@ -38,6 +39,12 @@ const OPTIONS: ReadonlyArray<DemoToggleOption> = [
     icon: Presentation,
   },
   {
+    value: "gdocs",
+    label: "Google-Docs-Scrollvideo",
+    subtitle: "Personalisiertes Dokument scrollt",
+    icon: FileText,
+  },
+  {
     value: "solo",
     label: "Webcam-Solo",
     subtitle: "Nur dein Webcam-Video, fullscreen",
@@ -55,7 +62,7 @@ export function DemoToggleGroup({ value, onChange }: DemoToggleGroupProps) {
     <div
       role="radiogroup"
       aria-label="Demo-Modus auswählen"
-      className="grid grid-cols-2 md:grid-cols-4 gap-3"
+      className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3"
     >
       {OPTIONS.map((option) => {
         const Icon = option.icon;

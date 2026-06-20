@@ -20,7 +20,12 @@ export const DEMO_DURATION_IN_FRAMES = 600;
 export const DEMO_WIDTH = 1920;
 export const DEMO_HEIGHT = 1080;
 
-export type MarketingDemoMode = "screenshot" | "scroll" | "slides" | "solo";
+export type MarketingDemoMode =
+  | "screenshot"
+  | "scroll"
+  | "slides"
+  | "gdocs"
+  | "solo";
 
 export type MarketingDemoProps = {
   mode: MarketingDemoMode;
@@ -28,6 +33,7 @@ export type MarketingDemoProps = {
 };
 
 const SCREENSHOT_SRC = "/demo-assets/website-screenshot.png";
+const GDOCS_SRC = "/demo-assets/gdocs-document.png";
 const WEBCAM_MP4 = "/demo-assets/webcam.mp4";
 
 const SLIDE_SRCS = [1, 2, 3, 4, 5].map(
@@ -41,13 +47,13 @@ const SLIDE_STEP = 120;
 
 function ScrollBackground() {
   const frame = useCurrentFrame();
-  // Symmetrischer Auf-/Ab-Scroll ueber die volle Composition-Laenge:
-  // 0 → -2000 → -2000 (kurze Pause) → 0
-  // 0   300     330                   600
+  // Bild 1200x8000, skaliert auf 1920 width → 1920x12800 effektiv.
+  // Wir scrollen tief (bis -10000) damit die ganze Seite sichtbar wird,
+  // dann wieder hoch.
   const translateY = interpolate(
     frame,
-    [0, 300, 330, 600],
-    [0, -2000, -2000, 0],
+    [0, 280, 320, 600],
+    [0, -10000, -10000, 0],
     {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
@@ -55,23 +61,205 @@ function ScrollBackground() {
   );
 
   return (
-    <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#0F172A" }}>
+    <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#FFFFFF" }}>
+      <Img
+        src={staticFile(SCREENSHOT_SRC)}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: "100%",
+          height: "auto",
+          transform: `translateY(${translateY}px)`,
+          willChange: "transform",
+          display: "block",
+        }}
+      />
+    </AbsoluteFill>
+  );
+}
+
+/**
+ * Google-Docs-Scrollvideo: zeigt ein Dokument im Docs-Chrome (Top-Bar,
+ * Toolbar, Sidebar wie bei Slides) und scrollt durch. Webcam bleibt
+ * unten-links als Kreis.
+ */
+function GoogleDocsBackground() {
+  const frame = useCurrentFrame();
+  // Dokument-Hoehe (1100x6000 → bei contain auf 1080 Stage = ca. 5891 effective)
+  // Wir scrollen 0 → -3800 → pause → 0
+  const translateY = interpolate(
+    frame,
+    [0, 280, 320, 600],
+    [0, -3800, -3800, 0],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    },
+  );
+
+  return (
+    <AbsoluteFill
+      style={{
+        backgroundColor: "#F1F3F4",
+        fontFamily: "'Google Sans', Roboto, Arial, sans-serif",
+      }}
+    >
+      {/* Top bar */}
       <div
         style={{
           position: "absolute",
-          inset: 0,
-          transform: `translateY(${translateY}px)`,
-          willChange: "transform",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 56,
+          backgroundColor: "#FFFFFF",
+          borderBottom: "1px solid #DADCE0",
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          padding: "0 20px",
+          zIndex: 2,
         }}
       >
-        <Img
-          src={staticFile(SCREENSHOT_SRC)}
+        <div
           style={{
-            width: "100%",
-            height: "auto",
-            display: "block",
+            width: 36,
+            height: 36,
+            borderRadius: 6,
+            backgroundColor: "#4285F4",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 20,
+            fontWeight: 700,
+            color: "#FFFFFF",
           }}
-        />
+        >
+          ▤
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 18, fontWeight: 500, color: "#202124" }}>
+            Angebot Mustermann GmbH
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              color: "#5F6368",
+              display: "flex",
+              gap: 18,
+              marginTop: 4,
+            }}
+          >
+            <span>Datei</span>
+            <span>Bearbeiten</span>
+            <span>Ansicht</span>
+            <span>Einfügen</span>
+            <span>Format</span>
+            <span>Tools</span>
+            <span>Hilfe</span>
+          </div>
+        </div>
+        <div
+          style={{
+            padding: "8px 20px",
+            borderRadius: 4,
+            backgroundColor: "#1A73E8",
+            color: "#FFFFFF",
+            fontSize: 14,
+            fontWeight: 500,
+          }}
+        >
+          Teilen
+        </div>
+        <div
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: "50%",
+            background: "linear-gradient(135deg, #AA8CF5, #7C5CE8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#FFFFFF",
+            fontWeight: 600,
+            fontSize: 14,
+          }}
+        >
+          CS
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div
+        style={{
+          position: "absolute",
+          top: 56,
+          left: 0,
+          right: 0,
+          height: 40,
+          backgroundColor: "#FFFFFF",
+          borderBottom: "1px solid #DADCE0",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "0 20px",
+          fontSize: 12,
+          color: "#5F6368",
+          zIndex: 2,
+        }}
+      >
+        {["↶", "↷", "🖨", "100 %", "Standardtext", "Arial", "11", "B", "I", "U", "🎨", "🔗", "▦", "—"].map(
+          (k) => (
+            <div
+              key={k}
+              style={{
+                padding: "4px 8px",
+                borderRadius: 4,
+                fontWeight: k === "B" ? 700 : 400,
+                fontStyle: k === "I" ? "italic" : "normal",
+                textDecoration: k === "U" ? "underline" : "none",
+              }}
+            >
+              {k}
+            </div>
+          ),
+        )}
+      </div>
+
+      {/* Document scroll area */}
+      <div
+        style={{
+          position: "absolute",
+          top: 96,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          overflow: "hidden",
+          backgroundColor: "#F8F9FA",
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{
+            position: "relative",
+            width: 880,
+            maxWidth: "100%",
+            transform: `translateY(${translateY}px)`,
+            willChange: "transform",
+          }}
+        >
+          <Img
+            src={staticFile(GDOCS_SRC)}
+            style={{
+              width: "100%",
+              height: "auto",
+              display: "block",
+              boxShadow: "0 1px 3px rgba(60,64,67,0.15)",
+            }}
+          />
+        </div>
       </div>
     </AbsoluteFill>
   );
@@ -391,6 +579,7 @@ function Background({ mode }: { mode: MarketingDemoMode }) {
   if (mode === "screenshot") return <ScreenshotBackground />;
   if (mode === "scroll") return <ScrollBackground />;
   if (mode === "slides") return <SlidesBackground />;
+  if (mode === "gdocs") return <GoogleDocsBackground />;
   return null;
 }
 

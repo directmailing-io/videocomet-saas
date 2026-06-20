@@ -12,7 +12,12 @@ import MarketingDemoComposition, {
   DEMO_HEIGHT,
 } from "./remotion/MarketingDemoComposition";
 
-export type DemoMode = "screenshot" | "scroll" | "slides" | "solo";
+export type DemoMode =
+  | "screenshot"
+  | "scroll"
+  | "slides"
+  | "gdocs"
+  | "solo";
 
 function PlayerSkeleton() {
   return <div className="absolute inset-0 bg-black animate-pulse" />;
@@ -32,6 +37,7 @@ const Player = dynamic(
 
 const PRELOAD_IMAGES = [
   "/demo-assets/website-screenshot.png",
+  "/demo-assets/gdocs-document.png",
   "/demo-assets/slide-1.png",
   "/demo-assets/slide-2.png",
   "/demo-assets/slide-3.png",
