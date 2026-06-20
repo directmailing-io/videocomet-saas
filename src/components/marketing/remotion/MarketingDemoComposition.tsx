@@ -19,12 +19,7 @@ export const DEMO_DURATION_IN_FRAMES = 600;
 export const DEMO_WIDTH = 1920;
 export const DEMO_HEIGHT = 1080;
 
-export type MarketingDemoMode =
-  | "screenshot"
-  | "scroll"
-  | "slides"
-  | "gdocs"
-  | "solo";
+export type MarketingDemoMode = "screenshot" | "slides" | "gdocs" | "solo";
 
 export type MarketingDemoProps = {
   mode: MarketingDemoMode;
@@ -46,52 +41,41 @@ const SANS = "'Inter', 'Helvetica Neue', Arial, sans-serif";
 const GOOGLE_SANS =
   "'Google Sans', 'Roboto', 'Helvetica Neue', Arial, sans-serif";
 
-function ScrollBackground({ scrollEnabled }: { scrollEnabled: boolean }) {
-  // CSS-Keyframes statt useCurrentFrame: laeuft IMMER, auch wenn der
-  // Remotion-Player aus irgendeinem Grund nicht spielt. Standardmaessig
-  // Standbild — Scroll erst per Toggle. Animation ungleichmaessig:
-  // mal scrollen, mal pausieren, mal kurz nach oben, dann weiter runter.
-  // Wirkt wie ein echter Mensch, der die Seite anschaut.
-  return (
-    <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#FFFFFF" }}>
-      <style>{`
-        @keyframes vc-demo-scroll {
-          0%   { transform: translateY(0); }
-          10%  { transform: translateY(-1400px); }
-          14%  { transform: translateY(-1400px); }
-          20%  { transform: translateY(-900px); }
-          24%  { transform: translateY(-900px); }
-          34%  { transform: translateY(-3600px); }
-          40%  { transform: translateY(-3600px); }
-          45%  { transform: translateY(-3100px); }
-          56%  { transform: translateY(-6400px); }
-          62%  { transform: translateY(-6400px); }
-          66%  { transform: translateY(-5700px); }
-          80%  { transform: translateY(-9400px); }
-          85%  { transform: translateY(-9400px); }
-          90%  { transform: translateY(-8500px); }
-          100% { transform: translateY(0); }
-        }
-      `}</style>
-      <Img
-        src={staticFile(SCREENSHOT_SRC)}
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          width: "100%",
-          height: "auto",
-          animation: scrollEnabled
-            ? "vc-demo-scroll 45s ease-in-out infinite"
-            : "none",
-          transform: scrollEnabled ? undefined : "translateY(0)",
-          willChange: "transform",
-          display: "block",
-        }}
-      />
-    </AbsoluteFill>
-  );
-}
+/**
+ * Realistische "menschliche" Scroll-Keyframes: jeder echte Mensch scrollt
+ * ein Stueck, haelt mehrere Sekunden um zu lesen, scrollt manchmal kurz
+ * zurueck um was nochmal anzuschauen, dann weiter. Keine konstante
+ * Bewegung. Gesamt-Loop = 60s. Pausen >50 % der Zeit, damit man wirklich
+ * "mitlesen" kann.
+ *
+ * Image-Hoehe = 1920 * (8000/1200) = 12800. Visible = 1080. Max sinnvoller
+ * Scroll bis ca. -10500 (zeigt Footer noch sauber).
+ */
+const WEBSITE_SCROLL_KEYFRAMES = `
+  @keyframes vc-demo-scroll {
+    0%   { transform: translateY(0); }
+    6%   { transform: translateY(0); }
+    9%   { transform: translateY(-900px); }
+    18%  { transform: translateY(-900px); }
+    20%  { transform: translateY(-1300px); }
+    28%  { transform: translateY(-1300px); }
+    30%  { transform: translateY(-1050px); }
+    34%  { transform: translateY(-1050px); }
+    38%  { transform: translateY(-2800px); }
+    47%  { transform: translateY(-2800px); }
+    49%  { transform: translateY(-3200px); }
+    55%  { transform: translateY(-3200px); }
+    57%  { transform: translateY(-2900px); }
+    61%  { transform: translateY(-2900px); }
+    65%  { transform: translateY(-5800px); }
+    74%  { transform: translateY(-5800px); }
+    76%  { transform: translateY(-6300px); }
+    82%  { transform: translateY(-6300px); }
+    86%  { transform: translateY(-9200px); }
+    94%  { transform: translateY(-9200px); }
+    100% { transform: translateY(0); }
+  }
+`;
 
 /**
  * Google-Docs-Scrollvideo: zeigt ein echtes JSX-gerendertes Dokument im
@@ -115,17 +99,23 @@ function GoogleDocsBackground({
       <style>{`
         @keyframes vc-demo-gdocs-scroll {
           0%   { transform: translateY(0); }
-          12%  { transform: translateY(-250px); }
-          16%  { transform: translateY(-250px); }
-          24%  { transform: translateY(-150px); }
-          36%  { transform: translateY(-700px); }
-          42%  { transform: translateY(-700px); }
-          48%  { transform: translateY(-600px); }
-          62%  { transform: translateY(-1200px); }
-          68%  { transform: translateY(-1200px); }
-          74%  { transform: translateY(-1050px); }
-          88%  { transform: translateY(-1500px); }
-          92%  { transform: translateY(-1500px); }
+          7%   { transform: translateY(0); }
+          11%  { transform: translateY(-220px); }
+          20%  { transform: translateY(-220px); }
+          22%  { transform: translateY(-380px); }
+          32%  { transform: translateY(-380px); }
+          34%  { transform: translateY(-300px); }
+          38%  { transform: translateY(-300px); }
+          42%  { transform: translateY(-820px); }
+          54%  { transform: translateY(-820px); }
+          56%  { transform: translateY(-720px); }
+          60%  { transform: translateY(-720px); }
+          64%  { transform: translateY(-1180px); }
+          76%  { transform: translateY(-1180px); }
+          78%  { transform: translateY(-1080px); }
+          82%  { transform: translateY(-1080px); }
+          86%  { transform: translateY(-1500px); }
+          94%  { transform: translateY(-1500px); }
           100% { transform: translateY(0); }
         }
       `}</style>
@@ -284,7 +274,7 @@ function GoogleDocsBackground({
             width: 880,
             maxWidth: "100%",
             animation: scrollEnabled
-              ? "vc-demo-gdocs-scroll 50s ease-in-out infinite"
+              ? "vc-demo-gdocs-scroll 55s ease-in-out infinite"
               : "none",
             transform: scrollEnabled ? undefined : "translateY(0)",
             willChange: "transform",
@@ -355,10 +345,45 @@ function DocumentPaper() {
         jeden Tag Anfragen kosten — ich schreib&apos;s dir kurz auf, dann
         kannst du in Ruhe drauf gucken.
       </p>
-      <p style={{ margin: "0 0 40px 0" }}>
+      <p style={{ margin: "0 0 28px 0" }}>
         Wenn du Bock hast, packen wir die Punkte gemeinsam an. Termin per
         Klick auf das Video unten.
       </p>
+
+      {/* Eingebetteter Screenshot — wie als Bild ins Doc kopiert */}
+      <div
+        style={{
+          width: "100%",
+          height: 420,
+          marginBottom: 12,
+          borderRadius: 6,
+          overflow: "hidden",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+          border: "1px solid #DADCE0",
+          backgroundColor: "#FFFFFF",
+        }}
+      >
+        <Img
+          src={staticFile(SCREENSHOT_SRC)}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "top",
+            display: "block",
+          }}
+        />
+      </div>
+      <div
+        style={{
+          fontSize: 13,
+          color: "#5F6368",
+          fontStyle: "italic",
+          marginBottom: 40,
+        }}
+      >
+        Bild 1 — Screenshot von mustermann-industrie.de (oben angeheftet).
+      </div>
 
       <ErrorBlock
         number={1}
@@ -516,16 +541,44 @@ function SlidesBackground() {
   );
 }
 
-function ScreenshotBackground() {
+function ScreenshotBackground({
+  scrollEnabled,
+}: {
+  scrollEnabled: boolean;
+}) {
+  // scrollEnabled=false: Standbild (Top der Webseite, cover).
+  // scrollEnabled=true: animiertes Scroll-Video durch die ganze Seite mit
+  // realistischen Lese-Pausen.
+  if (!scrollEnabled) {
+    return (
+      <AbsoluteFill style={{ backgroundColor: "#FFFFFF" }}>
+        <Img
+          src={staticFile(SCREENSHOT_SRC)}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "top",
+          }}
+        />
+      </AbsoluteFill>
+    );
+  }
+
   return (
-    <AbsoluteFill style={{ backgroundColor: "#0F172A" }}>
+    <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#FFFFFF" }}>
+      <style>{WEBSITE_SCROLL_KEYFRAMES}</style>
       <Img
         src={staticFile(SCREENSHOT_SRC)}
         style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
           width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          objectPosition: "top",
+          height: "auto",
+          animation: "vc-demo-scroll 60s ease-in-out infinite",
+          willChange: "transform",
+          display: "block",
         }}
       />
     </AbsoluteFill>
@@ -539,9 +592,8 @@ function Background({
   mode: MarketingDemoMode;
   scrollEnabled: boolean;
 }) {
-  if (mode === "screenshot") return <ScreenshotBackground />;
-  if (mode === "scroll")
-    return <ScrollBackground scrollEnabled={scrollEnabled} />;
+  if (mode === "screenshot")
+    return <ScreenshotBackground scrollEnabled={scrollEnabled} />;
   if (mode === "slides") return <SlidesBackground />;
   if (mode === "gdocs")
     return <GoogleDocsBackground scrollEnabled={scrollEnabled} />;

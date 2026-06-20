@@ -4,7 +4,6 @@ import * as React from "react";
 import {
   FileText,
   Image as ImageIcon,
-  MousePointerClick,
   Presentation,
   Video as VideoIcon,
   type LucideIcon,
@@ -23,14 +22,8 @@ const OPTIONS: ReadonlyArray<DemoToggleOption> = [
   {
     value: "screenshot",
     label: "Website-Screenshot",
-    subtitle: "Statische Website als Hintergrund",
+    subtitle: "Webseite des Kunden im Hintergrund",
     icon: ImageIcon,
-  },
-  {
-    value: "scroll",
-    label: "Website-Scrollvideo",
-    subtitle: "Animierte Scroll-Tour",
-    icon: MousePointerClick,
   },
   {
     value: "slides",
@@ -40,8 +33,8 @@ const OPTIONS: ReadonlyArray<DemoToggleOption> = [
   },
   {
     value: "gdocs",
-    label: "Google-Docs-Scrollvideo",
-    subtitle: "Personalisiertes Dokument scrollt",
+    label: "Google Docs",
+    subtitle: "Persönliche Notiz im Doc",
     icon: FileText,
   },
   {
@@ -62,7 +55,7 @@ export function DemoToggleGroup({ value, onChange }: DemoToggleGroupProps) {
     <div
       role="radiogroup"
       aria-label="Demo-Modus auswählen"
-      className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3"
+      className="grid grid-cols-2 md:grid-cols-4 gap-3"
     >
       {OPTIONS.map((option) => {
         const Icon = option.icon;

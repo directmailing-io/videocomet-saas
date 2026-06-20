@@ -13,12 +13,7 @@ import MarketingDemoComposition, {
   DEMO_HEIGHT,
 } from "./remotion/MarketingDemoComposition";
 
-export type DemoMode =
-  | "screenshot"
-  | "scroll"
-  | "slides"
-  | "gdocs"
-  | "solo";
+export type DemoMode = "screenshot" | "slides" | "gdocs" | "solo";
 
 function PlayerSkeleton() {
   return <div className="absolute inset-0 bg-black animate-pulse" />;
@@ -51,7 +46,7 @@ export function DemoPlayer() {
   const [scrollEnabled, setScrollEnabled] = React.useState(false);
   const playerRef = React.useRef<PlayerRef>(null);
 
-  const canScroll = mode === "scroll" || mode === "gdocs";
+  const canScroll = mode === "screenshot" || mode === "gdocs";
 
   // Preload images so background switches are instant
   React.useEffect(() => {
