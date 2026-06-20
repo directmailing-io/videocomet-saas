@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import * as React from "react";
 import { Volume2, VolumeX } from "lucide-react";
 import type { Player as PlayerType, PlayerRef } from "@remotion/player";
+import { cn } from "@/lib/utils";
 import { DemoToggleGroup } from "./DemoToggleGroup";
 import MarketingDemoComposition, {
   DEMO_FPS,
@@ -47,7 +48,10 @@ const PRELOAD_IMAGES = [
 export function DemoPlayer() {
   const [mode, setMode] = React.useState<DemoMode>("screenshot");
   const [muted, setMuted] = React.useState(true);
+  const [scrollEnabled, setScrollEnabled] = React.useState(false);
   const playerRef = React.useRef<PlayerRef>(null);
+
+  const canScroll = mode === "scroll" || mode === "gdocs";
 
   // Preload images so background switches are instant
   React.useEffect(() => {
@@ -109,7 +113,7 @@ export function DemoPlayer() {
         <Player
           ref={playerRef}
           component={MarketingDemoComposition}
-          inputProps={{ mode }}
+          inputProps={{ mode, scrollEnabled }}
           durationInFrames={DEMO_DURATION_IN_FRAMES}
           fps={DEMO_FPS}
           compositionWidth={DEMO_WIDTH}
@@ -119,6 +123,34 @@ export function DemoPlayer() {
           controls={false}
           style={{ width: "100%", height: "100%" }}
         />
+        {canScroll ? (
+          <button
+            type="button"
+            onClick={() => setScrollEnabled((v) => !v)}
+            className={cn(
+              "absolute bottom-3 left-3 z-10 inline-flex items-center gap-2 rounded-full backdrop-blur px-3.5 py-1.5 text-xs font-medium transition-colors",
+              scrollEnabled
+                ? "bg-brand text-white hover:bg-brand-deep"
+                : "bg-black/60 text-white hover:bg-black/80",
+            )}
+            aria-pressed={scrollEnabled}
+          >
+            <span
+              className={cn(
+                "relative inline-flex h-3.5 w-6 rounded-full transition-colors",
+                scrollEnabled ? "bg-white/40" : "bg-white/25",
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-0.5 size-2.5 rounded-full bg-white transition-all",
+                  scrollEnabled ? "left-3" : "left-0.5",
+                )}
+              />
+            </span>
+            Scrollen aktivieren
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={handleToggleMute}

@@ -28,6 +28,7 @@ export type MarketingDemoMode =
 
 export type MarketingDemoProps = {
   mode: MarketingDemoMode;
+  scrollEnabled?: boolean;
   [key: string]: unknown;
 };
 
@@ -45,16 +46,30 @@ const SANS = "'Inter', 'Helvetica Neue', Arial, sans-serif";
 const GOOGLE_SANS =
   "'Google Sans', 'Roboto', 'Helvetica Neue', Arial, sans-serif";
 
-function ScrollBackground() {
+function ScrollBackground({ scrollEnabled }: { scrollEnabled: boolean }) {
   // CSS-Keyframes statt useCurrentFrame: laeuft IMMER, auch wenn der
-  // Remotion-Player aus irgendeinem Grund nicht spielt (Browser-Autoplay-
-  // Block, Tab-Throttling, etc.). Browser-driven, nicht React-driven.
+  // Remotion-Player aus irgendeinem Grund nicht spielt. Standardmaessig
+  // Standbild — Scroll erst per Toggle. Animation ungleichmaessig:
+  // mal scrollen, mal pausieren, mal kurz nach oben, dann weiter runter.
+  // Wirkt wie ein echter Mensch, der die Seite anschaut.
   return (
     <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#FFFFFF" }}>
       <style>{`
         @keyframes vc-demo-scroll {
           0%   { transform: translateY(0); }
-          50%  { transform: translateY(-10000px); }
+          10%  { transform: translateY(-1400px); }
+          14%  { transform: translateY(-1400px); }
+          20%  { transform: translateY(-900px); }
+          24%  { transform: translateY(-900px); }
+          34%  { transform: translateY(-3600px); }
+          40%  { transform: translateY(-3600px); }
+          45%  { transform: translateY(-3100px); }
+          56%  { transform: translateY(-6400px); }
+          62%  { transform: translateY(-6400px); }
+          66%  { transform: translateY(-5700px); }
+          80%  { transform: translateY(-9400px); }
+          85%  { transform: translateY(-9400px); }
+          90%  { transform: translateY(-8500px); }
           100% { transform: translateY(0); }
         }
       `}</style>
@@ -66,7 +81,10 @@ function ScrollBackground() {
           top: 0,
           width: "100%",
           height: "auto",
-          animation: "vc-demo-scroll 20s linear infinite",
+          animation: scrollEnabled
+            ? "vc-demo-scroll 45s ease-in-out infinite"
+            : "none",
+          transform: scrollEnabled ? undefined : "translateY(0)",
           willChange: "transform",
           display: "block",
         }}
@@ -80,8 +98,13 @@ function ScrollBackground() {
  * Docs-Chrome (Top-Bar + Toolbar). Inhalt = personalisierter Schnell-
  * Check fuer "Max" mit 3 roten Findings. Scrollt langsam hoch und runter.
  */
-function GoogleDocsBackground() {
-  // Wie ScrollBackground: CSS-Keyframes statt frame-getriebener Animation.
+function GoogleDocsBackground({
+  scrollEnabled,
+}: {
+  scrollEnabled: boolean;
+}) {
+  // Wie ScrollBackground: Standbild per Default, langsame & ungleichmaessige
+  // Scroll-Animation ueber CSS-Keyframes wenn aktiviert.
   return (
     <AbsoluteFill
       style={{
@@ -92,7 +115,17 @@ function GoogleDocsBackground() {
       <style>{`
         @keyframes vc-demo-gdocs-scroll {
           0%   { transform: translateY(0); }
-          50%  { transform: translateY(-1400px); }
+          12%  { transform: translateY(-250px); }
+          16%  { transform: translateY(-250px); }
+          24%  { transform: translateY(-150px); }
+          36%  { transform: translateY(-700px); }
+          42%  { transform: translateY(-700px); }
+          48%  { transform: translateY(-600px); }
+          62%  { transform: translateY(-1200px); }
+          68%  { transform: translateY(-1200px); }
+          74%  { transform: translateY(-1050px); }
+          88%  { transform: translateY(-1500px); }
+          92%  { transform: translateY(-1500px); }
           100% { transform: translateY(0); }
         }
       `}</style>
@@ -250,7 +283,10 @@ function GoogleDocsBackground() {
           style={{
             width: 880,
             maxWidth: "100%",
-            animation: "vc-demo-gdocs-scroll 20s linear infinite",
+            animation: scrollEnabled
+              ? "vc-demo-gdocs-scroll 50s ease-in-out infinite"
+              : "none",
+            transform: scrollEnabled ? undefined : "translateY(0)",
             willChange: "transform",
           }}
         >
@@ -372,13 +408,7 @@ function DocumentPaper() {
         }}
       />
       <div style={{ color: "#5F6368", fontSize: 14 }}>
-        Lieben Gruß,
-        <br />
-        <strong style={{ color: "#202124", fontSize: 16 }}>
-          Christoph Skuk
-        </strong>
-        <br />
-        VideoComet · christoph@videocomet.de
+        Lieben Gruß
       </div>
     </div>
   );
@@ -502,16 +532,25 @@ function ScreenshotBackground() {
   );
 }
 
-function Background({ mode }: { mode: MarketingDemoMode }) {
+function Background({
+  mode,
+  scrollEnabled,
+}: {
+  mode: MarketingDemoMode;
+  scrollEnabled: boolean;
+}) {
   if (mode === "screenshot") return <ScreenshotBackground />;
-  if (mode === "scroll") return <ScrollBackground />;
+  if (mode === "scroll")
+    return <ScrollBackground scrollEnabled={scrollEnabled} />;
   if (mode === "slides") return <SlidesBackground />;
-  if (mode === "gdocs") return <GoogleDocsBackground />;
+  if (mode === "gdocs")
+    return <GoogleDocsBackground scrollEnabled={scrollEnabled} />;
   return null;
 }
 
 export default function MarketingDemoComposition({
   mode,
+  scrollEnabled = false,
 }: MarketingDemoProps) {
   // Webcam-PiP: bottom-LEFT, perfekter KREIS. In solo-Mode → fullscreen.
   const wrapperStyle: React.CSSProperties =
@@ -539,7 +578,7 @@ export default function MarketingDemoComposition({
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#0F172A" }}>
-      <Background mode={mode} />
+      <Background mode={mode} scrollEnabled={scrollEnabled} />
       <div style={wrapperStyle}>
         <Video
           src={staticFile(WEBCAM_MP4)}

@@ -106,7 +106,7 @@ function slideBackground(): string {
 // ---------------------------------------------------------------------------
 
 function buildSlide1(): string {
-  // Stilisierter Kunde-Avatar (Initialen) + Datum + Begruessung
+  // Stilisierter Kunde-Avatar (Initialen) + Begruessung
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
     <defs>
       <linearGradient id="s1Bg" x1="0" y1="0" x2="1" y2="1">
@@ -142,11 +142,9 @@ function buildSlide1(): string {
     <text x="460" y="640" font-family="${FONT_FAMILY}" font-weight="800"
           font-size="92" fill="${COLORS.brandDeep}">Max Mustermann</text>
 
-    <!-- Untertitel + Datum -->
+    <!-- Untertitel -->
     <text x="460" y="730" font-family="${FONT_FAMILY}" font-weight="400"
           font-size="32" fill="${COLORS.textMuted}">Mustermann Industrie GmbH · München</text>
-    <text x="460" y="785" font-family="${FONT_FAMILY}" font-weight="400"
-          font-size="28" fill="${COLORS.textMuted}">20. Juni 2026 · Christoph Skuk</text>
 
     <!-- Slide-Footer -->
     <rect x="220" y="900" width="1480" height="2" fill="${COLORS.border}" />
