@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
+import { DemoSection } from "@/components/marketing/DemoSection";
 
 export default function HomePage() {
   return (
@@ -34,6 +35,8 @@ export default function HomePage() {
           </p>
         </div>
       </main>
+
+      <DemoSection />
 
       <footer className="w-full px-6 py-5 border-t border-line bg-surface">
         <div className="max-w-6xl mx-auto flex items-center justify-between text-xs text-ink-muted">
