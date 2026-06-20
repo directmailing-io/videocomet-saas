@@ -58,6 +58,32 @@ export function DemoPlayer() {
     });
   }, []);
 
+  // Force-start playback. Remotion Player's `autoPlay` prop is unreliable in
+  // some browsers (Safari + strict Chrome policies) — without this, the Player
+  // stays paused on frame 0 and the timeline never advances, so scroll-mode
+  // looks static and slides start at opacity 0 (= blank). The Player is muted
+  // so play() is allowed even without user gesture.
+  React.useEffect(() => {
+    const tryPlay = () => {
+      const p = playerRef.current;
+      if (!p) return;
+      try {
+        p.play();
+      } catch {
+        /* noop — Player may not be ready yet */
+      }
+    };
+    // First attempt right after mount, retry shortly after in case Player
+    // wasn't ready yet (dynamic import).
+    tryPlay();
+    const t1 = window.setTimeout(tryPlay, 300);
+    const t2 = window.setTimeout(tryPlay, 1000);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, []);
+
   const handleToggleMute = React.useCallback(() => {
     setMuted((prev) => {
       const next = !prev;

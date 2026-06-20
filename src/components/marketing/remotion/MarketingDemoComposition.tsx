@@ -267,10 +267,14 @@ function GoogleDocsBackground() {
 
 function SlideFrame({ src, index }: { src: string; index: number }) {
   const frame = useCurrentFrame();
+  // Wichtig: opacity startet bei 1 (nicht bei 0) — sonst sieht der User
+  // beim ersten Aufruf eine leere Folie, bevor das Fade-In durchgelaufen
+  // ist. Nur Fade-OUT am Ende behalten, damit Crossfade zur naechsten
+  // Folie sauber rueberblendet.
   const opacity = interpolate(
     frame,
-    [0, 12, SLIDE_DURATION - 14, SLIDE_DURATION],
-    [0, 1, 1, 0],
+    [SLIDE_DURATION - 14, SLIDE_DURATION],
+    [1, 0],
     {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
