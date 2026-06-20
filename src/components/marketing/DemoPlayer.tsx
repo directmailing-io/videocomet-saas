@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import * as React from "react";
+import { Info } from "lucide-react";
 import type { Player as PlayerType, PlayerRef } from "@remotion/player";
 import { cn } from "@/lib/utils";
 import { DemoToggleGroup } from "./DemoToggleGroup";
@@ -123,9 +124,23 @@ export function DemoPlayer() {
           </button>
         ) : null}
       </div>
-      <p className="text-center text-xs text-ink-muted">
-        Demo. Echte Videos werden in deinem Account erzeugt.
-      </p>
+      {canScroll && scrollEnabled ? (
+        <div className="mx-auto max-w-2xl rounded-squircle-md border border-warn/30 bg-warn-soft/50 px-4 py-3 text-xs text-ink-soft flex items-start gap-2.5">
+          <Info className="size-4 text-warn shrink-0 mt-0.5" aria-hidden />
+          <span>
+            <strong className="text-ink font-semibold">
+              Hinweis zur Demo:
+            </strong>{" "}
+            Das Scroll-Verhalten hier ist generiert und wirkt etwas
+            mechanisch. In deinem echten Video zeichnest du das Scrollen
+            vorab einmal selbst auf — dadurch sieht es 1:1 menschlich aus.
+          </span>
+        </div>
+      ) : (
+        <p className="text-center text-xs text-ink-muted">
+          Demo. Echte Videos werden in deinem Account erzeugt.
+        </p>
+      )}
     </div>
   );
 }
