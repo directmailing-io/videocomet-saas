@@ -564,7 +564,7 @@ function AddIntegrationDialog({
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <div>
             <Label>Anbieter</Label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-col gap-2">
               {(["hubspot", "salessuite", "close"] as const).map((p) => (
                 <button
                   key={p}

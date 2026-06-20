@@ -351,19 +351,21 @@ export function WebhookFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="xl">
+      <DialogContent size="lg" className="max-h-[88vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>
             {mode === "create" ? "Neuer Webhook" : "Webhook bearbeiten"}
           </DialogTitle>
           <DialogDescription>
-            Senden Sie VideoComet-Events (Lead geöffnet, Video gestartet, …) an
-            einen externen HTTPS-Endpunkt — z. B. Make.com, Zapier oder Ihre
-            eigene API.
+            VideoComet-Events (z.&nbsp;B. „Lead hat Landingpage geöffnet") an
+            Zapier, Make oder eine eigene URL schicken.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col gap-4 overflow-y-auto pr-1 -mr-1"
+        >
           {/* 1. Name ─────────────────────────────────────────────────── */}
           <div>
             <Label htmlFor="webhook-name">Name</Label>
@@ -694,35 +696,27 @@ function EventGroup({
 }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5">
         {title}
       </p>
-      <ul className="flex flex-col gap-2.5">
+      <ul className="flex flex-col">
         {kinds.map((k) => {
           const meta = WEBHOOK_EVENT_LABELS[k];
           const id = `webhook-event-${k}`;
           return (
-            <li key={k} className="flex items-start gap-2.5">
-              <Checkbox
-                id={id}
-                checked={selected.has(k)}
-                onCheckedChange={() => onToggle(k)}
-                disabled={disabled}
-                className="mt-0.5"
-              />
+            <li key={k}>
               <label
                 htmlFor={id}
-                className="min-w-0 cursor-pointer select-none"
+                className="flex items-center gap-2 py-1.5 cursor-pointer select-none rounded-sm hover:bg-surface-muted/40 -mx-1 px-1"
+                title={meta.description}
               >
-                <p className="text-sm font-medium text-ink leading-tight">
-                  {meta.label}
-                </p>
-                <p className="text-[11px] text-ink-muted leading-snug">
-                  {meta.description}
-                </p>
-                <p className="text-[10px] font-mono text-ink-muted/70 mt-0.5">
-                  {k}
-                </p>
+                <Checkbox
+                  id={id}
+                  checked={selected.has(k)}
+                  onCheckedChange={() => onToggle(k)}
+                  disabled={disabled}
+                />
+                <span className="text-sm text-ink">{meta.label}</span>
               </label>
             </li>
           );
