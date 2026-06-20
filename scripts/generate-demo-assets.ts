@@ -1055,7 +1055,6 @@ const ASSETS: AssetSpec[] = [
   { name: "slide-3.png", width: 1920, height: 1080, build: buildSlide3 },
   { name: "slide-4.png", width: 1920, height: 1080, build: buildSlide4 },
   { name: "slide-5.png", width: 1920, height: 1080, build: buildSlide5 },
-  { name: "gdocs-document.png", width: 1100, height: 6000, build: buildGoogleDocsDocument },
 ];
 
 function formatBytes(bytes: number): string {

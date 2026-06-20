@@ -13,8 +13,7 @@ import {
 
 // Composition-Dauer = 600 Frames (20 s @ 30 fps) — knapp ueber die echte
 // Webcam-Laenge (19,9 s), damit der `<Video loop>`-Cut sauber mit dem
-// Composition-Loop zusammenfaellt. Vorher: 360 Frames (12 s) → Webcam wurde
-// frueh abgeschnitten und der Restart sah hart aus.
+// Composition-Loop zusammenfaellt.
 export const DEMO_FPS = 30;
 export const DEMO_DURATION_IN_FRAMES = 600;
 export const DEMO_WIDTH = 1920;
@@ -33,27 +32,28 @@ export type MarketingDemoProps = {
 };
 
 const SCREENSHOT_SRC = "/demo-assets/website-screenshot.png";
-const GDOCS_SRC = "/demo-assets/gdocs-document.png";
 const WEBCAM_MP4 = "/demo-assets/webcam.mp4";
 
 const SLIDE_SRCS = [1, 2, 3, 4, 5].map(
   (n) => `/demo-assets/slide-${n}.png`,
 );
 
-// 5 Slides × 120 Frames (4 s) = 600 Frames → fuellt die ganze Composition
-// gleichmaessig. Crossfade 12 Frames Overlap.
 const SLIDE_DURATION = 132;
 const SLIDE_STEP = 120;
 
+const SANS = "'Inter', 'Helvetica Neue', Arial, sans-serif";
+const GOOGLE_SANS =
+  "'Google Sans', 'Roboto', 'Helvetica Neue', Arial, sans-serif";
+
 function ScrollBackground() {
   const frame = useCurrentFrame();
-  // Bild 1200x8000, skaliert auf 1920 width → 1920x12800 effektiv.
-  // Wir scrollen tief (bis -10000) damit die ganze Seite sichtbar wird,
-  // dann wieder hoch.
+  // Bild 1200x8000 → bei width:100% (1920) ist es 12800 hoch.
+  // Triangle-Wave: 0 → -10000 (runter) → 0 (hoch). Keine Pausen am Anfang/
+  // Ende → der User sieht IMMER Bewegung, auch wenn er nur kurz reinguckt.
   const translateY = interpolate(
     frame,
-    [0, 280, 320, 600],
-    [0, -10000, -10000, 0],
+    [0, 300, 600],
+    [0, -10000, 0],
     {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
@@ -80,18 +80,17 @@ function ScrollBackground() {
 }
 
 /**
- * Google-Docs-Scrollvideo: zeigt ein Dokument im Docs-Chrome (Top-Bar,
- * Toolbar, Sidebar wie bei Slides) und scrollt durch. Webcam bleibt
- * unten-links als Kreis.
+ * Google-Docs-Scrollvideo: zeigt ein echtes JSX-gerendertes Dokument im
+ * Docs-Chrome (Top-Bar + Toolbar). Inhalt = personalisierter Schnell-
+ * Check fuer "Max" mit 3 roten Findings. Scrollt langsam hoch und runter.
  */
 function GoogleDocsBackground() {
   const frame = useCurrentFrame();
-  // Dokument-Hoehe (1100x6000 → bei contain auf 1080 Stage = ca. 5891 effective)
-  // Wir scrollen 0 → -3800 → pause → 0
+  // Triangle-Wave: 0 → -1400 → 0. Immer in Bewegung.
   const translateY = interpolate(
     frame,
-    [0, 280, 320, 600],
-    [0, -3800, -3800, 0],
+    [0, 300, 600],
+    [0, -1400, 0],
     {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
@@ -102,7 +101,7 @@ function GoogleDocsBackground() {
     <AbsoluteFill
       style={{
         backgroundColor: "#F1F3F4",
-        fontFamily: "'Google Sans', Roboto, Arial, sans-serif",
+        fontFamily: GOOGLE_SANS,
       }}
     >
       {/* Top bar */}
@@ -140,7 +139,7 @@ function GoogleDocsBackground() {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 18, fontWeight: 500, color: "#202124" }}>
-            Angebot Mustermann GmbH
+            Notiz für Max
           </div>
           <div
             style={{
@@ -209,25 +208,38 @@ function GoogleDocsBackground() {
           zIndex: 2,
         }}
       >
-        {["↶", "↷", "🖨", "100 %", "Standardtext", "Arial", "11", "B", "I", "U", "🎨", "🔗", "▦", "—"].map(
-          (k) => (
-            <div
-              key={k}
-              style={{
-                padding: "4px 8px",
-                borderRadius: 4,
-                fontWeight: k === "B" ? 700 : 400,
-                fontStyle: k === "I" ? "italic" : "normal",
-                textDecoration: k === "U" ? "underline" : "none",
-              }}
-            >
-              {k}
-            </div>
-          ),
-        )}
+        {[
+          "↶",
+          "↷",
+          "🖨",
+          "100 %",
+          "Standardtext",
+          "Arial",
+          "11",
+          "B",
+          "I",
+          "U",
+          "🎨",
+          "🔗",
+          "▦",
+          "—",
+        ].map((k) => (
+          <div
+            key={k}
+            style={{
+              padding: "4px 8px",
+              borderRadius: 4,
+              fontWeight: k === "B" ? 700 : 400,
+              fontStyle: k === "I" ? "italic" : "normal",
+              textDecoration: k === "U" ? "underline" : "none",
+            }}
+          >
+            {k}
+          </div>
+        ))}
       </div>
 
-      {/* Document scroll area */}
+      {/* Document area */}
       <div
         style={{
           position: "absolute",
@@ -239,38 +251,209 @@ function GoogleDocsBackground() {
           backgroundColor: "#F8F9FA",
           display: "flex",
           justifyContent: "center",
+          paddingTop: 40,
         }}
       >
         <div
           style={{
-            position: "relative",
             width: 880,
             maxWidth: "100%",
             transform: `translateY(${translateY}px)`,
             willChange: "transform",
           }}
         >
-          <Img
-            src={staticFile(GDOCS_SRC)}
-            style={{
-              width: "100%",
-              height: "auto",
-              display: "block",
-              boxShadow: "0 1px 3px rgba(60,64,67,0.15)",
-            }}
-          />
+          <DocumentPaper />
         </div>
       </div>
     </AbsoluteFill>
   );
 }
 
-function SlideFrame({ src, index }: { src: string; index: number }) {
+function DocumentPaper() {
+  return (
+    <div
+      style={{
+        backgroundColor: "#FFFFFF",
+        boxShadow: "0 1px 3px rgba(60,64,67,0.15)",
+        padding: "100px 110px",
+        color: "#202124",
+        fontSize: 17,
+        lineHeight: 1.65,
+        fontFamily: SANS,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          textTransform: "uppercase",
+          letterSpacing: 2,
+          color: "#7C5CE8",
+          fontWeight: 600,
+          marginBottom: 12,
+        }}
+      >
+        Persönliche Notiz · Vertraulich
+      </div>
+      <h1
+        style={{
+          fontSize: 44,
+          fontWeight: 700,
+          margin: "0 0 12px 0",
+          color: "#0F172A",
+          letterSpacing: -0.5,
+        }}
+      >
+        Notiz für Max
+      </h1>
+      <div style={{ color: "#5F6368", fontSize: 15, marginBottom: 36 }}>
+        Schnell-Check für{" "}
+        <span style={{ color: "#1A73E8", textDecoration: "underline" }}>
+          mustermann-industrie.de
+        </span>{" "}
+        · 20. Juni 2026 · Christoph Skuk
+      </div>
+
+      <div
+        style={{
+          height: 1,
+          backgroundColor: "#E8EAED",
+          margin: "0 0 36px 0",
+        }}
+      />
+
+      <p style={{ margin: "0 0 18px 0" }}>Hey Max,</p>
+      <p style={{ margin: "0 0 18px 0" }}>
+        ich hab heute morgen 15 Minuten in deiner Webseite verbracht. Mir
+        sind <strong>drei Sachen</strong> aufgefallen, die dich aktuell
+        jeden Tag Anfragen kosten — ich schreib&apos;s dir kurz auf, dann
+        kannst du in Ruhe drauf gucken.
+      </p>
+      <p style={{ margin: "0 0 40px 0" }}>
+        Wenn du Bock hast, packen wir die Punkte gemeinsam an. Termin per
+        Klick auf das Video unten.
+      </p>
+
+      <ErrorBlock
+        number={1}
+        title="Kein Meta-Pixel installiert"
+        body="Weder Meta- noch Google-Tag-Manager liegen im Quelltext. Heißt: jeder Besucher, der heute nicht direkt kauft, ist für Retargeting verloren. Setup-Aufwand: 30 Minuten. Impact: 25–40 % günstigere Leads, weil Wiederkehrer dramatisch besser konvertieren."
+      />
+
+      <ErrorBlock
+        number={2}
+        title="Keine echten Fallstudien sichtbar"
+        body={'Auf „Über uns“ und „Referenzen“ zähle ich null messbare Cases. Die Kundenlogos sehen schick aus — verkaufen aber nichts. Im B2B-Maschinenbau gilt: ohne Zahlen, Gesichter und Vorher/Nachher glaubt dir niemand. Drei 200-Wort-Cases mit den letzten Stuttgart-Projekten reichen, um die Anfragen-Landingpage ca. 1,8× hochzuziehen.'}
+      />
+
+      <ErrorBlock
+        number={3}
+        title="Hero-Bild im Stockfoto-Look"
+        body="Das Header-Bild ist eine Shutterstock-Aufnahme einer Schweißanlage, die nicht zu eurem Portfolio passt. In den ersten drei Sekunden entscheidet dein Besucher, ob er weiterscrollt — Stockfotos sind Trust-Killer Nr. 1. Halbtages-Shooting bei euch vor Ort, 12 echte Bilder für unter 800 € und ein Hero, das wirklich verkauft."
+      />
+
+      <h2
+        style={{
+          fontSize: 22,
+          fontWeight: 700,
+          color: "#0F172A",
+          margin: "20px 0 14px 0",
+        }}
+      >
+        Was machen wir jetzt?
+      </h2>
+      <p style={{ margin: "0 0 16px 0" }}>
+        Ich hab nächste Woche Dienstag und Donnerstag jeweils einen
+        30-Minuten-Slot frei. Wir gehen die drei Punkte durch, ich zeig dir
+        live, wo der Pixel hingehört, und am Ende hast du eine
+        Aufgabenliste, die du entweder selbst abarbeitest oder an mein Team
+        gibst.
+      </p>
+      <p style={{ margin: "0 0 36px 0" }}>
+        Falls dir das alles zu viel ist: kein Stress, melde dich einfach,
+        wenn der Zeitpunkt besser passt.
+      </p>
+
+      <div
+        style={{
+          height: 1,
+          backgroundColor: "#E8EAED",
+          margin: "0 0 24px 0",
+        }}
+      />
+      <div style={{ color: "#5F6368", fontSize: 14 }}>
+        Lieben Gruß,
+        <br />
+        <strong style={{ color: "#202124", fontSize: 16 }}>
+          Christoph Skuk
+        </strong>
+        <br />
+        VideoComet · christoph@videocomet.de
+      </div>
+    </div>
+  );
+}
+
+function ErrorBlock({
+  number,
+  title,
+  body,
+}: {
+  number: number;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 20,
+        padding: "22px 26px",
+        marginBottom: 22,
+        border: "1px solid #FCA5A5",
+        borderLeft: "5px solid #DC2626",
+        borderRadius: 8,
+        backgroundColor: "#FEF2F2",
+      }}
+    >
+      <div
+        style={{
+          width: 40,
+          height: 40,
+          flexShrink: 0,
+          borderRadius: "50%",
+          backgroundColor: "#DC2626",
+          color: "#FFFFFF",
+          fontWeight: 700,
+          fontSize: 18,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: 2,
+        }}
+      >
+        {number}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 19,
+            fontWeight: 700,
+            color: "#7F1D1D",
+            marginBottom: 6,
+          }}
+        >
+          {title}
+        </div>
+        <div style={{ color: "#3F1818", lineHeight: 1.6 }}>{body}</div>
+      </div>
+    </div>
+  );
+}
+
+function SlideFrame({ src }: { src: string }) {
   const frame = useCurrentFrame();
-  // Wichtig: opacity startet bei 1 (nicht bei 0) — sonst sieht der User
-  // beim ersten Aufruf eine leere Folie, bevor das Fade-In durchgelaufen
-  // ist. Nur Fade-OUT am Ende behalten, damit Crossfade zur naechsten
-  // Folie sauber rueberblendet.
+  // Opacity startet bei 1; nur Fade-OUT am Ende fuer sauberen Cross-Fade
+  // zur naechsten Folie. Damit ist die erste Folie sofort sichtbar.
   const opacity = interpolate(
     frame,
     [SLIDE_DURATION - 14, SLIDE_DURATION],
@@ -281,274 +464,23 @@ function SlideFrame({ src, index }: { src: string; index: number }) {
     },
   );
 
-  // Slide-Bild + Google-Slides-aehnliches Chrome drumherum, damit der User
-  // sofort erkennt: "das ist eine Praesentation".
   return (
-    <AbsoluteFill style={{ opacity, backgroundColor: "#F1F3F4" }}>
-      <GoogleSlidesChrome slideNumber={index + 1} totalSlides={SLIDE_SRCS.length}>
-        <Img
-          src={staticFile(src)}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "contain",
-            backgroundColor: "#FFFFFF",
-          }}
-        />
-      </GoogleSlidesChrome>
+    <AbsoluteFill style={{ opacity, backgroundColor: "#FFFFFF" }}>
+      <Img
+        src={staticFile(src)}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+        }}
+      />
     </AbsoluteFill>
-  );
-}
-
-/**
- * Google-Slides-Chrome: realistischer Tab-Bar + Toolbar + Sidebar mit
- * Slide-Thumbnails. Das Slide selbst landet im grossen Stage-Bereich.
- */
-function GoogleSlidesChrome({
-  children,
-  slideNumber,
-  totalSlides,
-}: {
-  children: React.ReactNode;
-  slideNumber: number;
-  totalSlides: number;
-}) {
-  return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        display: "flex",
-        flexDirection: "column",
-        backgroundColor: "#F1F3F4",
-        fontFamily:
-          "'Google Sans', Roboto, Arial, sans-serif",
-        color: "#3C4043",
-      }}
-    >
-      {/* Top bar — title + Google-Konto */}
-      <div
-        style={{
-          height: 56,
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          padding: "0 20px",
-          backgroundColor: "#FFFFFF",
-          borderBottom: "1px solid #DADCE0",
-        }}
-      >
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 6,
-            backgroundColor: "#FBBC04",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 22,
-            fontWeight: 700,
-            color: "#FFFFFF",
-          }}
-        >
-          ▱
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 18, fontWeight: 500, color: "#202124" }}>
-            VideoComet Pitch
-          </div>
-          <div
-            style={{
-              fontSize: 13,
-              color: "#5F6368",
-              display: "flex",
-              gap: 18,
-              marginTop: 4,
-            }}
-          >
-            <span>Datei</span>
-            <span>Bearbeiten</span>
-            <span>Ansicht</span>
-            <span>Einfügen</span>
-            <span>Folie</span>
-            <span>Format</span>
-            <span>Hilfe</span>
-          </div>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <div
-            style={{
-              padding: "8px 20px",
-              borderRadius: 4,
-              backgroundColor: "#1A73E8",
-              color: "#FFFFFF",
-              fontSize: 14,
-              fontWeight: 500,
-            }}
-          >
-            Präsentieren
-          </div>
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: "50%",
-              background: "linear-gradient(135deg, #AA8CF5, #7C5CE8)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#FFFFFF",
-              fontWeight: 600,
-              fontSize: 14,
-            }}
-          >
-            CS
-          </div>
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div
-        style={{
-          height: 40,
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "0 20px",
-          backgroundColor: "#FFFFFF",
-          borderBottom: "1px solid #DADCE0",
-          fontSize: 12,
-          color: "#5F6368",
-        }}
-      >
-        {["↶", "↷", "🖨", "🔍 100 %", "🅰", "B", "I", "U", "🎨", "▦", "—", "🔗"].map(
-          (k) => (
-            <div
-              key={k}
-              style={{
-                padding: "4px 8px",
-                borderRadius: 4,
-                fontWeight: k === "B" ? 700 : 400,
-                fontStyle: k === "I" ? "italic" : "normal",
-                textDecoration: k === "U" ? "underline" : "none",
-              }}
-            >
-              {k}
-            </div>
-          ),
-        )}
-      </div>
-
-      {/* Body */}
-      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        {/* Sidebar with slide thumbnails */}
-        <div
-          style={{
-            width: 200,
-            flexShrink: 0,
-            backgroundColor: "#FFFFFF",
-            borderRight: "1px solid #DADCE0",
-            padding: 12,
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-            overflow: "hidden",
-          }}
-        >
-          {Array.from({ length: totalSlides }).map((_, i) => {
-            const idx = i + 1;
-            const active = idx === slideNumber;
-            return (
-              <div
-                key={idx}
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "stretch",
-                }}
-              >
-                <div
-                  style={{
-                    width: 16,
-                    color: active ? "#1A73E8" : "#5F6368",
-                    fontSize: 13,
-                    fontWeight: active ? 600 : 400,
-                    textAlign: "right",
-                  }}
-                >
-                  {idx}
-                </div>
-                <div
-                  style={{
-                    flex: 1,
-                    aspectRatio: "16/9",
-                    borderRadius: 4,
-                    backgroundColor: active ? "#E8F0FE" : "#FFFFFF",
-                    border: active
-                      ? "2px solid #1A73E8"
-                      : "1px solid #DADCE0",
-                    overflow: "hidden",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#9AA0A6",
-                    fontSize: 10,
-                    fontWeight: 500,
-                  }}
-                >
-                  Slide {idx}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Main stage */}
-        <div
-          style={{
-            flex: 1,
-            backgroundColor: "#F8F9FA",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 28,
-            minWidth: 0,
-            minHeight: 0,
-          }}
-        >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: "100%",
-              aspectRatio: "16/9",
-              backgroundColor: "#FFFFFF",
-              boxShadow:
-                "0 1px 3px rgba(60,64,67,0.15), 0 4px 8px rgba(60,64,67,0.1)",
-              borderRadius: 2,
-              overflow: "hidden",
-              position: "relative",
-            }}
-          >
-            {children}
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
 function SlidesBackground() {
   return (
-    <AbsoluteFill style={{ backgroundColor: "#F1F3F4" }}>
+    <AbsoluteFill style={{ backgroundColor: "#FFFFFF" }}>
       {SLIDE_SRCS.map((src, i) => (
         <Sequence
           key={src}
@@ -556,7 +488,7 @@ function SlidesBackground() {
           durationInFrames={SLIDE_DURATION}
           layout="none"
         >
-          <SlideFrame src={src} index={i} />
+          <SlideFrame src={src} />
         </Sequence>
       ))}
     </AbsoluteFill>
@@ -590,8 +522,7 @@ function Background({ mode }: { mode: MarketingDemoMode }) {
 export default function MarketingDemoComposition({
   mode,
 }: MarketingDemoProps) {
-  // Webcam-PiP: bottom-LEFT statt right, perfekter KREIS (square + 50%).
-  // In solo-Mode wird daraus fullscreen via CSS-Transition.
+  // Webcam-PiP: bottom-LEFT, perfekter KREIS. In solo-Mode → fullscreen.
   const wrapperStyle: React.CSSProperties =
     mode === "solo"
       ? {
@@ -617,12 +548,7 @@ export default function MarketingDemoComposition({
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#0F172A" }}>
-      {/* Layer 1: background switches by mode */}
       <Background mode={mode} />
-
-      {/* Layer 2: STABLE webcam — always rendered at the same JSX position
-          so that the underlying <video> element does not remount when mode
-          changes. Only the wrapper styles transition. */}
       <div style={wrapperStyle}>
         <Video
           src={staticFile(WEBCAM_MP4)}
