@@ -42,42 +42,46 @@ const GOOGLE_SANS =
   "'Google Sans', 'Roboto', 'Helvetica Neue', Arial, sans-serif";
 
 /**
- * Echtes Scroll-Verhalten: Wheel-Bursts (200–800 ms), kurze Lese-Pausen
- * (1–2,5 s), gelegentlich kleine Rueck-Scrolls, manchmal harte Spruenge
- * (Page Down). Kein Anfangs-Delay — direkt beim Loop-Start geht's los.
- * Gesamt-Loop = 38 s.
+ * Echtes Scroll-Verhalten: viele kleine Wheel-Detents (150-500 px),
+ * dazwischen gelegentlich groessere Spruenge (Page Down, ~1500 px),
+ * dazwischen kurze Lese-Pausen (1-2 s). Jeder Scroll-Step braucht
+ * 1-1,5 s und wird mit ease-in-out interpoliert → smoothes Beschleunigen
+ * + Ausklingen pro Segment, kein Springen.
  *
- * Image-Hoehe = 1920 * (8000/1200) = 12800. Visible = 1080.
+ * Loop = 50 s. Image-Hoehe 1920×(8000/1200)=12800, Visible 1080, max
+ * sinnvoller Scroll ~ -10000.
  */
 const WEBSITE_SCROLL_KEYFRAMES = `
   @keyframes vc-demo-scroll {
     0%   { transform: translateY(0); }
-    2%   { transform: translateY(-450px); }
-    6%   { transform: translateY(-450px); }
-    8%   { transform: translateY(-1300px); }
-    12%  { transform: translateY(-1300px); }
-    13%  { transform: translateY(-1750px); }
-    17%  { transform: translateY(-1750px); }
-    19%  { transform: translateY(-1500px); }
+    2%   { transform: translateY(-160px); }
+    5%   { transform: translateY(-160px); }
+    8%   { transform: translateY(-480px); }
+    12%  { transform: translateY(-480px); }
+    15%  { transform: translateY(-900px); }
+    18%  { transform: translateY(-900px); }
     21%  { transform: translateY(-1500px); }
-    24%  { transform: translateY(-3100px); }
-    29%  { transform: translateY(-3100px); }
-    31%  { transform: translateY(-3650px); }
-    35%  { transform: translateY(-3650px); }
-    38%  { transform: translateY(-5000px); }
-    43%  { transform: translateY(-5000px); }
-    46%  { transform: translateY(-6500px); }
-    51%  { transform: translateY(-6500px); }
-    53%  { transform: translateY(-6200px); }
-    55%  { transform: translateY(-6200px); }
-    59%  { transform: translateY(-8000px); }
-    64%  { transform: translateY(-8000px); }
-    66%  { transform: translateY(-8700px); }
-    70%  { transform: translateY(-8700px); }
-    74%  { transform: translateY(-10100px); }
-    80%  { transform: translateY(-10100px); }
-    82%  { transform: translateY(-9700px); }
-    84%  { transform: translateY(-9700px); }
+    25%  { transform: translateY(-1500px); }
+    27%  { transform: translateY(-1380px); }
+    30%  { transform: translateY(-1380px); }
+    33%  { transform: translateY(-2300px); }
+    38%  { transform: translateY(-2300px); }
+    40%  { transform: translateY(-2700px); }
+    44%  { transform: translateY(-2700px); }
+    47%  { transform: translateY(-3900px); }
+    51%  { transform: translateY(-3900px); }
+    54%  { transform: translateY(-5100px); }
+    58%  { transform: translateY(-5100px); }
+    60%  { transform: translateY(-4950px); }
+    62%  { transform: translateY(-4950px); }
+    65%  { transform: translateY(-6400px); }
+    69%  { transform: translateY(-6400px); }
+    72%  { transform: translateY(-7700px); }
+    76%  { transform: translateY(-7700px); }
+    78%  { transform: translateY(-8100px); }
+    81%  { transform: translateY(-8100px); }
+    84%  { transform: translateY(-9400px); }
+    88%  { transform: translateY(-9400px); }
     100% { transform: translateY(0); }
   }
 `;
@@ -104,26 +108,30 @@ function GoogleDocsBackground({
       <style>{`
         @keyframes vc-demo-gdocs-scroll {
           0%   { transform: translateY(0); }
-          3%   { transform: translateY(-140px); }
-          7%   { transform: translateY(-140px); }
-          9%   { transform: translateY(-320px); }
-          13%  { transform: translateY(-320px); }
-          15%  { transform: translateY(-490px); }
-          22%  { transform: translateY(-490px); }
-          24%  { transform: translateY(-440px); }
-          26%  { transform: translateY(-440px); }
-          29%  { transform: translateY(-720px); }
-          35%  { transform: translateY(-720px); }
-          37%  { transform: translateY(-900px); }
-          43%  { transform: translateY(-900px); }
-          45%  { transform: translateY(-1080px); }
-          53%  { transform: translateY(-1080px); }
-          55%  { transform: translateY(-1020px); }
-          57%  { transform: translateY(-1020px); }
-          60%  { transform: translateY(-1280px); }
-          68%  { transform: translateY(-1280px); }
-          70%  { transform: translateY(-1480px); }
-          77%  { transform: translateY(-1480px); }
+          3%   { transform: translateY(-80px); }
+          6%   { transform: translateY(-80px); }
+          9%   { transform: translateY(-200px); }
+          13%  { transform: translateY(-200px); }
+          16%  { transform: translateY(-360px); }
+          22%  { transform: translateY(-360px); }
+          25%  { transform: translateY(-500px); }
+          29%  { transform: translateY(-500px); }
+          31%  { transform: translateY(-460px); }
+          33%  { transform: translateY(-460px); }
+          36%  { transform: translateY(-680px); }
+          42%  { transform: translateY(-680px); }
+          45%  { transform: translateY(-820px); }
+          50%  { transform: translateY(-820px); }
+          53%  { transform: translateY(-980px); }
+          58%  { transform: translateY(-980px); }
+          60%  { transform: translateY(-940px); }
+          62%  { transform: translateY(-940px); }
+          65%  { transform: translateY(-1120px); }
+          71%  { transform: translateY(-1120px); }
+          74%  { transform: translateY(-1280px); }
+          80%  { transform: translateY(-1280px); }
+          83%  { transform: translateY(-1380px); }
+          88%  { transform: translateY(-1380px); }
           100% { transform: translateY(0); }
         }
       `}</style>
@@ -282,7 +290,7 @@ function GoogleDocsBackground({
             width: 880,
             maxWidth: "100%",
             animation: scrollEnabled
-              ? "vc-demo-gdocs-scroll 40s cubic-bezier(0.18,0.85,0.25,1) infinite"
+              ? "vc-demo-gdocs-scroll 50s ease-in-out infinite"
               : "none",
             transform: scrollEnabled ? undefined : "translateY(0)",
             willChange: "transform",
@@ -584,8 +592,7 @@ function ScreenshotBackground({
           top: 0,
           width: "100%",
           height: "auto",
-          animation:
-            "vc-demo-scroll 38s cubic-bezier(0.18,0.85,0.25,1) infinite",
+          animation: "vc-demo-scroll 50s ease-in-out infinite",
           willChange: "transform",
           display: "block",
         }}
