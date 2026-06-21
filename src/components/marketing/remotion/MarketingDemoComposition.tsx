@@ -21,16 +21,28 @@ export const DEMO_HEIGHT = 1080;
 
 export type MarketingDemoMode = "screenshot" | "slides" | "gdocs" | "solo";
 
+export type DemoLead = {
+  id: string;
+  firstName: string;
+  fullName: string;
+  salutation: string;
+  initials: string;
+  company: string;
+  location: string;
+  domain: string;
+  screenshot: string;
+  industryLabel: string;
+};
+
 export type MarketingDemoProps = {
   mode: MarketingDemoMode;
+  lead: DemoLead;
   scrollEnabled?: boolean;
   [key: string]: unknown;
 };
 
-const SCREENSHOT_SRC = "/demo-assets/website-screenshot.png";
 const WEBCAM_MP4 = "/demo-assets/webcam.mp4";
-
-const SLIDE_SRCS = [1, 2, 3, 4, 5].map(
+const GENERIC_SLIDE_SRCS = [2, 3, 4].map(
   (n) => `/demo-assets/slide-${n}.png`,
 );
 
@@ -93,8 +105,10 @@ const WEBSITE_SCROLL_KEYFRAMES = `
  */
 function GoogleDocsBackground({
   scrollEnabled,
+  lead,
 }: {
   scrollEnabled: boolean;
+  lead: DemoLead;
 }) {
   // Wie ScrollBackground: Standbild per Default, langsame & ungleichmaessige
   // Scroll-Animation ueber CSS-Keyframes wenn aktiviert.
@@ -170,7 +184,7 @@ function GoogleDocsBackground({
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 18, fontWeight: 500, color: "#202124" }}>
-            Notiz für Max
+            Notiz für {lead.firstName}
           </div>
           <div
             style={{
@@ -296,14 +310,14 @@ function GoogleDocsBackground({
             willChange: "transform",
           }}
         >
-          <DocumentPaper />
+          <DocumentPaper lead={lead} />
         </div>
       </div>
     </AbsoluteFill>
   );
 }
 
-function DocumentPaper() {
+function DocumentPaper({ lead }: { lead: DemoLead }) {
   return (
     <div
       style={{
@@ -337,12 +351,12 @@ function DocumentPaper() {
           letterSpacing: -0.5,
         }}
       >
-        Notiz für Max
+        Notiz für {lead.firstName}
       </h1>
       <div style={{ color: "#5F6368", fontSize: 15, marginBottom: 36 }}>
         Schnell-Check für{" "}
         <span style={{ color: "#1A73E8", textDecoration: "underline" }}>
-          mustermann-industrie.de
+          {lead.domain}
         </span>
       </div>
 
@@ -354,7 +368,7 @@ function DocumentPaper() {
         }}
       />
 
-      <p style={{ margin: "0 0 18px 0" }}>Hey Max,</p>
+      <p style={{ margin: "0 0 18px 0" }}>Hey {lead.firstName},</p>
       <p style={{ margin: "0 0 18px 0" }}>
         ich hab heute morgen 15 Minuten in deiner Webseite verbracht. Mir
         sind <strong>drei Sachen</strong> aufgefallen, die dich aktuell
@@ -380,7 +394,7 @@ function DocumentPaper() {
         }}
       >
         <Img
-          src={staticFile(SCREENSHOT_SRC)}
+          src={staticFile(lead.screenshot)}
           style={{
             width: "100%",
             height: "100%",
@@ -398,7 +412,7 @@ function DocumentPaper() {
           marginBottom: 40,
         }}
       >
-        Bild 1 — Screenshot von mustermann-industrie.de (oben angeheftet).
+        Bild 1 — Screenshot von {lead.domain} (oben angeheftet).
       </div>
 
       <ErrorBlock
@@ -540,36 +554,409 @@ function SlideFrame({ src }: { src: string }) {
   );
 }
 
-function SlidesBackground() {
+function SlideFrameJSX({ children }: { children: React.ReactNode }) {
+  const frame = useCurrentFrame();
+  const opacity = interpolate(
+    frame,
+    [SLIDE_DURATION - 14, SLIDE_DURATION],
+    [1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+  );
+  return (
+    <AbsoluteFill style={{ opacity, backgroundColor: "#FFFFFF" }}>
+      {children}
+    </AbsoluteFill>
+  );
+}
+
+function SlidesBackground({ lead }: { lead: DemoLead }) {
   return (
     <AbsoluteFill style={{ backgroundColor: "#FFFFFF" }}>
-      {SLIDE_SRCS.map((src, i) => (
+      <Sequence
+        from={0}
+        durationInFrames={SLIDE_DURATION}
+        layout="none"
+      >
+        <SlideFrameJSX>
+          <SlidePersonalIntro lead={lead} />
+        </SlideFrameJSX>
+      </Sequence>
+      {GENERIC_SLIDE_SRCS.map((src, i) => (
         <Sequence
           key={src}
-          from={i * SLIDE_STEP}
+          from={(i + 1) * SLIDE_STEP}
           durationInFrames={SLIDE_DURATION}
           layout="none"
         >
           <SlideFrame src={src} />
         </Sequence>
       ))}
+      <Sequence
+        from={4 * SLIDE_STEP}
+        durationInFrames={SLIDE_DURATION}
+        layout="none"
+      >
+        <SlideFrameJSX>
+          <SlidePersonalOutro lead={lead} />
+        </SlideFrameJSX>
+      </Sequence>
     </AbsoluteFill>
+  );
+}
+
+const SLIDE_BRAND_DEEP = "#7C5CE8";
+const SLIDE_BRAND_PURPLE = "#AA8CF5";
+const SLIDE_INK_DARK = "#0F172A";
+const SLIDE_INK_MUTED = "#64748B";
+const SLIDE_FONT =
+  "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+
+function SlideShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        backgroundImage:
+          "radial-gradient(90% 90% at 20% 0%, #F3EEFF 0%, #FFFFFF 55%, #FFFFFF 100%)",
+        fontFamily: SLIDE_FONT,
+        color: SLIDE_INK_DARK,
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 6,
+          background: `linear-gradient(90deg, ${SLIDE_BRAND_PURPLE}, ${SLIDE_BRAND_DEEP})`,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          top: 56,
+          left: 80,
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+        }}
+      >
+        <div
+          style={{
+            width: 14,
+            height: 14,
+            borderRadius: 3,
+            backgroundColor: SLIDE_BRAND_PURPLE,
+          }}
+        />
+        <div
+          style={{
+            width: 14,
+            height: 14,
+            borderRadius: 3,
+            backgroundColor: SLIDE_BRAND_DEEP,
+          }}
+        />
+        <div
+          style={{
+            marginLeft: 8,
+            fontWeight: 700,
+            fontSize: 18,
+            letterSpacing: 2.5,
+            color: SLIDE_INK_DARK,
+          }}
+        >
+          VIDEOCOMET
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SlideDecorations() {
+  return (
+    <>
+      <div
+        style={{
+          position: "absolute",
+          top: 120,
+          right: 100,
+          width: 180,
+          height: 180,
+          borderRadius: "50%",
+          backgroundColor: "#D1FAE5",
+          opacity: 0.85,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: 180,
+          left: 120,
+          width: 140,
+          height: 140,
+          borderRadius: "50%",
+          backgroundColor: "#FCE7F3",
+          opacity: 0.8,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: 240,
+          right: 140,
+          width: 90,
+          height: 90,
+          borderRadius: 16,
+          backgroundColor: "#FEF3C7",
+          opacity: 0.9,
+        }}
+      />
+    </>
+  );
+}
+
+function SlideFooter({
+  pageNumber,
+  totalPages,
+  lead,
+}: {
+  pageNumber: number;
+  totalPages: number;
+  lead: DemoLead;
+}) {
+  return (
+    <>
+      <div
+        style={{
+          position: "absolute",
+          left: 220,
+          right: 220,
+          bottom: 130,
+          height: 2,
+          backgroundColor: "#E2E8F0",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: 220,
+          bottom: 80,
+          fontSize: 22,
+          fontWeight: 500,
+          color: SLIDE_INK_MUTED,
+        }}
+      >
+        5 Minuten · Vertraulich · {lead.company}
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          right: 80,
+          bottom: 40,
+          fontSize: 20,
+          fontWeight: 500,
+          color: SLIDE_INK_MUTED,
+        }}
+      >
+        {pageNumber}/{totalPages}
+      </div>
+    </>
+  );
+}
+
+function SlidePersonalIntro({ lead }: { lead: DemoLead }) {
+  return (
+    <SlideShell>
+      <SlideDecorations />
+      {/* Avatar */}
+      <div
+        style={{
+          position: "absolute",
+          left: 220,
+          top: 380,
+          width: 200,
+          height: 200,
+          borderRadius: "50%",
+          background: `linear-gradient(135deg, ${SLIDE_BRAND_PURPLE}, ${SLIDE_BRAND_DEEP})`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#FFFFFF",
+          fontSize: 92,
+          fontWeight: 800,
+          letterSpacing: -2,
+        }}
+      >
+        {lead.initials}
+      </div>
+      {/* Text block */}
+      <div
+        style={{
+          position: "absolute",
+          left: 460,
+          top: 390,
+          right: 220,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 32,
+            fontWeight: 600,
+            letterSpacing: 4,
+            color: SLIDE_BRAND_DEEP,
+            textTransform: "uppercase",
+            marginBottom: 14,
+          }}
+        >
+          Persönliches Video
+        </div>
+        <div
+          style={{
+            fontSize: 92,
+            fontWeight: 800,
+            lineHeight: 1.05,
+            color: SLIDE_INK_DARK,
+            marginBottom: 4,
+          }}
+        >
+          Video für
+        </div>
+        <div
+          style={{
+            fontSize: 92,
+            fontWeight: 800,
+            lineHeight: 1.05,
+            color: SLIDE_BRAND_DEEP,
+            marginBottom: 30,
+          }}
+        >
+          {lead.fullName}
+        </div>
+        <div
+          style={{
+            fontSize: 32,
+            fontWeight: 400,
+            color: SLIDE_INK_MUTED,
+          }}
+        >
+          {lead.company} · {lead.location}
+        </div>
+      </div>
+      <SlideFooter pageNumber={1} totalPages={5} lead={lead} />
+    </SlideShell>
+  );
+}
+
+function SlidePersonalOutro({ lead }: { lead: DemoLead }) {
+  return (
+    <SlideShell>
+      <SlideDecorations />
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 290,
+          textAlign: "center",
+          fontSize: 32,
+          fontWeight: 600,
+          letterSpacing: 4,
+          color: SLIDE_BRAND_DEEP,
+          textTransform: "uppercase",
+        }}
+      >
+        Nächster Schritt
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 380,
+          textAlign: "center",
+          fontSize: 90,
+          fontWeight: 800,
+          lineHeight: 1.05,
+          color: SLIDE_INK_DARK,
+        }}
+      >
+        Lassen Sie uns sprechen,
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 490,
+          textAlign: "center",
+          fontSize: 90,
+          fontWeight: 800,
+          lineHeight: 1.05,
+          color: SLIDE_BRAND_DEEP,
+        }}
+      >
+        {lead.salutation}.
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 640,
+          textAlign: "center",
+          fontSize: 30,
+          fontWeight: 400,
+          color: SLIDE_INK_MUTED,
+        }}
+      >
+        30 Minuten · unverbindlich · per Video
+      </div>
+      {/* CTA */}
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: 760,
+          transform: "translateX(-50%)",
+          width: 480,
+          height: 110,
+          borderRadius: 16,
+          background: `linear-gradient(135deg, ${SLIDE_BRAND_PURPLE}, ${SLIDE_BRAND_DEEP})`,
+          color: "#FFFFFF",
+          fontSize: 42,
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 14px 36px -10px rgba(124,92,232,0.55)",
+        }}
+      >
+        Termin vereinbaren →
+      </div>
+      <SlideFooter pageNumber={5} totalPages={5} lead={lead} />
+    </SlideShell>
   );
 }
 
 function ScreenshotBackground({
   scrollEnabled,
+  lead,
 }: {
   scrollEnabled: boolean;
+  lead: DemoLead;
 }) {
   // scrollEnabled=false: Standbild (Top der Webseite, cover).
   // scrollEnabled=true: animiertes Scroll-Video durch die ganze Seite mit
-  // realistischen Lese-Pausen.
+  // realistischen Lese-Pausen. Webseite kommt aus lead.screenshot.
   if (!scrollEnabled) {
     return (
       <AbsoluteFill style={{ backgroundColor: "#FFFFFF" }}>
         <Img
-          src={staticFile(SCREENSHOT_SRC)}
+          src={staticFile(lead.screenshot)}
           style={{
             width: "100%",
             height: "100%",
@@ -585,7 +972,7 @@ function ScreenshotBackground({
     <AbsoluteFill style={{ overflow: "hidden", backgroundColor: "#FFFFFF" }}>
       <style>{WEBSITE_SCROLL_KEYFRAMES}</style>
       <Img
-        src={staticFile(SCREENSHOT_SRC)}
+        src={staticFile(lead.screenshot)}
         style={{
           position: "absolute",
           left: 0,
@@ -604,20 +991,27 @@ function ScreenshotBackground({
 function Background({
   mode,
   scrollEnabled,
+  lead,
 }: {
   mode: MarketingDemoMode;
   scrollEnabled: boolean;
+  lead: DemoLead;
 }) {
   if (mode === "screenshot")
-    return <ScreenshotBackground scrollEnabled={scrollEnabled} />;
-  if (mode === "slides") return <SlidesBackground />;
+    return (
+      <ScreenshotBackground scrollEnabled={scrollEnabled} lead={lead} />
+    );
+  if (mode === "slides") return <SlidesBackground lead={lead} />;
   if (mode === "gdocs")
-    return <GoogleDocsBackground scrollEnabled={scrollEnabled} />;
+    return (
+      <GoogleDocsBackground scrollEnabled={scrollEnabled} lead={lead} />
+    );
   return null;
 }
 
 export default function MarketingDemoComposition({
   mode,
+  lead,
   scrollEnabled = false,
 }: MarketingDemoProps) {
   // Webcam-PiP: bottom-LEFT, perfekter KREIS. In solo-Mode → fullscreen.
@@ -646,7 +1040,7 @@ export default function MarketingDemoComposition({
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#0F172A" }}>
-      <Background mode={mode} scrollEnabled={scrollEnabled} />
+      <Background mode={mode} scrollEnabled={scrollEnabled} lead={lead} />
       <div style={wrapperStyle}>
         <Video
           src={staticFile(WEBCAM_MP4)}

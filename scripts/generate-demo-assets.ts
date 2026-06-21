@@ -802,6 +802,573 @@ function buildWebsiteScreenshot(): string {
 }
 
 // ---------------------------------------------------------------------------
+// website-lust.png — Lisa Lust / Lust Cosmetics GmbH (rosé/cream Cosmetics)
+// 1200 x 8000, dasselbe Aspect Ratio wie Mustermann, damit die
+// Scroll-Animation 1:1 passt.
+// ---------------------------------------------------------------------------
+
+function buildWebsiteLisa(): string {
+  const W = 1200;
+  const H = 8000;
+  const C = {
+    rose: "#EC4899",
+    roseDeep: "#BE185D",
+    blush: "#FCE7F3",
+    cream: "#FFF7ED",
+    gold: "#D4A574",
+    goldSoft: "#FEF3C7",
+    teal: "#10B981",
+    tealSoft: "#D1FAE5",
+    purple: "#8B5CF6",
+    purpleSoft: "#EDE9FE",
+    dark: "#18181B",
+    grey: "#71717A",
+    border: "#F4F4F5",
+  };
+
+  const chrome = `
+    <g>
+      <rect x="0" y="0" width="${W}" height="80" fill="${COLORS.chromeGrey}" />
+      <circle cx="32" cy="40" r="9" fill="#FF5F57" />
+      <circle cx="60" cy="40" r="9" fill="#FEBC2E" />
+      <circle cx="88" cy="40" r="9" fill="#28C840" />
+      <rect x="160" y="20" width="900" height="40" rx="20"
+            fill="${COLORS.surface}" stroke="${COLORS.border}" stroke-width="1" />
+      <text x="190" y="46" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="18" fill="${COLORS.textMuted}">https://lust-cosmetics.de</text>
+    </g>
+  `;
+
+  const header = `
+    <g transform="translate(0, 80)">
+      <rect x="0" y="0" width="${W}" height="120" fill="${C.cream}" />
+      <circle cx="78" cy="60" r="22" fill="${C.rose}" />
+      <circle cx="78" cy="60" r="14" fill="${C.cream}" />
+      <text x="116" y="68" font-family="${FONT_FAMILY}" font-weight="900" letter-spacing="4"
+            font-size="20" fill="${C.dark}">LUST COSMETICS</text>
+      <g font-family="${FONT_FAMILY}" font-weight="500" font-size="16" fill="${C.dark}">
+        <text x="700" y="65">Pflege</text>
+        <text x="780" y="65">Looks</text>
+        <text x="860" y="65">Studio</text>
+        <text x="945" y="65">Ritual</text>
+        <text x="1030" y="65">Kontakt</text>
+      </g>
+    </g>
+  `;
+
+  const hero = `
+    <g transform="translate(0, 200)">
+      <defs>
+        <linearGradient id="lisaHero" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${C.blush}" />
+          <stop offset="100%" stop-color="${C.cream}" />
+        </linearGradient>
+        <linearGradient id="lisaProduct" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${C.rose}" />
+          <stop offset="100%" stop-color="${C.roseDeep}" />
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="${W}" height="1000" fill="url(#lisaHero)" />
+      <circle cx="80" cy="900" r="120" fill="${C.rose}" opacity="0.15" />
+      <circle cx="1080" cy="120" r="80" fill="${C.gold}" opacity="0.35" />
+      <text x="80" y="280" font-family="${FONT_FAMILY}" font-weight="700" letter-spacing="5"
+            font-size="18" fill="${C.roseDeep}">PFLEGE AUS HAMBURG</text>
+      <text x="80" y="400" font-family="${FONT_FAMILY}" font-weight="800" font-size="68" fill="${C.dark}">Pflege, die zu</text>
+      <text x="80" y="478" font-family="${FONT_FAMILY}" font-weight="800" font-size="68" fill="${C.dark}">Dir passt.</text>
+      <text x="80" y="568" font-family="${FONT_FAMILY}" font-weight="400" font-size="22" fill="${C.grey}">Naturkosmetik, im eigenen Studio formuliert.</text>
+      <text x="80" y="600" font-family="${FONT_FAMILY}" font-weight="400" font-size="22" fill="${C.grey}">Frei von Parfums, Mikroplastik und Tierversuchen.</text>
+      <g>
+        <rect x="80" y="680" width="240" height="60" rx="30" fill="${C.dark}" />
+        <text x="200" y="718" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="700" font-size="18" fill="${COLORS.surface}">Beratung buchen</text>
+      </g>
+      <g>
+        <rect x="340" y="680" width="220" height="60" rx="30" fill="transparent" stroke="${C.dark}" stroke-width="2" />
+        <text x="450" y="718" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="600" font-size="18" fill="${C.dark}">Mehr lesen</text>
+      </g>
+
+      <!-- Product cylinder shape: looks like a cosmetic bottle -->
+      <rect x="720" y="180" width="360" height="600" rx="180" fill="url(#lisaProduct)" />
+      <rect x="800" y="180" width="200" height="80" rx="20" fill="${C.dark}" />
+      <circle cx="900" cy="500" r="80" fill="${COLORS.surface}" opacity="0.2" />
+      <text x="900" y="510" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800" font-size="48" fill="${COLORS.surface}">LL</text>
+      <text x="900" y="560" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="500" font-size="14" letter-spacing="3" fill="${COLORS.surface}">SIGNATURE</text>
+    </g>
+  `;
+
+  const trustBand = `
+    <g transform="translate(0, 1200)">
+      <rect x="0" y="0" width="${W}" height="160" fill="${C.dark}" />
+      <text x="600" y="65" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="600" font-size="14" letter-spacing="3" fill="${C.gold}">VERTRAUEN VON 4.800+ KUNDINNEN</text>
+      <g font-family="${FONT_FAMILY}" font-weight="700" font-size="18" fill="${COLORS.surface}" opacity="0.7">
+        <text x="200" y="115" text-anchor="middle">Vogue</text>
+        <text x="380" y="115" text-anchor="middle">ELLE</text>
+        <text x="560" y="115" text-anchor="middle">Brigitte</text>
+        <text x="740" y="115" text-anchor="middle">myself</text>
+        <text x="920" y="115" text-anchor="middle">flair</text>
+      </g>
+    </g>
+  `;
+
+  const lines = (i: number) => 1500 + i * 360;
+  const cardsPalette = [
+    { color: C.rose, soft: C.blush, title: "Tag", sub: "Strahlender Glow" },
+    { color: C.gold, soft: C.goldSoft, title: "Nacht", sub: "Tiefenregenerierend" },
+    { color: C.teal, soft: C.tealSoft, title: "Anti-Aging", sub: "Wirkstoff-Boost" },
+  ];
+  const lines2 = (i: number) => 1700 + i * 0;
+  const linesSection = `
+    <g transform="translate(0, ${lines(0)})">
+      <text x="600" y="0" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="600" letter-spacing="3"
+            font-size="14" fill="${C.roseDeep}">UNSERE PFLEGE-LINIEN</text>
+      <text x="600" y="60" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800"
+            font-size="40" fill="${C.dark}">Für jeden Hauttyp das passende Ritual.</text>
+      ${cardsPalette
+        .map(
+          (p, i) => `
+        <g transform="translate(${80 + i * 360}, ${100})">
+          <rect x="0" y="0" width="320" height="380" rx="24" fill="${COLORS.surface}" stroke="${C.border}" stroke-width="1" />
+          <rect x="32" y="32" width="256" height="180" rx="16" fill="${p.soft}" />
+          <circle cx="160" cy="122" r="46" fill="${p.color}" opacity="0.85" />
+          <text x="32" y="260" font-family="${FONT_FAMILY}" font-weight="800" font-size="26" fill="${C.dark}">${p.title}</text>
+          <text x="32" y="296" font-family="${FONT_FAMILY}" font-weight="400" font-size="15" fill="${C.grey}">${p.sub}</text>
+          <text x="32" y="340" font-family="${FONT_FAMILY}" font-weight="600" font-size="15" fill="${p.color}">Pflege ansehen →</text>
+        </g>
+      `,
+        )
+        .join("")}
+      <g visibility="hidden">${lines2(0)}</g>
+    </g>
+  `;
+
+  const promise = `
+    <g transform="translate(0, 2400)">
+      <rect x="0" y="0" width="${W}" height="900" fill="${C.cream}" />
+      <text x="80" y="120" font-family="${FONT_FAMILY}" font-weight="600" letter-spacing="3" font-size="14" fill="${C.roseDeep}">UNSER VERSPRECHEN</text>
+      <text x="80" y="200" font-family="${FONT_FAMILY}" font-weight="800" font-size="44" fill="${C.dark}">Wenn es nicht zu Dir passt,</text>
+      <text x="80" y="252" font-family="${FONT_FAMILY}" font-weight="800" font-size="44" fill="${C.roseDeep}">bekommst Du Dein Geld zurück.</text>
+      <text x="80" y="330" font-family="${FONT_FAMILY}" font-weight="400" font-size="20" fill="${C.grey}">60 Tage Geld-zurück-Garantie auf jedes Produkt.</text>
+      <text x="80" y="362" font-family="${FONT_FAMILY}" font-weight="400" font-size="20" fill="${C.grey}">Versand kostenfrei ab 49 €. Ehrlich. Ohne Klein-</text>
+      <text x="80" y="394" font-family="${FONT_FAMILY}" font-weight="400" font-size="20" fill="${C.grey}">gedrucktes.</text>
+      <g transform="translate(700, 100)">
+        <circle cx="200" cy="350" r="180" fill="${C.blush}" />
+        <rect x="120" y="270" width="160" height="160" rx="20" fill="${C.rose}" />
+        <text x="200" y="365" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800" font-size="48" fill="${COLORS.surface}">60</text>
+        <text x="200" y="402" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="500" font-size="14" letter-spacing="2" fill="${COLORS.surface}">TAGE</text>
+      </g>
+    </g>
+  `;
+
+  const reviews = `
+    <g transform="translate(0, 3400)">
+      <text x="600" y="120" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="600" letter-spacing="3" font-size="14" fill="${C.roseDeep}">WAS KUNDINNEN SAGEN</text>
+      <text x="600" y="190" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800" font-size="40" fill="${C.dark}">4,9 / 5 aus 2.347 Bewertungen.</text>
+      ${[
+        { name: "Anna · 34", text: "Endlich Pflege, die hält, was sie verspricht. Meine Haut ist seit Wochen ruhig." },
+        { name: "Mira · 41", text: "Persönliche Beratung war Gold wert. Tagespflege riecht nach gar nichts — perfekt." },
+        { name: "Jana · 28", text: "Bestelle alles in der Nacht-Linie nach. Riecht traumhaft, fühlt sich teuer an." },
+      ]
+        .map(
+          (r, i) => `
+        <g transform="translate(${80 + i * 360}, ${260})">
+          <rect x="0" y="0" width="320" height="280" rx="24" fill="${C.blush}" />
+          <g font-family="${FONT_FAMILY}" font-weight="700" font-size="20" fill="${C.gold}">
+            <text x="32" y="56">★ ★ ★ ★ ★</text>
+          </g>
+          <text x="32" y="110" font-family="${FONT_FAMILY}" font-weight="400" font-size="16" fill="${C.dark}">"${r.text.slice(0, 38)}</text>
+          <text x="32" y="138" font-family="${FONT_FAMILY}" font-weight="400" font-size="16" fill="${C.dark}">${r.text.slice(38, 76)}</text>
+          <text x="32" y="166" font-family="${FONT_FAMILY}" font-weight="400" font-size="16" fill="${C.dark}">${r.text.slice(76)}"</text>
+          <line x1="32" y1="210" x2="80" y2="210" stroke="${C.roseDeep}" stroke-width="2" />
+          <text x="32" y="245" font-family="${FONT_FAMILY}" font-weight="700" font-size="15" fill="${C.dark}">${r.name}</text>
+        </g>
+      `,
+        )
+        .join("")}
+    </g>
+  `;
+
+  const stats = `
+    <g transform="translate(0, 4100)">
+      <rect x="0" y="0" width="${W}" height="540" fill="${C.dark}" />
+      <text x="600" y="120" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="600" letter-spacing="3" font-size="14" fill="${C.gold}">UNSERE ZAHLEN</text>
+      ${[
+        { v: "97 %", l: "Wiederkäuferinnen" },
+        { v: "60 Tage", l: "Geld-zurück-Garantie" },
+        { v: "0", l: "Tierversuche, immer" },
+        { v: "12", l: "Hauttypen begleitet" },
+      ]
+        .map(
+          (s, i) => `
+        <g transform="translate(${100 + i * 250}, ${200})">
+          <text x="125" y="100" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800" font-size="56" fill="${C.gold}">${s.v}</text>
+          <text x="125" y="160" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="400" font-size="16" fill="${COLORS.surface}" opacity="0.85">${s.l}</text>
+        </g>
+      `,
+        )
+        .join("")}
+    </g>
+  `;
+
+  const packages = `
+    <g transform="translate(0, 4800)">
+      <text x="600" y="120" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="600" letter-spacing="3" font-size="14" fill="${C.roseDeep}">UNSERE PAKETE</text>
+      <text x="600" y="190" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800" font-size="40" fill="${C.dark}">Klein anfangen oder direkt durchstarten.</text>
+      ${[
+        { title: "Probier-Set", price: "29 €", lines: ["3 Minis", "Persönlicher Hauttest", "Beratung per Mail"] },
+        { title: "Signature", price: "89 €", lines: ["3-stufiges Tagsritual", "Beratung 1:1", "60-Tage-Garantie"], featured: true },
+        { title: "Komplett", price: "189 €", lines: ["Tag + Nacht + Anti-Aging", "Video-Beratung 45 Min", "Geschenk-Verpackung"] },
+      ]
+        .map(
+          (p, i) => `
+        <g transform="translate(${80 + i * 360}, ${260})">
+          <rect x="0" y="0" width="320" height="440" rx="24" fill="${p.featured ? C.dark : COLORS.surface}" stroke="${p.featured ? "transparent" : C.border}" stroke-width="1" />
+          ${
+            p.featured
+              ? `<rect x="100" y="-14" width="120" height="28" rx="14" fill="${C.gold}" />
+                 <text x="160" y="5" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="700" font-size="11" letter-spacing="2" fill="${C.dark}">EMPFOHLEN</text>`
+              : ""
+          }
+          <text x="160" y="80" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="700" font-size="20" fill="${p.featured ? C.gold : C.dark}">${p.title}</text>
+          <text x="160" y="160" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800" font-size="56" fill="${p.featured ? COLORS.surface : C.dark}">${p.price}</text>
+          ${p.lines
+            .map(
+              (l, j) => `
+              <text x="40" y="${230 + j * 32}" font-family="${FONT_FAMILY}" font-weight="500" font-size="15" fill="${p.featured ? COLORS.surface : C.dark}" opacity="${p.featured ? "0.9" : "1"}">✓ ${l}</text>
+            `,
+            )
+            .join("")}
+          <rect x="40" y="360" width="240" height="48" rx="24" fill="${p.featured ? C.gold : C.rose}" />
+          <text x="160" y="390" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="700" font-size="15" fill="${p.featured ? C.dark : COLORS.surface}">Bestellen</text>
+        </g>
+      `,
+        )
+        .join("")}
+    </g>
+  `;
+
+  const cta = `
+    <g transform="translate(0, 5800)">
+      <rect x="80" y="80" width="1040" height="500" rx="32" fill="${C.rose}" />
+      <circle cx="200" cy="450" r="100" fill="${COLORS.surface}" opacity="0.15" />
+      <circle cx="1000" cy="180" r="80" fill="${COLORS.surface}" opacity="0.15" />
+      <text x="600" y="240" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800" font-size="48" fill="${COLORS.surface}">Buche Dir 15 Minuten</text>
+      <text x="600" y="296" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800" font-size="48" fill="${COLORS.surface}">mit Lisa direkt.</text>
+      <text x="600" y="356" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="400" font-size="18" fill="${COLORS.surface}" opacity="0.9">Kein Verkauf. Nur ehrliche Haut-Beratung.</text>
+      <g>
+        <rect x="440" y="420" width="320" height="60" rx="30" fill="${C.dark}" />
+        <text x="600" y="458" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="700" font-size="18" fill="${COLORS.surface}">Termin sichern →</text>
+      </g>
+    </g>
+  `;
+
+  const footer = `
+    <g transform="translate(0, 6600)">
+      <rect x="0" y="0" width="${W}" height="1400" fill="${C.dark}" />
+      <text x="80" y="120" font-family="${FONT_FAMILY}" font-weight="900" letter-spacing="4" font-size="22" fill="${COLORS.surface}">LUST COSMETICS</text>
+      <text x="80" y="170" font-family="${FONT_FAMILY}" font-weight="400" font-size="15" fill="${COLORS.surface}" opacity="0.7">Naturkosmetik aus Hamburg.</text>
+      <text x="80" y="200" font-family="${FONT_FAMILY}" font-weight="400" font-size="15" fill="${COLORS.surface}" opacity="0.7">Cremes und Seren in Klein-Serie.</text>
+
+      <g font-family="${FONT_FAMILY}" font-weight="700" font-size="13" fill="${COLORS.surface}">
+        <text x="480" y="120">Studio</text>
+        <text x="700" y="120">Magazin</text>
+        <text x="900" y="120">Service</text>
+      </g>
+      <g font-family="${FONT_FAMILY}" font-weight="400" font-size="14" fill="${COLORS.surface}" opacity="0.6">
+        <text x="480" y="160">Pflege</text>
+        <text x="480" y="190">Looks</text>
+        <text x="480" y="220">Ritual</text>
+        <text x="700" y="160">Hauttypen</text>
+        <text x="700" y="190">Inhaltsstoffe</text>
+        <text x="900" y="160">Beratung</text>
+        <text x="900" y="190">Versand</text>
+        <text x="900" y="220">Retoure</text>
+      </g>
+
+      <rect x="80" y="380" width="1040" height="1" fill="${COLORS.surface}" opacity="0.15" />
+      <text x="80" y="420" font-family="${FONT_FAMILY}" font-weight="400" font-size="12" fill="${COLORS.surface}" opacity="0.5">© 2026 Lust Cosmetics GmbH · Hamburg · alle Rechte vorbehalten.</text>
+    </g>
+  `;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <rect width="${W}" height="${H}" fill="${COLORS.surface}" />
+    ${chrome}
+    ${header}
+    ${hero}
+    ${trustBand}
+    ${linesSection}
+    ${promise}
+    ${reviews}
+    ${stats}
+    ${packages}
+    ${cta}
+    ${footer}
+  </svg>`;
+}
+
+// ---------------------------------------------------------------------------
+// website-friedrich.png — Franz Friedrich / Friedrich Manufaktur
+// Earthy + Forest theme, traditional handcraft
+// ---------------------------------------------------------------------------
+
+function buildWebsiteFranz(): string {
+  const W = 1200;
+  const H = 8000;
+  const C = {
+    brown: "#92400E",
+    brownDeep: "#451A03",
+    forest: "#14532D",
+    forestSoft: "#D1FAE5",
+    beige: "#F5E6D3",
+    cream: "#FAF5EB",
+    gold: "#CA8A04",
+    goldSoft: "#FEF9C3",
+    rust: "#C2410C",
+    dark: "#1C1917",
+    grey: "#78716C",
+    border: "#E7E5E4",
+  };
+
+  const chrome = `
+    <g>
+      <rect x="0" y="0" width="${W}" height="80" fill="${COLORS.chromeGrey}" />
+      <circle cx="32" cy="40" r="9" fill="#FF5F57" />
+      <circle cx="60" cy="40" r="9" fill="#FEBC2E" />
+      <circle cx="88" cy="40" r="9" fill="#28C840" />
+      <rect x="160" y="20" width="900" height="40" rx="20"
+            fill="${COLORS.surface}" stroke="${COLORS.border}" stroke-width="1" />
+      <text x="190" y="46" font-family="${FONT_FAMILY}" font-weight="400"
+            font-size="18" fill="${COLORS.textMuted}">https://friedrich-manufaktur.de</text>
+    </g>
+  `;
+
+  const header = `
+    <g transform="translate(0, 80)">
+      <rect x="0" y="0" width="${W}" height="120" fill="${C.cream}" />
+      <rect x="60" y="42" width="44" height="44" rx="4" fill="${C.brownDeep}" />
+      <text x="78" y="74" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="900" font-size="20" fill="${C.gold}">FF</text>
+      <text x="124" y="60" font-family="${FONT_FAMILY}" font-weight="700" letter-spacing="3" font-size="16" fill="${C.dark}">FRIEDRICH</text>
+      <text x="124" y="86" font-family="${FONT_FAMILY}" font-weight="400" letter-spacing="6" font-size="12" fill="${C.grey}">MANUFAKTUR · KÖLN</text>
+      <g font-family="${FONT_FAMILY}" font-weight="500" font-size="16" fill="${C.dark}">
+        <text x="660" y="65">Manufaktur</text>
+        <text x="785" y="65">Kollektion</text>
+        <text x="900" y="65">Auftragsarbeit</text>
+        <text x="1050" y="65">Kontakt</text>
+      </g>
+    </g>
+  `;
+
+  const hero = `
+    <g transform="translate(0, 200)">
+      <defs>
+        <linearGradient id="franzHero" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${C.brown}" />
+          <stop offset="100%" stop-color="${C.brownDeep}" />
+        </linearGradient>
+        <linearGradient id="franzWood" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${C.beige}" />
+          <stop offset="100%" stop-color="${C.gold}" />
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="${W}" height="1000" fill="url(#franzHero)" />
+      <rect x="0" y="0" width="${W}" height="60" fill="${C.brownDeep}" opacity="0.6" />
+      <text x="80" y="180" font-family="${FONT_FAMILY}" font-weight="700" letter-spacing="5" font-size="16" fill="${C.gold}">GEGRÜNDET 1962 · KÖLN-EHRENFELD</text>
+      <text x="80" y="330" font-family="${FONT_FAMILY}" font-weight="800" font-size="64" fill="${COLORS.surface}">Echtes Handwerk.</text>
+      <text x="80" y="410" font-family="${FONT_FAMILY}" font-weight="800" font-size="64" fill="${COLORS.surface}">Drei Generationen.</text>
+      <text x="80" y="490" font-family="${FONT_FAMILY}" font-weight="800" font-size="64" fill="${C.gold}">Eine Manufaktur.</text>
+      <text x="80" y="570" font-family="${FONT_FAMILY}" font-weight="400" font-size="22" fill="${COLORS.surface}" opacity="0.85">Holz, Leder und Messing — verarbeitet wie bei Großvater.</text>
+      <text x="80" y="602" font-family="${FONT_FAMILY}" font-weight="400" font-size="22" fill="${COLORS.surface}" opacity="0.85">Auftragsarbeiten ab einer Stückzahl. Made in Köln.</text>
+      <g>
+        <rect x="80" y="680" width="260" height="60" rx="4" fill="${C.gold}" />
+        <text x="210" y="718" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="700" font-size="18" fill="${C.dark}">Anfrage stellen</text>
+      </g>
+      <g>
+        <rect x="360" y="680" width="220" height="60" rx="4" fill="transparent" stroke="${COLORS.surface}" stroke-width="2" />
+        <text x="470" y="718" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="600" font-size="18" fill="${COLORS.surface}">Manufaktur ansehen</text>
+      </g>
+      <!-- Decorative tool/wood block on right -->
+      <rect x="700" y="200" width="420" height="600" rx="8" fill="url(#franzWood)" />
+      <rect x="720" y="220" width="380" height="60" fill="${C.brownDeep}" opacity="0.4" />
+      <rect x="780" y="380" width="240" height="80" rx="4" fill="${C.brownDeep}" />
+      <text x="900" y="430" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800" letter-spacing="3" font-size="20" fill="${C.gold}">FRIEDRICH</text>
+      <circle cx="900" cy="620" r="60" fill="${C.brownDeep}" opacity="0.3" />
+      <circle cx="900" cy="620" r="36" fill="${C.gold}" />
+      <text x="900" y="630" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="800" font-size="24" fill="${C.brownDeep}">1962</text>
+    </g>
+  `;
+
+  const trustBar = `
+    <g transform="translate(0, 1200)">
+      <rect x="0" y="0" width="${W}" height="100" fill="${C.cream}" />
+      <text x="600" y="50" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="600" letter-spacing="5" font-size="13" fill="${C.brown}">AUSGEZEICHNET MIT DEM DEUTSCHEN HANDWERKSPREIS · STERN 5/5 · STIFTUNG WARENTEST "GUT"</text>
+    </g>
+  `;
+
+  const craft = `
+    <g transform="translate(0, 1400)">
+      <text x="80" y="120" font-family="${FONT_FAMILY}" font-weight="600" letter-spacing="3" font-size="14" fill="${C.brown}">UNSER HANDWERK</text>
+      <text x="80" y="200" font-family="${FONT_FAMILY}" font-weight="800" font-size="44" fill="${C.dark}">Wir verarbeiten, was die</text>
+      <text x="80" y="252" font-family="${FONT_FAMILY}" font-weight="800" font-size="44" fill="${C.brown}">Industrie längst vergessen hat.</text>
+      ${[
+        { title: "Holz", text: "Eiche und Nussbaum aus dem Bergischen Land. Geölt, nicht lackiert.", color: C.brown },
+        { title: "Leder", text: "Pflanzlich gegerbt. Wird mit jedem Jahr schöner und weicher.", color: C.rust },
+        { title: "Messing", text: "Gepatiniert von Hand. Jedes Stück ein Unikat mit eigener Geschichte.", color: C.gold },
+      ]
+        .map(
+          (it, i) => `
+        <g transform="translate(${80 + i * 360}, ${320})">
+          <rect x="0" y="0" width="320" height="320" rx="4" fill="${C.cream}" stroke="${C.border}" stroke-width="1" />
+          <rect x="0" y="0" width="320" height="8" fill="${it.color}" />
+          <text x="32" y="80" font-family="${FONT_FAMILY}" font-weight="800" font-size="28" fill="${it.color}">${it.title}</text>
+          <text x="32" y="150" font-family="${FONT_FAMILY}" font-weight="400" font-size="16" fill="${C.dark}">${it.text.slice(0, 32)}</text>
+          <text x="32" y="178" font-family="${FONT_FAMILY}" font-weight="400" font-size="16" fill="${C.dark}">${it.text.slice(32, 64)}</text>
+          <text x="32" y="206" font-family="${FONT_FAMILY}" font-weight="400" font-size="16" fill="${C.dark}">${it.text.slice(64)}</text>
+          <text x="32" y="270" font-family="${FONT_FAMILY}" font-weight="700" font-size="14" letter-spacing="2" fill="${it.color}">MEHR ERFAHREN →</text>
+        </g>
+      `,
+        )
+        .join("")}
+    </g>
+  `;
+
+  const story = `
+    <g transform="translate(0, 2400)">
+      <rect x="0" y="0" width="${W}" height="900" fill="${C.beige}" />
+      <text x="80" y="120" font-family="${FONT_FAMILY}" font-weight="600" letter-spacing="3" font-size="14" fill="${C.brown}">DIE GESCHICHTE</text>
+      <text x="80" y="200" font-family="${FONT_FAMILY}" font-weight="800" font-size="42" fill="${C.dark}">Wilhelm Friedrich gründete</text>
+      <text x="80" y="248" font-family="${FONT_FAMILY}" font-weight="800" font-size="42" fill="${C.brown}">die Manufaktur 1962.</text>
+      <text x="80" y="320" font-family="${FONT_FAMILY}" font-weight="400" font-size="18" fill="${C.dark}">Heute führt Franz, sein Enkel, das Handwerk in dritter</text>
+      <text x="80" y="350" font-family="${FONT_FAMILY}" font-weight="400" font-size="18" fill="${C.dark}">Generation fort. Wir arbeiten zu sechst — fünf Handwerker</text>
+      <text x="80" y="380" font-family="${FONT_FAMILY}" font-weight="400" font-size="18" fill="${C.dark}">und ein Hund. Tradition heißt bei uns nicht stehen bleiben,</text>
+      <text x="80" y="410" font-family="${FONT_FAMILY}" font-weight="400" font-size="18" fill="${C.dark}">sondern weitergeben.</text>
+      <g>
+        <rect x="80" y="480" width="240" height="56" rx="4" fill="${C.brownDeep}" />
+        <text x="200" y="514" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="700" font-size="16" fill="${C.gold}">Manufaktur besuchen</text>
+      </g>
+
+      <!-- right: stylized portrait block -->
+      <rect x="700" y="100" width="420" height="700" rx="4" fill="${C.brownDeep}" />
+      <rect x="720" y="120" width="380" height="60" fill="${C.gold}" opacity="0.3" />
+      <circle cx="910" cy="370" r="100" fill="${C.beige}" />
+      <rect x="800" y="490" width="220" height="200" rx="4" fill="${C.gold}" opacity="0.7" />
+      <text x="910" y="585" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="700" letter-spacing="4" font-size="14" fill="${C.brownDeep}">DRITTE GENERATION</text>
+    </g>
+  `;
+
+  const collection = `
+    <g transform="translate(0, 3400)">
+      <text x="80" y="120" font-family="${FONT_FAMILY}" font-weight="600" letter-spacing="3" font-size="14" fill="${C.brown}">DIE KOLLEKTION</text>
+      <text x="80" y="200" font-family="${FONT_FAMILY}" font-weight="800" font-size="44" fill="${C.dark}">Sechs Stücke, in Serie gefertigt.</text>
+      ${[
+        { name: "Schreibsekretär", price: "ab 4.200 €", color: C.brown },
+        { name: "Leder-Aktentasche", price: "ab 1.150 €", color: C.rust },
+        { name: "Messing-Lampe", price: "ab 680 €", color: C.gold },
+        { name: "Bibliothekstisch", price: "ab 6.800 €", color: C.brown },
+        { name: "Reise-Etui", price: "ab 420 €", color: C.rust },
+        { name: "Wand-Uhr", price: "ab 950 €", color: C.gold },
+      ]
+        .map(
+          (it, i) => {
+            const col = i % 3;
+            const row = Math.floor(i / 3);
+            return `
+        <g transform="translate(${80 + col * 360}, ${280 + row * 280})">
+          <rect x="0" y="0" width="320" height="240" rx="4" fill="${C.cream}" stroke="${C.border}" stroke-width="1" />
+          <rect x="0" y="0" width="320" height="160" fill="${it.color}" opacity="0.18" />
+          <rect x="100" y="40" width="120" height="80" fill="${it.color}" />
+          <text x="32" y="190" font-family="${FONT_FAMILY}" font-weight="700" font-size="20" fill="${C.dark}">${it.name}</text>
+          <text x="32" y="220" font-family="${FONT_FAMILY}" font-weight="400" font-size="14" fill="${C.grey}">${it.price}</text>
+        </g>
+      `;
+          },
+        )
+        .join("")}
+    </g>
+  `;
+
+  const customWork = `
+    <g transform="translate(0, 4900)">
+      <rect x="80" y="0" width="1040" height="500" rx="4" fill="${C.brownDeep}" />
+      <rect x="80" y="0" width="1040" height="8" fill="${C.gold}" />
+      <text x="120" y="100" font-family="${FONT_FAMILY}" font-weight="600" letter-spacing="3" font-size="14" fill="${C.gold}">AUFTRAGSARBEITEN</text>
+      <text x="120" y="180" font-family="${FONT_FAMILY}" font-weight="800" font-size="42" fill="${COLORS.surface}">Etwas Eigenes?</text>
+      <text x="120" y="232" font-family="${FONT_FAMILY}" font-weight="800" font-size="42" fill="${C.gold}">Wir bauen es.</text>
+      <text x="120" y="310" font-family="${FONT_FAMILY}" font-weight="400" font-size="18" fill="${COLORS.surface}" opacity="0.8">Vom Schreibtisch nach Maß bis zum kompletten Bibliotheks-Innen-</text>
+      <text x="120" y="340" font-family="${FONT_FAMILY}" font-weight="400" font-size="18" fill="${COLORS.surface}" opacity="0.8">ausbau. Sechs Wochen Vorlauf, lebenslange Garantie auf Mechanik.</text>
+      <g>
+        <rect x="120" y="400" width="240" height="56" rx="4" fill="${C.gold}" />
+        <text x="240" y="434" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="700" font-size="16" fill="${C.brownDeep}">Anfrage stellen</text>
+      </g>
+    </g>
+  `;
+
+  const testimonialAndPress = `
+    <g transform="translate(0, 5500)">
+      <text x="600" y="120" text-anchor="middle" font-family="${FONT_FAMILY}" font-weight="600" letter-spacing="3" font-size="14" fill="${C.brown}">STIMMEN UNSERER KUNDEN</text>
+      ${[
+        { name: "Dr. K. Müller, Köln", text: "Der Schreibsekretär ist seit elf Jahren in Gebrauch. Funktioniert wie am ersten Tag." },
+        { name: "C. Becker, Düsseldorf", text: "Habe drei Generationen unserer Familie ausgestattet. Werde wiederkommen." },
+        { name: "Hotel Atrium, Köln", text: "Friedrich hat unsere Lobby in zwei Monaten komplett umgebaut. Souverän." },
+      ]
+        .map(
+          (r, i) => `
+        <g transform="translate(${80 + i * 360}, ${180})">
+          <rect x="0" y="0" width="320" height="280" rx="4" fill="${C.cream}" stroke="${C.border}" stroke-width="1" />
+          <text x="32" y="60" font-family="${FONT_FAMILY}" font-weight="800" font-size="48" fill="${C.gold}">"</text>
+          <text x="32" y="110" font-family="${FONT_FAMILY}" font-weight="400" font-size="15" fill="${C.dark}">${r.text.slice(0, 38)}</text>
+          <text x="32" y="136" font-family="${FONT_FAMILY}" font-weight="400" font-size="15" fill="${C.dark}">${r.text.slice(38, 76)}</text>
+          <text x="32" y="162" font-family="${FONT_FAMILY}" font-weight="400" font-size="15" fill="${C.dark}">${r.text.slice(76)}</text>
+          <line x1="32" y1="210" x2="80" y2="210" stroke="${C.brown}" stroke-width="2" />
+          <text x="32" y="245" font-family="${FONT_FAMILY}" font-weight="700" font-size="14" fill="${C.brownDeep}">${r.name}</text>
+        </g>
+      `,
+        )
+        .join("")}
+    </g>
+  `;
+
+  const footer = `
+    <g transform="translate(0, 6200)">
+      <rect x="0" y="0" width="${W}" height="1800" fill="${C.brownDeep}" />
+      <text x="80" y="120" font-family="${FONT_FAMILY}" font-weight="700" letter-spacing="4" font-size="18" fill="${C.gold}">FRIEDRICH MANUFAKTUR</text>
+      <text x="80" y="170" font-family="${FONT_FAMILY}" font-weight="400" font-size="14" fill="${COLORS.surface}" opacity="0.7">Helmholtzstraße 16</text>
+      <text x="80" y="195" font-family="${FONT_FAMILY}" font-weight="400" font-size="14" fill="${COLORS.surface}" opacity="0.7">50825 Köln-Ehrenfeld</text>
+      <text x="80" y="220" font-family="${FONT_FAMILY}" font-weight="400" font-size="14" fill="${COLORS.surface}" opacity="0.7">Werkstatt geöffnet Di–Fr</text>
+      <g font-family="${FONT_FAMILY}" font-weight="700" font-size="13" fill="${C.gold}">
+        <text x="480" y="120">Manufaktur</text>
+        <text x="680" y="120">Kollektion</text>
+        <text x="880" y="120">Service</text>
+      </g>
+      <g font-family="${FONT_FAMILY}" font-weight="400" font-size="13" fill="${COLORS.surface}" opacity="0.6">
+        <text x="480" y="160">Geschichte</text>
+        <text x="480" y="188">Werkstatt</text>
+        <text x="480" y="216">Team</text>
+        <text x="680" y="160">Möbel</text>
+        <text x="680" y="188">Leder</text>
+        <text x="680" y="216">Sonderanfertigung</text>
+        <text x="880" y="160">Anfrage</text>
+        <text x="880" y="188">Pflege</text>
+        <text x="880" y="216">Reparatur</text>
+      </g>
+      <rect x="80" y="320" width="1040" height="1" fill="${COLORS.surface}" opacity="0.15" />
+      <text x="80" y="360" font-family="${FONT_FAMILY}" font-weight="400" font-size="12" fill="${COLORS.surface}" opacity="0.5">© 2026 Friedrich Manufaktur · Köln · Inhaber: Franz Friedrich</text>
+    </g>
+  `;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <rect width="${W}" height="${H}" fill="${C.cream}" />
+    ${chrome}
+    ${header}
+    ${hero}
+    ${trustBar}
+    ${craft}
+    ${story}
+    ${collection}
+    ${customWork}
+    ${testimonialAndPress}
+    ${footer}
+  </svg>`;
+}
+
+// ---------------------------------------------------------------------------
 // Google-Docs Dokument — 1100 x 6000 (tall, scrollable)
 // ---------------------------------------------------------------------------
 
@@ -1047,12 +1614,12 @@ interface AssetSpec {
 }
 
 const ASSETS: AssetSpec[] = [
-  { name: "website-screenshot.png", width: 1200, height: 8000, build: buildWebsiteScreenshot },
-  { name: "slide-1.png", width: 1920, height: 1080, build: buildSlide1 },
+  { name: "website-max.png", width: 1200, height: 8000, build: buildWebsiteScreenshot },
+  { name: "website-lisa.png", width: 1200, height: 8000, build: buildWebsiteLisa },
+  { name: "website-franz.png", width: 1200, height: 8000, build: buildWebsiteFranz },
   { name: "slide-2.png", width: 1920, height: 1080, build: buildSlide2 },
   { name: "slide-3.png", width: 1920, height: 1080, build: buildSlide3 },
   { name: "slide-4.png", width: 1920, height: 1080, build: buildSlide4 },
-  { name: "slide-5.png", width: 1920, height: 1080, build: buildSlide5 },
 ];
 
 function formatBytes(bytes: number): string {

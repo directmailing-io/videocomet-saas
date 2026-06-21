@@ -11,6 +11,7 @@ import MarketingDemoComposition, {
   DEMO_DURATION_IN_FRAMES,
   DEMO_WIDTH,
   DEMO_HEIGHT,
+  type DemoLead,
 } from "./remotion/MarketingDemoComposition";
 
 export type DemoMode = "screenshot" | "slides" | "gdocs" | "solo";
@@ -31,20 +32,62 @@ const Player = dynamic(
   },
 ) as unknown as typeof PlayerType;
 
+const LEADS: ReadonlyArray<DemoLead> = [
+  {
+    id: "max",
+    firstName: "Max",
+    fullName: "Max Mustermann",
+    salutation: "Herr Mustermann",
+    initials: "MM",
+    company: "Mustermann Industrie GmbH",
+    location: "München",
+    domain: "mustermann-industrie.de",
+    screenshot: "/demo-assets/website-max.png",
+    industryLabel: "Industrie · Maschinenbau",
+  },
+  {
+    id: "lisa",
+    firstName: "Lisa",
+    fullName: "Lisa Lust",
+    salutation: "Frau Lust",
+    initials: "LL",
+    company: "Lust Cosmetics GmbH",
+    location: "Hamburg",
+    domain: "lust-cosmetics.de",
+    screenshot: "/demo-assets/website-lisa.png",
+    industryLabel: "Naturkosmetik · D2C",
+  },
+  {
+    id: "franz",
+    firstName: "Franz",
+    fullName: "Franz Friedrich",
+    salutation: "Herr Friedrich",
+    initials: "FF",
+    company: "Friedrich Manufaktur",
+    location: "Köln",
+    domain: "friedrich-manufaktur.de",
+    screenshot: "/demo-assets/website-franz.png",
+    industryLabel: "Handwerk · Manufaktur",
+  },
+];
+
 const PRELOAD_IMAGES = [
-  "/demo-assets/website-screenshot.png",
-  "/demo-assets/slide-1.png",
+  ...LEADS.map((l) => l.screenshot),
   "/demo-assets/slide-2.png",
   "/demo-assets/slide-3.png",
   "/demo-assets/slide-4.png",
-  "/demo-assets/slide-5.png",
 ];
 
 export function DemoPlayer() {
   const [mode, setMode] = React.useState<DemoMode>("screenshot");
+  const [leadId, setLeadId] = React.useState<string>(LEADS[0].id);
   const [scrollEnabled, setScrollEnabled] = React.useState(false);
   const playerRef = React.useRef<PlayerRef>(null);
 
+  const lead = React.useMemo(
+    () => LEADS.find((l) => l.id === leadId) ?? LEADS[0],
+    [leadId],
+  );
   const canScroll = mode === "screenshot" || mode === "gdocs";
 
   // Preload images so background switches are instant
@@ -79,13 +122,49 @@ export function DemoPlayer() {
   }, []);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
+      {/* Lead-Picker — separate row above the mode toggles */}
+      <div
+        role="radiogroup"
+        aria-label="Lead auswählen"
+        className="mx-auto inline-flex items-center gap-1 rounded-full bg-surface-soft border border-line p-1"
+      >
+        {LEADS.map((l) => {
+          const active = l.id === leadId;
+          return (
+            <button
+              key={l.id}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => setLeadId(l.id)}
+              className={cn(
+                "inline-flex flex-col items-start px-4 py-1.5 rounded-full text-xs font-medium transition-colors min-w-[110px]",
+                active
+                  ? "bg-brand text-white shadow-brand"
+                  : "text-ink hover:bg-surface-muted",
+              )}
+            >
+              <span className="font-semibold">An {l.firstName}</span>
+              <span
+                className={cn(
+                  "text-[10px] font-normal",
+                  active ? "text-white/80" : "text-ink-muted",
+                )}
+              >
+                {l.industryLabel}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <DemoToggleGroup value={mode} onChange={setMode} />
       <div className="relative w-full max-w-4xl mx-auto aspect-video rounded-2xl overflow-hidden shadow-2xl bg-black">
         <Player
           ref={playerRef}
           component={MarketingDemoComposition}
-          inputProps={{ mode, scrollEnabled }}
+          inputProps={{ mode, scrollEnabled, lead }}
           durationInFrames={DEMO_DURATION_IN_FRAMES}
           fps={DEMO_FPS}
           compositionWidth={DEMO_WIDTH}
@@ -138,7 +217,9 @@ export function DemoPlayer() {
         </div>
       ) : (
         <p className="text-center text-xs text-ink-muted">
-          Demo. Echte Videos werden in deinem Account erzeugt.
+          Gleiches Video, drei verschiedene Leads — wechsle oben durch und
+          schau, wie sich Name, Firma und Webseite live anpassen, während
+          das Video an exakt derselben Stelle weiterläuft.
         </p>
       )}
     </div>
