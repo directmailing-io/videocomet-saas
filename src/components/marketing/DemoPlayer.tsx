@@ -44,6 +44,20 @@ const LEADS: ReadonlyArray<DemoLead> = [
     domain: "mustermann-industrie.de",
     screenshot: "/demo-assets/website-max.png",
     industryLabel: "Industrie · Maschinenbau",
+    errors: [
+      {
+        title: "Kein technisches Datenblatt als Lead-Magnet",
+        body: "Procurement-Käufer wollen vor der Anfrage ein PDF mit Drehmoment, Spannweite, Wartungsintervallen herunterladen. Bei dir führt jeder Klick auf „Mehr Infos“ zu einer Marketing-Seite — die E-Mail-Adresse ist weg, der Nurture-Loop unmöglich. Setup: 1 PDF + Mailchimp-Form. 2 Stunden Arbeit. Erfahrungswert: 3–5× mehr qualifizierte B2B-Anfragen.",
+      },
+      {
+        title: "Keine Spec-Sheets pro Anlage",
+        body: "Engineering-Käufer erstellen Excel-Vergleichslisten, bevor sie überhaupt anrufen. Bei dir steht überall „Hohe Qualität, persönliche Beratung“ — null harte Zahlen. Drei Spec-PDFs für deine Top-Anlagen reichen, damit du in diesen Listen überhaupt mitlaufen kannst.",
+      },
+      {
+        title: "Stockfoto-Maschine im Hero-Bild",
+        body: "Das Header-Bild ist eine Shutterstock-Schweißanlage, die nicht zu eurem Portfolio passt. Maschinenbauer erkennen das in zwei Sekunden — und scrollen direkt zur Konkurrenz. Halbtages-Shooting bei euch in München. Einmal investiert, jahrelang Wirkung.",
+      },
+    ],
   },
   {
     id: "lisa",
@@ -56,6 +70,20 @@ const LEADS: ReadonlyArray<DemoLead> = [
     domain: "lust-cosmetics.de",
     screenshot: "/demo-assets/website-lisa.png",
     industryLabel: "Naturkosmetik · D2C",
+    errors: [
+      {
+        title: "Kein Hauttyp-Quiz beim Einstieg",
+        body: "70 % deiner Besucherinnen wissen nicht, welche Pflege-Linie zu ihrer Haut passt. Ohne Quiz scrollen sie 3 Minuten lang die Produktliste durch und springen ab. Ein 4-Klick-Quiz (Hauttyp → Probleme → Routine → Empfehlung) hebt bei vergleichbaren D2C-Brands die Conversion um Faktor 2,3.",
+      },
+      {
+        title: "Keine User-Photos in den Produktseiten",
+        body: "Auf den Detailseiten zeigst du Rendering-Shots der Tiegel. Naturkosmetik-Käuferinnen brauchen UGC — echte Hände, echte Texturen, echte Hauttypen. Eine Hashtag-Aktion mit dem Probier-Set bringt dir in 2 Wochen 40+ ehrliche Instagram-Fotos. Drei davon im Produkt-Slider reichen.",
+      },
+      {
+        title: "Konsistenz der Cremes unsichtbar",
+        body: "Du schreibst „cremig wie Butter“ und „leichtes Gel“ — zeigst es aber nicht. Eine Close-Up-Foto-Serie auf dem Handrücken (Pumpstoß → Verteilen → Einziehen) macht aus dem Adjektiv ein Versprechen. 800 € Studio-Shoot, drei Stunden Aufwand, sofort spürbar bei Add-to-Cart.",
+      },
+    ],
   },
   {
     id: "franz",
@@ -68,6 +96,20 @@ const LEADS: ReadonlyArray<DemoLead> = [
     domain: "friedrich-manufaktur.de",
     screenshot: "/demo-assets/website-franz.png",
     industryLabel: "Handwerk · Manufaktur",
+    errors: [
+      {
+        title: "Keine echten Werkstatt-Bilder",
+        body: "Auf „Manufaktur“ sehe ich ein Stockfoto einer fremden Holzwerkstatt und ein Bild von Wilhelm Friedrich aus 1985. Käufer eines 4.200-€-Sekretärs wollen heute sehen, wo das Stück entsteht — Hände, Werkzeuge, Holzspäne, das Atelier am Vormittag. Zwei Stunden Foto-Reportage vor Ort, einmal investiert, jahrelang Vertrauen.",
+      },
+      {
+        title: "Materialherkunft wird nicht erzählt",
+        body: "Du arbeitest mit Eiche aus dem Bergischen Land und pflanzlich gegerbtem Leder — das steht aber nirgendwo. Premium-Käufer kaufen Geschichten: wo der Baum stand, welcher Gerber das Leder veredelt hat, warum gerade dieses Messing. Drei Absätze pro Material verdoppeln die wahrgenommene Wertigkeit ohne einen Cent zusätzliche Produktkosten.",
+      },
+      {
+        title: "Lieferzeit komplett intransparent",
+        body: "Bei einem 6.800-€-Bibliothekstisch will der Käufer vor der Anfrage wissen: 6 Wochen oder 6 Monate? Bei dir steht nirgendwo eine Zahl. Drei einfache Timeline-Bullets („Anfrage → Skizze in 7 Tagen → Fertigung in 8 Wochen“) räumen Bauchschmerzen aus, bevor sie überhaupt entstehen.",
+      },
+    ],
   },
 ];
 

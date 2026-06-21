@@ -21,6 +21,11 @@ export const DEMO_HEIGHT = 1080;
 
 export type MarketingDemoMode = "screenshot" | "slides" | "gdocs" | "solo";
 
+export type DemoLeadError = {
+  title: string;
+  body: string;
+};
+
 export type DemoLead = {
   id: string;
   firstName: string;
@@ -32,6 +37,7 @@ export type DemoLead = {
   domain: string;
   screenshot: string;
   industryLabel: string;
+  errors: ReadonlyArray<DemoLeadError>;
 };
 
 export type MarketingDemoProps = {
@@ -415,23 +421,14 @@ function DocumentPaper({ lead }: { lead: DemoLead }) {
         Bild 1 — Screenshot von {lead.domain} (oben angeheftet).
       </div>
 
-      <ErrorBlock
-        number={1}
-        title="Kein Meta-Pixel installiert"
-        body="Weder Meta- noch Google-Tag-Manager liegen im Quelltext. Heißt: jeder Besucher, der heute nicht direkt kauft, ist für Retargeting verloren. Setup-Aufwand: 30 Minuten. Impact: 25–40 % günstigere Leads, weil Wiederkehrer dramatisch besser konvertieren."
-      />
-
-      <ErrorBlock
-        number={2}
-        title="Keine echten Fallstudien sichtbar"
-        body={'Auf „Über uns“ und „Referenzen“ zähle ich null messbare Cases. Die Kundenlogos sehen schick aus — verkaufen aber nichts. Im B2B-Maschinenbau gilt: ohne Zahlen, Gesichter und Vorher/Nachher glaubt dir niemand. Drei 200-Wort-Cases mit den letzten Stuttgart-Projekten reichen, um die Anfragen-Landingpage ca. 1,8× hochzuziehen.'}
-      />
-
-      <ErrorBlock
-        number={3}
-        title="Hero-Bild im Stockfoto-Look"
-        body="Das Header-Bild ist eine Shutterstock-Aufnahme einer Schweißanlage, die nicht zu eurem Portfolio passt. In den ersten drei Sekunden entscheidet dein Besucher, ob er weiterscrollt — Stockfotos sind Trust-Killer Nr. 1. Halbtages-Shooting bei euch vor Ort, 12 echte Bilder für unter 800 € und ein Hero, das wirklich verkauft."
-      />
+      {lead.errors.map((err, i) => (
+        <ErrorBlock
+          key={i}
+          number={i + 1}
+          title={err.title}
+          body={err.body}
+        />
+      ))}
 
       <h2
         style={{
