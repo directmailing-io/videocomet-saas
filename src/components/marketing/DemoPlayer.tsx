@@ -113,6 +113,26 @@ const LEADS: ReadonlyArray<DemoLead> = [
   },
 ];
 
+function GhostLeadPill({
+  name,
+  industry,
+}: {
+  name: string;
+  industry: string;
+}) {
+  return (
+    <div
+      aria-hidden
+      className="hidden md:inline-flex flex-col items-start px-4 py-1.5 rounded-full text-xs font-medium pointer-events-none select-none min-w-[110px] grayscale"
+    >
+      <span className="font-semibold text-ink/70">An {name}</span>
+      <span className="text-[10px] font-normal text-ink-muted/70">
+        {industry}
+      </span>
+    </div>
+  );
+}
+
 const PRELOAD_IMAGES = [
   ...LEADS.map((l) => l.screenshot),
   "/demo-assets/slide-2.png",
@@ -165,40 +185,53 @@ export function DemoPlayer() {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Lead-Picker — separate row above the mode toggles */}
-      <div
-        role="radiogroup"
-        aria-label="Lead auswählen"
-        className="mx-auto inline-flex items-center gap-1 rounded-full bg-surface-soft border border-line p-1"
-      >
-        {LEADS.map((l) => {
-          const active = l.id === leadId;
-          return (
-            <button
-              key={l.id}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => setLeadId(l.id)}
-              className={cn(
-                "inline-flex flex-col items-start px-4 py-1.5 rounded-full text-xs font-medium transition-colors min-w-[110px]",
-                active
-                  ? "bg-brand text-white shadow-brand"
-                  : "text-ink hover:bg-surface-muted",
-              )}
-            >
-              <span className="font-semibold">An {l.firstName}</span>
-              <span
+      {/* Lead-Picker — full width with edge fade suggesting "infinite leads" */}
+      <div className="relative w-full max-w-4xl mx-auto">
+        <div
+          role="radiogroup"
+          aria-label="Lead auswählen"
+          className="flex items-center justify-center gap-1 rounded-full bg-surface-soft border border-line p-1 overflow-hidden md:[mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)] md:[-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)]"
+        >
+          {/* Ghost leads left — non-clickable, faded into transparency */}
+          <GhostLeadPill name="Stefan" industry="Agentur · SaaS" />
+          <GhostLeadPill name="Sofia" industry="Coaching" />
+
+          {LEADS.map((l) => {
+            const active = l.id === leadId;
+            return (
+              <button
+                key={l.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setLeadId(l.id)}
                 className={cn(
-                  "text-[10px] font-normal",
-                  active ? "text-white/80" : "text-ink-muted",
+                  "inline-flex flex-col items-start px-4 py-1.5 rounded-full text-xs font-medium transition-colors min-w-[110px]",
+                  active
+                    ? "bg-brand text-white shadow-brand"
+                    : "text-ink hover:bg-surface-muted",
                 )}
               >
-                {l.industryLabel}
-              </span>
-            </button>
-          );
-        })}
+                <span className="font-semibold">An {l.firstName}</span>
+                <span
+                  className={cn(
+                    "text-[10px] font-normal",
+                    active ? "text-white/80" : "text-ink-muted",
+                  )}
+                >
+                  {l.industryLabel}
+                </span>
+              </button>
+            );
+          })}
+
+          {/* Ghost leads right */}
+          <GhostLeadPill name="Tobias" industry="Hotel · Gastro" />
+          <GhostLeadPill name="Nadine" industry="Immobilien" />
+        </div>
+        <p className="mt-2 text-center text-[11px] text-ink-muted">
+          Demo zeigt 3 Beispiel-Leads. In deinem Account beliebig viele.
+        </p>
       </div>
 
       <DemoToggleGroup value={mode} onChange={setMode} />
