@@ -46,16 +46,16 @@ const LEADS: ReadonlyArray<DemoLead> = [
     industryLabel: "Industrie · Maschinenbau",
     errors: [
       {
-        title: "Kein technisches Datenblatt als Lead-Magnet",
-        body: "Procurement-Käufer wollen vor der Anfrage ein PDF mit Drehmoment, Spannweite, Wartungsintervallen herunterladen. Bei dir führt jeder Klick auf „Mehr Infos“ zu einer Marketing-Seite — die E-Mail-Adresse ist weg, der Nurture-Loop unmöglich. Setup: 1 PDF + Mailchimp-Form. 2 Stunden Arbeit. Erfahrungswert: 3–5× mehr qualifizierte B2B-Anfragen.",
+        title: "Kein Datenblatt zum Download",
+        body: "Einkäufer wollen vor der Anfrage ein PDF mit Drehmoment, Spannweite und Wartungsintervallen. Bei dir landen sie auf einer Marketing-Seite, und du verlierst die E-Mail-Adresse. Ein Datenblatt gegen E-Mail, fertig in zwei Stunden, bringt typisch drei bis fünf Mal mehr qualifizierte Anfragen.",
       },
       {
         title: "Keine Spec-Sheets pro Anlage",
-        body: "Engineering-Käufer erstellen Excel-Vergleichslisten, bevor sie überhaupt anrufen. Bei dir steht überall „Hohe Qualität, persönliche Beratung“ — null harte Zahlen. Drei Spec-PDFs für deine Top-Anlagen reichen, damit du in diesen Listen überhaupt mitlaufen kannst.",
+        body: "Ingenieure bauen Excel-Vergleichslisten, bevor sie anrufen. Bei dir stehen nur Werbesätze, keine Zahlen. Drei Spec-PDFs für deine Top-Anlagen reichen, damit du in diesen Listen überhaupt auftauchst.",
       },
       {
         title: "Stockfoto-Maschine im Hero-Bild",
-        body: "Das Header-Bild ist eine Shutterstock-Schweißanlage, die nicht zu eurem Portfolio passt. Maschinenbauer erkennen das in zwei Sekunden — und scrollen direkt zur Konkurrenz. Halbtages-Shooting bei euch in München. Einmal investiert, jahrelang Wirkung.",
+        body: "Das Hero-Bild ist eine Shutterstock-Schweißanlage und passt nicht zu eurem Portfolio. Maschinenbauer sehen das in zwei Sekunden und scrollen weiter zur Konkurrenz. Ein halber Tag Foto-Shooting bei euch in München, einmal gemacht, hält jahrelang.",
       },
     ],
   },
@@ -73,15 +73,15 @@ const LEADS: ReadonlyArray<DemoLead> = [
     errors: [
       {
         title: "Kein Hauttyp-Quiz beim Einstieg",
-        body: "70 % deiner Besucherinnen wissen nicht, welche Pflege-Linie zu ihrer Haut passt. Ohne Quiz scrollen sie 3 Minuten lang die Produktliste durch und springen ab. Ein 4-Klick-Quiz (Hauttyp → Probleme → Routine → Empfehlung) hebt bei vergleichbaren D2C-Brands die Conversion um Faktor 2,3.",
+        body: "Sieben von zehn Besucherinnen wissen nicht, welche Pflege-Linie zu ihrer Haut passt. Ohne Quiz scrollen sie ratlos durch die Produktliste und springen ab. Vier Klicks reichen: Hauttyp, Probleme, Routine, Empfehlung. Bei vergleichbaren Brands verdoppelt das die Conversion.",
       },
       {
-        title: "Keine User-Photos in den Produktseiten",
-        body: "Auf den Detailseiten zeigst du Rendering-Shots der Tiegel. Naturkosmetik-Käuferinnen brauchen UGC — echte Hände, echte Texturen, echte Hauttypen. Eine Hashtag-Aktion mit dem Probier-Set bringt dir in 2 Wochen 40+ ehrliche Instagram-Fotos. Drei davon im Produkt-Slider reichen.",
+        title: "Keine echten Kundinnen-Fotos",
+        body: "Auf den Produktseiten siehst du nur Rendering-Shots der Tiegel. Käuferinnen brauchen echte Hände, echte Texturen, echte Hauttypen. Eine Hashtag-Aktion mit dem Probier-Set bringt dir in zwei Wochen über 40 ehrliche Instagram-Fotos. Drei davon im Slider reichen.",
       },
       {
         title: "Konsistenz der Cremes unsichtbar",
-        body: "Du schreibst „cremig wie Butter“ und „leichtes Gel“ — zeigst es aber nicht. Eine Close-Up-Foto-Serie auf dem Handrücken (Pumpstoß → Verteilen → Einziehen) macht aus dem Adjektiv ein Versprechen. 800 € Studio-Shoot, drei Stunden Aufwand, sofort spürbar bei Add-to-Cart.",
+        body: "Du schreibst „cremig wie Butter“ und „leichtes Gel“. Zeigst es aber nicht. Drei Close-Up-Fotos auf dem Handrücken: Pumpstoß, Verteilen, Einziehen. Macht aus dem Versprechen einen Beweis. 800 Euro Shoot, drei Stunden Aufwand, sofort spürbar bei Add-to-Cart.",
       },
     ],
   },
@@ -99,15 +99,15 @@ const LEADS: ReadonlyArray<DemoLead> = [
     errors: [
       {
         title: "Keine echten Werkstatt-Bilder",
-        body: "Auf „Manufaktur“ sehe ich ein Stockfoto einer fremden Holzwerkstatt und ein Bild von Wilhelm Friedrich aus 1985. Käufer eines 4.200-€-Sekretärs wollen heute sehen, wo das Stück entsteht — Hände, Werkzeuge, Holzspäne, das Atelier am Vormittag. Zwei Stunden Foto-Reportage vor Ort, einmal investiert, jahrelang Vertrauen.",
+        body: "Auf „Manufaktur“ sehe ich ein Stockfoto einer fremden Werkstatt und ein Bild von Wilhelm aus 1985. Käufer eines 4.200-Euro-Sekretärs wollen sehen, wo das Stück heute entsteht: Hände, Werkzeuge, Holzspäne, das Atelier am Vormittag. Zwei Stunden Foto-Reportage vor Ort, einmal gemacht, hält jahrelang.",
       },
       {
         title: "Materialherkunft wird nicht erzählt",
-        body: "Du arbeitest mit Eiche aus dem Bergischen Land und pflanzlich gegerbtem Leder — das steht aber nirgendwo. Premium-Käufer kaufen Geschichten: wo der Baum stand, welcher Gerber das Leder veredelt hat, warum gerade dieses Messing. Drei Absätze pro Material verdoppeln die wahrgenommene Wertigkeit ohne einen Cent zusätzliche Produktkosten.",
+        body: "Du arbeitest mit Eiche aus dem Bergischen Land und pflanzlich gegerbtem Leder. Das steht aber nirgendwo. Premium-Käufer kaufen Geschichten: wo der Baum stand, welcher Gerber das Leder veredelt hat, warum dieses Messing. Drei Absätze pro Material verdoppeln die wahrgenommene Wertigkeit ohne einen Cent zusätzliche Kosten.",
       },
       {
         title: "Lieferzeit komplett intransparent",
-        body: "Bei einem 6.800-€-Bibliothekstisch will der Käufer vor der Anfrage wissen: 6 Wochen oder 6 Monate? Bei dir steht nirgendwo eine Zahl. Drei einfache Timeline-Bullets („Anfrage → Skizze in 7 Tagen → Fertigung in 8 Wochen“) räumen Bauchschmerzen aus, bevor sie überhaupt entstehen.",
+        body: "Bei einem 6.800-Euro-Bibliothekstisch will der Käufer wissen: sechs Wochen oder sechs Monate? Bei dir steht keine Zahl. Drei Punkte reichen: Anfrage, Skizze in sieben Tagen, Fertigung in acht Wochen. Räumt Bauchschmerzen aus, bevor sie entstehen.",
       },
     ],
   },
@@ -254,14 +254,14 @@ export function DemoPlayer() {
             </strong>{" "}
             Das Scroll-Verhalten hier ist generiert und wirkt etwas
             mechanisch. In deinem echten Video zeichnest du das Scrollen
-            vorab einmal selbst auf — dadurch sieht es 1:1 menschlich aus.
+            vorab einmal selbst auf. Dadurch sieht es natürlich aus.
           </span>
         </div>
       ) : (
         <p className="text-center text-xs text-ink-muted">
-          Gleiches Video, drei verschiedene Leads — wechsle oben durch und
+          Gleiches Video, drei verschiedene Leads. Wechsle oben durch und
           schau, wie sich Name, Firma und Webseite live anpassen, während
-          das Video an exakt derselben Stelle weiterläuft.
+          das Video an genau derselben Stelle weiterläuft.
         </p>
       )}
     </div>

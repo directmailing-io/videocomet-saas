@@ -377,9 +377,9 @@ function DocumentPaper({ lead }: { lead: DemoLead }) {
       <p style={{ margin: "0 0 18px 0" }}>Hey {lead.firstName},</p>
       <p style={{ margin: "0 0 18px 0" }}>
         ich hab heute morgen 15 Minuten in deiner Webseite verbracht. Mir
-        sind <strong>drei Sachen</strong> aufgefallen, die dich aktuell
-        jeden Tag Anfragen kosten — ich schreib&apos;s dir kurz auf, dann
-        kannst du in Ruhe drauf gucken.
+        sind <strong>drei Sachen</strong> aufgefallen, die dich gerade
+        jeden Tag Anfragen kosten. Ich schreib sie dir kurz auf, dann
+        kannst du in Ruhe drüber gucken.
       </p>
       <p style={{ margin: "0 0 28px 0" }}>
         Wenn du Bock hast, packen wir die Punkte gemeinsam an. Termin per
@@ -418,7 +418,7 @@ function DocumentPaper({ lead }: { lead: DemoLead }) {
           marginBottom: 40,
         }}
       >
-        Bild 1 — Screenshot von {lead.domain} (oben angeheftet).
+        Bild 1: Screenshot von {lead.domain} (oben angeheftet).
       </div>
 
       {lead.errors.map((err, i) => (
