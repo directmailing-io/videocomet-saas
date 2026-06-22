@@ -3,7 +3,6 @@
 import * as React from "react";
 import {
   AbsoluteFill,
-  Video,
   Img,
   Sequence,
   useCurrentFrame,
@@ -1039,12 +1038,19 @@ export default function MarketingDemoComposition({
     <AbsoluteFill style={{ backgroundColor: "#0F172A" }}>
       <Background mode={mode} scrollEnabled={scrollEnabled} lead={lead} />
       <div style={wrapperStyle}>
-        <Video
+        {/* Native <video> statt Remotion's <Video>: Remotion's Video haengt am
+            Player-Clock und spielt unter iOS Safari oft gar nicht ab (Player
+            bleibt pausiert, Video bleibt schwarz). Das native Element nutzt
+            Browser-Autoplay mit muted+playsInline und laeuft unabhaengig. */}
+        <video
           src={staticFile(WEBCAM_MP4)}
           muted
           playsInline
           loop
-          volume={0}
+          autoPlay
+          preload="auto"
+          disableRemotePlayback
+          disablePictureInPicture
           style={{
             width: "100%",
             height: "100%",

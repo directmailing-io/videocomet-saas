@@ -43,7 +43,7 @@ const LEADS: ReadonlyArray<DemoLead> = [
     location: "München",
     domain: "mustermann-industrie.de",
     screenshot: "/demo-assets/website-max.png",
-    industryLabel: "Industrie · Maschinenbau",
+    industryLabel: "Maschinenbau",
     errors: [
       {
         title: "Kein Datenblatt zum Download",
@@ -69,7 +69,7 @@ const LEADS: ReadonlyArray<DemoLead> = [
     location: "Hamburg",
     domain: "lust-cosmetics.de",
     screenshot: "/demo-assets/website-lisa.png",
-    industryLabel: "Naturkosmetik · D2C",
+    industryLabel: "Naturkosmetik",
     errors: [
       {
         title: "Kein Hauttyp-Quiz beim Einstieg",
@@ -95,7 +95,7 @@ const LEADS: ReadonlyArray<DemoLead> = [
     location: "Köln",
     domain: "friedrich-manufaktur.de",
     screenshot: "/demo-assets/website-franz.png",
-    industryLabel: "Handwerk · Manufaktur",
+    industryLabel: "Manufaktur",
     errors: [
       {
         title: "Keine echten Werkstatt-Bilder",
@@ -123,10 +123,10 @@ function GhostLeadPill({
   return (
     <div
       aria-hidden
-      className="hidden md:inline-flex flex-col items-start px-4 py-1.5 rounded-full text-xs font-medium pointer-events-none select-none min-w-[110px] grayscale"
+      className="hidden md:inline-flex flex-col items-center justify-center px-3 py-2 rounded-full pointer-events-none select-none w-[136px] grayscale whitespace-nowrap leading-tight"
     >
-      <span className="font-semibold text-ink/70">An {name}</span>
-      <span className="text-[10px] font-normal text-ink-muted/70">
+      <span className="text-xs font-semibold text-ink/70">An {name}</span>
+      <span className="text-[10px] font-normal text-ink-muted/70 mt-0.5">
         {industry}
       </span>
     </div>
@@ -193,7 +193,7 @@ export function DemoPlayer() {
           className="flex items-center justify-center gap-1 rounded-full bg-surface-soft border border-line p-1 overflow-hidden md:[mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)] md:[-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)]"
         >
           {/* Ghost leads left — non-clickable, faded into transparency */}
-          <GhostLeadPill name="Stefan" industry="Agentur · SaaS" />
+          <GhostLeadPill name="Stefan" industry="SaaS-Agentur" />
           <GhostLeadPill name="Sofia" industry="Coaching" />
 
           {LEADS.map((l) => {
@@ -206,16 +206,16 @@ export function DemoPlayer() {
                 aria-checked={active}
                 onClick={() => setLeadId(l.id)}
                 className={cn(
-                  "inline-flex flex-col items-start px-4 py-1.5 rounded-full text-xs font-medium transition-colors min-w-[110px]",
+                  "inline-flex flex-col items-center justify-center px-3 py-2 rounded-full transition-colors w-[136px] whitespace-nowrap leading-tight",
                   active
                     ? "bg-brand text-white shadow-brand"
                     : "text-ink hover:bg-surface-muted",
                 )}
               >
-                <span className="font-semibold">An {l.firstName}</span>
+                <span className="text-xs font-semibold">An {l.firstName}</span>
                 <span
                   className={cn(
-                    "text-[10px] font-normal",
+                    "text-[10px] font-normal mt-0.5",
                     active ? "text-white/80" : "text-ink-muted",
                   )}
                 >
@@ -226,7 +226,7 @@ export function DemoPlayer() {
           })}
 
           {/* Ghost leads right */}
-          <GhostLeadPill name="Tobias" industry="Hotel · Gastro" />
+          <GhostLeadPill name="Tobias" industry="Hotellerie" />
           <GhostLeadPill name="Nadine" industry="Immobilien" />
         </div>
         <p className="mt-2 text-center text-[11px] text-ink-muted">
