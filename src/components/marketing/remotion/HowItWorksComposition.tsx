@@ -138,15 +138,13 @@ function StepFrame({
 }
 
 function useEnter(delay: number, duration = 18) {
-  const { fps } = useVideoConfig();
-  const frame = useCurrentFrame();
-  const t = spring({
-    frame: frame - delay,
-    fps,
-    config: { damping: 22, stiffness: 130, mass: 0.7 },
-    durationInFrames: duration,
-  });
-  return t;
+  // Per Default sofort 1 — Content ist beim Sequence-Start direkt sichtbar.
+  // Optionale Animation laeuft per CSS-Keyframe (siehe `<style>` unten),
+  // unabhaengig vom Remotion-Clock. Dadurch ist die Section auch dann
+  // sichtbar, wenn der Player-Autoplay (z. B. iOS Safari) nicht greift.
+  void delay;
+  void duration;
+  return 1;
 }
 
 // ===========================================================================
