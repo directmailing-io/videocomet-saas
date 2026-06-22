@@ -52,42 +52,42 @@ const STEPS: ReadonlyArray<{
     id: "webcam",
     title: "Aufnehmen",
     eyebrow: "Schritt 1",
-    headline: "Setz dich vor die Webcam.",
-    sub: "Eine ruhige Minute, drei Takes. Du wählst, welcher in die Kampagne geht.",
+    headline: "Du nimmst ein Video auf",
+    sub: "Ein kurzes, lockeres und authentisches Video zu dir, deinem Angebot und deinem Unternehmen.",
   },
   {
     id: "scenes",
     title: "Szene",
     eyebrow: "Schritt 2",
     headline: "Was sieht dein Lead?",
-    sub: "Webseite, Folie, Doc oder reines Webcam-Solo. Deine Aufnahme sitzt automatisch mit drin.",
+    sub: "Du gestaltest, was im Video angezeigt werden soll: Die Webseite des Kunden, als wärst du live darauf? Oder doch eine personalisierte Folie?",
   },
   {
     id: "landing",
     title: "Landingpage",
     eyebrow: "Schritt 3",
-    headline: "Wähle eine Vorlage.",
-    sub: "Headline und Termin-Button sind schon drin. Dein Video sitzt automatisch im Hero.",
+    headline: "Wähle deine Landingpage-Vorlage",
+    sub: "Jedes Video wird auf einer personalisierten Landingpage platziert. Für jeden Lead eine eigene Landingpage, ohne Einschränkungen.",
   },
   {
     id: "leads",
     title: "Leadliste",
     eyebrow: "Schritt 4",
-    headline: "Lade deine Leads hoch.",
-    sub: "CSV oder Excel rein. Jede Zeile bekommt automatisch eine eigene, persönliche Landingpage.",
+    headline: "Lade deine Leads hoch",
+    sub: "Lade eine CSV- oder Excel-Datei hoch oder importiere deinen Google-Sheets-Link mit den Leads. Du ordnest die Spalten den Platzhaltern zu und der Rest passiert automatisch.",
   },
   {
     id: "export",
     title: "Export",
     eyebrow: "Schritt 5",
-    headline: "CSV oder Briefe. Du entscheidest.",
-    sub: "Entweder die fertige Liste mit Landingpage-URLs zum Versenden, oder druckfertige Briefe als PDF.",
+    headline: "Wie willst du die Videos versenden?",
+    sub: "Exportiere die Leadliste mit allen persönlichen URLs und nutze sie in deinem CRM oder Mailing-Tool. Oder lade druckfertige Briefe als PDF für die Post.",
   },
   {
     id: "tracking",
     title: "Tracking",
     eyebrow: "Schritt 6",
-    headline: "Schau live, was passiert.",
+    headline: "Schau live, was passiert",
     sub: "Wer öffnet, wer schaut, wer klickt. Optional synchron in dein CRM.",
   },
 ];
@@ -1832,7 +1832,7 @@ function ExportCsvLayer({ active }: { active: boolean }) {
                 <td className="py-2 px-3 text-ink font-medium">{l.first}</td>
                 <td className="py-2 px-3 text-ink-soft">{l.company}</td>
                 <td className="py-2 px-3 text-brand-deep font-mono text-[10px] bg-brand-soft/30 border-l border-brand/20 truncate max-w-[200px]">
-                  videocomet.de/lp/{l.slug}
+                  deine-domain.de/{l.slug}
                 </td>
               </tr>
             ))}
@@ -1950,20 +1950,20 @@ function RealisticLetter({ lead }: { lead: LeadLike }) {
       style={{
         fontFamily: "'Inter', -apple-system, sans-serif",
         color: "#0F172A",
-        padding: "8% 9% 7% 9%",
+        padding: "12% 13% 11% 13%",
       }}
     >
       {/* DIN 5008: Absender klein über Adresse */}
       <div
-        className="text-[6px] leading-tight pb-1 mb-1 border-b"
+        className="text-[5px] leading-tight pb-1 mb-1 border-b"
         style={{ color: "#94A3B8", borderColor: "#E2E8F0" }}
       >
         <Placeholder>{`{Deine Firma GmbH · Strasse · PLZ Stadt}`}</Placeholder>
       </div>
 
       {/* Adressfeld + Datum */}
-      <div className="flex justify-between mt-3 mb-5">
-        <div className="text-[9px] leading-[1.35]">
+      <div className="flex justify-between mt-3 mb-4">
+        <div className="text-[7.5px] leading-[1.4]">
           {lead.salutation}
           <br />
           <strong>
@@ -1976,18 +1976,18 @@ function RealisticLetter({ lead }: { lead: LeadLike }) {
           <br />
           <Placeholder>{`{${lead.city}}`}</Placeholder>
         </div>
-        <div className="text-[8px] text-right" style={{ color: "#475569" }}>
+        <div className="text-[7px] text-right" style={{ color: "#475569" }}>
           {`{Stadt}, {Datum}`}
         </div>
       </div>
 
       {/* Betreff (echt) */}
-      <div className="text-[10px] font-bold mb-3">
+      <div className="text-[8.5px] font-bold mb-3">
         <Placeholder>{`{Betreff-Zeile}`}</Placeholder>
       </div>
 
       {/* Anrede (mix aus echt + Platzhalter) */}
-      <div className="text-[9px] mb-3">
+      <div className="text-[7.5px] mb-3">
         <Placeholder>{`{${lead.polite}}`}</Placeholder>,
       </div>
 
@@ -2005,10 +2005,10 @@ function RealisticLetter({ lead }: { lead: LeadLike }) {
 
       {/* URL-Block (echt, weil personalisiert wichtig) */}
       <div
-        className="text-[9px] font-mono font-bold mb-3 px-2.5 py-1.5 rounded inline-flex items-center self-start"
+        className="text-[7.5px] font-mono font-bold mb-3 px-2 py-1.5 rounded inline-flex items-center self-start"
         style={{ backgroundColor: "#F3EEFF", color: "#5232C7" }}
       >
-        videocomet.de/lp/{lead.slug}
+        deine-domain.de/{lead.slug}
       </div>
 
       {/* Ein letzter Lückentext-Block fuer Restinhalt */}
@@ -2024,21 +2024,21 @@ function RealisticLetter({ lead }: { lead: LeadLike }) {
           Beide in flex, kein absolute, also kein Overlap moeglich. */}
       <div className="flex items-end gap-4">
         <div className="flex-1 min-w-0">
-          <div className="text-[9px] mb-3">Mit besten Grüßen</div>
+          <div className="text-[7.5px] mb-3">Mit besten Grüßen</div>
           <div
-            className="text-[14px] italic mb-0.5"
+            className="text-[12px] italic mb-0.5"
             style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}
           >
             <Placeholder>{`{Dein Name}`}</Placeholder>
           </div>
-          <div className="text-[7px]" style={{ color: "#94A3B8" }}>
+          <div className="text-[6px]" style={{ color: "#94A3B8" }}>
             <Placeholder>{`{Deine Firma GmbH}`}</Placeholder>
           </div>
         </div>
         <div className="shrink-0 flex flex-col items-center gap-1">
           <div
             style={{
-              padding: 3,
+              padding: 2,
               backgroundColor: "white",
               border: "1px solid #E2E8F0",
               borderRadius: 2,
@@ -2046,11 +2046,11 @@ function RealisticLetter({ lead }: { lead: LeadLike }) {
           >
             <RealQrCode
               value={`https://app.videocomet.de/lp/${lead.slug}`}
-              size={52}
+              size={44}
             />
           </div>
           <div
-            className="text-[6px] text-center"
+            className="text-[5px] text-center"
             style={{ color: "#94A3B8" }}
           >
             Direkt zum Video

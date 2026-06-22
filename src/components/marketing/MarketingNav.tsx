@@ -7,23 +7,34 @@ import { cn } from "@/lib/utils";
 
 /**
  * Fixed Top-Nav für die Marketing-Landingpage.
- * Transparent über dem Dark-Hero (weißes Logo via CSS-Filter, weiße Links).
- * Wechselt zu hellem Theme (weißer Hintergrund, dunkles Logo) sobald der
- * 320vh-Hero verlassen wird.
+ * Bleibt komplett im Dark-Modus solange die HowItWorksSection (#how-it-works)
+ * mit weissem Background noch nicht ins Viewport gerollt ist — also waehrend
+ * Hero + DemoSection (beide dark). Erst dann wechselt sie in Light-Theme.
  */
 export function MarketingNav() {
   const [overDark, setOverDark] = React.useState(true);
 
   React.useEffect(() => {
-    const onScroll = () => {
-      // Hero ist 320vh hoch. Sticky-Inhalt 100vh. Visuell wird die Section
-      // bei ca. scrollY > 280vh "ausgeblendet" (Fade-to-Black-Phase 78–100%
-      // entspricht 250–320 vh). Nav-Wechsel ein bisschen vorher.
-      setOverDark(window.scrollY < window.innerHeight * 2.5);
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    const target = document.getElementById("how-it-works");
+    if (!target) {
+      // Fallback: alter scroll-basierter Trigger
+      const onScroll = () =>
+        setOverDark(window.scrollY < window.innerHeight * 3.5);
+      onScroll();
+      window.addEventListener("scroll", onScroll, { passive: true });
+      return () => window.removeEventListener("scroll", onScroll);
+    }
+    // IntersectionObserver mit rootMargin so dass die Nav umschaltet,
+    // sobald HowItWorks-Section ca. 60 px ueber den unteren Bildschirmrand
+    // hinausragt — also wenn ihr Top den Nav-Bereich kreuzt.
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        setOverDark(!entry.isIntersecting);
+      },
+      { rootMargin: "-60px 0px -85% 0px", threshold: 0 },
+    );
+    obs.observe(target);
+    return () => obs.disconnect();
   }, []);
 
   return (
