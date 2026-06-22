@@ -201,90 +201,71 @@ function GlassIcon({
 // Brand-Logos — vereinfachte SVGs in den jeweils echten Brand-Farben
 // ---------------------------------------------------------------------------
 
-function HubSpotLogo({ className }: { className?: string }) {
+/**
+ * Brand-Logos via simpleicons.org CDN — liefert die offiziellen
+ * SVG-Marken in den jeweiligen Brand-Farben. Nominative Fair-Use:
+ * Anzeige fuer Integrationspartner.
+ */
+function CdnLogo({
+  slug,
+  alt,
+  className,
+}: {
+  slug: string;
+  alt: string;
+  className?: string;
+}) {
+  // simpleicons.org CDN: https://cdn.simpleicons.org/<slug>/<hexcolor>
+  // ohne Farbe = offizielle Brand-Farbe
   return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <g fill="#FF7A59">
-        <circle cx="22.5" cy="20.5" r="6.5" />
-        <rect x="21" y="6" width="3" height="11" rx="1.5" />
-        <circle cx="22.5" cy="5.5" r="3.5" />
-        <rect x="2" y="19" width="14" height="3" rx="1.5" />
-        <circle cx="2.5" cy="20.5" r="3.5" />
-      </g>
-      <circle cx="22.5" cy="20.5" r="2.6" fill="white" />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`https://cdn.simpleicons.org/${slug}`}
+      alt={alt}
+      width={24}
+      height={24}
+      loading="lazy"
+      className={className}
+    />
   );
+}
+
+function HubSpotLogo({ className }: { className?: string }) {
+  return <CdnLogo slug="hubspot" alt="HubSpot" className={className} />;
 }
 
 function ZapierLogo({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <circle cx="16" cy="16" r="15" fill="#FF4F00" />
-      <g
-        stroke="white"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      >
-        <line x1="16" y1="7" x2="16" y2="25" />
-        <line x1="7" y1="16" x2="25" y2="16" />
-        <line x1="9.5" y1="9.5" x2="22.5" y2="22.5" />
-        <line x1="22.5" y1="9.5" x2="9.5" y2="22.5" />
-      </g>
-      <circle cx="16" cy="16" r="3.6" fill="white" />
-    </svg>
-  );
+  return <CdnLogo slug="zapier" alt="Zapier" className={className} />;
 }
 
 function MakeLogo({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <rect width="32" height="32" rx="8" fill="#6D00CC" />
-      <g fill="white">
-        <rect x="9" y="9" width="3" height="14" rx="1.5" />
-        <rect x="14.5" y="9" width="3" height="14" rx="1.5" />
-        <rect
-          x="20"
-          y="9"
-          width="3"
-          height="14"
-          rx="1.5"
-          transform="rotate(20 21.5 16)"
-        />
-      </g>
-    </svg>
-  );
+  return <CdnLogo slug="make" alt="Make" className={className} />;
 }
 
 function SalessuiteLogo({ className }: { className?: string }) {
+  // Salessuite hat keinen Eintrag bei simple-icons (zu spezifisch).
+  // Stylisierter monogramm-Mark in der Brand-Farbe.
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden>
       <rect width="32" height="32" rx="8" fill="#1E40AF" />
-      <path
-        d="M22 12.5c0-1.5-1.5-2.5-3.5-2.5h-2c-2 0-3.5 1-3.5 2.5s1.5 2.5 3.5 2.5h2c2 0 3.5 1 3.5 2.5s-1.5 2.5-3.5 2.5h-2c-2 0-3.5-1-3.5-2.5"
-        stroke="white"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        fill="none"
-      />
+      <text
+        x="50%"
+        y="50%"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill="white"
+        fontSize="18"
+        fontWeight="800"
+        fontFamily="Inter, -apple-system, sans-serif"
+      >
+        S
+      </text>
     </svg>
   );
 }
 
 function CloseLogo({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <rect width="32" height="32" rx="8" fill="#10B981" />
-      <path
-        d="M22 11.5c-1.6-1.4-3.6-2-5.5-1.7-2.7.4-5 2.9-5 6.2s2.3 5.8 5 6.2c1.9.3 3.9-.3 5.5-1.7"
-        stroke="white"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-        fill="none"
-      />
-    </svg>
-  );
+  return <CdnLogo slug="close" alt="Close" className={className} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -796,13 +777,13 @@ function LpThumbMock({
 function BriefBento() {
   return (
     <div className="relative w-full h-full flex flex-col p-7">
-      {/* Glow */}
+      {/* Warm Glows */}
       <div
         aria-hidden
-        className="absolute -top-20 -right-16 size-80 rounded-full pointer-events-none"
+        className="absolute -top-20 -right-16 size-[420px] rounded-full pointer-events-none"
         style={{
           background:
-            "radial-gradient(closest-side, rgba(249,115,22,0.45), transparent 70%)",
+            "radial-gradient(closest-side, rgba(251,146,60,0.40), transparent 70%)",
         }}
       />
       <div
@@ -810,7 +791,7 @@ function BriefBento() {
         className="absolute bottom-0 left-0 size-72 rounded-full pointer-events-none opacity-60"
         style={{
           background:
-            "radial-gradient(closest-side, rgba(180,83,9,0.35), transparent 75%)",
+            "radial-gradient(closest-side, rgba(180,83,9,0.30), transparent 75%)",
         }}
       />
 
@@ -818,87 +799,182 @@ function BriefBento() {
         <Mail className="size-5" />
       </GlassIcon>
 
-      {/* Letter + Envelope stack — center-right floating */}
-      <div className="absolute top-4 right-4 w-[200px] h-[190px]">
-        {/* Envelope behind */}
+      {/* Layered letter stack — Apple-Style product hero */}
+      <div className="absolute top-2 right-0 w-[260px] h-[280px] pointer-events-none">
+        {/* Ghost 3 — furthest, most blurred */}
         <div
-          className="absolute top-12 right-0 rounded-md shadow-2xl"
+          aria-hidden
+          className="absolute top-10 right-10 rounded-md"
           style={{
             width: 170,
-            height: 110,
-            transform: "rotate(-8deg)",
-            background: "linear-gradient(135deg, #FED7AA, #FB923C)",
-            border: "1px solid rgba(0,0,0,0.08)",
+            aspectRatio: "210/297",
+            background: "#FAF6EE",
+            border: "1px solid rgba(0,0,0,0.05)",
+            transform: "rotate(-14deg)",
+            opacity: 0.35,
+            filter: "blur(2px)",
+            boxShadow: "0 18px 50px -16px rgba(0,0,0,0.45)",
             zIndex: 1,
           }}
+        />
+        {/* Ghost 2 — middle */}
+        <div
+          aria-hidden
+          className="absolute top-5 right-5 rounded-md"
+          style={{
+            width: 170,
+            aspectRatio: "210/297",
+            background: "#FFFCF5",
+            border: "1px solid rgba(0,0,0,0.07)",
+            transform: "rotate(-7deg)",
+            opacity: 0.6,
+            filter: "blur(0.8px)",
+            boxShadow: "0 22px 50px -18px rgba(0,0,0,0.5)",
+            zIndex: 2,
+          }}
+        />
+
+        {/* Front letter — fully rendered, crisp */}
+        <div
+          className="absolute top-0 right-0 rounded-md overflow-hidden"
+          style={{
+            width: 175,
+            aspectRatio: "210/297",
+            transform: "rotate(3deg)",
+            zIndex: 3,
+            boxShadow:
+              "0 30px 60px -20px rgba(0,0,0,0.65), 0 10px 25px -10px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.7)",
+            background:
+              "linear-gradient(180deg, #FFFEFA 0%, #FAF6EE 100%)",
+            border: "1px solid rgba(0,0,0,0.06)",
+          }}
         >
-          {/* Envelope flap */}
+          {/* Letterhead strip */}
           <div
-            className="absolute inset-x-0 top-0 h-12"
+            className="absolute inset-x-0 top-0 h-2"
             style={{
-              background:
-                "linear-gradient(180deg, #FB923C 0%, #EA580C 50%, #FB923C 51%, #FED7AA 100%)",
-              clipPath: "polygon(0 0, 100% 0, 50% 100%)",
+              background: "linear-gradient(90deg, #F97316, #FBBF24)",
             }}
           />
-          {/* Stamp */}
+          {/* Subtle paper grain via gradient */}
           <div
-            className="absolute top-2 right-2 size-7 rounded-sm bg-white/80 border border-amber-900/20 flex items-center justify-center text-[5px] font-bold text-amber-900"
+            aria-hidden
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(120% 80% at 50% 0%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.04) 100%)",
+            }}
+          />
+
+          <div
+            className="relative h-full flex flex-col"
+            style={{ padding: "14px 14px 12px" }}
           >
-            PORTO
+            {/* Sender */}
+            <div
+              className="text-[4px] text-ink-muted/80 pb-1 mb-2 border-b leading-tight"
+              style={{ borderColor: "#E8DECC" }}
+            >
+              Deine Firma · Musterstraße 1 · 12345 Stadt
+            </div>
+
+            {/* Adresse + Datum */}
+            <div className="flex justify-between items-start mb-3">
+              <div className="text-[5px] leading-[1.35] text-ink">
+                Herrn
+                <br />
+                <strong>Max Mustermann</strong>
+                <br />
+                Mustermann Industrie
+                <br />
+                Industriestr. 42
+                <br />
+                85737 Ismaning
+              </div>
+              <div className="text-[4px] text-ink-muted text-right">
+                22.06.2026
+              </div>
+            </div>
+
+            {/* Subject */}
+            <div className="text-[5.5px] font-bold text-ink mb-1.5">
+              Drei Punkte zu Ihrer Webseite
+            </div>
+
+            {/* Anrede */}
+            <div className="text-[5px] text-ink mb-1.5">
+              Sehr geehrter Herr Mustermann,
+            </div>
+
+            {/* Body lines */}
+            <div className="space-y-[2px] mb-1.5">
+              <div className="h-[1.5px] bg-ink/15 w-full rounded" />
+              <div className="h-[1.5px] bg-ink/15 w-[92%] rounded" />
+              <div className="h-[1.5px] bg-ink/15 w-[78%] rounded" />
+            </div>
+            <div className="space-y-[2px] mb-1.5">
+              <div className="h-[1.5px] bg-ink/15 w-full rounded" />
+              <div className="h-[1.5px] bg-ink/15 w-[85%] rounded" />
+            </div>
+
+            {/* URL highlight */}
+            <div
+              className="text-[5px] font-mono font-bold inline-flex self-start px-1.5 py-0.5 rounded mb-2"
+              style={{
+                backgroundColor: "#F3EEFF",
+                color: "#5232C7",
+              }}
+            >
+              deine-domain.de/max
+            </div>
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Footer with signature + QR */}
+            <div className="flex items-end justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-[4.5px] text-ink mb-1.5">
+                  Mit besten Grüßen
+                </div>
+                <div
+                  className="text-[8px] italic mb-0.5"
+                  style={{
+                    fontFamily: "'Georgia', 'Times New Roman', serif",
+                  }}
+                >
+                  Dein Name
+                </div>
+                <div className="text-[3.5px] text-ink-muted">
+                  Deine Firma
+                </div>
+              </div>
+              <div
+                className="shrink-0 size-7 rounded-[2px] border border-ink/15 overflow-hidden bg-white p-[1px]"
+              >
+                <div
+                  className="size-full"
+                  style={{
+                    background:
+                      "repeating-conic-gradient(#0F172A 0deg 90deg, white 90deg 180deg)",
+                    backgroundSize: "2px 2px",
+                  }}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Letter in front */}
+        {/* Subtle bottom shadow blob to ground the stack */}
         <div
-          className="absolute top-0 right-4 rounded-md bg-white shadow-2xl"
+          aria-hidden
+          className="absolute bottom-0 left-1/2 -translate-x-1/2 w-44 h-2 rounded-full pointer-events-none"
           style={{
-            width: 140,
-            aspectRatio: "210/297",
-            transform: "rotate(6deg)",
-            padding: "10px 12px",
-            border: "1px solid rgba(0,0,0,0.06)",
-            zIndex: 2,
+            background:
+              "radial-gradient(50% 100% at 50% 0%, rgba(0,0,0,0.45), transparent 100%)",
+            filter: "blur(4px)",
           }}
-        >
-          {/* Letterhead band */}
-          <div className="w-3 h-0.5 mb-1.5 bg-amber-700 rounded" />
-          {/* Adresse */}
-          <div className="text-[4px] text-ink/70 leading-[1.4]">
-            Max Mustermann
-            <br />
-            Industriestr. 42
-            <br />
-            85737 Ismaning
-          </div>
-          {/* Anrede */}
-          <div className="text-[4.5px] font-bold text-ink/85 mt-2">
-            Sehr geehrter
-          </div>
-          {/* Lines */}
-          <div className="space-y-0.5 mt-1.5">
-            <div className="h-px bg-ink/12 w-full" />
-            <div className="h-px bg-ink/12 w-5/6" />
-            <div className="h-px bg-ink/12 w-3/4" />
-            <div className="h-px bg-ink/12 w-full" />
-          </div>
-          {/* URL */}
-          <div
-            className="text-[4px] font-mono font-bold mt-1.5 px-1 py-0.5 rounded inline-block"
-            style={{ backgroundColor: "#F3EEFF", color: "#5232C7" }}
-          >
-            deine-domain.de/max
-          </div>
-          {/* QR code mock */}
-          <div
-            className="absolute bottom-1.5 right-1.5 size-5 rounded-sm overflow-hidden"
-            style={{
-              background:
-                "repeating-conic-gradient(#0F172A 0deg 90deg, white 90deg 180deg)",
-              backgroundSize: "2.5px 2.5px",
-            }}
-          />
-        </div>
+        />
       </div>
 
       <div className="mt-auto pt-12 relative">
