@@ -22,25 +22,25 @@ const OPTIONS: ReadonlyArray<DemoToggleOption> = [
   {
     value: "screenshot",
     label: "Website-Screenshot",
-    subtitle: "Webseite des Kunden im Hintergrund",
+    subtitle: "Soll die Kunden-Webseite angezeigt werden?",
     icon: ImageIcon,
   },
   {
     value: "slides",
     label: "Folienpräsentation",
-    subtitle: "Slide-Deck mit Animationen",
+    subtitle: "Soll eine frei gestaltete Folie angezeigt werden?",
     icon: Presentation,
   },
   {
     value: "gdocs",
     label: "Google Docs",
-    subtitle: "Persönliche Notiz im Doc",
+    subtitle: "Soll ein Google-Docs-Dokument angezeigt werden?",
     icon: FileText,
   },
   {
     value: "solo",
     label: "Webcam-Solo",
-    subtitle: "Nur dein Webcam-Video, fullscreen",
+    subtitle: "Soll nur dein Webcam-Video angezeigt werden?",
     icon: VideoIcon,
   },
 ];
@@ -68,20 +68,20 @@ export function DemoToggleGroup({ value, onChange }: DemoToggleGroupProps) {
             aria-checked={active}
             onClick={() => onChange(option.value)}
             className={cn(
-              "relative flex flex-col items-start gap-2 rounded-squircle-md border p-4 text-left transition-all",
+              "relative flex flex-col items-start gap-2 rounded-squircle-md border p-4 text-left transition-all backdrop-blur-md",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
               active
-                ? "border-brand bg-brand-soft text-brand-deep ring-2 ring-brand/30"
-                : "border-line bg-surface hover:bg-surface-muted hover:border-brand/40",
+                ? "border-brand/60 bg-brand/[0.15] text-white ring-2 ring-brand/30"
+                : "border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08] hover:border-white/20",
             )}
           >
             {active ? (
-              <span className="absolute top-3 right-3 size-2 rounded-full bg-brand" />
+              <span className="absolute top-3 right-3 size-2 rounded-full bg-brand-light" />
             ) : null}
             <Icon
               className={cn(
                 "size-5",
-                active ? "text-brand-deep" : "text-ink-soft",
+                active ? "text-brand-light" : "text-white/55",
               )}
               aria-hidden="true"
             />
@@ -89,7 +89,7 @@ export function DemoToggleGroup({ value, onChange }: DemoToggleGroupProps) {
               <span
                 className={cn(
                   "text-sm font-semibold",
-                  active ? "text-brand-deep" : "text-ink",
+                  active ? "text-white" : "text-white/90",
                 )}
               >
                 {option.label}
@@ -97,7 +97,7 @@ export function DemoToggleGroup({ value, onChange }: DemoToggleGroupProps) {
               <span
                 className={cn(
                   "text-xs",
-                  active ? "text-brand-deep/70" : "text-ink-muted",
+                  active ? "text-white/70" : "text-white/50",
                 )}
               >
                 {option.subtitle}

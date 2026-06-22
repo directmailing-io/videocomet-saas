@@ -3,8 +3,9 @@
 import * as React from "react";
 
 /**
- * Apple-style Reveal-on-Scroll: faded-up Animation startet sobald das
- * Element ca. 12 % im Viewport ist. Stagger via `delay`-Prop.
+ * Cinematic Reveal-on-Scroll: laenger als ein normales Fade-up, mit
+ * dezentem Scale + Blur → wirkt wie ein Apple-Keynote-Crossfade.
+ * Stagger via `delay`-Prop.
  */
 export function RevealOnScroll({
   children,
@@ -30,7 +31,7 @@ export function RevealOnScroll({
           obs.unobserve(el);
         }
       },
-      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
+      { threshold: 0.12, rootMargin: "0px 0px -6% 0px" },
     );
     obs.observe(el);
     return () => obs.disconnect();
@@ -42,9 +43,12 @@ export function RevealOnScroll({
       className={className}
       style={{
         opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(28px)",
-        transition: `opacity 900ms cubic-bezier(0.2,0.8,0.2,1) ${delay}ms, transform 900ms cubic-bezier(0.2,0.8,0.2,1) ${delay}ms`,
-        willChange: "opacity, transform",
+        transform: visible
+          ? "translateY(0) scale(1)"
+          : "translateY(40px) scale(0.96)",
+        filter: visible ? "blur(0px)" : "blur(8px)",
+        transition: `opacity 1400ms cubic-bezier(0.2,0.8,0.2,1) ${delay}ms, transform 1400ms cubic-bezier(0.2,0.8,0.2,1) ${delay}ms, filter 1100ms cubic-bezier(0.2,0.8,0.2,1) ${delay}ms`,
+        willChange: "opacity, transform, filter",
       }}
     >
       {children}

@@ -125,8 +125,8 @@ function GhostLeadPill({
       aria-hidden
       className="hidden md:inline-flex flex-col items-center justify-center px-3 py-2 rounded-full pointer-events-none select-none w-[136px] grayscale whitespace-nowrap leading-tight"
     >
-      <span className="text-xs font-semibold text-ink/70">An {name}</span>
-      <span className="text-[10px] font-normal text-ink-muted/70 mt-0.5">
+      <span className="text-xs font-semibold text-white/40">An {name}</span>
+      <span className="text-[10px] font-normal text-white/25 mt-0.5">
         {industry}
       </span>
     </div>
@@ -190,7 +190,7 @@ export function DemoPlayer() {
         <div
           role="radiogroup"
           aria-label="Lead auswählen"
-          className="flex items-center justify-center gap-1 rounded-full bg-surface-soft border border-line p-1 overflow-hidden md:[mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)] md:[-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)]"
+          className="flex items-center justify-center gap-1 rounded-full bg-white/[0.06] border border-white/10 backdrop-blur-md p-1 overflow-hidden md:[mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)] md:[-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)]"
         >
           {/* Ghost leads left — non-clickable, faded into transparency */}
           <GhostLeadPill name="Stefan" industry="SaaS-Agentur" />
@@ -209,14 +209,14 @@ export function DemoPlayer() {
                   "inline-flex flex-col items-center justify-center px-3 py-2 rounded-full transition-colors w-[136px] whitespace-nowrap leading-tight",
                   active
                     ? "bg-brand text-white shadow-brand"
-                    : "text-ink hover:bg-surface-muted",
+                    : "text-white/85 hover:bg-white/10",
                 )}
               >
                 <span className="text-xs font-semibold">An {l.firstName}</span>
                 <span
                   className={cn(
                     "text-[10px] font-normal mt-0.5",
-                    active ? "text-white/80" : "text-ink-muted",
+                    active ? "text-white/80" : "text-white/50",
                   )}
                 >
                   {l.industryLabel}
@@ -229,7 +229,7 @@ export function DemoPlayer() {
           <GhostLeadPill name="Tobias" industry="Hotellerie" />
           <GhostLeadPill name="Nadine" industry="Immobilien" />
         </div>
-        <p className="mt-2 text-center text-[11px] text-ink-muted">
+        <p className="mt-2 text-center text-[11px] text-white/50">
           Demo zeigt 3 Beispiel-Leads. In deinem Account beliebig viele.
         </p>
       </div>
@@ -279,10 +279,10 @@ export function DemoPlayer() {
         ) : null}
       </div>
       {canScroll && scrollEnabled ? (
-        <div className="mx-auto max-w-2xl rounded-squircle-md border border-warn/30 bg-warn-soft/50 px-4 py-3 text-xs text-ink-soft flex items-start gap-2.5">
+        <div className="mx-auto max-w-2xl rounded-squircle-md border border-warn/30 bg-warn/[0.10] backdrop-blur-md px-4 py-3 text-xs text-white/75 flex items-start gap-2.5">
           <Info className="size-4 text-warn shrink-0 mt-0.5" aria-hidden />
           <span>
-            <strong className="text-ink font-semibold">
+            <strong className="text-white font-semibold">
               Hinweis zur Demo:
             </strong>{" "}
             Das Scroll-Verhalten hier ist generiert und wirkt etwas
@@ -291,7 +291,7 @@ export function DemoPlayer() {
           </span>
         </div>
       ) : (
-        <p className="text-center text-xs text-ink-muted">
+        <p className="text-center text-xs text-white/55">
           Gleiches Video, drei verschiedene Leads. Wechsle oben durch und
           schau, wie sich Name, Firma und Webseite live anpassen, während
           das Video an genau derselben Stelle weiterläuft.

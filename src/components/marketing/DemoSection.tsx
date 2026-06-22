@@ -1,4 +1,3 @@
-import { Sparkles } from "lucide-react";
 import { DemoPlayer } from "./DemoPlayer";
 import { RevealOnScroll } from "./RevealOnScroll";
 
@@ -22,21 +21,20 @@ export function DemoSection() {
       <div className="relative max-w-5xl mx-auto px-6 md:px-10">
         <div className="text-center max-w-3xl mx-auto mb-14 md:mb-20">
           <RevealOnScroll delay={0}>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/8 border border-white/15 backdrop-blur text-white/85 text-xs font-semibold mb-7">
-              <Sparkles className="size-3.5 text-brand-light" />
+            <div className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-white/8 border border-white/15 backdrop-blur text-white/85 text-[11px] font-semibold tracking-[0.18em] uppercase mb-7">
               Live-Demo
             </div>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={140}>
-            <h2 className="text-4xl md:text-6xl font-bold tracking-[-0.03em] leading-[1.04] text-white text-balance">
+          <RevealOnScroll delay={200}>
+            <h2 className="font-light tracking-[-0.04em] leading-[1.05] text-white text-[clamp(40px,5.6vw,80px)] text-balance">
               Wie sieht ein
             </h2>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={240}>
+          <RevealOnScroll delay={380}>
             <h2
-              className="text-4xl md:text-6xl font-bold tracking-[-0.03em] leading-[1.04] bg-clip-text text-transparent text-balance"
+              className="font-light tracking-[-0.04em] leading-[1.05] bg-clip-text text-transparent text-[clamp(40px,5.6vw,80px)] text-balance"
               style={{
                 backgroundImage:
                   "linear-gradient(96deg, #C7B6FE 0%, #AA8CF5 35%, #7C5CE8 70%, #5232C7 100%)",
@@ -46,14 +44,14 @@ export function DemoSection() {
             </h2>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={340}>
-            <h2 className="text-4xl md:text-6xl font-bold tracking-[-0.03em] leading-[1.04] text-white text-balance">
+          <RevealOnScroll delay={540}>
+            <h2 className="font-light tracking-[-0.04em] leading-[1.05] text-white text-[clamp(40px,5.6vw,80px)] text-balance">
               eigentlich aus?
             </h2>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={520}>
-            <p className="mt-8 text-lg md:text-xl leading-relaxed text-white/65 text-balance max-w-2xl mx-auto">
+          <RevealOnScroll delay={820}>
+            <p className="mt-9 text-lg md:text-xl leading-relaxed text-white/65 text-balance max-w-2xl mx-auto">
               Du hast volle Freiheit, wie dein Video am Ende aussieht. Wie
               eine persönliche Loom-Aufnahme: deine Webcam plus alles, was
               du auf dem Bildschirm zeigen willst. Wähle Modus und
@@ -62,11 +60,11 @@ export function DemoSection() {
           </RevealOnScroll>
         </div>
 
-        <RevealOnScroll delay={640}>
+        <RevealOnScroll delay={1020}>
           <DemoPlayer />
         </RevealOnScroll>
 
-        <RevealOnScroll delay={820}>
+        <RevealOnScroll delay={1240}>
           <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 mt-14 text-xs text-white/55">
             <span className="inline-flex items-center gap-2">
               <span className="size-1.5 rounded-full bg-brand-light" />
