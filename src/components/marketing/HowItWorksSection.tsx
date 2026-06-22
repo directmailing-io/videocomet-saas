@@ -263,7 +263,7 @@ export function HowItWorksSection() {
   return (
     <section
       id="how-it-works"
-      className="relative z-[1] w-full bg-white py-24 md:py-32"
+      className="relative z-[2] w-full bg-white py-24 md:py-32 rounded-t-[32px] md:rounded-t-[48px] -mt-8 md:-mt-12 shadow-[0_-20px_60px_-20px_rgba(0,0,0,0.45)]"
     >
       <div className="max-w-6xl mx-auto px-6 md:px-10">
         <div className="max-w-2xl mx-auto text-center mb-12">

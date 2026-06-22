@@ -1,42 +1,87 @@
-import { CheckCircle2 } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { DemoPlayer } from "./DemoPlayer";
+import { RevealOnScroll } from "./RevealOnScroll";
 
 export function DemoSection() {
   return (
     <section
       id="demo"
-      className="relative z-[1] w-full bg-surface-soft rounded-t-[32px] md:rounded-t-[48px] -mt-8 md:-mt-12 shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.35)]"
+      className="relative z-[1] w-full bg-black text-white overflow-hidden py-32 md:py-40"
     >
-      <div className="max-w-5xl mx-auto px-6 py-20 md:py-28">
-        <div className="text-center mb-10 md:mb-14">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-soft text-brand-deep text-xs font-semibold mb-4">
-            <span className="w-1.5 h-1.5 rounded-full bg-brand" />
-            Live-Demo
+      {/* Sehr dezenter radialer Brand-Glow oben in der Mitte fuer
+          Tiefe und Marken-Akzent — bleibt subtil schwarz */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(60% 50% at 50% 0%, rgba(124,92,232,0.18) 0%, rgba(124,92,232,0) 60%)",
+        }}
+      />
+
+      <div className="relative max-w-5xl mx-auto px-6 md:px-10">
+        <div className="text-center max-w-3xl mx-auto mb-14 md:mb-20">
+          <RevealOnScroll delay={0}>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/8 border border-white/15 backdrop-blur text-white/85 text-xs font-semibold mb-7">
+              <Sparkles className="size-3.5 text-brand-light" />
+              Live-Demo
+            </div>
+          </RevealOnScroll>
+
+          <RevealOnScroll delay={140}>
+            <h2 className="text-4xl md:text-6xl font-bold tracking-[-0.03em] leading-[1.04] text-white text-balance">
+              Wie sieht ein
+            </h2>
+          </RevealOnScroll>
+
+          <RevealOnScroll delay={240}>
+            <h2
+              className="text-4xl md:text-6xl font-bold tracking-[-0.03em] leading-[1.04] bg-clip-text text-transparent text-balance"
+              style={{
+                backgroundImage:
+                  "linear-gradient(96deg, #C7B6FE 0%, #AA8CF5 35%, #7C5CE8 70%, #5232C7 100%)",
+              }}
+            >
+              personalisiertes Video
+            </h2>
+          </RevealOnScroll>
+
+          <RevealOnScroll delay={340}>
+            <h2 className="text-4xl md:text-6xl font-bold tracking-[-0.03em] leading-[1.04] text-white text-balance">
+              eigentlich aus?
+            </h2>
+          </RevealOnScroll>
+
+          <RevealOnScroll delay={520}>
+            <p className="mt-8 text-lg md:text-xl leading-relaxed text-white/65 text-balance max-w-2xl mx-auto">
+              Du hast volle Freiheit, wie dein Video am Ende aussieht. Wie
+              eine persönliche Loom-Aufnahme: deine Webcam plus alles, was
+              du auf dem Bildschirm zeigen willst. Wähle Modus und
+              Empfänger und sieh, wie sich das Video live anpasst.
+            </p>
+          </RevealOnScroll>
+        </div>
+
+        <RevealOnScroll delay={640}>
+          <DemoPlayer />
+        </RevealOnScroll>
+
+        <RevealOnScroll delay={820}>
+          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 mt-14 text-xs text-white/55">
+            <span className="inline-flex items-center gap-2">
+              <span className="size-1.5 rounded-full bg-brand-light" />
+              30 Sekunden Webcam, 1000 personalisierte Videos
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="size-1.5 rounded-full bg-brand-light" />
+              Vollautomatisch generiert
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="size-1.5 rounded-full bg-brand-light" />
+              Eigene Landingpage für jeden Empfänger
+            </span>
           </div>
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-balance mb-3">
-            So sieht ein personalisiertes Video aus
-          </h2>
-          <p className="text-ink-muted max-w-2xl mx-auto text-balance">
-            Wähle einen Modus und sieh, wie VIDEOCOMET deine Webcam-Aufnahme mit
-            Website, Folien oder einem Scroll-Video zu einer persönlichen Botschaft
-            kombiniert.
-          </p>
-        </div>
-        <DemoPlayer />
-        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 mt-10 text-xs text-ink-muted">
-          <span className="inline-flex items-center gap-1.5">
-            <CheckCircle2 className="size-3.5 text-ok" />
-            30 Sekunden Webcam → 500 personalisierte Videos
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <CheckCircle2 className="size-3.5 text-ok" />
-            Vollautomatisch
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <CheckCircle2 className="size-3.5 text-ok" />
-            Eigene Landingpages für jeden Empfänger
-          </span>
-        </div>
+        </RevealOnScroll>
       </div>
     </section>
   );
