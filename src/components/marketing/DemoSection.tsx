@@ -5,7 +5,7 @@ export function DemoSection() {
   return (
     <section
       id="demo"
-      className="w-full bg-surface-soft border-t border-line"
+      className="relative z-[1] w-full bg-surface-soft rounded-t-[32px] md:rounded-t-[48px] -mt-8 md:-mt-12 shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.35)]"
     >
       <div className="max-w-5xl mx-auto px-6 py-20 md:py-28">
         <div className="text-center mb-10 md:mb-14">

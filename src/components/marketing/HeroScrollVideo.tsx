@@ -87,10 +87,13 @@ export function HeroScrollVideo() {
       const idx = Math.round(progress * (FRAME_COUNT - 1));
       drawFrame(idx);
 
-      // Background fade-to-black (last 22 %)
+      // Background-Fade: voll schwarz am Start (0–6 %) UND am Ende (78–100 %).
+      // Dazwischen ist das Video sichtbar, der Inhalt liegt darueber.
       if (fadeRef.current) {
-        const fade =
+        const startFade = progress < 0.06 ? 1 - progress / 0.06 : 0;
+        const endFade =
           progress < 0.78 ? 0 : Math.min(1, (progress - 0.78) / 0.22);
+        const fade = Math.max(startFade, endFade);
         fadeRef.current.style.opacity = fade.toFixed(3);
       }
       // Content fades earlier (60–82 %)
@@ -153,11 +156,12 @@ export function HeroScrollVideo() {
               "radial-gradient(120% 80% at 50% 50%, transparent 0%, rgba(0,0,0,0.40) 65%, rgba(0,0,0,0.88) 100%), linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.88) 100%)",
           }}
         />
-        {/* Solid fade-to-black overlay (driven by scroll) */}
+        {/* Solid Black-Overlay (Scroll-getrieben): am Start opaque, fadet bis
+            6 % aus, am Ende ab 78 % wieder rein. Initialer Render = schwarz. */}
         <div
           ref={fadeRef}
           className="absolute inset-0 bg-black pointer-events-none"
-          style={{ opacity: 0, willChange: "opacity" }}
+          style={{ opacity: 1, willChange: "opacity" }}
           aria-hidden
         />
 
