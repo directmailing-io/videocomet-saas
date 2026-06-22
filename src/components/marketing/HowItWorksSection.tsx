@@ -2,15 +2,19 @@
 
 import * as React from "react";
 import QRCodeLib from "qrcode";
+import { AnimatePresence, motion } from "framer-motion";
 import {
+  CalendarCheck,
   CheckCircle2,
   ClipboardList,
+  Eye,
   FileText,
   Image as ImageIcon,
   Linkedin,
   AtSign,
   Mail,
   MousePointerClick,
+  PlayCircle,
   Presentation,
   Video as VideoIcon,
   Zap,
@@ -1968,30 +1972,142 @@ function RealQrCode({ value, size }: { value: string; size: number }) {
 // Tracking Layer — dashboard + push notifs
 // ---------------------------------------------------------------------------
 
-function TrackingLayer({ active }: { active: boolean }) {
-  const NOTIFS = [
-    {
-      icon: <ImageIcon className="size-3" />,
-      who: "Max Mustermann",
-      what: "öffnete deine Seite",
-      meta: "vor 2 s",
-      color: "#10B981",
-    },
-    {
-      icon: <VideoIcon className="size-3" />,
-      who: "Lisa Lust",
-      what: "schaut gerade (00:42)",
-      meta: "vor 8 s",
-      color: "#7C5CE8",
-    },
-    {
-      icon: <MousePointerClick className="size-3" />,
-      who: "Franz Friedrich",
-      what: "klickte Termin",
-      meta: "vor 14 s",
-      color: "#FBBF24",
-    },
+// 4 Event-Typen, die der User vorgegeben hat
+const TRACK_EVENTS = [
+  {
+    action: "hat die Seite aufgerufen",
+    icon: <Eye className="size-3" />,
+    color: "#10B981",
+  },
+  {
+    action: "hat das Video abgespielt",
+    icon: <PlayCircle className="size-3" />,
+    color: "#7C5CE8",
+  },
+  {
+    action: "hat den CTA-Button geklickt",
+    icon: <MousePointerClick className="size-3" />,
+    color: "#FBBF24",
+  },
+  {
+    action: "hat einen Termin gebucht",
+    icon: <CalendarCheck className="size-3" />,
+    color: "#F472B6",
+  },
+] as const;
+
+// Lead-Pool für die Notifs (Vorname + Firma) — 20 deutsche Namen mit
+// Firma, gefuellt aus den vorhandenen Lead-Pools.
+const NOTIF_LEADS = (() => {
+  const all = [
+    { first: "Max", last: "Mustermann", company: "Mustermann Industrie" },
+    { first: "Lisa", last: "Lust", company: "Lust Cosmetics" },
+    { first: "Franz", last: "Friedrich", company: "Friedrich Manufaktur" },
+    { first: "Sofia", last: "Reuter", company: "Reuter Coaching" },
+    ...EXTRA_PEOPLE.slice(0, 16).map((p) => {
+      const parts = p.company.split(" ");
+      return { first: p.first, last: parts[0], company: p.company };
+    }),
   ];
+  return all;
+})();
+
+type TrackNotif = {
+  id: number;
+  who: string;
+  company: string;
+  actionIndex: number;
+  ageLabel: string;
+};
+
+function pickRandom<T>(arr: ReadonlyArray<T>): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function ageLabelFor(secAgo: number): string {
+  if (secAgo < 5) return "gerade eben";
+  if (secAgo < 60) return `vor ${Math.round(secAgo)} s`;
+  return `vor ${Math.round(secAgo / 60)} min`;
+}
+
+function TrackingLayer({ active }: { active: boolean }) {
+  const [notifs, setNotifs] = React.useState<TrackNotif[]>([]);
+  const idRef = React.useRef(0);
+  const createdAtRef = React.useRef<Map<number, number>>(new Map());
+
+  // Stream-Logik: bei Step-Aktivierung 3 Initial-Notifs setzen, dann
+  // alle 4-10 s (zufaellig) eine neue oben einreihen, alte rutschen
+  // nach unten, max. 6 sichtbar. Insgesamt 20 ueber ca. 2 Min.
+  React.useEffect(() => {
+    if (!active) {
+      setNotifs([]);
+      createdAtRef.current.clear();
+      return;
+    }
+    // Setup initial
+    const now = Date.now();
+    createdAtRef.current.clear();
+    const initial: TrackNotif[] = [0, 1, 2].map((i) => {
+      const id = idRef.current++;
+      const lead = pickRandom(NOTIF_LEADS);
+      const actionIndex = Math.floor(Math.random() * TRACK_EVENTS.length);
+      const secAgo = (i + 1) * 8;
+      createdAtRef.current.set(id, now - secAgo * 1000);
+      return {
+        id,
+        who: `${lead.first} ${lead.last}`,
+        company: lead.company,
+        actionIndex,
+        ageLabel: ageLabelFor(secAgo),
+      };
+    });
+    setNotifs(initial);
+
+    let cancelled = false;
+    function scheduleNext() {
+      if (cancelled) return;
+      // Unregelmaessig zwischen 4 und 10 s
+      const delay = 4000 + Math.random() * 6000;
+      window.setTimeout(() => {
+        if (cancelled) return;
+        const id = idRef.current++;
+        const lead = pickRandom(NOTIF_LEADS);
+        const actionIndex = Math.floor(Math.random() * TRACK_EVENTS.length);
+        createdAtRef.current.set(id, Date.now());
+        const newNotif: TrackNotif = {
+          id,
+          who: `${lead.first} ${lead.last}`,
+          company: lead.company,
+          actionIndex,
+          ageLabel: "gerade eben",
+        };
+        setNotifs((prev) => {
+          // newest first, max 6
+          const next = [newNotif, ...prev].slice(0, 6);
+          return next;
+        });
+        scheduleNext();
+      }, delay);
+    }
+    scheduleNext();
+
+    // Age-Update jede 5 s damit "vor X s" hochzaehlt
+    const ageTick = window.setInterval(() => {
+      const now2 = Date.now();
+      setNotifs((prev) =>
+        prev.map((n) => {
+          const created = createdAtRef.current.get(n.id) ?? now2;
+          const sec = (now2 - created) / 1000;
+          return { ...n, ageLabel: ageLabelFor(sec) };
+        }),
+      );
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(ageTick);
+    };
+  }, [active]);
 
   return (
     <>
@@ -2058,37 +2174,60 @@ function TrackingLayer({ active }: { active: boolean }) {
         </div>
       </div>
 
-      {/* Push notifs */}
-      <div className="absolute top-12 right-3 w-[210px] flex flex-col gap-2 z-30">
-        {NOTIFS.map((n, i) => (
-          <div
-            key={n.who}
-            className="rounded-xl p-2.5 backdrop-blur-md border border-white/15 transition-all duration-500"
-            style={{
-              backgroundColor: "rgba(15,23,42,0.85)",
-              opacity: active ? 1 : 0,
-              transform: active ? "translateX(0)" : "translateX(80px)",
-              transitionDelay: `${i * 220 + 300}ms`,
-              boxShadow: "0 14px 28px -14px rgba(15,23,42,0.55)",
-            }}
-          >
-            <div className="flex gap-2 items-start">
-              <div
-                className="shrink-0 size-7 rounded-md flex items-center justify-center text-white"
-                style={{ backgroundColor: n.color }}
+      {/* Push notifs — gestreamed, neueste oben, alte rutschen runter,
+          ueberzaehlige (>6) fallen unten raus. AnimatePresence mit layout
+          fuer smooth Enter/Exit + Reflow */}
+      <div className="absolute top-12 right-3 w-[224px] flex flex-col gap-2 z-30">
+        <AnimatePresence initial={false}>
+          {notifs.map((n) => {
+            const ev = TRACK_EVENTS[n.actionIndex];
+            return (
+              <motion.div
+                key={n.id}
+                layout
+                initial={{ opacity: 0, x: 60, scale: 0.9 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{
+                  opacity: 0,
+                  x: 60,
+                  scale: 0.92,
+                  transition: { duration: 0.25 },
+                }}
+                transition={{
+                  type: "spring",
+                  stiffness: 320,
+                  damping: 28,
+                  mass: 0.7,
+                }}
+                className="rounded-xl p-2.5 backdrop-blur-md border border-white/15"
+                style={{
+                  backgroundColor: "rgba(15,23,42,0.88)",
+                  boxShadow: "0 14px 28px -14px rgba(15,23,42,0.55)",
+                }}
               >
-                {n.icon}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] leading-tight">
-                  <span className="text-white font-bold">{n.who}</span>{" "}
-                  <span className="text-white/70">{n.what}</span>
+                <div className="flex gap-2 items-start">
+                  <div
+                    className="shrink-0 size-7 rounded-md flex items-center justify-center text-white"
+                    style={{ backgroundColor: ev.color }}
+                  >
+                    {ev.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] leading-tight">
+                      <span className="text-white font-bold">{n.who}</span>{" "}
+                      <span className="text-white/55">von</span>{" "}
+                      <span className="text-white/80">{n.company}</span>{" "}
+                      <span className="text-white/70">{ev.action}</span>
+                    </div>
+                    <div className="text-[8px] text-white/45 mt-0.5">
+                      {n.ageLabel}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-[8px] text-white/45 mt-0.5">{n.meta}</div>
-              </div>
-            </div>
-          </div>
-        ))}
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
       </div>
     </>
   );
