@@ -189,14 +189,14 @@ export function HeroScrollVideo() {
           <div />
 
           <div className="vc-hero-eyebrow inline-flex items-center gap-3 text-[10px] tracking-[0.22em] uppercase opacity-0">
-            <span className="text-white/95">Persönliche Video-Akquise</span>
+            <span className="text-white/95">Die geheime Strategie der Marktführer</span>
             <span className="block w-3 h-px bg-white/30" />
             <span className="text-white/45">VIDEOCOMET</span>
           </div>
 
           <h1 className="vc-hero-title font-light tracking-[-0.025em] leading-[1.04] text-white text-[clamp(40px,6.4vw,88px)] max-w-[22ch] text-balance">
             <span className="block overflow-hidden">
-              <span className="vc-hero-line block">Ein Video.</span>
+              <span className="vc-hero-line block">Werde unvergesslich.</span>
             </span>
             <span className="block overflow-hidden">
               <span
@@ -206,17 +206,22 @@ export function HeroScrollVideo() {
                     "linear-gradient(96deg, #C7B6FE 0%, #AA8CF5 35%, #7C5CE8 70%, #5232C7 100%)",
                 }}
               >
-                Einschlagskraft eines Kometen.
+                Bei jedem Kontakt.
               </span>
             </span>
           </h1>
 
-          <p className="vc-hero-sub max-w-xl text-lg leading-relaxed text-white/70 opacity-0">
-            Einmal Webcam, tausendfach personalisiert. Trifft deinen Lead
-            genau dort, wo er erreichbar ist.
+          <p className="vc-hero-sub max-w-2xl text-[17px] leading-[1.6] text-white/75 opacity-0">
+            Einmal ein Video aufnehmen, danach tausendfach personalisiert an
+            deine Zielgruppe verschicken. Persönlich, authentisch und
+            überzeugend. So bleibst du in Erinnerung und wirst von neuen
+            Kunden kontaktiert.
           </p>
 
-          <div className="vc-hero-channels flex flex-wrap items-center gap-2 opacity-0">
+          <div className="vc-hero-channels flex flex-wrap items-center gap-x-3 gap-y-2 opacity-0">
+            <span className="text-[11px] tracking-[0.18em] uppercase text-white/55 mr-1">
+              Verschicke Videos per:
+            </span>
             <ChannelChip icon={<AtSign className="size-3.5" />} label="E-Mail" />
             <ChannelChip
               icon={<Linkedin className="size-3.5" />}
@@ -224,7 +229,7 @@ export function HeroScrollVideo() {
             />
             <ChannelChip
               icon={<Mail className="size-3.5" />}
-              label="Brief im Briefkasten"
+              label="Brief"
             />
           </div>
 
