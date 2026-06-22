@@ -1,78 +1,191 @@
 "use client";
 
 import * as React from "react";
-import { Zap } from "lucide-react";
+import {
+  CheckCircle2,
+  ClipboardList,
+  FileText,
+  Image as ImageIcon,
+  Linkedin,
+  AtSign,
+  Mail,
+  MousePointerClick,
+  Presentation,
+  Video as VideoIcon,
+  Zap,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Cumulative-Layer-Walkthrough:
+ * Kumulativer Layer-Walkthrough mit interaktiver Side-Panel-Auswahl.
  *
- * Das Webcam-<video> bleibt durchgaengig im selben DOM-Knoten gemountet,
- * laeuft konstant durch. Pro Step werden nur Position + Groesse animiert,
- * weitere Layer (Szene, Landingpage-Frame, 4er-Grid, Brief, Push-Notifs)
- * faden zusaetzlich ein. Reines React + CSS, kein Remotion und kein
- * Player-Clock – damit klappt das Klicken auf die Step-Pills 100 %.
+ * - Eine fixe 16:10-Stage links, Side-Panel rechts.
+ * - Webcam-<video> bleibt durchgehend gemountet und animiert nur seine
+ *   Position/Größe pro Step (CSS-Transitionen).
+ * - Im Side-Panel sind Sub-Selektoren pro Step (z. B. 3 Takes, 4 Szenen,
+ *   3 LP-Templates). Klick → Preview updated live.
  */
 
-const STEPS = [
+type StepId =
+  | "webcam"
+  | "scenes"
+  | "landing"
+  | "leads"
+  | "letter"
+  | "tracking";
+
+const STEPS: ReadonlyArray<{
+  id: StepId;
+  title: string;
+  eyebrow: string;
+  headline: string;
+  sub: string;
+}> = [
   {
     id: "webcam",
     title: "Webcam",
     eyebrow: "Aufnehmen",
-    headline: "Eine Aufnahme reicht.",
-    sub: "Eine ruhige Minute Webcam. Du wählst aus drei Takes den besten aus.",
+    headline: "Eine Aufnahme. Drei Takes.",
+    sub: "Nimm dich einmal vor der Webcam auf. Wähle den Take, der am besten sitzt.",
   },
   {
     id: "scenes",
     title: "Szenen",
     eyebrow: "Szenen wählen",
     headline: "Setze deine Aufnahme in Szene.",
-    sub: "Website-Screenshot, Folien, persönliches Dokument oder Solo. Deine Webcam sitzt automatisch im Bild.",
+    sub: "Website, Folien, persönliches Dokument oder reines Webcam-Solo. Deine Aufnahme sitzt automatisch im Bild.",
   },
   {
     id: "landing",
     title: "Landingpage",
     eyebrow: "Landingpage gestalten",
-    headline: "Dein Video sitzt im Hero.",
-    sub: "Wähle eine von drei Vorlagen. Headline, Platzhalter und CTA sind schon dran.",
+    headline: "Drei Vorlagen. Dein Video sitzt im Hero.",
+    sub: "Wähle ein Design. Headline, Platzhalter und CTA sind schon drin.",
   },
   {
     id: "leads",
     title: "Leadliste",
     eyebrow: "Leadliste hochladen",
     headline: "Aus eins wird tausend.",
-    sub: "CSV rein. Jede Zeile bekommt eine eigene Landingpage. Die fertige Liste wandert in dein Versand-Tool.",
+    sub: "CSV rein, jede Zeile bekommt eine eigene Landingpage. Die fertige Liste wandert in dein Versand-Tool.",
   },
   {
     id: "letter",
     title: "Brief",
     eyebrow: "Brief erstellen",
-    headline: "Drucke fertig. PDF inklusive.",
-    sub: "Pro Empfänger ein Brief mit Adresse, Anrede und persönlicher URL. Drucke direkt oder gib das Bündel an deinen Druckdienst.",
+    headline: "Druckfertiges PDF pro Empfänger.",
+    sub: "Adresse, Anrede, Inhalt und persönliche URL sind schon drin. Drucke direkt oder gib das Bündel an deinen Druckdienst.",
   },
   {
     id: "tracking",
     title: "Tracking",
     eyebrow: "Live tracken",
     headline: "Du siehst alles, in Echtzeit.",
-    sub: "Jede Öffnung, Watch-Time, jeder Klick. Optional synchron in dein HubSpot, Salessuite, Close, Zapier oder Make.",
+    sub: "Jede Öffnung, Watch-Time, jeder Klick. Optional synchron in HubSpot, Salessuite, Close, Zapier oder Make.",
   },
-] as const;
+];
+
+// ---------------------------------------------------------------------------
+// Webcam-Takes / Szenen / Templates
+// ---------------------------------------------------------------------------
+
+const TAKES = [
+  { id: 0, label: "Take A", subtitle: "0:48", initials: "CS", grad: "from-[#AA8CF5] to-[#7C5CE8]" },
+  { id: 1, label: "Take B", subtitle: "1:24", initials: "CS", grad: "from-[#10B981] to-[#047857]" },
+  { id: 2, label: "Take C", subtitle: "0:58", initials: "CS", grad: "from-[#FBBF24] to-[#D97706]" },
+];
+
+type SceneId = "website" | "slides" | "doc" | "solo";
+const SCENES: Array<{
+  id: SceneId;
+  label: string;
+  sub: string;
+  icon: React.ReactNode;
+}> = [
+  { id: "website", label: "Website", sub: "Screenshot des Leads", icon: <ImageIcon className="size-4" /> },
+  { id: "slides", label: "Folien", sub: "Pitch-Deck-Stil", icon: <Presentation className="size-4" /> },
+  { id: "doc", label: "Doc", sub: "Persönliche Notiz", icon: <FileText className="size-4" /> },
+  { id: "solo", label: "Solo", sub: "Nur dein Video", icon: <VideoIcon className="size-4" /> },
+];
+
+type TemplateId = "soft" | "bold" | "classic";
+const TEMPLATES: Array<{
+  id: TemplateId;
+  label: string;
+  sub: string;
+  bg: string;
+  headerBg: string;
+  accent: string;
+  text: string;
+  textMuted: string;
+  ctaBg: string;
+  ctaText: string;
+}> = [
+  {
+    id: "soft",
+    label: "Soft",
+    sub: "Hell, freundlich",
+    bg: "#FAFAFE",
+    headerBg: "#FFFFFF",
+    accent: "#7C5CE8",
+    text: "#0F172A",
+    textMuted: "#64748B",
+    ctaBg: "#7C5CE8",
+    ctaText: "#FFFFFF",
+  },
+  {
+    id: "bold",
+    label: "Bold",
+    sub: "Dark, hochkontrast",
+    bg: "#0F172A",
+    headerBg: "#1E293B",
+    accent: "#FBBF24",
+    text: "#FFFFFF",
+    textMuted: "#94A3B8",
+    ctaBg: "#FBBF24",
+    ctaText: "#0F172A",
+  },
+  {
+    id: "classic",
+    label: "Klassisch",
+    sub: "Warm, edel",
+    bg: "#FAF5EB",
+    headerBg: "#F5E6D3",
+    accent: "#92400E",
+    text: "#1C1917",
+    textMuted: "#78716C",
+    ctaBg: "#1C1917",
+    ctaText: "#FAF5EB",
+  },
+];
+
+const LEADS = [
+  { name: "Max Mustermann", first: "Max", company: "Mustermann Industrie", color: "#7C5CE8" },
+  { name: "Lisa Lust", first: "Lisa", company: "Lust Cosmetics", color: "#EC4899" },
+  { name: "Franz Friedrich", first: "Franz", company: "Friedrich Manufaktur", color: "#92400E" },
+  { name: "Sofia Reuter", first: "Sofia", company: "Reuter Coaching", color: "#10B981" },
+];
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
 
 export function HowItWorksSection() {
   const [step, setStep] = React.useState(0);
   const [manual, setManual] = React.useState(false);
+  const [take, setTake] = React.useState(0);
+  const [sceneId, setSceneId] = React.useState<SceneId>("website");
+  const [templateId, setTemplateId] = React.useState<TemplateId>("soft");
 
-  // Auto-advance unless user has clicked
   React.useEffect(() => {
     if (manual) return;
     const id = window.setInterval(() => {
       setStep((s) => (s + 1) % STEPS.length);
-    }, 5200);
+    }, 6000);
     return () => window.clearInterval(id);
   }, [manual]);
 
-  const handleClick = (i: number) => {
+  const onStepClick = (i: number) => {
     setStep(i);
     setManual(true);
   };
@@ -105,7 +218,7 @@ export function HowItWorksSection() {
               <button
                 key={s.id}
                 type="button"
-                onClick={() => handleClick(i)}
+                onClick={() => onStepClick(i)}
                 className={cn(
                   "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all",
                   "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
@@ -129,20 +242,36 @@ export function HowItWorksSection() {
           })}
         </div>
 
-        {/* Stage + caption */}
-        <div className="grid grid-cols-12 gap-8 items-center">
-          <div className="col-span-12 lg:col-span-7">
-            <Stage step={step} />
+        {/* Stage + Side panel */}
+        <div className="grid grid-cols-12 gap-6 items-start">
+          <div className="col-span-12 lg:col-span-8">
+            <Stage
+              step={step}
+              sceneId={sceneId}
+              template={TEMPLATES.find((t) => t.id === templateId)!}
+            />
           </div>
 
-          <div className="col-span-12 lg:col-span-5">
-            <StepCaption step={step} />
-            {!manual ? (
-              <div className="mt-6 flex items-center gap-2 text-xs text-ink-muted">
-                <span className="size-1.5 rounded-full bg-brand animate-pulse" />
-                Auto-Demo läuft. Klick auf einen Schritt, um zu steuern.
-              </div>
-            ) : null}
+          <div className="col-span-12 lg:col-span-4">
+            <SidePanel
+              step={step}
+              take={take}
+              setTake={(t) => {
+                setTake(t);
+                setManual(true);
+              }}
+              sceneId={sceneId}
+              setSceneId={(s) => {
+                setSceneId(s);
+                setManual(true);
+              }}
+              templateId={templateId}
+              setTemplateId={(t) => {
+                setTemplateId(t);
+                setManual(true);
+              }}
+              manual={manual}
+            />
           </div>
         </div>
       </div>
@@ -150,62 +279,378 @@ export function HowItWorksSection() {
   );
 }
 
-function StepCaption({ step }: { step: number }) {
+// ---------------------------------------------------------------------------
+// Side Panel
+// ---------------------------------------------------------------------------
+
+function SidePanel({
+  step,
+  take,
+  setTake,
+  sceneId,
+  setSceneId,
+  templateId,
+  setTemplateId,
+  manual,
+}: {
+  step: number;
+  take: number;
+  setTake: (t: number) => void;
+  sceneId: SceneId;
+  setSceneId: (s: SceneId) => void;
+  templateId: TemplateId;
+  setTemplateId: (t: TemplateId) => void;
+  manual: boolean;
+}) {
   const s = STEPS[step];
+
   return (
-    <div key={s.id} className="vc-fade-up">
-      <div className="text-xs font-bold tracking-[0.22em] uppercase text-brand-deep mb-3">
-        {s.eyebrow}
+    <div className="flex flex-col gap-5">
+      <div key={s.id} className="vc-fade-up">
+        <div className="text-xs font-bold tracking-[0.22em] uppercase text-brand-deep mb-3">
+          {s.eyebrow}
+        </div>
+        <h3 className="text-2xl md:text-3xl font-bold tracking-[-0.02em] text-ink leading-tight mb-3 text-balance">
+          {s.headline}
+        </h3>
+        <p className="text-ink-muted leading-relaxed">{s.sub}</p>
       </div>
-      <h3 className="text-2xl md:text-3xl font-bold tracking-[-0.02em] text-ink leading-tight mb-3 text-balance">
-        {s.headline}
-      </h3>
-      <p className="text-ink-muted leading-relaxed text-balance">{s.sub}</p>
+
+      {/* Selection area changes per step */}
+      <div key={`sel-${s.id}`} className="vc-fade-up">
+        {step === 0 ? (
+          <SelectorTakes value={take} onChange={setTake} />
+        ) : null}
+        {step === 1 ? (
+          <SelectorScenes value={sceneId} onChange={setSceneId} />
+        ) : null}
+        {step === 2 ? (
+          <SelectorTemplates value={templateId} onChange={setTemplateId} />
+        ) : null}
+        {step === 3 ? <SelectorLeadList /> : null}
+        {step === 4 ? <SelectorLetterInfo /> : null}
+        {step === 5 ? <SelectorTrackingInfo /> : null}
+      </div>
+
+      {!manual ? (
+        <div className="flex items-center gap-2 text-xs text-ink-muted">
+          <span className="size-1.5 rounded-full bg-brand animate-pulse" />
+          Auto-Demo läuft. Klick auf einen Schritt, um zu steuern.
+        </div>
+      ) : null}
 
       <style>{`
         @keyframes vc-fade-up-anim {
           0%   { opacity: 0; transform: translateY(8px); }
           100% { opacity: 1; transform: translateY(0); }
         }
-        .vc-fade-up { animation: vc-fade-up-anim 0.5s cubic-bezier(0.2,0.8,0.2,1) forwards; }
+        .vc-fade-up { animation: vc-fade-up-anim 0.45s cubic-bezier(0.2,0.8,0.2,1) forwards; }
       `}</style>
     </div>
   );
 }
 
+function SelectorTakes({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {TAKES.map((t) => {
+        const active = t.id === value;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onChange(t.id)}
+            className={cn(
+              "flex items-center gap-3 p-3 rounded-xl border transition-all text-left",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
+              active
+                ? "border-brand bg-brand-soft/50"
+                : "border-line bg-white hover:border-brand/40",
+            )}
+          >
+            <div
+              className={cn(
+                "shrink-0 size-10 rounded-full bg-gradient-to-br flex items-center justify-center text-white font-bold",
+                t.grad,
+              )}
+            >
+              {t.initials}
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-ink">{t.label}</div>
+              <div className="text-xs text-ink-muted">{t.subtitle} · 1080p</div>
+            </div>
+            {active ? <CheckCircle2 className="size-4 text-brand" /> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SelectorScenes({
+  value,
+  onChange,
+}: {
+  value: SceneId;
+  onChange: (s: SceneId) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {SCENES.map((s) => {
+        const active = s.id === value;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onChange(s.id)}
+            className={cn(
+              "flex flex-col items-start gap-1.5 p-3 rounded-xl border transition-all text-left",
+              active
+                ? "border-brand bg-brand-soft/50"
+                : "border-line bg-white hover:border-brand/40",
+            )}
+          >
+            <span
+              className={cn(
+                active ? "text-brand-deep" : "text-ink-muted",
+              )}
+            >
+              {s.icon}
+            </span>
+            <div>
+              <div className="text-sm font-semibold text-ink">{s.label}</div>
+              <div className="text-[11px] text-ink-muted">{s.sub}</div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SelectorTemplates({
+  value,
+  onChange,
+}: {
+  value: TemplateId;
+  onChange: (t: TemplateId) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {TEMPLATES.map((t) => {
+        const active = t.id === value;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onChange(t.id)}
+            className={cn(
+              "flex items-center gap-3 p-3 rounded-xl border transition-all text-left",
+              active
+                ? "border-brand bg-brand-soft/50"
+                : "border-line bg-white hover:border-brand/40",
+            )}
+          >
+            <div
+              className="shrink-0 size-12 rounded-lg overflow-hidden border border-line"
+              style={{ backgroundColor: t.bg }}
+            >
+              <div
+                className="h-1/2"
+                style={{ backgroundColor: t.headerBg }}
+              />
+              <div
+                className="h-1/2 flex items-center justify-center"
+                style={{ backgroundColor: t.bg }}
+              >
+                <div
+                  className="w-3/4 h-1 rounded-full"
+                  style={{ backgroundColor: t.accent }}
+                />
+              </div>
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-ink">{t.label}</div>
+              <div className="text-xs text-ink-muted">{t.sub}</div>
+            </div>
+            {active ? <CheckCircle2 className="size-4 text-brand" /> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SelectorLeadList() {
+  return (
+    <div className="rounded-xl border border-line bg-white overflow-hidden">
+      <div className="px-3 py-2 bg-surface-soft border-b border-line flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="size-3.5 text-brand-deep" />
+          <span className="text-xs font-semibold text-ink">leads.csv</span>
+        </div>
+        <span className="text-[10px] font-mono text-ink-muted">12.043 Zeilen</span>
+      </div>
+      <table className="w-full text-xs">
+        <tbody>
+          {LEADS.map((l, i) => (
+            <tr
+              key={i}
+              className="border-b border-line/60 last:border-b-0"
+            >
+              <td className="py-1.5 px-3 text-ink font-medium w-1/3">
+                {l.first}
+              </td>
+              <td className="py-1.5 px-3 text-ink-soft">{l.company}</td>
+            </tr>
+          ))}
+          <tr>
+            <td colSpan={2} className="py-2 px-3 text-center text-[10px] text-ink-muted/70 italic">
+              +12.039 weitere
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div className="px-3 py-2 border-t border-line bg-brand/5 flex items-center gap-2">
+        <CheckCircle2 className="size-3 text-ok" />
+        <span className="text-[11px] text-ink">Spalten erkannt</span>
+      </div>
+    </div>
+  );
+}
+
+function SelectorLetterInfo() {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3 p-3 rounded-xl border border-line bg-white">
+        <FileText className="size-5 text-brand-deep shrink-0" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-ink">PDF-Bundle</div>
+          <div className="text-xs text-ink-muted">3.631 druckfertige Briefe</div>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 p-3 rounded-xl border border-line bg-white">
+        <ImageIcon className="size-5 text-brand-deep shrink-0" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-ink">QR-Code drin</div>
+          <div className="text-xs text-ink-muted">Direkt zum persönlichen Video</div>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 p-3 rounded-xl border border-line bg-white">
+        <Mail className="size-5 text-brand-deep shrink-0" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-ink">Anschriften vorbefüllt</div>
+          <div className="text-xs text-ink-muted">Aus deiner Leadliste</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SelectorTrackingInfo() {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { l: "Öffnung", icon: <AtSign className="size-3" /> },
+          { l: "Watch-Time", icon: <VideoIcon className="size-3" /> },
+          { l: "CTA-Klick", icon: <MousePointerClick className="size-3" /> },
+        ].map((k, i) => (
+          <div
+            key={i}
+            className="p-2 rounded-lg border border-line bg-white text-center"
+          >
+            <div className="flex justify-center text-brand-deep mb-1">
+              {k.icon}
+            </div>
+            <div className="text-[10px] font-semibold text-ink">{k.l}</div>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-xl border border-line bg-white p-3">
+        <div className="text-[10px] font-bold tracking-wider uppercase text-ink-muted mb-2">
+          CRM-Sync optional
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {["HubSpot", "Salessuite", "Close", "Zapier", "Make"].map((c) => (
+            <span
+              key={c}
+              className="px-2 py-0.5 rounded-md bg-surface-soft text-[10px] text-ink-soft border border-line"
+            >
+              {c}
+            </span>
+          ))}
+        </div>
+        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-ink-muted">
+          <Linkedin className="size-3" />
+          Webhook-Event pro Aktion
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Stage — alle Layer in einem Container, Webcam-Video bleibt mounted
+// Stage
 // ---------------------------------------------------------------------------
-function Stage({ step }: { step: number }) {
-  // Webcam-Geometrie pro Step (Prozent vom Stage)
+
+type Template = (typeof TEMPLATES)[number];
+
+function Stage({
+  step,
+  sceneId,
+  template,
+}: {
+  step: number;
+  sceneId: SceneId;
+  template: Template;
+}) {
   const webcamPos = WEBCAM_LAYOUT[step] ?? WEBCAM_LAYOUT[0];
 
   return (
     <div className="relative w-full aspect-[16/10] rounded-3xl overflow-hidden bg-gradient-to-br from-[#0F172A] via-[#1a1d35] to-[#0F172A] border border-line shadow-[0_30px_80px_-30px_rgba(15,23,42,0.35)]">
-      {/* subtle stars */}
-      <div className="absolute inset-0 opacity-[0.18]" style={STARS_STYLE} />
+      {/* Subtle stars */}
+      <div className="absolute inset-0 opacity-[0.15]" style={STARS_STYLE} />
 
-      {/* Layer 1: scene background (Step 1+) */}
-      <SceneLayer active={step >= 1} />
+      {/* Scene background — only step 1 */}
+      <SceneLayer active={step === 1} sceneId={sceneId} />
 
-      {/* Layer 2: landingpage frame (Step 2+) — wraps the scene */}
-      <LandingFrame active={step >= 2 && step <= 2} />
+      {/* Landingpage — step 2 single, full bleed */}
+      <LandingPageLayer active={step === 2} template={template} lead={LEADS[0]} showVideoSlot />
 
-      {/* Layer 3: 4er-Grid (Step 3+) */}
-      <MultiGridLayer active={step >= 3} />
+      {/* Multi grid — step 3 */}
+      <MultiGridLayer active={step === 3} template={template} />
 
-      {/* Layer 4: Brief-Stack (Step 4+) */}
-      <LetterStack active={step >= 4} />
+      {/* Letter — step 4 */}
+      <LetterLayer active={step === 4} />
 
-      {/* Layer 5: Push-Notifs (Step 5) */}
-      <PushNotifications active={step === 5} />
+      {/* Tracking dashboard + push notifs — step 5 */}
+      <TrackingLayer active={step === 5} />
 
-      {/* Webcam — always mounted, just resized/repositioned */}
+      {/* Step badge top-left */}
+      <div className="absolute top-4 left-4 z-30 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/45 backdrop-blur-md text-white text-[11px] font-mono tracking-wider">
+        <span className="text-brand-light font-bold">0{step + 1}</span>
+        <span className="opacity-60">/</span>
+        <span className="opacity-60">06</span>
+      </div>
+
+      {/* Webcam — always mounted */}
       <div
-        className="absolute transition-all duration-700"
+        className="absolute z-20"
         style={{
           ...webcamPos,
-          transitionTimingFunction: "cubic-bezier(0.65, 0, 0.35, 1)",
+          transition:
+            "top 700ms cubic-bezier(0.65,0,0.35,1), left 700ms cubic-bezier(0.65,0,0.35,1), width 700ms cubic-bezier(0.65,0,0.35,1), border-radius 700ms cubic-bezier(0.65,0,0.35,1)",
+          overflow: "hidden",
+          boxShadow:
+            "0 0 0 4px rgba(255,255,255,0.92), 0 18px 36px -12px rgba(15,23,42,0.55)",
         }}
       >
         <video
@@ -217,331 +662,529 @@ function Stage({ step }: { step: number }) {
           preload="auto"
           disableRemotePlayback
           disablePictureInPicture
-          className="w-full h-full object-cover"
+          className="block w-full h-full object-cover"
           style={{
-            borderRadius: webcamPos.borderRadius as string,
-            boxShadow:
-              "0 0 0 4px rgba(255,255,255,0.92), 0 18px 36px -12px rgba(15,23,42,0.55)",
-            transition: "box-shadow 700ms",
+            aspectRatio: webcamPos.aspectRatio,
           }}
         />
-      </div>
-
-      {/* Step overlay top-left */}
-      <div className="absolute top-4 left-4 z-30 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-md text-white text-[11px] font-mono tracking-wider">
-        <span className="text-brand-light font-bold">
-          0{step + 1}
-        </span>
-        <span className="opacity-60">/</span>
-        <span className="opacity-60">06</span>
       </div>
     </div>
   );
 }
 
-// Webcam layout-rules pro Step (Position via top/left, kein Center-Offset
-// notwendig). Werte in % vom Stage. Aspect ratio des Containers ist 16:10,
-// also width:height vom Webcam-Element bezieht sich proportional auf die
-// Stage-Breite bzw. -Hoehe — was bei aspect-ratio asymmetrisch zu Verzerrung
-// fuehrt. Wir setzen aspect-ratio via Style direkt auf "1/1" damit der
-// Kreis ein Kreis bleibt.
+// Webcam-Geometrie pro Step (in % vom Stage). aspectRatio macht ihn rund/eckig.
 const WEBCAM_LAYOUT: Array<{
   top: string;
   left: string;
   width: string;
   aspectRatio: string;
   borderRadius: string;
-  zIndex: number;
 }> = [
-  // 0 Webcam: zentriert, großes Rund
-  { top: "16%", left: "33%", width: "34%", aspectRatio: "1/1", borderRadius: "9999px", zIndex: 20 },
-  // 1 Szenen: bottom-left PiP
-  { top: "62%", left: "5%", width: "16%", aspectRatio: "1/1", borderRadius: "9999px", zIndex: 20 },
-  // 2 Landingpage: links unten im LP-Hero
-  { top: "55%", left: "8%", width: "14%", aspectRatio: "1/1", borderRadius: "9999px", zIndex: 20 },
-  // 3 Leads: in der ersten LP-Kachel oben links
-  { top: "27%", left: "11%", width: "8%", aspectRatio: "1/1", borderRadius: "9999px", zIndex: 20 },
-  // 4 Brief: gleich wie Step 3, Brief liegt rechts daneben
-  { top: "27%", left: "9%", width: "8%", aspectRatio: "1/1", borderRadius: "9999px", zIndex: 20 },
-  // 5 Tracking: kleines PiP in der oberen rechten Ecke
-  { top: "8%", left: "78%", width: "14%", aspectRatio: "1/1", borderRadius: "9999px", zIndex: 20 },
+  // 0 Webcam — zentriert, großes Rund
+  { top: "16%", left: "33%", width: "34%", aspectRatio: "1/1", borderRadius: "9999px" },
+  // 1 Szenen — bottom-left PiP, Kreis
+  { top: "62%", left: "5%", width: "16%", aspectRatio: "1/1", borderRadius: "9999px" },
+  // 2 Landingpage — rechts im Hero, Rounded-Rect
+  { top: "28%", left: "57%", width: "36%", aspectRatio: "4/3", borderRadius: "24px" },
+  // 3 Leads — in der ersten LP-Kachel des 2x2-Grids, Rounded-Rect
+  { top: "20%", left: "31%", width: "16%", aspectRatio: "4/3", borderRadius: "10px" },
+  // 4 Brief — verschwindet aus dem Hauptfokus, kleines PiP rechts oben
+  { top: "8%", left: "82%", width: "12%", aspectRatio: "1/1", borderRadius: "9999px" },
+  // 5 Tracking — kleines PiP rechts oben
+  { top: "8%", left: "82%", width: "12%", aspectRatio: "1/1", borderRadius: "9999px" },
 ];
 
 // ---------------------------------------------------------------------------
-// SceneLayer — Website-Screenshot (Mustermann) als Hintergrund
+// Stage Layers
 // ---------------------------------------------------------------------------
-function SceneLayer({ active }: { active: boolean }) {
+
+function SceneLayer({
+  active,
+  sceneId,
+}: {
+  active: boolean;
+  sceneId: SceneId;
+}) {
   return (
     <div
       className="absolute inset-0 transition-opacity duration-700"
-      style={{
-        opacity: active ? 1 : 0,
-        transitionTimingFunction: "cubic-bezier(0.65, 0, 0.35, 1)",
-      }}
+      style={{ opacity: active ? 1 : 0 }}
     >
+      {sceneId === "website" ? <SceneWebsite /> : null}
+      {sceneId === "slides" ? <SceneSlides /> : null}
+      {sceneId === "doc" ? <SceneDoc /> : null}
+      {sceneId === "solo" ? <SceneSolo /> : null}
+    </div>
+  );
+}
+
+function SceneWebsite() {
+  return (
+    <>
       <img
         src="/demo-assets/website-max.png"
         alt=""
         aria-hidden
         className="w-full h-full object-cover object-top"
-        style={{
-          filter: "brightness(0.95)",
-        }}
       />
       <div
-        className="absolute inset-0 pointer-events-none"
+        className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(180deg, rgba(0,0,0,0.2) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.4) 100%)",
+            "linear-gradient(180deg, rgba(0,0,0,0.2) 0%, transparent 35%, transparent 70%, rgba(0,0,0,0.45) 100%)",
         }}
       />
+    </>
+  );
+}
+
+function SceneSlides() {
+  return (
+    <div className="absolute inset-0 bg-gradient-to-br from-[#F3EEFF] via-[#FFFFFF] to-[#F8FAFC] flex items-center justify-center">
+      <div className="text-center px-12">
+        <div className="text-xs font-bold tracking-[0.3em] text-brand-deep mb-4 uppercase">
+          Persönliches Pitch-Deck
+        </div>
+        <div className="text-5xl md:text-6xl font-extrabold text-ink leading-[1.05]">
+          Video für
+          <br />
+          <span className="text-brand-deep">Max Mustermann</span>
+        </div>
+        <div className="text-sm text-ink-muted mt-4">
+          Mustermann Industrie GmbH · München
+        </div>
+      </div>
     </div>
   );
 }
 
+function SceneDoc() {
+  return (
+    <div className="absolute inset-0 bg-gradient-to-br from-[#F8FAFC] to-[#E2E8F0] p-8 flex items-center justify-center">
+      <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+        <div className="w-12 h-1 bg-brand mb-4 rounded" />
+        <div className="text-lg font-bold text-ink mb-2">Notiz für Max</div>
+        <div className="text-xs text-ink-muted mb-4">
+          Schnell-Check für mustermann-industrie.de
+        </div>
+        <div className="space-y-1.5">
+          <div className="h-1 bg-ink/15 w-full rounded" />
+          <div className="h-1 bg-ink/15 w-5/6 rounded" />
+          <div className="h-1 bg-ink/15 w-4/6 rounded" />
+        </div>
+        <div className="mt-4 p-2 rounded bg-red-50 border-l-2 border-red-400">
+          <div className="text-[10px] font-bold text-red-900">
+            1. Kein Datenblatt zum Download
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SceneSolo() {
+  return (
+    <div className="absolute inset-0 bg-gradient-to-br from-[#0F172A] via-[#1a1d35] to-[#0F172A]" />
+  );
+}
+
 // ---------------------------------------------------------------------------
-// LandingFrame — Browser-Chrome + Header oben + CTA unten um die Szene
+// Landingpage Layer — clean, two-col hero, video right
 // ---------------------------------------------------------------------------
-function LandingFrame({ active }: { active: boolean }) {
+
+function LandingPageLayer({
+  active,
+  template,
+  lead,
+  showVideoSlot,
+}: {
+  active: boolean;
+  template: Template;
+  lead: (typeof LEADS)[number];
+  showVideoSlot?: boolean;
+}) {
   return (
     <div
       className="absolute inset-0 transition-opacity duration-700 z-10"
       style={{ opacity: active ? 1 : 0, pointerEvents: "none" }}
     >
-      {/* Browser top-bar */}
-      <div className="absolute top-0 left-0 right-0 h-9 bg-white/95 backdrop-blur flex items-center px-3 gap-2">
-        <div className="flex gap-1.5">
-          <div className="size-2 rounded-full bg-red-400" />
-          <div className="size-2 rounded-full bg-yellow-400" />
-          <div className="size-2 rounded-full bg-green-400" />
+      <LandingPageInner template={template} lead={lead} videoSlot={!!showVideoSlot} fullSize />
+    </div>
+  );
+}
+
+function LandingPageInner({
+  template,
+  lead,
+  videoSlot,
+  fullSize,
+}: {
+  template: Template;
+  lead: (typeof LEADS)[number];
+  videoSlot: boolean;
+  fullSize: boolean;
+}) {
+  return (
+    <div
+      className="absolute inset-0 flex flex-col"
+      style={{ backgroundColor: template.bg }}
+    >
+      {/* Browser chrome */}
+      <div className="shrink-0 h-7 bg-white/95 backdrop-blur flex items-center px-3 gap-2 border-b border-black/5">
+        <div className="flex gap-1">
+          <div className="size-1.5 rounded-full bg-red-400" />
+          <div className="size-1.5 rounded-full bg-yellow-400" />
+          <div className="size-1.5 rounded-full bg-green-400" />
         </div>
-        <div className="flex-1 h-5 mx-2 rounded-md bg-surface-soft text-[10px] text-ink-muted flex items-center px-2 font-mono">
-          videocomet.de/lp/max-mustermann
+        <div className="flex-1 h-4 mx-2 rounded bg-surface-soft text-[8px] text-ink-muted flex items-center px-2 font-mono">
+          videocomet.de/lp/{lead.first.toLowerCase()}-{lead.company.toLowerCase().split(" ")[0]}
         </div>
       </div>
-      {/* CTA banner bottom */}
-      <div className="absolute bottom-4 right-4 px-3 py-2 rounded-lg bg-brand text-white text-xs font-semibold shadow-lg">
-        Termin sichern →
+
+      {/* Header */}
+      <div
+        className="shrink-0 flex items-center px-5 py-3 border-b"
+        style={{
+          backgroundColor: template.headerBg,
+          borderColor:
+            template.id === "bold" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <div
+            className="size-5 rounded"
+            style={{ backgroundColor: template.accent }}
+          />
+          <div
+            className={cn(
+              "text-[10px] font-extrabold tracking-wider uppercase",
+            )}
+            style={{ color: template.text }}
+          >
+            Dein Logo
+          </div>
+        </div>
+        <div className="ml-auto flex items-center gap-4">
+          {["Home", "Über", "Kontakt"].map((n) => (
+            <span
+              key={n}
+              className="text-[10px] font-medium"
+              style={{ color: template.textMuted }}
+            >
+              {n}
+            </span>
+          ))}
+        </div>
       </div>
-      {/* Personalized headline overlay */}
-      <div className="absolute top-14 left-6 max-w-[55%]">
-        <div className="text-[9px] font-bold tracking-widest uppercase text-yellow-300 mb-1 drop-shadow">
-          Persönlich für dich
+
+      {/* Hero — two columns */}
+      <div className="flex-1 flex items-center px-6 py-4 gap-6">
+        <div className="flex-1 max-w-[55%]">
+          <div
+            className={cn(
+              "text-[9px] font-extrabold tracking-[0.22em] uppercase mb-2",
+              fullSize ? "" : "mb-1",
+            )}
+            style={{ color: template.accent }}
+          >
+            Persönlich für dich
+          </div>
+          <div
+            className={cn(
+              fullSize ? "text-2xl md:text-3xl" : "text-xs",
+              "font-extrabold leading-[1.05] mb-2",
+            )}
+            style={{ color: template.text }}
+          >
+            {lead.first},
+            <br />
+            schau dir das an.
+          </div>
+          <div
+            className={cn(fullSize ? "text-xs" : "text-[8px]", "leading-relaxed")}
+            style={{ color: template.textMuted }}
+          >
+            {fullSize ? (
+              <>
+                Ich hab mir kurz {lead.company} angesehen und drei Sachen
+                aufgeschrieben, die dir gerade Anfragen kosten. Schau es dir an,
+                wenn du Lust hast.
+              </>
+            ) : (
+              <>Drei Punkte zu {lead.company}.</>
+            )}
+          </div>
+          <div
+            className={cn(
+              "mt-3 inline-flex items-center font-bold rounded-full",
+              fullSize ? "text-[11px] px-3 py-1.5" : "text-[7px] px-1.5 py-0.5",
+            )}
+            style={{ backgroundColor: template.ctaBg, color: template.ctaText }}
+          >
+            Termin sichern →
+          </div>
         </div>
-        <div className="text-white text-xl md:text-2xl font-extrabold leading-tight drop-shadow-lg">
-          Max,
-          <br />
-          schau dir das an.
-        </div>
+
+        {/* Video slot — only on full-size LP (step 2) */}
+        {videoSlot && fullSize ? (
+          <div className="flex-1 max-w-[40%]">
+            {/* Placeholder for the actual webcam <video> which sits over this area */}
+            <div
+              className="rounded-2xl aspect-[4/3] w-full"
+              style={{
+                backgroundColor:
+                  template.id === "bold" ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+              }}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// MultiGridLayer — 2x2 Grid mit 4 personalisierten Landingpages
+// Multi-grid Layer — 2x2 of the same LP, different names
 // ---------------------------------------------------------------------------
-const LEADS = [
-  { name: "Max Mustermann", company: "Mustermann Industrie", color: "#7C5CE8" },
-  { name: "Lisa Lust", company: "Lust Cosmetics", color: "#EC4899" },
-  { name: "Franz Friedrich", company: "Friedrich Manufaktur", color: "#92400E" },
-  { name: "Sofia Reuter", company: "Reuter Coaching", color: "#10B981" },
-];
 
-function MultiGridLayer({ active }: { active: boolean }) {
+function MultiGridLayer({
+  active,
+  template,
+}: {
+  active: boolean;
+  template: Template;
+}) {
   return (
     <div
-      className="absolute inset-0 transition-opacity duration-700 z-10 p-4"
-      style={{
-        opacity: active ? 1 : 0,
-        pointerEvents: "none",
-      }}
+      className="absolute inset-0 z-10 p-3 transition-opacity duration-700"
+      style={{ opacity: active ? 1 : 0, pointerEvents: "none" }}
     >
-      <div className="grid grid-cols-2 grid-rows-2 gap-3 w-full h-full">
-        {LEADS.map((lead, i) => (
-          <LeadCard
-            key={lead.name}
-            lead={lead}
-            isFirst={i === 0}
-            delay={i * 80}
-            active={active}
-          />
+      <div className="grid grid-cols-2 grid-rows-2 gap-2 w-full h-full">
+        {LEADS.map((l, i) => (
+          <div
+            key={l.name}
+            className="relative rounded-xl overflow-hidden border border-line transition-all duration-500"
+            style={{
+              backgroundColor: template.bg,
+              transitionDelay: `${i * 80}ms`,
+              opacity: active ? 1 : 0,
+              transform: active ? "scale(1)" : "scale(0.96)",
+            }}
+          >
+            <LandingPageInner
+              template={template}
+              lead={l}
+              videoSlot={i === 0}
+              fullSize={false}
+            />
+            {/* For non-first cards, show a static video placeholder gradient */}
+            {i !== 0 ? (
+              <div
+                className="absolute rounded-md"
+                style={{
+                  top: "30%",
+                  left: "58%",
+                  width: "36%",
+                  height: "44%",
+                  background: `linear-gradient(135deg, ${l.color}, ${l.color}88)`,
+                  boxShadow: "0 6px 14px -4px rgba(15,23,42,0.3)",
+                  border: "2px solid white",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "white",
+                  fontWeight: 800,
+                  fontSize: "10px",
+                }}
+              >
+                ▶
+              </div>
+            ) : null}
+          </div>
         ))}
       </div>
-      <div className="absolute -top-1 right-4 px-3 py-1 rounded-full bg-ink text-white text-[10px] font-bold shadow-lg">
+      <div className="absolute -top-2 right-3 px-2.5 py-0.5 rounded-full bg-ink text-white text-[10px] font-bold shadow-lg">
         <span className="text-brand-light">+12.039</span> weitere generiert
       </div>
     </div>
   );
 }
 
-function LeadCard({
-  lead,
-  isFirst,
-  delay,
-  active,
-}: {
-  lead: { name: string; company: string; color: string };
-  isFirst: boolean;
-  delay: number;
-  active: boolean;
-}) {
+// ---------------------------------------------------------------------------
+// Letter Layer — realistic A4 letter to Max Mustermann
+// ---------------------------------------------------------------------------
+
+function LetterLayer({ active }: { active: boolean }) {
   return (
     <div
-      className="relative rounded-xl overflow-hidden bg-white border border-line transition-all duration-500 shadow-md"
-      style={{
-        opacity: active ? 1 : 0,
-        transform: active ? "scale(1)" : "scale(0.95)",
-        transitionDelay: `${delay}ms`,
-      }}
+      className="absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-700 px-8 py-8"
+      style={{ opacity: active ? 1 : 0, pointerEvents: "none" }}
     >
-      {/* Hero stripe */}
+      {/* Back letter */}
       <div
-        className="h-2/3 relative p-3 flex flex-col justify-between"
+        className="absolute rounded-md bg-white border border-line shadow-2xl"
         style={{
-          background: `linear-gradient(135deg, ${lead.color}40, ${lead.color}90)`,
+          width: "44%",
+          aspectRatio: "210/297",
+          transform: "translate(-25%, -2%) rotate(-6deg)",
+          transition: "transform 700ms",
         }}
-      >
-        <div>
-          <div className="text-[8px] font-bold uppercase tracking-wider text-white/90 mb-0.5">
-            Persönlich für
-          </div>
-          <div className="text-xs md:text-sm font-extrabold text-white leading-tight drop-shadow">
-            {lead.name}
-          </div>
-          <div className="text-[9px] text-white/80 mt-0.5">
-            {lead.company}
-          </div>
-        </div>
-        {/* Mini-Video placeholder — except for first card (where real video sits) */}
-        {!isFirst ? (
-          <div
-            className="absolute bottom-2 left-2 size-8 rounded-full border-2 border-white shadow-md flex items-center justify-center text-white text-[10px] font-bold"
-            style={{
-              background: `linear-gradient(135deg, ${lead.color}, ${lead.color}cc)`,
-            }}
-          >
-            ▶
-          </div>
-        ) : null}
-      </div>
-      {/* Body */}
-      <div className="p-2 bg-white">
-        <div className="space-y-0.5">
-          <div className="h-0.5 w-full bg-ink-muted/30 rounded" />
-          <div className="h-0.5 w-3/4 bg-ink-muted/30 rounded" />
-          <div className="h-0.5 w-2/3 bg-ink-muted/30 rounded" />
-        </div>
-        <div
-          className="mt-1.5 inline-block px-2 py-0.5 rounded text-[8px] font-bold text-white font-mono"
-          style={{ backgroundColor: lead.color }}
-        >
-          /lp/{lead.name.split(" ")[0].toLowerCase()}
-        </div>
-      </div>
+      />
+      <div
+        className="absolute rounded-md bg-white border border-line shadow-2xl"
+        style={{
+          width: "44%",
+          aspectRatio: "210/297",
+          transform: "translate(0%, 4%) rotate(4deg)",
+          transition: "transform 700ms",
+        }}
+      />
+      {/* Front letter */}
+      <RealisticLetter />
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// LetterStack — gefächerte Briefe rechts oben
-// ---------------------------------------------------------------------------
-function LetterStack({ active }: { active: boolean }) {
-  const LETTERS = [
-    { name: "Lisa Lust", url: "videocomet.de/lp/lisa-lust" },
-    { name: "Franz Friedrich", url: "videocomet.de/lp/franz-friedrich" },
-    { name: "Sofia Reuter", url: "videocomet.de/lp/sofia-reuter" },
-  ];
-
+function RealisticLetter() {
   return (
     <div
-      className="absolute right-4 top-1/2 -translate-y-1/2 transition-all duration-700 z-20"
+      className="relative rounded-md bg-white border border-line shadow-2xl overflow-hidden"
       style={{
-        opacity: active ? 1 : 0,
-        transform: active
-          ? "translate(0, -50%) rotate(0deg)"
-          : "translate(120%, -50%) rotate(8deg)",
+        width: "46%",
+        aspectRatio: "210/297",
+        padding: "5% 8%",
+        fontFamily: "'Inter', sans-serif",
+        color: "#0F172A",
+        transition: "transform 700ms",
       }}
     >
-      <div className="relative w-[220px] h-[280px]">
-        {LETTERS.map((l, i) => {
-          const offset = i * 8;
-          const rot = (i - 1) * -3;
-          return (
-            <div
-              key={l.name}
-              className="absolute inset-0 rounded-lg bg-white border border-line shadow-xl p-4"
-              style={{
-                transform: `translate(${offset}px, ${offset * 0.5}px) rotate(${rot}deg)`,
-                zIndex: LETTERS.length - i,
-              }}
-            >
-              <div className="w-8 h-1 rounded bg-brand mb-3" />
-              <div className="text-[9px] text-ink-muted leading-tight mb-3">
-                Christoph Skuk
-                <br />
-                VIDEOCOMET · Köln
-              </div>
-              <div className="text-[10px] font-semibold text-ink mb-3 leading-tight">
-                {l.name}
-              </div>
-              <div className="text-[9px] text-ink leading-relaxed">
-                Sehr geehrte/r {l.name.split(" ")[0]},<br />
-                ein persönliches Video für Sie:
-              </div>
-              <div className="text-[9px] font-mono font-bold text-brand-deep mt-1 break-all">
-                {l.url}
-              </div>
-              {/* QR placeholder */}
-              <div
-                className="absolute bottom-3 right-3 size-10"
-                style={{
-                  background: `repeating-conic-gradient(${"#0F172A"} 0deg 90deg, white 90deg 180deg)`,
-                }}
-              />
-            </div>
-          );
-        })}
+      {/* Sender (DIN-Norm: small block above recipient) */}
+      <div className="text-[7px] leading-tight text-ink-muted mb-1">
+        Dein Logo · Deine Firma GmbH · Musterstr. 1 · 12345 Stadt
       </div>
+      <div
+        className="border-b border-line mb-2"
+        style={{ borderColor: "#E2E8F0" }}
+      />
+
+      {/* Address window */}
+      <div className="text-[8px] leading-tight font-medium mb-4">
+        Herrn
+        <br />
+        <strong>Max Mustermann</strong>
+        <br />
+        Mustermann Industrie GmbH
+        <br />
+        Industriestraße 42
+        <br />
+        85737 Ismaning
+      </div>
+
+      {/* Date right */}
+      <div className="text-[7px] text-ink-soft text-right mb-3">
+        München, 22. Juni 2026
+      </div>
+
+      {/* Subject */}
+      <div className="text-[9px] font-bold mb-2">
+        Drei Beobachtungen zu Ihrer Webseite
+      </div>
+
+      {/* Salutation */}
+      <div className="text-[8px] mb-2">Sehr geehrter Herr Mustermann,</div>
+
+      {/* Body */}
+      <div className="text-[7.5px] leading-[1.5] space-y-1.5 mb-3">
+        <p>
+          ich hab mir kurz mustermann-industrie.de angeschaut und drei
+          Beobachtungen, die Ihnen aktuell Anfragen kosten könnten.
+        </p>
+        <p>
+          Das ganze Gespräch dazu hab ich Ihnen in einem zweiminütigen Video
+          aufgenommen. Sie finden es unter:
+        </p>
+      </div>
+
+      {/* URL block */}
+      <div
+        className="text-[8px] font-mono font-bold mb-3 px-2 py-1.5 rounded"
+        style={{ backgroundColor: "#F3EEFF", color: "#5232C7" }}
+      >
+        videocomet.de/lp/max-mustermann
+      </div>
+
+      <div className="text-[7.5px] leading-[1.5]">
+        Mit den besten Grüßen
+      </div>
+
+      {/* Signature (cursive feel) */}
+      <div
+        className="text-[10px] italic mt-3"
+        style={{ fontFamily: "'Georgia', serif" }}
+      >
+        Dein Name
+      </div>
+      <div className="text-[7px] text-ink-muted">Deine Firma GmbH</div>
+
+      {/* QR bottom-right */}
+      <div
+        className="absolute"
+        style={{
+          bottom: "6%",
+          right: "8%",
+          width: "14%",
+          aspectRatio: "1/1",
+          background:
+            "repeating-conic-gradient(#0F172A 0deg 90deg, white 90deg 180deg)",
+          border: "1px solid #E2E8F0",
+        }}
+      />
+      <div
+        className="absolute text-[6px] text-ink-muted"
+        style={{ bottom: "4%", right: "8%" }}
+      >
+        Scan für Video
+      </div>
+
       {/* Badge */}
-      <div className="absolute -top-3 -left-3 px-3 py-1 rounded-full bg-ink text-white text-[10px] font-bold shadow-lg">
-        <span className="text-brand-light">PDF</span> · 3.631× druckfertig
+      <div className="absolute -top-2 -right-2 px-2 py-0.5 rounded-full bg-ink text-white text-[9px] font-bold shadow">
+        <span className="text-brand-light">PDF</span> · druckfertig
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// PushNotifications — drei iOS-style toasts rechts oben
+// Tracking Layer — dashboard + push notifs
 // ---------------------------------------------------------------------------
-function PushNotifications({ active }: { active: boolean }) {
+
+function TrackingLayer({ active }: { active: boolean }) {
   const NOTIFS = [
     {
-      icon: "👁️",
+      icon: <ImageIcon className="size-3" />,
       who: "Max Mustermann",
       what: "öffnete deine Seite",
-      meta: "vor 2 s · Mustermann Industrie",
+      meta: "vor 2 s",
       color: "#10B981",
     },
     {
-      icon: "▶️",
+      icon: <VideoIcon className="size-3" />,
       who: "Lisa Lust",
       what: "schaut gerade (00:42)",
-      meta: "vor 8 s · Lust Cosmetics",
+      meta: "vor 8 s",
       color: "#7C5CE8",
     },
     {
-      icon: "🎯",
+      icon: <MousePointerClick className="size-3" />,
       who: "Franz Friedrich",
-      what: "klickte Termin-Button",
-      meta: "vor 14 s · Friedrich Manufaktur",
+      what: "klickte Termin",
+      meta: "vor 14 s",
       color: "#FBBF24",
     },
   ];
 
   return (
     <>
-      {/* Dashboard background */}
       <div
         className="absolute inset-3 rounded-2xl bg-white border border-line p-4 transition-all duration-700 z-10"
         style={{
@@ -550,7 +1193,7 @@ function PushNotifications({ active }: { active: boolean }) {
           pointerEvents: "none",
         }}
       >
-        <div className="text-xs font-bold tracking-wide uppercase text-ink-muted mb-3">
+        <div className="text-[10px] font-bold tracking-widest uppercase text-ink-muted mb-2">
           Live-Dashboard
         </div>
         <div className="grid grid-cols-4 gap-2 mb-3">
@@ -564,7 +1207,7 @@ function PushNotifications({ active }: { active: boolean }) {
               key={i}
               className="rounded-lg bg-surface-soft border border-line p-2"
             >
-              <div className="text-[8px] font-bold text-ink-muted uppercase tracking-wider">
+              <div className="text-[8px] font-bold text-ink-muted uppercase">
                 {k.l}
               </div>
               <div
@@ -578,24 +1221,20 @@ function PushNotifications({ active }: { active: boolean }) {
             </div>
           ))}
         </div>
-        <div className="flex-1 rounded-lg bg-surface-soft border border-line p-3">
-          <div className="text-[8px] font-bold text-ink-muted uppercase tracking-wider mb-1">
+        <div className="rounded-lg bg-surface-soft border border-line p-3">
+          <div className="text-[8px] font-bold uppercase text-ink-muted mb-1">
             Watch-Time-Verlauf
           </div>
-          <svg viewBox="0 0 200 40" className="w-full h-14">
+          <svg viewBox="0 0 200 40" className="w-full h-16">
             <defs>
-              <linearGradient id="vc-track-mini" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="0%"
-                  stopColor="#AA8CF5"
-                  stopOpacity="0.55"
-                />
+              <linearGradient id="vc-howit-track" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#AA8CF5" stopOpacity="0.55" />
                 <stop offset="100%" stopColor="#AA8CF5" stopOpacity="0" />
               </linearGradient>
             </defs>
             <path
               d="M0,35 L20,30 L40,25 L60,28 L80,18 L100,14 L120,16 L140,10 L160,8 L200,3 L200,40 L0,40 Z"
-              fill="url(#vc-track-mini)"
+              fill="url(#vc-howit-track)"
             />
             <path
               d="M0,35 L20,30 L40,25 L60,28 L80,18 L100,14 L120,16 L140,10 L160,8 L200,3"
@@ -609,8 +1248,8 @@ function PushNotifications({ active }: { active: boolean }) {
         </div>
       </div>
 
-      {/* Push notifications */}
-      <div className="absolute top-12 right-3 w-[200px] flex flex-col gap-2 z-30">
+      {/* Push notifs */}
+      <div className="absolute top-12 right-3 w-[210px] flex flex-col gap-2 z-30">
         {NOTIFS.map((n, i) => (
           <div
             key={n.who}
@@ -618,17 +1257,14 @@ function PushNotifications({ active }: { active: boolean }) {
             style={{
               backgroundColor: "rgba(15,23,42,0.85)",
               opacity: active ? 1 : 0,
-              transform: active
-                ? "translateX(0)"
-                : "translateX(60px)",
+              transform: active ? "translateX(0)" : "translateX(80px)",
               transitionDelay: `${i * 220 + 300}ms`,
-              boxShadow:
-                "0 14px 28px -14px rgba(15,23,42,0.5)",
+              boxShadow: "0 14px 28px -14px rgba(15,23,42,0.55)",
             }}
           >
             <div className="flex gap-2 items-start">
               <div
-                className="shrink-0 size-7 rounded-md flex items-center justify-center text-sm"
+                className="shrink-0 size-7 rounded-md flex items-center justify-center text-white"
                 style={{ backgroundColor: n.color }}
               >
                 {n.icon}
@@ -638,9 +1274,7 @@ function PushNotifications({ active }: { active: boolean }) {
                   <span className="text-white font-bold">{n.who}</span>{" "}
                   <span className="text-white/70">{n.what}</span>
                 </div>
-                <div className="text-[8px] text-white/45 mt-0.5">
-                  {n.meta}
-                </div>
+                <div className="text-[8px] text-white/45 mt-0.5">{n.meta}</div>
               </div>
             </div>
           </div>
@@ -651,11 +1285,11 @@ function PushNotifications({ active }: { active: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
-// Stars background
+// Stars
 // ---------------------------------------------------------------------------
+
 const STARS_STYLE: React.CSSProperties = {
   backgroundImage:
     "radial-gradient(circle at 20% 30%, white 1px, transparent 1.5px), radial-gradient(circle at 70% 60%, white 1px, transparent 1.5px), radial-gradient(circle at 40% 80%, white 0.8px, transparent 1.2px), radial-gradient(circle at 85% 20%, white 1px, transparent 1.5px)",
   backgroundSize: "320px 320px, 240px 240px, 180px 180px, 280px 280px",
 };
-
