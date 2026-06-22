@@ -200,7 +200,7 @@ export function HeroScrollVideo() {
             <span className="text-white/45">VIDEOCOMET</span>
           </div>
 
-          <h1 className="vc-hero-title font-light tracking-[-0.04em] leading-[1.04] text-white text-[clamp(40px,6.4vw,88px)] max-w-[22ch] text-balance">
+          <h1 className="vc-hero-title font-light tracking-[-0.04em] leading-[1.04] text-white text-[clamp(36px,4.8vw,68px)] max-w-[14ch] text-balance">
             <span className="block overflow-hidden">
               <span className="vc-hero-line block">Werde unvergesslich.</span>
             </span>
@@ -219,7 +219,7 @@ export function HeroScrollVideo() {
             </span>
           </h1>
 
-          <p className="vc-hero-sub max-w-2xl text-[17px] leading-[1.6] text-white/70 opacity-0">
+          <p className="vc-hero-sub max-w-[480px] text-[16px] leading-[1.6] text-white/70 opacity-0">
             Einmal ein Video aufnehmen, danach{" "}
             <strong className="font-semibold text-white">
               tausendfach personalisiert an deine Zielgruppe verschicken
