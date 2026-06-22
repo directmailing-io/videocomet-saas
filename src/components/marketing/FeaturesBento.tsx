@@ -3,11 +3,14 @@
 import * as React from "react";
 import {
   Bell,
+  CheckCircle2,
+  Database,
   Eye,
-  FlaskConical,
-  LineChart,
+  FileText,
+  Globe,
   Mail,
   MousePointerClick,
+  PenLine,
   PlayCircle,
   TrendingUp,
 } from "lucide-react";
@@ -15,9 +18,11 @@ import { cn } from "@/lib/utils";
 import { RevealOnScroll } from "./RevealOnScroll";
 
 /**
- * Features-Bento — Apple-Style Grid mit glas-morphismus, transparenten
- * Gradients und sophistizierten Visuals. Echte Brand-Logos. Fokussierte
- * Mockups statt generischer Visuals.
+ * Features-Bento — Style nach User-Referenz:
+ *   - Helle Cards mit fokussiertem zentriertem Visual oben
+ *   - Title + Sub UNTER dem Visual, zentriert
+ *   - Floating Mockups mit Schatten + Ghost-Layers fuer Tiefe
+ *   - 1 grosse colorful-mesh-Card als visueller Anker (Anbindungen)
  */
 export function FeaturesBento() {
   return (
@@ -59,51 +64,70 @@ export function FeaturesBento() {
           </RevealOnScroll>
         </div>
 
-        {/* Bento Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4 auto-rows-[minmax(260px,_auto)]">
-          <RevealOnScroll
-            delay={400}
-            className="lg:col-span-7 lg:row-span-2"
-          >
-            <BentoCard dark className="bg-[#08090F]">
-              <VideoBento />
-            </BentoCard>
+        {/* Bento Grid — 3-column layout, alles consistent */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <RevealOnScroll delay={400}>
+            <FeatureCard
+              title="Persönliche Videos in Serie."
+              sub="Eine Aufnahme reicht. Jeder Lead bekommt sein eigenes Video, automatisch zusammengesetzt."
+            >
+              <VideoVisual />
+            </FeatureCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={520} className="lg:col-span-5">
-            <BentoCard dark className="bg-[#0A2922]">
-              <PushBento />
-            </BentoCard>
+          <RevealOnScroll delay={500}>
+            <FeatureCard
+              title="Eine Landingpage pro Lead."
+              sub="Vorname, Firma und das Video sauber im Hero. Vollständig automatisch generiert."
+            >
+              <LandingVisual />
+            </FeatureCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={640} className="lg:col-span-5">
-            <BentoCard dark className="bg-[#072138]">
-              <AnalyticsBento />
-            </BentoCard>
+          <RevealOnScroll delay={600}>
+            <FeatureCard
+              title="Briefpost, die ankommt."
+              sub="Persönlich adressiert, mit QR-Code zum Video. Druckfertig als PDF zum Download."
+            >
+              <BriefVisual />
+            </FeatureCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={760} className="lg:col-span-7">
-            <BentoCard className="bg-[#FAFAFE]">
-              <LandingpageBento />
-            </BentoCard>
+          <RevealOnScroll delay={700}>
+            <FeatureCard
+              title="Live, sobald jemand reagiert."
+              sub="Push-Notifications für jede Öffnung, jeden Klick. Du bist immer informiert."
+            >
+              <PushVisual />
+            </FeatureCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={880} className="lg:col-span-5">
-            <BentoCard dark className="bg-[#1F0F03]">
-              <BriefBento />
-            </BentoCard>
+          <RevealOnScroll delay={800}>
+            <FeatureCard
+              title="Sieh, was wirklich funktioniert."
+              sub="Watch-Time, Klicks und Anfragen in einem klaren Dashboard."
+            >
+              <AnalyticsVisual />
+            </FeatureCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={1000} className="lg:col-span-4">
-            <BentoCard className="bg-[#FEF3C7]">
-              <ABBento />
-            </BentoCard>
+          <RevealOnScroll delay={900}>
+            <FeatureCard
+              title="Daten zeigen, was besser wirkt."
+              sub="Templates und Headlines gegeneinander testen. Die Version mit der besseren Conversion gewinnt."
+            >
+              <ABVisual />
+            </FeatureCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={1120} className="lg:col-span-8">
-            <BentoCard className="bg-white">
-              <IntegrationsBento />
-            </BentoCard>
+          {/* Wide hero-card — Anbindungen mit colorful mesh-bg */}
+          <RevealOnScroll delay={1050} className="md:col-span-2 lg:col-span-3">
+            <FeatureCardMesh
+              title="Eingebunden in deine Tools."
+              sub="Jedes Tracking-Event landet automatisch in deinem CRM oder Automation-Tool. Per Webhook, ohne Umweg."
+            >
+              <IntegrationsVisual />
+            </FeatureCardMesh>
           </RevealOnScroll>
         </div>
       </div>
@@ -112,643 +136,149 @@ export function FeaturesBento() {
 }
 
 // ---------------------------------------------------------------------------
-// Card-Shell
+// Card Shell
 // ---------------------------------------------------------------------------
 
-function BentoCard({
+function FeatureCard({
   children,
-  className,
-  dark = false,
+  title,
+  sub,
 }: {
   children: React.ReactNode;
-  className?: string;
-  dark?: boolean;
+  title: string;
+  sub: string;
 }) {
   return (
-    <div
-      className={cn(
-        "relative w-full h-full overflow-hidden rounded-3xl border transition-shadow",
-        dark
-          ? "border-white/[0.07] shadow-[0_24px_60px_-30px_rgba(15,23,42,0.6)]"
-          : "border-line shadow-[0_24px_60px_-30px_rgba(15,23,42,0.18)]",
-        className,
-      )}
-    >
+    <div className="relative h-full overflow-hidden rounded-3xl border border-line bg-gradient-to-b from-white to-[#FAFAFE] p-7 md:p-8 flex flex-col shadow-[0_4px_22px_-12px_rgba(15,23,42,0.12)] transition-shadow hover:shadow-[0_8px_30px_-12px_rgba(15,23,42,0.18)]">
       <div
         aria-hidden
         className="absolute inset-x-0 top-0 h-px"
         style={{
-          background: dark
-            ? "linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)"
-            : "linear-gradient(90deg, transparent, rgba(255,255,255,0.9), transparent)",
+          background:
+            "linear-gradient(90deg, transparent, rgba(255,255,255,0.9), transparent)",
         }}
       />
-      {children}
-    </div>
-  );
-}
-
-function Eyebrow({
-  children,
-  dark = false,
-}: {
-  children: React.ReactNode;
-  dark?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "text-[10px] font-semibold tracking-[0.22em] uppercase",
-        dark ? "text-white/45" : "text-brand-deep",
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-function GlassIcon({
-  children,
-  tint = "white",
-}: {
-  children: React.ReactNode;
-  tint?: "white" | "brand";
-}) {
-  return (
-    <div className="relative inline-flex shrink-0">
-      <div
-        aria-hidden
-        className={cn(
-          "absolute inset-0 rounded-2xl blur-2xl scale-125",
-          tint === "white" ? "bg-white/25" : "bg-brand/30",
-        )}
-      />
-      <div
-        className={cn(
-          "relative size-12 rounded-2xl flex items-center justify-center border backdrop-blur-xl",
-          tint === "white"
-            ? "bg-white/10 text-white border-white/20"
-            : "bg-brand-soft/80 text-brand-deep border-brand/30",
-        )}
-      >
+      <div className="relative flex-1 flex items-center justify-center min-h-[240px]">
         {children}
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Brand-Logos — vereinfachte SVGs in den jeweils echten Brand-Farben
-// ---------------------------------------------------------------------------
-
-/**
- * Brand-Logos via simpleicons.org CDN — liefert die offiziellen
- * SVG-Marken in den jeweiligen Brand-Farben. Nominative Fair-Use:
- * Anzeige fuer Integrationspartner.
- */
-function CdnLogo({
-  slug,
-  alt,
-  className,
-}: {
-  slug: string;
-  alt: string;
-  className?: string;
-}) {
-  // simpleicons.org CDN: https://cdn.simpleicons.org/<slug>/<hexcolor>
-  // ohne Farbe = offizielle Brand-Farbe
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={`https://cdn.simpleicons.org/${slug}`}
-      alt={alt}
-      width={24}
-      height={24}
-      loading="lazy"
-      className={className}
-    />
-  );
-}
-
-function HubSpotLogo({ className }: { className?: string }) {
-  return <CdnLogo slug="hubspot" alt="HubSpot" className={className} />;
-}
-
-function ZapierLogo({ className }: { className?: string }) {
-  return <CdnLogo slug="zapier" alt="Zapier" className={className} />;
-}
-
-function MakeLogo({ className }: { className?: string }) {
-  return <CdnLogo slug="make" alt="Make" className={className} />;
-}
-
-function SalessuiteLogo({ className }: { className?: string }) {
-  // Salessuite hat keinen Eintrag bei simple-icons (zu spezifisch).
-  // Stylisierter monogramm-Mark in der Brand-Farbe.
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <rect width="32" height="32" rx="8" fill="#1E40AF" />
-      <text
-        x="50%"
-        y="50%"
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill="white"
-        fontSize="18"
-        fontWeight="800"
-        fontFamily="Inter, -apple-system, sans-serif"
-      >
-        S
-      </text>
-    </svg>
-  );
-}
-
-function CloseLogo({ className }: { className?: string }) {
-  return <CdnLogo slug="close" alt="Close" className={className} />;
-}
-
-// ---------------------------------------------------------------------------
-// 1) Videogenerierung — large hero
-// ---------------------------------------------------------------------------
-
-function VideoBento() {
-  const STACK = [
-    {
-      name: "Franz Friedrich",
-      company: "Friedrich Manufaktur",
-      bg: "linear-gradient(135deg, #92400E, #451A03)",
-      accent: "#FBBF24",
-      offsetX: -40,
-      offsetY: 40,
-      rotation: -10,
-      opacity: 0.5,
-      blur: 1,
-      live: false,
-    },
-    {
-      name: "Lisa Lust",
-      company: "Lust Cosmetics",
-      bg: "linear-gradient(135deg, #EC4899, #BE185D)",
-      accent: "#FCE7F3",
-      offsetX: -20,
-      offsetY: 20,
-      rotation: -5,
-      opacity: 0.75,
-      blur: 0,
-      live: false,
-    },
-    {
-      name: "Max Mustermann",
-      company: "Mustermann Industrie",
-      bg: "linear-gradient(135deg, #7C5CE8, #5232C7)",
-      accent: "#FFFFFF",
-      offsetX: 0,
-      offsetY: 0,
-      rotation: 2,
-      opacity: 1,
-      blur: 0,
-      live: true,
-    },
-  ];
-
-  return (
-    <div className="relative w-full h-full flex flex-col p-8 md:p-10">
-      {/* Glows */}
-      <div
-        aria-hidden
-        className="absolute -top-40 -right-32 size-[640px] rounded-full pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(closest-side, rgba(170,140,245,0.5), rgba(170,140,245,0) 70%)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="absolute -bottom-12 -left-12 size-[380px] rounded-full pointer-events-none opacity-60"
-        style={{
-          background:
-            "radial-gradient(closest-side, rgba(236,72,153,0.35), transparent 75%)",
-        }}
-      />
-
-      {/* Visual area */}
-      <div className="relative flex-1 min-h-[260px]">
-        <div className="absolute top-2 right-0 md:right-4">
-          {STACK.map((s, i) => (
-            <div
-              key={s.name}
-              className="absolute right-0 top-0 rounded-2xl border border-white/15 overflow-hidden"
-              style={{
-                width: 360,
-                aspectRatio: "16/10",
-                transform: `translate(${s.offsetX}px, ${s.offsetY}px) rotate(${s.rotation}deg)`,
-                opacity: s.opacity,
-                filter: s.blur > 0 ? `blur(${s.blur}px)` : "none",
-                zIndex: i,
-                boxShadow: s.live
-                  ? "0 30px 70px -20px rgba(0,0,0,0.65), 0 0 40px rgba(124,92,232,0.4)"
-                  : "0 20px 50px -20px rgba(0,0,0,0.5)",
-              }}
-            >
-              <VideoPreviewMock
-                name={s.name}
-                company={s.company}
-                bg={s.bg}
-                accent={s.accent}
-                live={s.live}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Text */}
-      <div className="relative mt-6 max-w-[340px]">
-        <Eyebrow dark>Videogenerierung</Eyebrow>
-        <h3 className="mt-3 text-3xl md:text-4xl font-semibold tracking-[-0.02em] text-white leading-[1.05]">
-          Persönliche Videos.
-          <br />
-          <span className="text-brand-light">In Serie.</span>
+      <div className="text-center mt-6">
+        <h3 className="text-[19px] md:text-xl font-bold tracking-[-0.015em] text-ink leading-tight text-balance">
+          {title}
         </h3>
-        <p className="mt-3 text-sm md:text-base text-white/65 leading-relaxed">
-          Eine Aufnahme. Hunderte personalisierte Videos. Vollautomatisch.
+        <p className="mt-3 text-sm text-ink-muted leading-relaxed text-balance max-w-[28ch] mx-auto">
+          {sub}
         </p>
       </div>
     </div>
   );
 }
 
-function VideoPreviewMock({
-  name,
-  company,
-  bg,
-  accent,
-  live,
+function FeatureCardMesh({
+  children,
+  title,
+  sub,
 }: {
-  name: string;
-  company: string;
-  bg: string;
-  accent: string;
-  live: boolean;
+  children: React.ReactNode;
+  title: string;
+  sub: string;
 }) {
   return (
-    <div className="absolute inset-0 flex flex-col bg-[#11131F]">
-      <div className="h-6 bg-white/95 flex items-center px-3 gap-1.5">
-        <div className="size-1.5 rounded-full bg-red-400" />
-        <div className="size-1.5 rounded-full bg-yellow-400" />
-        <div className="size-1.5 rounded-full bg-green-400" />
-        <div className="flex-1 ml-2 h-2 rounded-full bg-surface-soft" />
-      </div>
-      <div
-        className="flex-1 relative p-4 flex items-center gap-3"
-        style={{ background: bg }}
-      >
-        <div className="flex-1 min-w-0">
-          <div
-            className="text-[7px] font-bold tracking-[0.2em] uppercase mb-1.5"
-            style={{ color: accent, opacity: 0.85 }}
-          >
-            Persönlich für dich
-          </div>
-          <div className="text-[14px] font-extrabold text-white leading-[1.05]">
-            {name},
-            <br />
-            schau dir das an.
-          </div>
-          <div className="mt-2 inline-flex text-[8px] font-bold text-ink bg-white rounded px-2 py-1 shadow-sm">
-            Termin sichern →
-          </div>
-        </div>
-        <div className="shrink-0 size-14 rounded-full overflow-hidden border-2 border-white shadow-xl">
-          {live ? (
-            <video
-              src="/demo-assets/webcam.mp4"
-              muted
-              autoPlay
-              loop
-              playsInline
-              preload="metadata"
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div
-              className="w-full h-full flex items-center justify-center text-white text-[10px] font-extrabold"
-              style={{
-                background: `linear-gradient(135deg, ${accent}40, ${accent}90)`,
-              }}
-            >
-              {name
-                .split(" ")
-                .map((n) => n[0])
-                .join("")}
-            </div>
-          )}
-        </div>
-      </div>
-      {/* Bottom strip with company */}
-      <div className="h-6 bg-white border-t border-line flex items-center px-3 gap-2">
-        <div className="size-2 rounded-sm bg-brand" />
-        <span className="text-[8px] font-bold text-ink truncate">{company}</span>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 2) Push Notifications
-// ---------------------------------------------------------------------------
-
-function PushBento() {
-  return (
-    <div className="relative w-full h-full flex flex-col p-7">
-      <div
-        aria-hidden
-        className="absolute -top-12 -right-12 size-72 rounded-full pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(closest-side, rgba(16,185,129,0.45), transparent 70%)",
-        }}
-      />
-
-      <GlassIcon>
-        <Bell className="size-5" />
-      </GlassIcon>
-
-      <div className="absolute top-6 right-4 flex flex-col gap-1.5 w-[170px]">
-        {[
-          { icon: <Eye className="size-3" />, who: "Max", what: "öffnete deine Seite" },
-          { icon: <PlayCircle className="size-3" />, who: "Lisa", what: "schaut gerade" },
-          { icon: <MousePointerClick className="size-3" />, who: "Franz", what: "klickte Termin" },
-        ].map((n, i) => (
-          <div
-            key={i}
-            className="rounded-xl backdrop-blur-md border border-white/15 p-2 flex items-center gap-2"
-            style={{
-              backgroundColor: "rgba(15,23,42,0.55)",
-              transform: `translateX(${-i * 4}px) translateY(${i * -2}px)`,
-              opacity: 1 - i * 0.18,
-            }}
-          >
-            <div className="size-5 shrink-0 rounded-md bg-white/15 flex items-center justify-center text-white">
-              {n.icon}
-            </div>
-            <div className="text-[9px] leading-tight text-white">
-              <span className="font-bold">{n.who}</span>{" "}
-              <span className="opacity-70">{n.what}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-auto pt-12">
-        <Eyebrow dark>Push-Notifications</Eyebrow>
-        <h3 className="mt-3 text-xl md:text-2xl font-semibold tracking-[-0.02em] text-white leading-tight">
-          Live, wenn jemand reagiert.
-        </h3>
-        <p className="mt-2 text-sm text-white/60 leading-relaxed">
-          Jede Öffnung, jeden Klick sofort sehen.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 3) Analytics
-// ---------------------------------------------------------------------------
-
-function AnalyticsBento() {
-  return (
-    <div className="relative w-full h-full flex flex-col p-7">
-      <div
-        aria-hidden
-        className="absolute -top-20 -right-10 size-72 rounded-full pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(closest-side, rgba(14,165,233,0.45), transparent 70%)",
-        }}
-      />
-
-      <GlassIcon>
-        <LineChart className="size-5" />
-      </GlassIcon>
-
-      <div className="absolute top-6 right-4 w-[170px] flex flex-col gap-2">
-        <div
-          className="rounded-xl backdrop-blur-md border border-white/15 p-2.5"
-          style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[8px] font-bold uppercase tracking-wider text-white/55">
-              Watch-Time ø
-            </span>
-            <TrendingUp className="size-3 text-emerald-300" />
-          </div>
-          <div className="text-xl font-extrabold text-white leading-none">
-            83 %
-          </div>
-        </div>
-        <div
-          className="rounded-xl backdrop-blur-md border border-white/15 p-2"
-          style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
-        >
-          <svg viewBox="0 0 100 28" className="w-full h-8">
-            <defs>
-              <linearGradient id="vc-bento-chart" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="rgba(255,255,255,0.55)" />
-                <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0,24 L15,22 L30,18 L45,16 L60,10 L75,12 L90,5 L100,3 L100,28 L0,28 Z"
-              fill="url(#vc-bento-chart)"
-            />
-            <path
-              d="M0,24 L15,22 L30,18 L45,16 L60,10 L75,12 L90,5 L100,3"
-              fill="none"
-              stroke="white"
-              strokeWidth="1.3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
-      </div>
-
-      <div className="mt-auto pt-12">
-        <Eyebrow dark>Analytics</Eyebrow>
-        <h3 className="mt-3 text-xl md:text-2xl font-semibold tracking-[-0.02em] text-white leading-tight">
-          Zahlen, die zählen.
-        </h3>
-        <p className="mt-2 text-sm text-white/60 leading-relaxed">
-          Watch-Time und CTAs auf einen Blick.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 4) Landingpage — 3 unterschiedliche Templates
-// ---------------------------------------------------------------------------
-
-function LandingpageBento() {
-  const TEMPLATES = [
-    {
-      name: "Franz",
-      template: "classic" as const,
-    },
-    {
-      name: "Lisa",
-      template: "bold" as const,
-    },
-    {
-      name: "Max",
-      template: "soft" as const,
-    },
-  ];
-
-  return (
-    <div className="relative w-full h-full flex p-8 md:p-10 gap-6">
+    <div className="relative h-full overflow-hidden rounded-3xl border border-line p-7 md:p-10 flex flex-col md:flex-row gap-8 md:gap-10 items-stretch shadow-[0_4px_22px_-12px_rgba(15,23,42,0.12)]">
+      {/* Mesh gradient background */}
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "radial-gradient(60% 80% at 0% 50%, rgba(243,238,255,0.6), rgba(243,238,255,0) 70%)",
+            "radial-gradient(60% 80% at 0% 0%, rgba(170,140,245,0.35) 0%, transparent 50%), radial-gradient(50% 80% at 100% 0%, rgba(251,191,36,0.25) 0%, transparent 50%), radial-gradient(50% 80% at 100% 100%, rgba(16,185,129,0.30) 0%, transparent 50%), radial-gradient(50% 80% at 0% 100%, rgba(14,165,233,0.25) 0%, transparent 50%), white",
+          filter: "saturate(1.15)",
+        }}
+      />
+      {/* Fine grain noise */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none opacity-[0.4] mix-blend-overlay"
+        style={{
+          backgroundImage:
+            'url("data:image/svg+xml;utf8,<svg xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"160\\" height=\\"160\\" viewBox=\\"0 0 160 160\\"><filter id=\\"n\\"><feTurbulence type=\\"fractalNoise\\" baseFrequency=\\"0.9\\" numOctaves=\\"2\\" stitchTiles=\\"stitch\\"/></filter><rect width=\\"100%\\" height=\\"100%\\" filter=\\"url(%23n)\\" opacity=\\"0.5\\"/></svg>")',
         }}
       />
 
-      <div className="relative flex-1 flex flex-col justify-center max-w-[280px]">
-        <Eyebrow>Landingpages</Eyebrow>
-        <h3 className="mt-3 text-3xl font-semibold tracking-[-0.02em] text-ink leading-[1.05]">
-          Eine eigene Seite.
-          <br />
-          <span className="text-brand-deep">Für jeden Lead.</span>
-        </h3>
-        <p className="mt-3 text-sm text-ink-muted leading-relaxed">
-          Automatisch personalisiert. Vorname, Firma und das Video
-          sauber im Hero.
-        </p>
+      {/* Visual */}
+      <div className="relative flex-1 flex items-center justify-center min-h-[260px]">
+        {children}
       </div>
 
-      {/* Right — 3 distinct LP designs fanned out */}
-      <div className="relative flex-1 hidden md:flex items-center justify-end pr-2">
-        <div className="relative w-[300px] h-[200px]">
-          {TEMPLATES.map((t, i) => (
-            <div
-              key={t.name}
-              className="absolute top-0 right-0 rounded-xl overflow-hidden"
-              style={{
-                width: 250,
-                aspectRatio: "16/10",
-                transform: `translate(${-i * 22}px, ${i * 16}px) rotate(${(i - 1) * -3}deg)`,
-                zIndex: TEMPLATES.length - i,
-                boxShadow: "0 18px 40px -16px rgba(15,23,42,0.4)",
-                border: "1px solid rgba(15,23,42,0.08)",
-              }}
-            >
-              <LpThumbMock name={t.name} template={t.template} />
-            </div>
-          ))}
-        </div>
+      {/* Text */}
+      <div className="relative md:w-[340px] md:shrink-0 md:self-center text-center md:text-left">
+        <h3 className="text-2xl md:text-3xl font-bold tracking-[-0.02em] text-ink leading-tight text-balance">
+          {title}
+        </h3>
+        <p className="mt-3 text-sm md:text-base text-ink-soft leading-relaxed text-balance">
+          {sub}
+        </p>
       </div>
     </div>
   );
 }
 
-function LpThumbMock({
-  name,
-  template,
-}: {
-  name: string;
-  template: "soft" | "bold" | "classic";
-}) {
-  const styles = {
-    soft: {
-      bg: "#FFFFFF",
-      heroBg: "linear-gradient(135deg, #F3EEFF, #FFFFFF)",
-      eyebrowColor: "#7C5CE8",
-      titleColor: "#0F172A",
-      ctaBg: "#7C5CE8",
-      ctaColor: "#FFFFFF",
-      logoColor: "#7C5CE8",
-    },
-    bold: {
-      bg: "#0F172A",
-      heroBg: "linear-gradient(135deg, #1E293B, #0F172A)",
-      eyebrowColor: "#FBBF24",
-      titleColor: "#FFFFFF",
-      ctaBg: "#FBBF24",
-      ctaColor: "#0F172A",
-      logoColor: "#FBBF24",
-    },
-    classic: {
-      bg: "#FAF5EB",
-      heroBg: "linear-gradient(135deg, #F5E6D3, #FAF5EB)",
-      eyebrowColor: "#92400E",
-      titleColor: "#1C1917",
-      ctaBg: "#1C1917",
-      ctaColor: "#FAF5EB",
-      logoColor: "#92400E",
-    },
-  }[template];
+// ---------------------------------------------------------------------------
+// 1) Videogenerierung — Floating LP-Card mit Video-Hero
+// ---------------------------------------------------------------------------
 
+function VideoVisual() {
   return (
-    <div className="w-full h-full flex flex-col" style={{ backgroundColor: styles.bg }}>
-      {/* Browser chrome */}
-      <div className="h-3.5 bg-white border-b border-line/40 flex items-center px-2 gap-1">
-        <div className="size-1 rounded-full bg-red-400" />
-        <div className="size-1 rounded-full bg-yellow-400" />
-        <div className="size-1 rounded-full bg-green-400" />
-        <div className="flex-1 ml-1.5 h-1 rounded-full bg-surface-soft" />
-      </div>
-      {/* Header */}
+    <div className="relative w-full max-w-[300px] aspect-[16/12] mx-auto">
+      {/* Ghost 2 */}
       <div
-        className="h-4 flex items-center px-2 gap-1.5"
-        style={{ backgroundColor: styles.bg }}
+        aria-hidden
+        className="absolute inset-0 rounded-2xl bg-white border border-line/60"
+        style={{
+          transform: "translate(-20px, -10px) rotate(-4deg)",
+          opacity: 0.45,
+          filter: "blur(1px)",
+          boxShadow: "0 18px 40px -16px rgba(15,23,42,0.25)",
+        }}
+      />
+      {/* Ghost 1 */}
+      <div
+        aria-hidden
+        className="absolute inset-0 rounded-2xl bg-white border border-line/80"
+        style={{
+          transform: "translate(-10px, -4px) rotate(-2deg)",
+          opacity: 0.75,
+          boxShadow: "0 22px 50px -18px rgba(15,23,42,0.30)",
+        }}
+      />
+      {/* Front */}
+      <div
+        className="absolute inset-0 rounded-2xl overflow-hidden border border-line bg-white"
+        style={{
+          boxShadow:
+            "0 30px 60px -20px rgba(15,23,42,0.4), 0 8px 22px -8px rgba(15,23,42,0.18)",
+        }}
       >
-        <div className="size-2 rounded" style={{ backgroundColor: styles.logoColor }} />
-        <div
-          className="text-[6px] font-bold tracking-wider uppercase"
-          style={{ color: styles.titleColor }}
-        >
-          Dein Logo
-        </div>
-      </div>
-      {/* Hero */}
-      <div className="flex-1 relative" style={{ background: styles.heroBg }}>
-        <div className="flex items-center h-full p-2.5 gap-2">
-          <div className="flex-1 min-w-0">
-            <div
-              className="text-[5px] font-bold tracking-wider uppercase mb-0.5"
-              style={{ color: styles.eyebrowColor }}
-            >
-              Persönlich für dich
-            </div>
-            <div
-              className="text-[11px] font-extrabold leading-[1.05]"
-              style={{ color: styles.titleColor }}
-            >
-              {name},
-              <br />
-              schau dir das an.
-            </div>
-            <div
-              className="mt-1 inline-block text-[5px] font-bold rounded px-1 py-0.5"
-              style={{ backgroundColor: styles.ctaBg, color: styles.ctaColor }}
-            >
-              Termin sichern →
-            </div>
-          </div>
+        <BrowserMock>
           <div
-            className="shrink-0 w-14 aspect-video rounded overflow-hidden border-2 border-white shadow"
+            className="relative h-full p-4 flex items-center gap-3"
             style={{
-              background: `linear-gradient(135deg, ${styles.eyebrowColor}AA, ${styles.eyebrowColor})`,
+              background: "linear-gradient(135deg, #7C5CE8, #5232C7)",
             }}
           >
-            {template === "soft" ? (
+            <div className="flex-1 min-w-0">
+              <div className="text-[8px] font-bold tracking-[0.2em] uppercase text-white/80 mb-1.5">
+                Persönlich für dich
+              </div>
+              <div className="text-[14px] font-extrabold text-white leading-[1.05]">
+                Max Mustermann,
+                <br />
+                schau dir das an.
+              </div>
+              <div className="mt-2 inline-flex text-[9px] font-bold text-ink bg-white rounded px-2 py-1 shadow-sm">
+                Termin sichern →
+              </div>
+            </div>
+            <div className="shrink-0 size-14 rounded-full overflow-hidden border-2 border-white shadow-xl">
               <video
                 src="/demo-assets/webcam.mp4"
                 muted
@@ -758,358 +288,372 @@ function LpThumbMock({
                 preload="metadata"
                 className="w-full h-full object-cover"
               />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-white text-[8px]">
-                ▶
-              </div>
-            )}
+            </div>
           </div>
-        </div>
+        </BrowserMock>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// 5) Brief — komplett ueberarbeitet, grosser fokussierter Letter + Envelope
+// 2) Landingpage — Browser mit klarer LP-Komposition
 // ---------------------------------------------------------------------------
 
-function BriefBento() {
+function LandingVisual() {
   return (
-    <div className="relative w-full h-full flex flex-col p-7">
-      {/* Warm Glows */}
+    <div className="relative w-full max-w-[300px] aspect-[16/12] mx-auto">
+      {/* Ghosts */}
       <div
         aria-hidden
-        className="absolute -top-20 -right-16 size-[420px] rounded-full pointer-events-none"
+        className="absolute inset-0 rounded-2xl bg-white border border-line/60"
         style={{
-          background:
-            "radial-gradient(closest-side, rgba(251,146,60,0.40), transparent 70%)",
+          transform: "translate(-20px, -10px) rotate(-4deg)",
+          opacity: 0.45,
+          filter: "blur(1px)",
+          boxShadow: "0 18px 40px -16px rgba(15,23,42,0.25)",
         }}
       />
       <div
         aria-hidden
-        className="absolute bottom-0 left-0 size-72 rounded-full pointer-events-none opacity-60"
+        className="absolute inset-0 rounded-2xl bg-white border border-line/80"
         style={{
-          background:
-            "radial-gradient(closest-side, rgba(180,83,9,0.30), transparent 75%)",
+          transform: "translate(-10px, -4px) rotate(-2deg)",
+          opacity: 0.75,
+          boxShadow: "0 22px 50px -18px rgba(15,23,42,0.30)",
         }}
       />
-
-      <GlassIcon>
-        <Mail className="size-5" />
-      </GlassIcon>
-
-      {/* Layered letter stack — Apple-Style product hero */}
-      <div className="absolute top-2 right-0 w-[260px] h-[280px] pointer-events-none">
-        {/* Ghost 3 — furthest, most blurred */}
-        <div
-          aria-hidden
-          className="absolute top-10 right-10 rounded-md"
-          style={{
-            width: 170,
-            aspectRatio: "210/297",
-            background: "#FAF6EE",
-            border: "1px solid rgba(0,0,0,0.05)",
-            transform: "rotate(-14deg)",
-            opacity: 0.35,
-            filter: "blur(2px)",
-            boxShadow: "0 18px 50px -16px rgba(0,0,0,0.45)",
-            zIndex: 1,
-          }}
-        />
-        {/* Ghost 2 — middle */}
-        <div
-          aria-hidden
-          className="absolute top-5 right-5 rounded-md"
-          style={{
-            width: 170,
-            aspectRatio: "210/297",
-            background: "#FFFCF5",
-            border: "1px solid rgba(0,0,0,0.07)",
-            transform: "rotate(-7deg)",
-            opacity: 0.6,
-            filter: "blur(0.8px)",
-            boxShadow: "0 22px 50px -18px rgba(0,0,0,0.5)",
-            zIndex: 2,
-          }}
-        />
-
-        {/* Front letter — fully rendered, crisp */}
-        <div
-          className="absolute top-0 right-0 rounded-md overflow-hidden"
-          style={{
-            width: 175,
-            aspectRatio: "210/297",
-            transform: "rotate(3deg)",
-            zIndex: 3,
-            boxShadow:
-              "0 30px 60px -20px rgba(0,0,0,0.65), 0 10px 25px -10px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.7)",
-            background:
-              "linear-gradient(180deg, #FFFEFA 0%, #FAF6EE 100%)",
-            border: "1px solid rgba(0,0,0,0.06)",
-          }}
-        >
-          {/* Letterhead strip */}
-          <div
-            className="absolute inset-x-0 top-0 h-2"
-            style={{
-              background: "linear-gradient(90deg, #F97316, #FBBF24)",
-            }}
-          />
-          {/* Subtle paper grain via gradient */}
-          <div
-            aria-hidden
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background:
-                "radial-gradient(120% 80% at 50% 0%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.04) 100%)",
-            }}
-          />
-
-          <div
-            className="relative h-full flex flex-col"
-            style={{ padding: "14px 14px 12px" }}
-          >
-            {/* Sender */}
-            <div
-              className="text-[4px] text-ink-muted/80 pb-1 mb-2 border-b leading-tight"
-              style={{ borderColor: "#E8DECC" }}
-            >
-              Deine Firma · Musterstraße 1 · 12345 Stadt
-            </div>
-
-            {/* Adresse + Datum */}
-            <div className="flex justify-between items-start mb-3">
-              <div className="text-[5px] leading-[1.35] text-ink">
-                Herrn
-                <br />
-                <strong>Max Mustermann</strong>
-                <br />
-                Mustermann Industrie
-                <br />
-                Industriestr. 42
-                <br />
-                85737 Ismaning
+      {/* Front */}
+      <div
+        className="absolute inset-0 rounded-2xl overflow-hidden border border-line bg-white"
+        style={{
+          boxShadow:
+            "0 30px 60px -20px rgba(15,23,42,0.4), 0 8px 22px -8px rgba(15,23,42,0.18)",
+        }}
+      >
+        <BrowserMock url="deine-domain.de/lisa">
+          <div className="h-full flex flex-col">
+            {/* Header */}
+            <div className="h-6 bg-white border-b border-line flex items-center px-3 gap-1.5">
+              <div className="size-2.5 rounded bg-brand" />
+              <div className="text-[7px] font-extrabold tracking-wider uppercase text-ink">
+                Dein Logo
               </div>
-              <div className="text-[4px] text-ink-muted text-right">
-                22.06.2026
+              <div className="flex-1" />
+              <div className="text-[6px] text-ink-muted flex gap-2">
+                <span>Home</span>
+                <span>Über</span>
               </div>
             </div>
-
-            {/* Subject */}
-            <div className="text-[5.5px] font-bold text-ink mb-1.5">
-              Drei Punkte zu Ihrer Webseite
-            </div>
-
-            {/* Anrede */}
-            <div className="text-[5px] text-ink mb-1.5">
-              Sehr geehrter Herr Mustermann,
-            </div>
-
-            {/* Body lines */}
-            <div className="space-y-[2px] mb-1.5">
-              <div className="h-[1.5px] bg-ink/15 w-full rounded" />
-              <div className="h-[1.5px] bg-ink/15 w-[92%] rounded" />
-              <div className="h-[1.5px] bg-ink/15 w-[78%] rounded" />
-            </div>
-            <div className="space-y-[2px] mb-1.5">
-              <div className="h-[1.5px] bg-ink/15 w-full rounded" />
-              <div className="h-[1.5px] bg-ink/15 w-[85%] rounded" />
-            </div>
-
-            {/* URL highlight */}
-            <div
-              className="text-[5px] font-mono font-bold inline-flex self-start px-1.5 py-0.5 rounded mb-2"
-              style={{
-                backgroundColor: "#F3EEFF",
-                color: "#5232C7",
-              }}
-            >
-              deine-domain.de/max
-            </div>
-
-            {/* Spacer */}
-            <div className="flex-1" />
-
-            {/* Footer with signature + QR */}
-            <div className="flex items-end justify-between gap-2">
+            {/* Hero */}
+            <div className="flex-1 p-3 flex items-center gap-2 bg-gradient-to-br from-[#F3EEFF] to-white">
               <div className="flex-1 min-w-0">
-                <div className="text-[4.5px] text-ink mb-1.5">
-                  Mit besten Grüßen
+                <div className="text-[6px] font-bold tracking-wider uppercase text-brand-deep mb-0.5">
+                  Persönlich für dich
                 </div>
-                <div
-                  className="text-[8px] italic mb-0.5"
-                  style={{
-                    fontFamily: "'Georgia', 'Times New Roman', serif",
-                  }}
-                >
-                  Dein Name
+                <div className="text-[12px] font-extrabold text-ink leading-[1.05]">
+                  Lisa,
+                  <br />
+                  schau dir das an.
                 </div>
-                <div className="text-[3.5px] text-ink-muted">
-                  Deine Firma
+                <div className="mt-1.5 inline-block text-[7px] font-bold text-white rounded px-1.5 py-0.5 bg-brand-deep">
+                  Termin sichern →
                 </div>
               </div>
+              <div className="shrink-0 w-16 aspect-video rounded overflow-hidden border-2 border-white shadow-md">
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#AA8CF5] to-[#7C5CE8] text-white text-[10px]">
+                  ▶
+                </div>
+              </div>
+            </div>
+          </div>
+        </BrowserMock>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 3) Brief — Floating cream A4 paper card mit Footer-QR
+// ---------------------------------------------------------------------------
+
+function BriefVisual() {
+  return (
+    <div className="relative w-full mx-auto" style={{ height: 280, maxWidth: 220 }}>
+      {/* Ghosts */}
+      <div
+        aria-hidden
+        className="absolute top-0 right-0 rounded-md"
+        style={{
+          width: 180,
+          aspectRatio: "210/297",
+          background: "#FAF6EE",
+          border: "1px solid rgba(0,0,0,0.05)",
+          transform: "translate(-30px, 14px) rotate(-12deg)",
+          opacity: 0.35,
+          filter: "blur(2px)",
+          boxShadow: "0 18px 50px -16px rgba(0,0,0,0.45)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="absolute top-0 right-0 rounded-md"
+        style={{
+          width: 180,
+          aspectRatio: "210/297",
+          background: "#FFFCF5",
+          border: "1px solid rgba(0,0,0,0.07)",
+          transform: "translate(-14px, 6px) rotate(-6deg)",
+          opacity: 0.6,
+          filter: "blur(0.6px)",
+          boxShadow: "0 22px 50px -18px rgba(0,0,0,0.5)",
+        }}
+      />
+      {/* Front */}
+      <div
+        className="absolute top-0 left-1/2 -translate-x-1/2 rounded-md overflow-hidden"
+        style={{
+          width: 195,
+          aspectRatio: "210/297",
+          background: "linear-gradient(180deg, #FFFEFA 0%, #FAF6EE 100%)",
+          border: "1px solid rgba(0,0,0,0.06)",
+          boxShadow:
+            "0 30px 60px -20px rgba(0,0,0,0.5), 0 10px 25px -10px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.8)",
+        }}
+      >
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-2"
+          style={{
+            background: "linear-gradient(90deg, #7C5CE8, #AA8CF5)",
+          }}
+        />
+        <div
+          className="relative h-full flex flex-col"
+          style={{ padding: "18px 16px 14px" }}
+        >
+          {/* Sender */}
+          <div
+            className="text-[4.5px] text-ink-muted pb-1 mb-2 border-b leading-tight"
+            style={{ borderColor: "#E8DECC" }}
+          >
+            Deine Firma · Musterstraße 1 · 12345 Stadt
+          </div>
+
+          {/* Adresse + Datum */}
+          <div className="flex justify-between items-start mb-3">
+            <div className="text-[5.5px] leading-[1.35] text-ink">
+              Herrn
+              <br />
+              <strong>Max Mustermann</strong>
+              <br />
+              Mustermann Industrie
+              <br />
+              Industriestr. 42
+              <br />
+              85737 Ismaning
+            </div>
+            <div className="text-[4.5px] text-ink-muted text-right">
+              22.06.2026
+            </div>
+          </div>
+
+          {/* Subject */}
+          <div className="text-[6px] font-bold text-ink mb-1.5">
+            Drei Punkte zu Ihrer Webseite
+          </div>
+
+          {/* Anrede */}
+          <div className="text-[5.5px] text-ink mb-1.5">
+            Sehr geehrter Herr Mustermann,
+          </div>
+
+          {/* Body lines */}
+          <div className="space-y-[2px] mb-2">
+            <div className="h-[1.5px] bg-ink/15 w-full rounded" />
+            <div className="h-[1.5px] bg-ink/15 w-[92%] rounded" />
+            <div className="h-[1.5px] bg-ink/15 w-[78%] rounded" />
+          </div>
+
+          {/* URL highlight */}
+          <div
+            className="text-[5.5px] font-mono font-bold inline-flex self-start px-1.5 py-0.5 rounded mb-2"
+            style={{
+              backgroundColor: "#F3EEFF",
+              color: "#5232C7",
+            }}
+          >
+            deine-domain.de/max
+          </div>
+
+          <div className="flex-1" />
+
+          {/* Footer */}
+          <div className="flex items-end justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="text-[5px] text-ink mb-1">Mit besten Grüßen</div>
               <div
-                className="shrink-0 size-7 rounded-[2px] border border-ink/15 overflow-hidden bg-white p-[1px]"
+                className="text-[9px] italic"
+                style={{
+                  fontFamily: "'Georgia', 'Times New Roman', serif",
+                }}
               >
-                <div
-                  className="size-full"
-                  style={{
-                    background:
-                      "repeating-conic-gradient(#0F172A 0deg 90deg, white 90deg 180deg)",
-                    backgroundSize: "2px 2px",
-                  }}
-                />
+                Dein Name
               </div>
+            </div>
+            <div className="shrink-0 size-7 rounded-[2px] border border-ink/15 overflow-hidden bg-white p-[1px]">
+              <div
+                className="size-full"
+                style={{
+                  background:
+                    "repeating-conic-gradient(#0F172A 0deg 90deg, white 90deg 180deg)",
+                  backgroundSize: "2px 2px",
+                }}
+              />
             </div>
           </div>
         </div>
-
-        {/* Subtle bottom shadow blob to ground the stack */}
-        <div
-          aria-hidden
-          className="absolute bottom-0 left-1/2 -translate-x-1/2 w-44 h-2 rounded-full pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(50% 100% at 50% 0%, rgba(0,0,0,0.45), transparent 100%)",
-            filter: "blur(4px)",
-          }}
-        />
-      </div>
-
-      <div className="mt-auto pt-12 relative">
-        <Eyebrow dark>Briefe</Eyebrow>
-        <h3 className="mt-3 text-xl md:text-2xl font-semibold tracking-[-0.02em] text-white leading-tight">
-          Briefe pro Lead.
-        </h3>
-        <p className="mt-2 text-sm text-white/60 leading-relaxed">
-          Persönlich adressiert, mit QR-Code zum Video.
-        </p>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// 6) A/B Testing
+// 4) Push — vertikale Pills wie Mac-Notifications
 // ---------------------------------------------------------------------------
 
-function ABBento() {
-  return (
-    <div className="relative w-full h-full flex flex-col p-7">
-      <div
-        aria-hidden
-        className="absolute -top-16 -right-12 size-72 rounded-full pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(closest-side, rgba(251,191,36,0.5), transparent 70%)",
-        }}
-      />
-
-      <GlassIcon tint="brand">
-        <FlaskConical className="size-5" />
-      </GlassIcon>
-
-      <div className="absolute top-6 right-4 flex gap-1.5 w-[140px]">
-        {[
-          { label: "A", v: "12 %", win: false },
-          { label: "B", v: "18 %", win: true },
-        ].map((c) => (
-          <div
-            key={c.label}
-            className={cn(
-              "flex-1 rounded-xl p-2 border backdrop-blur-md",
-              c.win
-                ? "bg-white border-amber-900/20"
-                : "bg-white/40 border-amber-900/10",
-            )}
-          >
-            <div
-              className={cn(
-                "size-4 rounded-full flex items-center justify-center text-[8px] font-extrabold mb-1",
-                c.win
-                  ? "bg-amber-900 text-white"
-                  : "bg-amber-900/30 text-amber-900",
-              )}
-            >
-              {c.label}
-            </div>
-            <div
-              className={cn(
-                "text-base font-extrabold leading-none",
-                c.win ? "text-amber-900" : "text-amber-900/60",
-              )}
-            >
-              {c.v}
-            </div>
-            <div className="text-[7px] text-amber-900/55 mt-0.5">
-              Conversion
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-auto pt-12">
-        <Eyebrow>A/B-Testing</Eyebrow>
-        <h3 className="mt-3 text-xl md:text-2xl font-semibold tracking-[-0.02em] text-ink leading-tight">
-          Was wirklich wirkt.
-        </h3>
-        <p className="mt-2 text-sm text-ink-muted leading-relaxed">
-          Templates und Headlines vergleichen.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 7) Anbindungen — echte Brand-Logos
-// ---------------------------------------------------------------------------
-
-function IntegrationsBento() {
-  const LOGOS = [
-    { name: "HubSpot", Logo: HubSpotLogo, top: 0, left: 10 },
-    { name: "Salessuite", Logo: SalessuiteLogo, top: 16, left: 140 },
-    { name: "Close", Logo: CloseLogo, top: 6, left: 240 },
-    { name: "Zapier", Logo: ZapierLogo, top: 100, left: 50 },
-    { name: "Make", Logo: MakeLogo, top: 110, left: 180 },
+function PushVisual() {
+  const NOTIFS = [
+    {
+      icon: <Eye className="size-3" />,
+      who: "Max Mustermann",
+      what: "öffnete deine Seite",
+      delay: 0,
+    },
+    {
+      icon: <PlayCircle className="size-3" />,
+      who: "Lisa Lust",
+      what: "schaut gerade",
+      delay: 0.1,
+    },
+    {
+      icon: <MousePointerClick className="size-3" />,
+      who: "Franz Friedrich",
+      what: "klickte Termin",
+      delay: 0.2,
+    },
   ];
   return (
-    <div className="relative w-full h-full flex p-7 md:p-8 gap-6">
+    <div className="relative w-full max-w-[260px] mx-auto flex flex-col items-stretch gap-2.5">
+      {NOTIFS.map((n, i) => (
+        <div
+          key={i}
+          className="rounded-2xl bg-white border border-line/80 px-3 py-2.5 flex items-center gap-3 shadow-[0_8px_20px_-12px_rgba(15,23,42,0.25)]"
+          style={{
+            transform: `translateY(${i * 0}px)`,
+          }}
+        >
+          <div
+            className="size-7 shrink-0 rounded-lg flex items-center justify-center text-white"
+            style={{
+              background:
+                i === 0
+                  ? "linear-gradient(135deg, #10B981, #047857)"
+                  : i === 1
+                    ? "linear-gradient(135deg, #AA8CF5, #7C5CE8)"
+                    : "linear-gradient(135deg, #FBBF24, #D97706)",
+            }}
+          >
+            {n.icon}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[12px] text-ink leading-tight">
+              <span className="font-bold">{n.who}</span>{" "}
+              <span className="text-ink-muted">{n.what}</span>
+            </div>
+            <div className="text-[10px] text-ink-muted mt-0.5">
+              {i === 0 ? "gerade eben" : i === 1 ? "vor 4 s" : "vor 12 s"}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 5) Analytics — Floating Mini-Dashboard
+// ---------------------------------------------------------------------------
+
+function AnalyticsVisual() {
+  return (
+    <div className="relative w-full max-w-[260px] mx-auto">
       <div
-        aria-hidden
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(60% 80% at 0% 50%, rgba(243,238,255,0.6), rgba(243,238,255,0) 70%)",
-        }}
-      />
+        className="rounded-2xl bg-white border border-line p-5 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.22)]"
+      >
+        {/* KPI big */}
+        <div className="flex items-end justify-between mb-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+              Watch-Time ø
+            </div>
+            <div className="text-[40px] font-extrabold leading-none mt-1 text-ink">
+              83%
+            </div>
+          </div>
+          <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+            <TrendingUp className="size-3" />
+            +12%
+          </div>
+        </div>
 
-      {/* Left text */}
-      <div className="relative flex-1 flex flex-col justify-center max-w-[260px]">
-        <Eyebrow>Anbindungen</Eyebrow>
-        <h3 className="mt-3 text-xl md:text-2xl font-semibold tracking-[-0.02em] text-ink leading-tight">
-          Verbunden mit deinen Tools.
-        </h3>
-        <p className="mt-2 text-sm text-ink-muted leading-relaxed">
-          HubSpot, Salessuite, Close, Zapier oder Make. Webhook-Events
-          pro Aktion.
-        </p>
-      </div>
+        {/* Chart */}
+        <div className="rounded-xl bg-surface-soft border border-line/60 p-3">
+          <svg viewBox="0 0 200 50" className="w-full h-14">
+            <defs>
+              <linearGradient
+                id="vc-feat-chart"
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="0%" stopColor="#7C5CE8" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#7C5CE8" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M0,40 L20,35 L40,30 L60,32 L80,22 L100,18 L120,20 L140,12 L160,10 L200,4 L200,50 L0,50 Z"
+              fill="url(#vc-feat-chart)"
+            />
+            <path
+              d="M0,40 L20,35 L40,30 L60,32 L80,22 L100,18 L120,20 L140,12 L160,10 L200,4"
+              fill="none"
+              stroke="#7C5CE8"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
 
-      {/* Right — floating Logo-Pills with REAL brand marks */}
-      <div className="relative flex-1 hidden md:flex items-center justify-end pr-2">
-        <div className="relative w-[330px] h-[200px]">
-          {LOGOS.map(({ name, Logo, top, left }) => (
+        {/* Mini-KPIs */}
+        <div className="grid grid-cols-3 gap-2 mt-3">
+          {[
+            { l: "Versendet", v: "743" },
+            { l: "Geöffnet", v: "284" },
+            { l: "Klicks", v: "39" },
+          ].map((k, i) => (
             <div
-              key={name}
-              className="absolute px-3 py-2 rounded-2xl bg-white border border-line shadow-[0_10px_28px_-8px_rgba(15,23,42,0.18)] flex items-center gap-2.5"
-              style={{ top, left }}
+              key={i}
+              className="rounded-lg bg-surface-soft border border-line/60 px-2 py-1.5"
             >
-              <Logo className="size-6 shrink-0" />
-              <span className="text-[13px] font-semibold text-ink">
-                {name}
-              </span>
+              <div className="text-[8px] uppercase tracking-wider text-ink-muted font-bold">
+                {k.l}
+              </div>
+              <div className="text-[14px] font-extrabold text-ink mt-0.5 leading-none">
+                {k.v}
+              </div>
             </div>
           ))}
         </div>
@@ -1117,3 +661,171 @@ function IntegrationsBento() {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// 6) A/B Testing — zwei Cards mit Winner-Markierung
+// ---------------------------------------------------------------------------
+
+function ABVisual() {
+  return (
+    <div className="relative w-full max-w-[300px] mx-auto flex items-end gap-3">
+      {/* A */}
+      <div
+        className="flex-1 rounded-2xl bg-white border border-line p-3 shadow-[0_8px_20px_-12px_rgba(15,23,42,0.18)] relative"
+        style={{ minHeight: 180 }}
+      >
+        <div className="size-6 rounded-full bg-ink-muted/15 flex items-center justify-center text-[10px] font-extrabold text-ink-muted mb-3">
+          A
+        </div>
+        <div className="space-y-1 mb-3">
+          <div className="h-1.5 bg-ink/15 w-full rounded" />
+          <div className="h-1.5 bg-ink/15 w-3/4 rounded" />
+        </div>
+        <div className="rounded-lg bg-surface-soft h-12 mb-3" />
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+          Conversion
+        </div>
+        <div className="text-2xl font-extrabold text-ink-muted/70 leading-none mt-1">
+          12%
+        </div>
+      </div>
+
+      {/* B winner */}
+      <div
+        className="flex-1 rounded-2xl bg-white border-2 border-brand p-3 shadow-[0_14px_30px_-14px_rgba(124,92,232,0.4)] relative"
+        style={{ minHeight: 200 }}
+      >
+        <div className="absolute -top-2 -right-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand text-white text-[9px] font-bold shadow-md">
+          <CheckCircle2 className="size-2.5" />
+          Winner
+        </div>
+        <div className="size-6 rounded-full bg-brand text-white flex items-center justify-center text-[10px] font-extrabold mb-3">
+          B
+        </div>
+        <div className="space-y-1 mb-3">
+          <div className="h-1.5 bg-brand/40 w-full rounded" />
+          <div className="h-1.5 bg-brand/40 w-3/4 rounded" />
+        </div>
+        <div className="rounded-lg bg-brand-soft h-12 mb-3" />
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-brand-deep">
+          Conversion
+        </div>
+        <div className="text-2xl font-extrabold text-brand-deep leading-none mt-1">
+          18%
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 7) Integrations — Workflow VIDEOCOMET → CRM
+// ---------------------------------------------------------------------------
+
+function IntegrationsVisual() {
+  const TARGETS = [
+    { slug: "hubspot", name: "HubSpot" },
+    { slug: "zapier", name: "Zapier" },
+    { slug: "make", name: "Make" },
+    { slug: "close", name: "Close" },
+  ];
+  return (
+    <div className="relative w-full max-w-[480px] mx-auto py-6">
+      {/* Source Pill: Tracking-Event */}
+      <div className="flex justify-center mb-4">
+        <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-white shadow-[0_10px_24px_-12px_rgba(15,23,42,0.25)] border border-line">
+          <div className="size-7 rounded-full flex items-center justify-center text-white"
+            style={{
+              background: "linear-gradient(135deg, #AA8CF5, #5232C7)",
+            }}
+          >
+            <Bell className="size-3.5" />
+          </div>
+          <div>
+            <div className="text-[13px] font-bold text-ink leading-tight">
+              CTA geklickt
+            </div>
+            <div className="text-[10px] text-ink-muted leading-tight">
+              Max Mustermann · gerade eben
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Connector */}
+      <div className="flex justify-center mb-4">
+        <svg width="60" height="40" viewBox="0 0 60 40" className="text-ink-muted/40">
+          <path
+            d="M30 0 L30 20 M10 38 L30 22 L50 38"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray="3 3"
+          />
+        </svg>
+      </div>
+
+      {/* Target tools — fan out */}
+      <div className="grid grid-cols-4 gap-2.5">
+        {TARGETS.map((t) => (
+          <div
+            key={t.slug}
+            className="rounded-2xl bg-white border border-line shadow-[0_8px_20px_-12px_rgba(15,23,42,0.2)] p-3 flex flex-col items-center gap-2"
+          >
+            <img
+              src={`https://cdn.simpleicons.org/${t.slug}`}
+              alt={t.name}
+              width={28}
+              height={28}
+              loading="lazy"
+              className="size-7"
+            />
+            <div className="text-[11px] font-semibold text-ink text-center">
+              {t.name}
+            </div>
+            <CheckCircle2 className="size-3.5 text-emerald-500" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Browser-Mock-Helper
+// ---------------------------------------------------------------------------
+
+function BrowserMock({
+  children,
+  url,
+}: {
+  children: React.ReactNode;
+  url?: string;
+}) {
+  return (
+    <div className="relative w-full h-full flex flex-col bg-white">
+      <div className="h-6 bg-white border-b border-line flex items-center px-2 gap-1.5 shrink-0">
+        <div className="size-1.5 rounded-full bg-red-400" />
+        <div className="size-1.5 rounded-full bg-yellow-400" />
+        <div className="size-1.5 rounded-full bg-green-400" />
+        {url ? (
+          <div className="flex-1 ml-2 h-3 rounded-full bg-surface-soft flex items-center px-2">
+            <span className="text-[6px] text-ink-muted truncate">{url}</span>
+          </div>
+        ) : (
+          <div className="flex-1 ml-2 h-2 rounded-full bg-surface-soft" />
+        )}
+      </div>
+      <div className="flex-1 min-h-0">{children}</div>
+    </div>
+  );
+}
+
+// Unused but kept reserved for future variants
+void Database;
+void FileText;
+void Globe;
+void Mail;
+void PenLine;
