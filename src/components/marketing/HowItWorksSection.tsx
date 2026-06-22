@@ -2009,9 +2009,9 @@ function TrackingLayer({ active }: { active: boolean }) {
         <div className="grid grid-cols-4 gap-2 mb-3">
           {[
             { l: "Versendet", v: "743" },
-            { l: "Geöffnet", v: "284", c: "text-ok" },
-            { l: "Geschaut", v: "171", c: "text-brand-deep" },
-            { l: "Klicks", v: "39", c: "text-brand-deep" },
+            { l: "Geöffnet", v: "21,4 %", c: "text-ok" },
+            { l: "Watch-Time ø", v: "83 %", c: "text-brand-deep" },
+            { l: "Anfragen", v: "39", c: "text-brand-deep" },
           ].map((k, i) => (
             <div
               key={i}
