@@ -5,11 +5,10 @@ import {
   ArrowRight,
   Bell,
   CheckCircle2,
-  Eye,
+  Globe,
+  Lock,
   Maximize2,
-  MousePointerClick,
   Play,
-  PlayCircle,
   TrendingUp,
   Volume2,
 } from "lucide-react";
@@ -72,21 +71,22 @@ export function FeaturesBento() {
           </RevealOnScroll>
         </div>
 
-        {/* Bento Grid */}
+        {/* Bento Grid — 2 wide Hero-Cards + 6 standard cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-          <RevealOnScroll delay={400}>
-            <FeatureCard
-              title="Persönliche Videos in Serie."
-              sub="Eine Aufnahme reicht. Jeder Lead bekommt sein eigenes Video, automatisch zusammengesetzt."
+          {/* Wide opener: Eigene Domain */}
+          <RevealOnScroll delay={400} className="md:col-span-2">
+            <FeatureCardMesh
+              title="Deine eigene Domain, dein Auftritt."
+              sub="Verbinde in zwei Minuten deine eigene Domain. SSL, DNS, Subdomain. Alles inklusive, ohne Frickelei."
             >
-              <VideoPlayerVisual />
-            </FeatureCard>
+              <DomainVisual />
+            </FeatureCardMesh>
           </RevealOnScroll>
 
           <RevealOnScroll delay={500}>
             <FeatureCard
-              title="Eine Landingpage pro Lead."
-              sub="Vorname, Firma und das Video sauber im Hero. Komplett automatisch generiert."
+              title="Landingpage. Builder oder ZIP."
+              sub="Mit dem Schnell-Builder in Minuten gebaut. Oder komplett eigene Website als ZIP hochladen, von Claude generiert."
             >
               <LandingPageVisual />
             </FeatureCard>
@@ -103,33 +103,42 @@ export function FeaturesBento() {
 
           <RevealOnScroll delay={700}>
             <FeatureCard
-              title="Live, sobald jemand reagiert."
-              sub="Push-Notifications für jede Öffnung und jeden Klick. Du bist immer informiert."
+              title="Scroll-Animationen mitten im Video."
+              sub="Zeige die Webseite des Kunden, ein Google-Doc oder eine Karriere-Seite. Live scrollend, direkt im Video."
             >
-              <PushVisual />
+              <ScrollAnimationVisual />
             </FeatureCard>
           </RevealOnScroll>
 
           <RevealOnScroll delay={800}>
             <FeatureCard
-              title="Sieh, was wirklich funktioniert."
-              sub="Watch-Time, Klicks und Anfragen in einem klaren Dashboard."
+              title="Slack-Push, sobald jemand reagiert."
+              sub="Öffnung, Watch-Time, Klick auf den CTA. Alles landet in deinem Slack, in Echtzeit."
             >
-              <AnalyticsVisual />
+              <SlackPushVisual />
             </FeatureCard>
           </RevealOnScroll>
 
           <RevealOnScroll delay={900}>
             <FeatureCard
+              title="Sieh, was wirklich funktioniert."
+              sub="Watch-Time, Klicks und Anfragen in einem klaren Dashboard. Live abrufbar, jederzeit vergleichbar."
+            >
+              <AnalyticsVisual />
+            </FeatureCard>
+          </RevealOnScroll>
+
+          <RevealOnScroll delay={1000}>
+            <FeatureCard
               title="Daten zeigen, was besser wirkt."
-              sub="Templates und Headlines gegeneinander testen. Die Version mit der besseren Conversion gewinnt."
+              sub="Zwei Video-Botschaften oder zwei Briefe gegeneinander testen. Die Variante mit der besseren Conversion gewinnt."
             >
               <ABVisual />
             </FeatureCard>
           </RevealOnScroll>
 
-          {/* Wide mesh card */}
-          <RevealOnScroll delay={1050} className="md:col-span-2">
+          {/* Wide closer: Anbindungen */}
+          <RevealOnScroll delay={1100} className="md:col-span-2">
             <FeatureCardMesh
               title="Eingebunden in deine Tools."
               sub="Jedes Tracking-Event landet automatisch in deinem CRM oder Automation-Tool. Per Webhook, ohne Umweg."
@@ -227,10 +236,10 @@ function FeatureCardMesh({
 }
 
 // ===========================================================================
-// 1) Videogenerierung — ECHTER Video-Player
+// Scroll-Animation — Video-Player mit gescrollter Webseite/Dokument
 // ===========================================================================
 
-function VideoPlayerVisual() {
+function ScrollAnimationVisual() {
   return (
     <div className="relative w-full max-w-[360px] mx-auto">
       <div
@@ -250,32 +259,78 @@ function VideoPlayerVisual() {
             "0 30px 60px -20px rgba(15,23,42,0.45), 0 10px 25px -8px rgba(15,23,42,0.2)",
         }}
       >
-        {/* Hero composition */}
-        <div
-          className="absolute inset-0 flex items-center"
-          style={{
-            background:
-              "linear-gradient(135deg, #6D28D9 0%, #7C5CE8 35%, #D946EF 100%)",
-          }}
-        >
-          <div
-            aria-hidden
-            className="absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(50% 80% at 30% 30%, rgba(255,255,255,0.18), transparent 60%)",
-            }}
-          />
+        {/* Inside-Video: Webseite des Kunden, gescrollt */}
+        <div className="absolute inset-0 bg-white">
+          {/* Pseudo-Browser-Bar des Video-Inhalts */}
+          <div className="absolute inset-x-0 top-0 h-3 bg-[#F4F4F8] border-b border-line/80 flex items-center gap-1 px-2">
+            <div className="size-1 rounded-full bg-[#FF5F57]" />
+            <div className="size-1 rounded-full bg-[#FEBC2E]" />
+            <div className="size-1 rounded-full bg-[#28C840]" />
+            <div className="ml-1 text-[5px] text-ink-muted tabular-nums">
+              kunde.de
+            </div>
+          </div>
 
-          <div className="relative flex-1 px-6 pr-24">
-            <div className="text-[9px] font-bold tracking-[0.25em] uppercase text-white/85 mb-2">
-              Persönlich für dich
+          {/* Gescrollter Seiteninhalt (Container fix, Inhalt nach oben verschoben) */}
+          <div
+            className="absolute inset-x-0 top-3 bottom-0 overflow-hidden"
+            style={{ paddingRight: 8 }}
+          >
+            <div
+              className="absolute inset-x-0 top-0 flex flex-col gap-2 p-3"
+              style={{ transform: "translateY(-58px)" }}
+            >
+              {/* Hero (teilweise ausserhalb) */}
+              <div className="h-12 rounded-md bg-gradient-to-br from-[#E0E7FF] to-[#F3EEFF] p-2 flex items-end gap-2 shrink-0">
+                <div className="size-5 rounded bg-brand-deep" />
+                <div className="flex-1">
+                  <div className="h-2 w-3/4 bg-brand-deep/40 rounded mb-1" />
+                  <div className="h-1.5 w-1/2 bg-brand-deep/20 rounded" />
+                </div>
+              </div>
+              {/* Section 1 */}
+              <div className="rounded-md border border-line/60 bg-white p-2 shrink-0">
+                <div className="h-1.5 w-2/3 bg-ink/20 rounded mb-1.5" />
+                <div className="h-1 w-full bg-ink/10 rounded mb-1" />
+                <div className="h-1 w-5/6 bg-ink/10 rounded" />
+              </div>
+              {/* Section 2 — Karriere */}
+              <div className="rounded-md border border-line/60 bg-white p-2 shrink-0">
+                <div className="text-[5.5px] font-bold tracking-[0.15em] uppercase text-brand-deep mb-1">
+                  Karriere
+                </div>
+                <div className="h-1 w-full bg-ink/10 rounded mb-1" />
+                <div className="h-1 w-3/4 bg-ink/10 rounded mb-1.5" />
+                <div className="grid grid-cols-2 gap-1">
+                  <div className="h-4 rounded bg-brand-soft" />
+                  <div className="h-4 rounded bg-brand-soft" />
+                </div>
+              </div>
+              {/* Section 3 — Testimonials */}
+              <div className="rounded-md border border-line/60 bg-white p-2 shrink-0">
+                <div className="flex gap-1.5">
+                  <div className="size-3 rounded-full bg-ink/15" />
+                  <div className="flex-1">
+                    <div className="h-1 w-3/4 bg-ink/15 rounded mb-1" />
+                    <div className="h-1 w-1/2 bg-ink/10 rounded" />
+                  </div>
+                </div>
+              </div>
+              {/* Section 4 */}
+              <div className="rounded-md border border-line/60 bg-white p-2 shrink-0 grid grid-cols-3 gap-1">
+                <div className="h-3 rounded bg-ink/5" />
+                <div className="h-3 rounded bg-ink/5" />
+                <div className="h-3 rounded bg-ink/5" />
+              </div>
             </div>
-            <div className="text-[20px] font-extrabold text-white leading-[1.05] tracking-[-0.02em]">
-              Max,
-              <br />
-              schau dir das an.
-            </div>
+          </div>
+
+          {/* Scrollbar rechts */}
+          <div className="absolute right-1.5 top-5 bottom-9 w-[3px] rounded-full bg-ink/8">
+            <div
+              className="absolute inset-x-0 rounded-full bg-ink/35"
+              style={{ top: "32%", height: "26%" }}
+            />
           </div>
         </div>
 
@@ -642,64 +697,86 @@ function BriefVisual() {
 }
 
 // ===========================================================================
-// 4) Push — Mac-Notification-Stack
+// Slack-Push — Slack-Channel mit Bot-Nachrichten
 // ===========================================================================
 
-function PushVisual() {
-  const NOTIFS = [
-    {
-      icon: <Eye className="size-3.5" />,
-      who: "Max Mustermann",
-      what: "öffnete deine Seite",
-      time: "gerade eben",
-      gradient: ["#10B981", "#047857"],
-    },
-    {
-      icon: <PlayCircle className="size-3.5" />,
-      who: "Lisa Lust",
-      what: "schaut gerade Sek. 0:18",
-      time: "vor 4 Sek.",
-      gradient: ["#AA8CF5", "#7C5CE8"],
-    },
-    {
-      icon: <MousePointerClick className="size-3.5" />,
-      who: "Franz Friedrich",
-      what: "klickte „Termin sichern“",
-      time: "vor 12 Sek.",
-      gradient: ["#FBBF24", "#D97706"],
-    },
-  ];
+function SlackPushVisual() {
   return (
-    <div className="relative w-full max-w-[300px] mx-auto flex flex-col gap-2.5">
-      {NOTIFS.map((n, i) => (
-        <div
-          key={i}
-          className="rounded-[18px] bg-white/95 backdrop-blur-md border border-line/70 px-3.5 py-3 flex items-center gap-3 shadow-[0_10px_28px_-14px_rgba(15,23,42,0.32)]"
-        >
-          <div
-            className="size-9 shrink-0 rounded-xl flex items-center justify-center text-white shadow-md"
-            style={{
-              background: `linear-gradient(135deg, ${n.gradient[0]}, ${n.gradient[1]})`,
-              boxShadow: `0 6px 16px -4px ${n.gradient[1]}66`,
-            }}
-          >
-            {n.icon}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[12px] font-bold text-ink leading-tight">
-                {n.who}
-              </span>
-              <span className="text-[10px] text-ink-muted shrink-0 tabular-nums">
-                {n.time}
-              </span>
-            </div>
-            <div className="text-[11px] text-ink-muted leading-tight mt-0.5 truncate">
-              {n.what}
-            </div>
-          </div>
+    <div className="relative w-full max-w-[320px] mx-auto">
+      <div
+        className="relative rounded-2xl overflow-hidden bg-white border border-line shadow-[0_14px_36px_-16px_rgba(15,23,42,0.28)]"
+      >
+        {/* Slack-Channel-Header */}
+        <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-line bg-[#F8F8F8]">
+          <span className="text-[14px] text-ink-muted leading-none">#</span>
+          <span className="text-[13px] font-bold text-ink leading-none">
+            video-comet
+          </span>
+          <span className="text-[10px] text-ink-muted leading-none ml-auto">
+            3 Mitglieder
+          </span>
         </div>
-      ))}
+
+        {/* Messages */}
+        <div className="px-3.5 py-3 space-y-3 bg-white">
+          {[
+            {
+              emoji: "🎯",
+              boldName: "Max Mustermann",
+              text: "hat dein Video geöffnet",
+              meta: "4 Sek. Watch-Time",
+              time: "10:32",
+            },
+            {
+              emoji: "✅",
+              boldName: "Lisa Lust",
+              text: "hat „Termin sichern“ geklickt",
+              meta: "Quelle: Brief",
+              time: "10:34",
+            },
+            {
+              emoji: "📈",
+              boldName: "Franz Friedrich",
+              text: "öffnete die Seite zum 3. Mal",
+              meta: "Hot Lead",
+              time: "10:36",
+            },
+          ].map((m, i) => (
+            <div key={i} className="flex items-start gap-2.5">
+              <div
+                className="size-7 shrink-0 rounded-md flex items-center justify-center text-white text-[11px] font-extrabold"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #5232C7 0%, #7C5CE8 100%)",
+                }}
+              >
+                VC
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2 leading-tight">
+                  <span className="text-[12px] font-bold text-ink">
+                    VideoComet
+                  </span>
+                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 rounded px-1 py-px">
+                    APP
+                  </span>
+                  <span className="text-[10px] text-ink-muted ml-auto tabular-nums">
+                    {m.time}
+                  </span>
+                </div>
+                <div className="text-[12px] text-ink leading-snug mt-0.5">
+                  <span className="mr-1">{m.emoji}</span>
+                  <span className="font-semibold">{m.boldName}</span>{" "}
+                  {m.text}
+                </div>
+                <div className="text-[10px] text-ink-muted leading-tight mt-0.5">
+                  {m.meta}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -918,6 +995,79 @@ function IntegrationsVisual() {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// Domain — Domain-Management-Card
+// ===========================================================================
+
+function DomainVisual() {
+  const DOMAINS = [
+    {
+      domain: "deine-firma.de",
+      meta: "SSL · Auto-Renewal",
+    },
+    {
+      domain: "videos.deine-firma.de",
+      meta: "CNAME → cdn.videocomet.de",
+    },
+    {
+      domain: "kampagne.deine-firma.de",
+      meta: "SSL · Auto-Renewal",
+    },
+  ];
+  return (
+    <div className="relative w-full max-w-[420px] mx-auto">
+      <div className="rounded-2xl bg-white border border-line shadow-[0_18px_40px_-18px_rgba(15,23,42,0.32)] overflow-hidden">
+        {/* Card-Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-line bg-[#FAFAFE]">
+          <div className="flex items-center gap-2">
+            <div
+              className="size-7 rounded-lg flex items-center justify-center text-white shadow-sm"
+              style={{
+                background: "linear-gradient(135deg, #7C5CE8, #5232C7)",
+              }}
+            >
+              <Globe className="size-3.5" />
+            </div>
+            <div>
+              <div className="text-[12px] font-bold text-ink leading-tight">
+                Domains
+              </div>
+              <div className="text-[10px] text-ink-muted leading-tight mt-0.5">
+                3 verbunden
+              </div>
+            </div>
+          </div>
+          <div className="inline-flex items-center gap-1 text-[10px] font-bold text-ink bg-white border border-line rounded-md px-2 py-1">
+            + Hinzufügen
+          </div>
+        </div>
+
+        {/* Domain-Rows */}
+        <div className="divide-y divide-line">
+          {DOMAINS.map((d, i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-3">
+              <div className="size-2 rounded-full bg-emerald-500 shrink-0 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] font-semibold text-ink truncate tabular-nums">
+                  {d.domain}
+                </div>
+                <div className="text-[10px] text-ink-muted leading-tight mt-0.5 flex items-center gap-1.5">
+                  <Lock className="size-2.5" />
+                  {d.meta}
+                </div>
+              </div>
+              <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                <CheckCircle2 className="size-2.5" />
+                Aktiv
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
