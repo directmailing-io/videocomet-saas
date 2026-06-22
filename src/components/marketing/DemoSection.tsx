@@ -3,7 +3,10 @@ import { DemoPlayer } from "./DemoPlayer";
 
 export function DemoSection() {
   return (
-    <section className="w-full bg-surface-soft border-t border-line">
+    <section
+      id="demo"
+      className="w-full bg-surface-soft border-t border-line"
+    >
       <div className="max-w-5xl mx-auto px-6 py-20 md:py-28">
         <div className="text-center mb-10 md:mb-14">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-soft text-brand-deep text-xs font-semibold mb-4">
