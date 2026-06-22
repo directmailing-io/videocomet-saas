@@ -222,14 +222,34 @@ export function HowItWorksSection() {
   const [take, setTake] = React.useState(0);
   const [sceneId, setSceneId] = React.useState<SceneId>("website");
   const [templateId, setTemplateId] = React.useState<TemplateId>("soft");
+  // Multiplikations-Animation in Step 4: 4 → 16 → 32
+  const [leadCount, setLeadCount] = React.useState<4 | 16 | 32>(4);
 
   React.useEffect(() => {
     if (manual) return;
-    const id = window.setInterval(() => {
+    // Step 4 (Leadliste) braucht 8 s damit alle drei Stufen sichtbar werden,
+    // die anderen 6 s.
+    const dwell = step === 3 ? 8000 : 6000;
+    const id = window.setTimeout(() => {
       setStep((s) => (s + 1) % STEPS.length);
-    }, 6000);
-    return () => window.clearInterval(id);
-  }, [manual]);
+    }, dwell);
+    return () => window.clearTimeout(id);
+  }, [manual, step]);
+
+  // Multiplikations-Choreografie pro Step-Eintritt
+  React.useEffect(() => {
+    if (step !== 3) {
+      setLeadCount(4);
+      return;
+    }
+    setLeadCount(4);
+    const t1 = window.setTimeout(() => setLeadCount(16), 2200);
+    const t2 = window.setTimeout(() => setLeadCount(32), 4400);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [step]);
 
   const onStepClick = (i: number) => {
     setStep(i);
@@ -295,6 +315,7 @@ export function HowItWorksSection() {
               step={step}
               sceneId={sceneId}
               template={TEMPLATES.find((t) => t.id === templateId)!}
+              leadCount={leadCount}
             />
           </div>
 
@@ -542,7 +563,7 @@ function SelectorLeadList() {
           <ClipboardList className="size-3.5 text-brand-deep" />
           <span className="text-xs font-semibold text-ink">leads.csv</span>
         </div>
-        <span className="text-[10px] font-mono text-ink-muted">12.043 Zeilen</span>
+        <span className="text-[10px] font-mono text-ink-muted">743 Zeilen</span>
       </div>
       <table className="w-full text-xs">
         <tbody>
@@ -559,7 +580,7 @@ function SelectorLeadList() {
           ))}
           <tr>
             <td colSpan={2} className="py-2 px-3 text-center text-[10px] text-ink-muted/70 italic">
-              +12.039 weitere
+              +739 weitere
             </td>
           </tr>
         </tbody>
@@ -653,13 +674,18 @@ function Stage({
   step,
   sceneId,
   template,
+  leadCount,
 }: {
   step: number;
   sceneId: SceneId;
   template: Template;
+  leadCount: 4 | 16 | 32;
 }) {
   const webcamPos = computeWebcamPos(step, sceneId);
   const isSolo = sceneId === "solo";
+  // In Step 5 (Brief) und Step 6 (Tracking) ist der Webcam-Stream
+  // visuell stoerend (Letter/Dashboard sprechen fuer sich). Komplett raus.
+  const hideWebcam = step === 4 || step === 5;
 
   return (
     <div className="relative w-full aspect-[16/10] rounded-3xl overflow-hidden bg-gradient-to-br from-[#0F172A] via-[#1a1d35] to-[#0F172A] border border-line shadow-[0_30px_80px_-30px_rgba(15,23,42,0.35)]">
@@ -677,11 +703,12 @@ function Stage({
         sceneId={sceneId}
       />
 
-      {/* Multi grid — step 3, scene inside each card slot */}
+      {/* Multi grid — step 3 */}
       <MultiGridLayer
         active={step === 3}
         template={template}
         sceneId={sceneId}
+        leadCount={leadCount}
       />
 
       {/* Letter — step 4 */}
@@ -708,8 +735,10 @@ function Stage({
             ? { height: webcamPos.height }
             : { aspectRatio: webcamPos.aspectRatio }),
           borderRadius: webcamPos.borderRadius,
+          opacity: hideWebcam ? 0 : 1,
+          pointerEvents: hideWebcam ? "none" : undefined,
           transition:
-            "top 700ms cubic-bezier(0.65,0,0.35,1), left 700ms cubic-bezier(0.65,0,0.35,1), width 700ms cubic-bezier(0.65,0,0.35,1), height 700ms cubic-bezier(0.65,0,0.35,1), border-radius 700ms cubic-bezier(0.65,0,0.35,1), box-shadow 700ms",
+            "top 700ms cubic-bezier(0.65,0,0.35,1), left 700ms cubic-bezier(0.65,0,0.35,1), width 700ms cubic-bezier(0.65,0,0.35,1), height 700ms cubic-bezier(0.65,0,0.35,1), border-radius 700ms cubic-bezier(0.65,0,0.35,1), box-shadow 700ms, opacity 400ms",
           overflow: "hidden",
           boxShadow: webcamPos.boxShadow,
         }}
@@ -1166,31 +1195,142 @@ function SceneInline({
     );
   }
   if (sceneId === "doc") {
-    return (
-      <div className="w-full h-full bg-gradient-to-br from-[#F8FAFC] to-[#E2E8F0] flex items-center justify-center p-2">
-        <div className="bg-white rounded shadow w-full h-full p-2 flex flex-col">
+    return <SceneDocGoogleDocs lead={lead} compact={compact} />;
+  }
+  return null;
+}
+
+/**
+ * Doc-Scene mit echter Google-Docs-UI: blaues Datei-Icon + Titel +
+ * Datei/Bearbeiten/Ansicht-Menue + Teilen-Button + Toolbar mit Format-
+ * Icons. Dokument selbst zentriert mit Lead-Personalisierung.
+ */
+function SceneDocGoogleDocs({
+  lead,
+  compact,
+}: {
+  lead: LeadLike;
+  compact: boolean;
+}) {
+  const domain = `${lead.company
+    .toLowerCase()
+    .replace(/\s+gmbh/i, "")
+    .replace(/\s+/g, "-")}.de`;
+  return (
+    <div
+      className="w-full h-full flex flex-col"
+      style={{ backgroundColor: "#F1F3F4" }}
+    >
+      {/* Top bar */}
+      <div
+        className="shrink-0 flex items-center bg-white border-b border-[#DADCE0]"
+        style={{ height: compact ? 18 : 28, padding: "0 6px", gap: 6 }}
+      >
+        {/* Google Docs Datei-Icon */}
+        <div
+          className="rounded-[2px] flex items-center justify-center font-bold text-white"
+          style={{
+            width: compact ? 12 : 18,
+            height: compact ? 12 : 18,
+            backgroundColor: "#4285F4",
+            fontSize: compact ? 8 : 12,
+          }}
+        >
+          ≡
+        </div>
+        <div className="flex-1 min-w-0 leading-none">
           <div
-            className={cn(
-              "h-0.5 rounded mb-1",
-              compact ? "w-6" : "w-10",
-            )}
-            style={{ backgroundColor: lead.color }}
+            className="font-medium text-[#202124] truncate"
+            style={{ fontSize: compact ? 7 : 10 }}
+          >
+            Notiz für {lead.first}
+          </div>
+          {!compact ? (
+            <div className="flex gap-2 mt-0.5 text-[7px] text-[#5F6368]">
+              <span>Datei</span>
+              <span>Bearbeiten</span>
+              <span>Ansicht</span>
+              <span>Einfügen</span>
+              <span>Hilfe</span>
+            </div>
+          ) : null}
+        </div>
+        {!compact ? (
+          <>
+            <div
+              className="text-white font-medium rounded"
+              style={{
+                backgroundColor: "#1A73E8",
+                fontSize: 7,
+                padding: "2px 6px",
+              }}
+            >
+              Teilen
+            </div>
+            <div
+              className="rounded-full"
+              style={{
+                width: 14,
+                height: 14,
+                background: "linear-gradient(135deg,#AA8CF5,#7C5CE8)",
+              }}
+            />
+          </>
+        ) : null}
+      </div>
+
+      {/* Toolbar */}
+      <div
+        className="shrink-0 flex items-center bg-white border-b border-[#DADCE0]"
+        style={{ height: compact ? 12 : 18, padding: "0 6px", gap: 5 }}
+      >
+        {["↶", "↷", "100%", "B", "I", "U", "🎨", "▦", "🔗"].map((k, i) => (
+          <span
+            key={i}
+            className="text-[#5F6368]"
+            style={{
+              fontSize: compact ? 5 : 8,
+              fontWeight: k === "B" ? 700 : 400,
+              fontStyle: k === "I" ? "italic" : "normal",
+              textDecoration: k === "U" ? "underline" : "none",
+            }}
+          >
+            {k}
+          </span>
+        ))}
+      </div>
+
+      {/* Document area */}
+      <div
+        className="flex-1 flex justify-center overflow-hidden"
+        style={{ padding: compact ? "6px" : "10px", backgroundColor: "#F8F9FA" }}
+      >
+        <div
+          className="bg-white shadow-sm"
+          style={{
+            width: "82%",
+            padding: compact ? "8px 10px" : "12px 16px",
+          }}
+        >
+          <div
+            className="rounded mb-1.5"
+            style={{
+              height: 2,
+              width: compact ? 18 : 30,
+              backgroundColor: lead.color,
+            }}
           />
           <div
-            className={cn(
-              "font-bold text-ink",
-              compact ? "text-[7px]" : "text-[10px]",
-            )}
+            className="font-bold text-ink leading-tight"
+            style={{ fontSize: compact ? 8 : 11 }}
           >
             Notiz für {lead.first}
           </div>
           <div
-            className={cn(
-              "text-ink-muted mb-1 truncate",
-              compact ? "text-[5px]" : "text-[7px]",
-            )}
+            className="text-ink-muted truncate mb-1.5"
+            style={{ fontSize: compact ? 5 : 7 }}
           >
-            {lead.company.toLowerCase().replace(/\s+gmbh/i, "").replace(/\s+/g, "-")}.de
+            Schnell-Check für {domain}
           </div>
           <div className="space-y-0.5 mt-1">
             <div className="h-0.5 bg-ink/15 w-full rounded" />
@@ -1198,18 +1338,15 @@ function SceneInline({
             <div className="h-0.5 bg-ink/15 w-4/6 rounded" />
           </div>
           <div
-            className={cn(
-              "mt-1 px-1 py-0.5 rounded bg-red-50 border-l border-red-400 text-[5px] font-bold text-red-900",
-              compact ? "" : "px-1.5 py-1",
-            )}
+            className="mt-2 px-1.5 py-0.5 rounded bg-red-50 border-l-2 border-red-400 font-bold text-red-900"
+            style={{ fontSize: compact ? 5 : 7 }}
           >
             1. Datenblatt fehlt
           </div>
         </div>
       </div>
-    );
-  }
-  return null;
+    </div>
+  );
 }
 
 /**
@@ -1269,88 +1406,197 @@ function FallbackWebsite({ lead }: { lead: LeadLike }) {
 // Multi-grid Layer — 2x2 of the same LP, different names
 // ---------------------------------------------------------------------------
 
+// Erweiterte Lead-Pool fuer die Multiplikations-Animation. Die ersten
+// 4 = Haupt-Leads (mit echtem Screenshot etc.), Rest sind generierte
+// Variationen die einfach durch die 4 Hauptleads cycle-en + andere Farben.
+const EXTENDED_LEADS = (() => {
+  const PALETTE = [
+    "#7C5CE8", "#EC4899", "#92400E", "#10B981",
+    "#FBBF24", "#3B82F6", "#EF4444", "#8B5CF6",
+    "#06B6D4", "#F97316", "#84CC16", "#A855F7",
+  ];
+  return Array.from({ length: 32 }, (_, i) => {
+    const base = LEADS[i % 4];
+    return {
+      ...base,
+      color: i < 4 ? base.color : PALETTE[i % PALETTE.length],
+    } as LeadLike;
+  });
+})();
+
 function MultiGridLayer({
   active,
   template,
   sceneId,
+  leadCount,
 }: {
   active: boolean;
   template: Template;
   sceneId: SceneId;
+  leadCount: 4 | 16 | 32;
 }) {
   const isSolo = sceneId === "solo";
+  const leads = EXTENDED_LEADS.slice(0, leadCount);
+  // Grid-Layout pro Phase
+  const gridClass =
+    leadCount === 4
+      ? "grid-cols-2 grid-rows-2 gap-2"
+      : leadCount === 16
+        ? "grid-cols-4 grid-rows-4 gap-1.5"
+        : "grid-cols-8 grid-rows-4 gap-1";
+
   return (
     <div
       className="absolute inset-0 z-10 p-3 transition-opacity duration-700"
       style={{ opacity: active ? 1 : 0, pointerEvents: "none" }}
     >
-      <div className="grid grid-cols-2 grid-rows-2 gap-2 w-full h-full">
-        {LEADS.map((l, i) => (
+      <div
+        className={cn(
+          "grid w-full h-full transition-all duration-500",
+          gridClass,
+        )}
+      >
+        {leads.map((l, i) => (
           <div
-            key={l.name}
-            className="relative rounded-xl overflow-hidden border border-line transition-all duration-500"
+            key={`${l.name}-${i}`}
+            className={cn(
+              "relative overflow-hidden border border-line transition-all duration-500",
+              leadCount === 4
+                ? "rounded-xl"
+                : leadCount === 16
+                  ? "rounded-md"
+                  : "rounded-sm",
+            )}
             style={{
               backgroundColor: template.bg,
-              transitionDelay: `${i * 80}ms`,
+              transitionDelay: `${Math.min(i * 30, 800)}ms`,
               opacity: active ? 1 : 0,
-              transform: active ? "scale(1)" : "scale(0.96)",
+              transform: active ? "scale(1)" : "scale(0.94)",
             }}
           >
-            <LandingPageInner
-              template={template}
-              lead={l}
-              videoSlot
-              fullSize={false}
-              sceneId={sceneId}
-            />
-            {/* Webcam-Video in JEDER Karte: Card 1 wird vom globalen
-                Stage-Webcam ueberlagert (transitioniert smooth aus Step 3),
-                Cards 2-4 bekommen ein eigenes <video> Element an derselben
-                relativen Position. Alle mp4-Streams sind identisch — der
-                User sieht: dasselbe Video, an jeden Lead personalisiert. */}
-            {i !== 0 ? (
-              <div
-                className="absolute overflow-hidden"
-                style={
-                  isSolo
-                    ? {
-                        // Solo: Webcam fuellt den ganzen Video-Slot
-                        top: "30%",
-                        left: "58%",
-                        width: "36%",
-                        height: "44%",
-                        borderRadius: "6px",
-                        boxShadow:
-                          "0 6px 14px -4px rgba(15,23,42,0.3)",
-                      }
-                    : {
-                        // Non-solo: Kreis-PiP bottom-left des Slots
-                        top: "60%",
-                        left: "60%",
-                        width: "10%",
-                        aspectRatio: "1/1",
-                        borderRadius: "9999px",
-                        boxShadow:
-                          "0 0 0 2px rgba(255,255,255,0.92), 0 6px 14px -4px rgba(15,23,42,0.45)",
-                      }
-                }
-              >
-                <video
-                  src="/demo-assets/webcam.mp4"
-                  muted
-                  autoPlay
-                  loop
-                  playsInline
-                  preload="auto"
-                  disableRemotePlayback
-                  disablePictureInPicture
-                  className="w-full h-full object-cover"
+            {leadCount === 4 ? (
+              <>
+                <LandingPageInner
+                  template={template}
+                  lead={l}
+                  videoSlot
+                  fullSize={false}
+                  sceneId={sceneId}
                 />
-              </div>
-            ) : null}
+                {/* Cards 2-4: eigenes Webcam-Element. Card 1 wird vom globalen
+                    transitionierenden Stage-Webcam ueberlagert. */}
+                {i !== 0 ? (
+                  <div
+                    className="absolute overflow-hidden"
+                    style={
+                      isSolo
+                        ? {
+                            top: "30%",
+                            left: "58%",
+                            width: "36%",
+                            height: "44%",
+                            borderRadius: "6px",
+                            boxShadow:
+                              "0 6px 14px -4px rgba(15,23,42,0.3)",
+                          }
+                        : {
+                            top: "60%",
+                            left: "60%",
+                            width: "10%",
+                            aspectRatio: "1/1",
+                            borderRadius: "9999px",
+                            boxShadow:
+                              "0 0 0 2px rgba(255,255,255,0.92), 0 6px 14px -4px rgba(15,23,42,0.45)",
+                          }
+                    }
+                  >
+                    <video
+                      src="/demo-assets/webcam.mp4"
+                      muted
+                      autoPlay
+                      loop
+                      playsInline
+                      preload="auto"
+                      disableRemotePlayback
+                      disablePictureInPicture
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <ThumbnailCard
+                lead={l}
+                template={template}
+                sceneId={sceneId}
+                minimal={leadCount === 32}
+              />
+            )}
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Sehr kompakte Lead-Karte fuer 16er-/32er-Grid. Zeigt nur Color-Strip
+ * mit Lead-Initial + ggf. winziger Scene-Preview. Performance-freundlich:
+ * keine eigenen Videos, keine kleinteilige Typografie die sowieso unlesbar
+ * waere.
+ */
+function ThumbnailCard({
+  lead,
+  template,
+  sceneId,
+  minimal,
+}: {
+  lead: LeadLike;
+  template: Template;
+  sceneId: SceneId;
+  minimal: boolean;
+}) {
+  void template;
+  void sceneId;
+  return (
+    <div
+      className="w-full h-full relative flex flex-col"
+      style={{
+        background: `linear-gradient(135deg, ${lead.color}25, ${lead.color}55)`,
+      }}
+    >
+      {/* Top accent stripe */}
+      <div
+        className={minimal ? "h-1" : "h-1.5"}
+        style={{ backgroundColor: lead.color }}
+      />
+      <div className="flex-1 flex flex-col items-center justify-center px-1">
+        <div
+          className={cn(
+            "rounded-full flex items-center justify-center text-white font-extrabold",
+            minimal ? "size-3" : "size-5",
+          )}
+          style={{
+            background: `linear-gradient(135deg, ${lead.color}, ${lead.color}cc)`,
+            fontSize: minimal ? "6px" : "9px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.18)",
+          }}
+        >
+          {lead.first[0]}
+        </div>
+        {!minimal ? (
+          <div
+            className="mt-1 text-[7px] font-bold leading-tight text-center text-ink truncate w-full"
+          >
+            {lead.first}
+          </div>
+        ) : null}
+      </div>
+      {/* Tiny CTA-Linie unten */}
+      <div
+        className="h-0.5 mx-1 mb-0.5 rounded"
+        style={{ backgroundColor: `${lead.color}80` }}
+      />
     </div>
   );
 }
@@ -1403,10 +1649,11 @@ function LetterLayer({ active }: { active: boolean }) {
 
   return (
     <div
-      className="absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-700"
+      className="absolute inset-0 z-10 flex items-center transition-opacity duration-700 px-8 py-6 gap-8"
       style={{ opacity: active ? 1 : 0, pointerEvents: "none" }}
     >
-      <div className="relative h-[88%] aspect-[210/297]">
+      {/* Letter-Stack links — Letter selbst behaelt aspect 210/297 */}
+      <div className="relative h-[88%] aspect-[210/297] shrink-0">
         {STACK.map((s, i) => (
           <div
             key={i}
@@ -1422,6 +1669,31 @@ function LetterLayer({ active }: { active: boolean }) {
             <RealisticLetter lead={s.lead} />
           </div>
         ))}
+      </div>
+
+      {/* Platzhalter-/Info-Spalte rechts */}
+      <div className="flex-1 flex flex-col gap-4 max-w-[280px] text-white/90">
+        <div className="text-[10px] font-bold tracking-[0.22em] uppercase text-brand-light">
+          743 Briefe · 1 Klick
+        </div>
+        <div className="text-xl font-bold leading-tight">
+          Pro Empfänger
+          <br />
+          ein eigener Brief.
+        </div>
+        <ul className="flex flex-col gap-2.5 mt-1 text-[12px] leading-snug">
+          {[
+            "Anrede und Adresse aus der Leadliste",
+            "Persönliche Landingpage-URL im Fließtext",
+            "Echter QR-Code zum Scannen",
+            "DIN-5008 konformes Layout, druckfertig",
+          ].map((t) => (
+            <li key={t} className="flex items-start gap-2">
+              <span className="mt-1 size-1 rounded-full bg-brand-light shrink-0" />
+              <span className="text-white/75">{t}</span>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );
@@ -1627,10 +1899,10 @@ function TrackingLayer({ active }: { active: boolean }) {
         </div>
         <div className="grid grid-cols-4 gap-2 mb-3">
           {[
-            { l: "Versendet", v: "12.043" },
-            { l: "Geöffnet", v: "4.218", c: "text-ok" },
-            { l: "Geschaut", v: "2.851", c: "text-brand-deep" },
-            { l: "Klicks", v: "611", c: "text-brand-deep" },
+            { l: "Versendet", v: "743" },
+            { l: "Geöffnet", v: "284", c: "text-ok" },
+            { l: "Geschaut", v: "171", c: "text-brand-deep" },
+            { l: "Klicks", v: "39", c: "text-brand-deep" },
           ].map((k, i) => (
             <div
               key={i}
