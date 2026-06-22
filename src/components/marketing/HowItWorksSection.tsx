@@ -5,6 +5,7 @@ import QRCodeLib from "qrcode";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   CalendarCheck,
+  Check,
   CheckCircle2,
   ClipboardList,
   Eye,
@@ -17,7 +18,6 @@ import {
   PlayCircle,
   Presentation,
   Video as VideoIcon,
-  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -267,8 +267,7 @@ export function HowItWorksSection() {
     >
       <div className="max-w-6xl mx-auto px-6 md:px-10">
         <div className="max-w-2xl mx-auto text-center mb-12">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-soft text-brand-deep text-xs font-semibold mb-5">
-            <Zap className="size-3.5" />
+          <div className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-brand-soft text-brand-deep text-[11px] font-semibold tracking-[0.18em] uppercase mb-5">
             So funktioniert es
           </div>
           <h2 className="text-4xl md:text-5xl font-bold tracking-[-0.025em] text-ink leading-[1.05] mb-5 text-balance">
@@ -280,36 +279,64 @@ export function HowItWorksSection() {
           </p>
         </div>
 
-        {/* Step pills */}
-        <div className="flex flex-wrap items-center justify-center gap-2 mb-10">
-          {STEPS.map((s, i) => {
-            const isActive = i === step;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => onStepClick(i)}
-                className={cn(
-                  "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
-                  isActive
-                    ? "bg-ink text-white shadow-md"
-                    : "bg-surface-soft text-ink hover:bg-brand-soft hover:text-brand-deep",
-                )}
-                aria-current={isActive ? "step" : undefined}
-              >
-                <span
-                  className={cn(
-                    "font-mono text-[11px] font-bold",
-                    isActive ? "text-brand-light" : "text-ink-muted",
-                  )}
+        {/* Step-Stepper — visuelle Checkliste / Reihenfolge mit
+            verbindender Linie zwischen den nummerierten Kreisen */}
+        <div className="mb-10">
+          <div className="relative flex items-start justify-between max-w-4xl mx-auto px-2">
+            {/* Verbindungslinie hinter den Kreisen */}
+            <div
+              aria-hidden
+              className="absolute left-6 right-6 h-px bg-line"
+              style={{ top: "20px" }}
+            />
+            {/* Fortschritts-Linie bis zum aktuellen Step */}
+            <div
+              aria-hidden
+              className="absolute left-6 h-px bg-brand transition-all duration-500"
+              style={{
+                top: "20px",
+                width: `calc((100% - 48px) * ${step / (STEPS.length - 1)})`,
+              }}
+            />
+            {STEPS.map((s, i) => {
+              const isActive = i === step;
+              const isPast = i < step;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => onStepClick(i)}
+                  aria-current={isActive ? "step" : undefined}
+                  className="relative z-[1] flex flex-col items-center gap-2 group focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 rounded-md p-1"
                 >
-                  0{i + 1}
-                </span>
-                <span>{s.title}</span>
-              </button>
-            );
-          })}
+                  <div
+                    className={cn(
+                      "size-10 rounded-full flex items-center justify-center font-mono text-[13px] font-bold transition-all border-2",
+                      isActive
+                        ? "bg-brand text-white border-brand shadow-[0_0_0_4px_rgba(124,92,232,0.18)]"
+                        : isPast
+                          ? "bg-brand text-white border-brand"
+                          : "bg-white text-ink-muted border-line group-hover:border-brand/40",
+                    )}
+                  >
+                    {isPast ? <Check className="size-4" /> : `0${i + 1}`}
+                  </div>
+                  <span
+                    className={cn(
+                      "text-xs font-semibold transition-colors text-center whitespace-nowrap",
+                      isActive
+                        ? "text-ink"
+                        : isPast
+                          ? "text-ink"
+                          : "text-ink-muted group-hover:text-ink",
+                    )}
+                  >
+                    {s.title}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Stage + Side panel */}

@@ -291,10 +291,10 @@ export function DemoPlayer() {
           </span>
         </div>
       ) : (
-        <p className="text-center text-xs text-white/55">
-          Gleiches Video, drei verschiedene Leads. Wechsle oben durch und
-          schau, wie sich Name, Firma und Webseite live anpassen, während
-          das Video an genau derselben Stelle weiterläuft.
+        <p className="text-center text-xs text-white/55 max-w-2xl mx-auto leading-relaxed">
+          Für jeden Lead ein eigenes, persönliches Video. Du kannst auch
+          mehrere Ansichten in einem Video kombinieren: erst die Webseite,
+          dann ein Google Doc, dann eine Folie.
         </p>
       )}
     </div>
