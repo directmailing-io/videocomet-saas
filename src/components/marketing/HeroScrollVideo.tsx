@@ -112,10 +112,13 @@ export function HeroScrollVideo() {
         const fade = Math.max(startFade, endFade);
         fadeRef.current.style.opacity = fade.toFixed(3);
       }
-      // Content fades earlier (60–82 %)
+      // Content blurrt + fadet bei 60–82 %: per Scroll defokussiert sich
+      // der Text bis auf 28 px Blur und 0 Opacity — wirkt wie ein
+      // Tiefenwechsel zwischen Vordergrund (Text) und Hintergrund (Komet).
       if (contentRef.current) {
         const cFade =
           progress < 0.6 ? 0 : Math.min(1, (progress - 0.6) / 0.22);
+        contentRef.current.style.filter = `blur(${(cFade * 28).toFixed(2)}px)`;
         contentRef.current.style.opacity = (1 - cFade).toFixed(3);
       }
       // Scroll-hint vanishes very early
@@ -187,6 +190,7 @@ export function HeroScrollVideo() {
         <div
           ref={contentRef}
           className="relative z-10 w-full h-full max-w-6xl mx-auto px-6 md:px-10 grid grid-rows-[1fr_auto_auto_auto_auto_auto] gap-5 content-end pb-[clamp(72px,9vh,128px)]"
+          style={{ willChange: "filter, opacity" }}
         >
           <div />
 
@@ -196,7 +200,7 @@ export function HeroScrollVideo() {
             <span className="text-white/45">VIDEOCOMET</span>
           </div>
 
-          <h1 className="vc-hero-title font-light tracking-[-0.025em] leading-[1.04] text-white text-[clamp(40px,6.4vw,88px)] max-w-[22ch] text-balance">
+          <h1 className="vc-hero-title font-light tracking-[-0.04em] leading-[1.04] text-white text-[clamp(40px,6.4vw,88px)] max-w-[22ch] text-balance">
             <span className="block overflow-hidden">
               <span className="vc-hero-line block">Werde unvergesslich.</span>
             </span>
