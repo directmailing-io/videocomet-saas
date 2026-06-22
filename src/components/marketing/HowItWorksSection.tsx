@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import QRCodeLib from "qrcode";
 import {
   CheckCircle2,
   ClipboardList,
@@ -160,11 +161,56 @@ const TEMPLATES: Array<{
 ];
 
 const LEADS = [
-  { name: "Max Mustermann", first: "Max", company: "Mustermann Industrie", color: "#7C5CE8" },
-  { name: "Lisa Lust", first: "Lisa", company: "Lust Cosmetics", color: "#EC4899" },
-  { name: "Franz Friedrich", first: "Franz", company: "Friedrich Manufaktur", color: "#92400E" },
-  { name: "Sofia Reuter", first: "Sofia", company: "Reuter Coaching", color: "#10B981" },
-];
+  {
+    name: "Max Mustermann",
+    first: "Max",
+    salutation: "Herrn",
+    polite: "Sehr geehrter Herr Mustermann",
+    company: "Mustermann Industrie GmbH",
+    color: "#7C5CE8",
+    screenshot: "/demo-assets/website-max.png",
+    slug: "max-mustermann",
+    street: "Industriestraße 42",
+    city: "85737 Ismaning",
+  },
+  {
+    name: "Lisa Lust",
+    first: "Lisa",
+    salutation: "Frau",
+    polite: "Sehr geehrte Frau Lust",
+    company: "Lust Cosmetics GmbH",
+    color: "#EC4899",
+    screenshot: "/demo-assets/website-lisa.png",
+    slug: "lisa-lust",
+    street: "Schanzenstraße 14",
+    city: "20357 Hamburg",
+  },
+  {
+    name: "Franz Friedrich",
+    first: "Franz",
+    salutation: "Herrn",
+    polite: "Sehr geehrter Herr Friedrich",
+    company: "Friedrich Manufaktur",
+    color: "#92400E",
+    screenshot: "/demo-assets/website-franz.png",
+    slug: "franz-friedrich",
+    street: "Helmholtzstraße 16",
+    city: "50825 Köln",
+  },
+  {
+    name: "Sofia Reuter",
+    first: "Sofia",
+    salutation: "Frau",
+    polite: "Sehr geehrte Frau Reuter",
+    company: "Reuter Coaching",
+    color: "#10B981",
+    // Kein Screenshot-Asset — wird via Fallback gerendert
+    screenshot: null,
+    slug: "sofia-reuter",
+    street: "Marienplatz 8",
+    city: "70173 Stuttgart",
+  },
+] as const;
 
 // ---------------------------------------------------------------------------
 // Main
@@ -1051,7 +1097,7 @@ function LandingPageInner({
               }}
             >
               {sceneId !== "solo" ? (
-                <SceneInline sceneId={sceneId} compact={!fullSize} />
+                <SceneInline sceneId={sceneId} compact={!fullSize} lead={lead} />
               ) : null}
             </div>
           </div>
@@ -1061,25 +1107,36 @@ function LandingPageInner({
   );
 }
 
+type LeadLike = (typeof LEADS)[number];
+
 /**
- * Scene gerendert in einem beliebigen Container (Video-Slot). Skaliert mit.
+ * Scene gerendert in einem beliebigen Container (Video-Slot). Skaliert mit
+ * und nimmt eine Lead-Identitaet an — Website-Screenshot wechselt pro
+ * Lead (Mustermann / Lust / Friedrich / Reuter-Fallback), die Folien-
+ * und Doc-Mocks zeigen den Vornamen/Firmennamen entsprechend.
  */
 function SceneInline({
   sceneId,
   compact,
+  lead,
 }: {
   sceneId: SceneId;
   compact: boolean;
+  lead: LeadLike;
 }) {
   if (sceneId === "website") {
-    return (
-      <img
-        src="/demo-assets/website-max.png"
-        alt=""
-        aria-hidden
-        className="w-full h-full object-cover object-top"
-      />
-    );
+    if (lead.screenshot) {
+      return (
+        <img
+          src={lead.screenshot}
+          alt=""
+          aria-hidden
+          className="w-full h-full object-cover object-top"
+        />
+      );
+    }
+    // Sofia hat (noch) keinen Screenshot → stilisierter Reuter-Coaching-Mock
+    return <FallbackWebsite lead={lead} />;
   }
   if (sceneId === "slides") {
     return (
@@ -1087,9 +1144,10 @@ function SceneInline({
         <div className="text-center">
           <div
             className={cn(
-              "font-bold tracking-[0.2em] uppercase text-brand-deep mb-1",
+              "font-bold tracking-[0.2em] uppercase mb-1",
               compact ? "text-[6px]" : "text-[9px]",
             )}
+            style={{ color: lead.color }}
           >
             Persönlich
           </div>
@@ -1101,7 +1159,7 @@ function SceneInline({
           >
             Video für
             <br />
-            <span className="text-brand-deep">Max Mustermann</span>
+            <span style={{ color: lead.color }}>{lead.name}</span>
           </div>
         </div>
       </div>
@@ -1113,9 +1171,10 @@ function SceneInline({
         <div className="bg-white rounded shadow w-full h-full p-2 flex flex-col">
           <div
             className={cn(
-              "h-0.5 rounded bg-brand mb-1",
+              "h-0.5 rounded mb-1",
               compact ? "w-6" : "w-10",
             )}
+            style={{ backgroundColor: lead.color }}
           />
           <div
             className={cn(
@@ -1123,15 +1182,15 @@ function SceneInline({
               compact ? "text-[7px]" : "text-[10px]",
             )}
           >
-            Notiz für Max
+            Notiz für {lead.first}
           </div>
           <div
             className={cn(
-              "text-ink-muted mb-1",
+              "text-ink-muted mb-1 truncate",
               compact ? "text-[5px]" : "text-[7px]",
             )}
           >
-            mustermann-industrie.de
+            {lead.company.toLowerCase().replace(/\s+gmbh/i, "").replace(/\s+/g, "-")}.de
           </div>
           <div className="space-y-0.5 mt-1">
             <div className="h-0.5 bg-ink/15 w-full rounded" />
@@ -1150,8 +1209,60 @@ function SceneInline({
       </div>
     );
   }
-  // solo handled outside
   return null;
+}
+
+/**
+ * Platzhalter-Webseite fuer Leads ohne eigenen Screenshot (z. B. Sofia).
+ * Wird wie ein Mini-Hero gerendert.
+ */
+function FallbackWebsite({ lead }: { lead: LeadLike }) {
+  const company = lead.company.replace(/\s+GmbH/i, "");
+  return (
+    <div
+      className="w-full h-full flex flex-col"
+      style={{
+        background: `linear-gradient(135deg, ${lead.color}25 0%, ${lead.color}10 50%, #FFFFFF 100%)`,
+      }}
+    >
+      <div
+        className="h-5 bg-white/95 flex items-center px-2 gap-1 border-b border-black/5"
+      >
+        <div
+          className="size-2 rounded-sm"
+          style={{ backgroundColor: lead.color }}
+        />
+        <span
+          className="text-[6px] font-extrabold tracking-wider uppercase truncate"
+          style={{ color: lead.color }}
+        >
+          {company}
+        </span>
+      </div>
+      <div className="flex-1 px-2 py-2 flex flex-col justify-center">
+        <div
+          className="text-[5px] font-bold tracking-[0.2em] uppercase mb-1"
+          style={{ color: lead.color }}
+        >
+          Coaching & Training
+        </div>
+        <div className="text-[9px] font-extrabold text-ink leading-[1.05] mb-1">
+          Mehr Fokus.
+          <br />
+          Mehr Klarheit.
+        </div>
+        <div className="text-[6px] text-ink-muted leading-tight mb-1">
+          Persönliches 1:1 Coaching aus {lead.city.split(" ").slice(1).join(" ")}.
+        </div>
+        <div
+          className="inline-block self-start text-[6px] font-bold text-white rounded px-1.5 py-0.5"
+          style={{ backgroundColor: lead.color }}
+        >
+          Termin buchen →
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1167,6 +1278,7 @@ function MultiGridLayer({
   template: Template;
   sceneId: SceneId;
 }) {
+  const isSolo = sceneId === "solo";
   return (
     <div
       className="absolute inset-0 z-10 p-3 transition-opacity duration-700"
@@ -1191,48 +1303,53 @@ function MultiGridLayer({
               fullSize={false}
               sceneId={sceneId}
             />
-            {/* Karten 2-4: Scene zeigt schon den Mock, zusätzlich kleiner
-                Webcam-Placeholder als PiP unten links im Video-Slot
-                (das echte Video sitzt nur in Karte 1) */}
-            {i !== 0 && sceneId !== "solo" ? (
+            {/* Webcam-Video in JEDER Karte: Card 1 wird vom globalen
+                Stage-Webcam ueberlagert (transitioniert smooth aus Step 3),
+                Cards 2-4 bekommen ein eigenes <video> Element an derselben
+                relativen Position. Alle mp4-Streams sind identisch — der
+                User sieht: dasselbe Video, an jeden Lead personalisiert. */}
+            {i !== 0 ? (
               <div
-                className="absolute rounded-full border-2 border-white shadow-md flex items-center justify-center text-white font-bold"
-                style={{
-                  // Selbe relative Position wie der echte Webcam-PiP in Karte 1
-                  top: "65%",
-                  left: "62%",
-                  width: "8%",
-                  aspectRatio: "1/1",
-                  background: `linear-gradient(135deg, ${l.color}, ${l.color}cc)`,
-                  fontSize: "6px",
-                }}
+                className="absolute overflow-hidden"
+                style={
+                  isSolo
+                    ? {
+                        // Solo: Webcam fuellt den ganzen Video-Slot
+                        top: "30%",
+                        left: "58%",
+                        width: "36%",
+                        height: "44%",
+                        borderRadius: "6px",
+                        boxShadow:
+                          "0 6px 14px -4px rgba(15,23,42,0.3)",
+                      }
+                    : {
+                        // Non-solo: Kreis-PiP bottom-left des Slots
+                        top: "60%",
+                        left: "60%",
+                        width: "10%",
+                        aspectRatio: "1/1",
+                        borderRadius: "9999px",
+                        boxShadow:
+                          "0 0 0 2px rgba(255,255,255,0.92), 0 6px 14px -4px rgba(15,23,42,0.45)",
+                      }
+                }
               >
-                {l.first[0]}
-              </div>
-            ) : null}
-            {i !== 0 && sceneId === "solo" ? (
-              <div
-                className="absolute rounded-md flex items-center justify-center text-white"
-                style={{
-                  top: "30%",
-                  left: "58%",
-                  width: "36%",
-                  height: "44%",
-                  background: `linear-gradient(135deg, ${l.color}, ${l.color}88)`,
-                  boxShadow: "0 6px 14px -4px rgba(15,23,42,0.3)",
-                  border: "2px solid white",
-                  fontSize: "16px",
-                  fontWeight: 800,
-                }}
-              >
-                ▶
+                <video
+                  src="/demo-assets/webcam.mp4"
+                  muted
+                  autoPlay
+                  loop
+                  playsInline
+                  preload="auto"
+                  disableRemotePlayback
+                  disablePictureInPicture
+                  className="w-full h-full object-cover"
+                />
               </div>
             ) : null}
           </div>
         ))}
-      </div>
-      <div className="absolute -top-2 right-3 px-2.5 py-0.5 rounded-full bg-ink text-white text-[10px] font-bold shadow-lg">
-        <span className="text-brand-light">+12.039</span> weitere generiert
       </div>
     </div>
   );
@@ -1243,142 +1360,226 @@ function MultiGridLayer({
 // ---------------------------------------------------------------------------
 
 function LetterLayer({ active }: { active: boolean }) {
+  // Letter-Stack: Front-Brief = Max (scharf), die anderen 3 progressiv
+  // versetzt + zunehmend geblurrt nach hinten. Zeigt: pro Lead ein Brief.
+  const STACK = [
+    {
+      lead: LEADS[3],
+      offsetX: "16%",
+      offsetY: "6%",
+      rotate: "10deg",
+      blur: 10,
+      opacity: 0.5,
+      scale: 0.96,
+    },
+    {
+      lead: LEADS[2],
+      offsetX: "10%",
+      offsetY: "3%",
+      rotate: "6deg",
+      blur: 6,
+      opacity: 0.7,
+      scale: 0.98,
+    },
+    {
+      lead: LEADS[1],
+      offsetX: "5%",
+      offsetY: "1%",
+      rotate: "3deg",
+      blur: 3,
+      opacity: 0.85,
+      scale: 0.99,
+    },
+    {
+      lead: LEADS[0],
+      offsetX: "0%",
+      offsetY: "0%",
+      rotate: "0deg",
+      blur: 0,
+      opacity: 1,
+      scale: 1,
+    },
+  ];
+
   return (
     <div
-      className="absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-700 px-8 py-8"
+      className="absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-700"
       style={{ opacity: active ? 1 : 0, pointerEvents: "none" }}
     >
-      {/* Back letter */}
-      <div
-        className="absolute rounded-md bg-white border border-line shadow-2xl"
-        style={{
-          width: "44%",
-          aspectRatio: "210/297",
-          transform: "translate(-25%, -2%) rotate(-6deg)",
-          transition: "transform 700ms",
-        }}
-      />
-      <div
-        className="absolute rounded-md bg-white border border-line shadow-2xl"
-        style={{
-          width: "44%",
-          aspectRatio: "210/297",
-          transform: "translate(0%, 4%) rotate(4deg)",
-          transition: "transform 700ms",
-        }}
-      />
-      {/* Front letter */}
-      <RealisticLetter />
+      <div className="relative h-[88%] aspect-[210/297]">
+        {STACK.map((s, i) => (
+          <div
+            key={i}
+            className="absolute inset-0"
+            style={{
+              transform: `translate(${s.offsetX}, ${s.offsetY}) rotate(${s.rotate}) scale(${s.scale})`,
+              filter: s.blur > 0 ? `blur(${s.blur}px)` : "none",
+              opacity: s.opacity,
+              transition: "transform 700ms, opacity 700ms",
+              zIndex: i,
+            }}
+          >
+            <RealisticLetter lead={s.lead} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function RealisticLetter() {
+function RealisticLetter({ lead }: { lead: LeadLike }) {
   return (
     <div
-      className="relative rounded-md bg-white border border-line shadow-2xl overflow-hidden"
+      className="relative w-full h-full bg-white shadow-[0_30px_60px_-20px_rgba(15,23,42,0.4)]"
       style={{
-        width: "46%",
-        aspectRatio: "210/297",
-        padding: "5% 8%",
-        fontFamily: "'Inter', sans-serif",
+        fontFamily: "'Inter', -apple-system, sans-serif",
         color: "#0F172A",
-        transition: "transform 700ms",
+        padding: "8% 9% 7% 9%",
       }}
     >
-      {/* Sender (DIN-Norm: small block above recipient) */}
-      <div className="text-[7px] leading-tight text-ink-muted mb-1">
-        Dein Logo · Deine Firma GmbH · Musterstr. 1 · 12345 Stadt
-      </div>
+      {/* DIN 5008: Absender klein über Adresse */}
       <div
-        className="border-b border-line mb-2"
-        style={{ borderColor: "#E2E8F0" }}
-      />
-
-      {/* Address window */}
-      <div className="text-[8px] leading-tight font-medium mb-4">
-        Herrn
-        <br />
-        <strong>Max Mustermann</strong>
-        <br />
-        Mustermann Industrie GmbH
-        <br />
-        Industriestraße 42
-        <br />
-        85737 Ismaning
+        className="text-[6px] leading-tight pb-1 mb-1 border-b"
+        style={{ color: "#94A3B8", borderColor: "#E2E8F0" }}
+      >
+        Deine Firma GmbH · Musterstraße 1 · 12345 Stadt
       </div>
 
-      {/* Date right */}
-      <div className="text-[7px] text-ink-soft text-right mb-3">
-        München, 22. Juni 2026
+      {/* Adressfeld + Datum nebeneinander */}
+      <div className="flex justify-between mt-3 mb-6">
+        <div className="text-[9px] leading-[1.35]">
+          {lead.salutation}
+          <br />
+          <strong>{lead.name}</strong>
+          <br />
+          {lead.company}
+          <br />
+          {lead.street}
+          <br />
+          {lead.city}
+        </div>
+        <div className="text-[8px] text-right" style={{ color: "#475569" }}>
+          22. Juni 2026
+        </div>
       </div>
 
-      {/* Subject */}
-      <div className="text-[9px] font-bold mb-2">
+      {/* Betreff */}
+      <div className="text-[10px] font-bold mb-4">
         Drei Beobachtungen zu Ihrer Webseite
       </div>
 
-      {/* Salutation */}
-      <div className="text-[8px] mb-2">Sehr geehrter Herr Mustermann,</div>
+      {/* Anrede */}
+      <div className="text-[9px] mb-3">{lead.polite},</div>
 
-      {/* Body */}
-      <div className="text-[7.5px] leading-[1.5] space-y-1.5 mb-3">
+      {/* Fließtext */}
+      <div className="text-[8.5px] leading-[1.55] space-y-2 mb-4">
         <p>
-          ich hab mir kurz mustermann-industrie.de angeschaut und drei
-          Beobachtungen, die Ihnen aktuell Anfragen kosten könnten.
+          ich habe mir kurz Ihre Webseite angeschaut und drei Punkte
+          aufgeschrieben, die Sie aktuell Anfragen kosten könnten.
         </p>
         <p>
-          Das ganze Gespräch dazu hab ich Ihnen in einem zweiminütigen Video
-          aufgenommen. Sie finden es unter:
+          Das Gespräch dazu habe ich Ihnen in einem zweiminütigen,
+          persönlichen Video aufgenommen. Sie finden es hier:
         </p>
       </div>
 
-      {/* URL block */}
+      {/* URL-Block */}
       <div
-        className="text-[8px] font-mono font-bold mb-3 px-2 py-1.5 rounded"
+        className="text-[9px] font-mono font-bold mb-3 px-3 py-2 rounded inline-flex items-center"
         style={{ backgroundColor: "#F3EEFF", color: "#5232C7" }}
       >
-        videocomet.de/lp/max-mustermann
+        videocomet.de/lp/{lead.slug}
       </div>
 
-      <div className="text-[7.5px] leading-[1.5]">
-        Mit den besten Grüßen
+      <div className="text-[8.5px] leading-[1.55] mb-1">
+        Oder einfach den QR-Code rechts unten scannen.
       </div>
 
-      {/* Signature (cursive feel) */}
+      {/* Closing */}
+      <div className="text-[9px] mt-6 mb-8">Mit besten Grüßen</div>
+
+      {/* Signatur — handwritten feel */}
       <div
-        className="text-[10px] italic mt-3"
-        style={{ fontFamily: "'Georgia', serif" }}
+        className="text-[16px] italic mb-1"
+        style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}
       >
         Dein Name
       </div>
-      <div className="text-[7px] text-ink-muted">Deine Firma GmbH</div>
-
-      {/* QR bottom-right */}
-      <div
-        className="absolute"
-        style={{
-          bottom: "6%",
-          right: "8%",
-          width: "14%",
-          aspectRatio: "1/1",
-          background:
-            "repeating-conic-gradient(#0F172A 0deg 90deg, white 90deg 180deg)",
-          border: "1px solid #E2E8F0",
-        }}
-      />
-      <div
-        className="absolute text-[6px] text-ink-muted"
-        style={{ bottom: "4%", right: "8%" }}
-      >
-        Scan für Video
+      <div className="text-[7px]" style={{ color: "#94A3B8" }}>
+        Deine Firma GmbH
       </div>
 
-      {/* Badge */}
-      <div className="absolute -top-2 -right-2 px-2 py-0.5 rounded-full bg-ink text-white text-[9px] font-bold shadow">
-        <span className="text-brand-light">PDF</span> · druckfertig
+      {/* QR-Code + Caption unten rechts */}
+      <div className="absolute" style={{ bottom: "7%", right: "9%" }}>
+        <div
+          style={{
+            padding: 3,
+            backgroundColor: "white",
+            border: "1px solid #E2E8F0",
+            borderRadius: 2,
+          }}
+        >
+          <RealQrCode
+            value={`https://app.videocomet.de/lp/${lead.slug}`}
+            size={56}
+          />
+        </div>
+        <div
+          className="text-[6px] text-center mt-1"
+          style={{ color: "#94A3B8" }}
+        >
+          videocomet.de/lp/
+          <br />
+          {lead.slug}
+        </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Echter QR-Code via `qrcode`-lib. Generiert beim Mount als data-URL.
+ */
+function RealQrCode({ value, size }: { value: string; size: number }) {
+  const [src, setSrc] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    QRCodeLib.toDataURL(value, {
+      margin: 0,
+      width: size * 4,
+      errorCorrectionLevel: "M",
+      color: { dark: "#0F172A", light: "#FFFFFF" },
+    })
+      .then((url) => {
+        if (!cancelled) setSrc(url);
+      })
+      .catch(() => {
+        if (!cancelled) setSrc(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [value, size]);
+
+  if (!src) {
+    return (
+      <div
+        style={{
+          width: size,
+          height: size,
+          backgroundColor: "#F1F5F9",
+        }}
+      />
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={`QR-Code für ${value}`}
+      width={size}
+      height={size}
+      style={{ display: "block", imageRendering: "pixelated" }}
+    />
   );
 }
 
