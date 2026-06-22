@@ -612,21 +612,31 @@ function Stage({
   sceneId: SceneId;
   template: Template;
 }) {
-  const webcamPos = WEBCAM_LAYOUT[step] ?? WEBCAM_LAYOUT[0];
+  const webcamPos = computeWebcamPos(step, sceneId);
+  const isSolo = sceneId === "solo";
 
   return (
     <div className="relative w-full aspect-[16/10] rounded-3xl overflow-hidden bg-gradient-to-br from-[#0F172A] via-[#1a1d35] to-[#0F172A] border border-line shadow-[0_30px_80px_-30px_rgba(15,23,42,0.35)]">
       {/* Subtle stars */}
       <div className="absolute inset-0 opacity-[0.15]" style={STARS_STYLE} />
 
-      {/* Scene background — only step 1 */}
-      <SceneLayer active={step === 1} sceneId={sceneId} />
+      {/* Scene background — step 1 (full stage) */}
+      <SceneLayer active={step === 1 && !isSolo} sceneId={sceneId} />
 
-      {/* Landingpage — step 2 single, full bleed */}
-      <LandingPageLayer active={step === 2} template={template} lead={LEADS[0]} showVideoSlot />
+      {/* Landingpage — step 2, scene rendered inside the video slot */}
+      <LandingPageLayer
+        active={step === 2}
+        template={template}
+        lead={LEADS[0]}
+        sceneId={sceneId}
+      />
 
-      {/* Multi grid — step 3 */}
-      <MultiGridLayer active={step === 3} template={template} />
+      {/* Multi grid — step 3, scene inside each card slot */}
+      <MultiGridLayer
+        active={step === 3}
+        template={template}
+        sceneId={sceneId}
+      />
 
       {/* Letter — step 4 */}
       <LetterLayer active={step === 4} />
@@ -641,16 +651,21 @@ function Stage({
         <span className="opacity-60">06</span>
       </div>
 
-      {/* Webcam — always mounted */}
+      {/* Webcam — always mounted, position computed from step + sceneId */}
       <div
         className="absolute z-20"
         style={{
-          ...webcamPos,
+          top: webcamPos.top,
+          left: webcamPos.left,
+          width: webcamPos.width,
+          ...(webcamPos.height
+            ? { height: webcamPos.height }
+            : { aspectRatio: webcamPos.aspectRatio }),
+          borderRadius: webcamPos.borderRadius,
           transition:
-            "top 700ms cubic-bezier(0.65,0,0.35,1), left 700ms cubic-bezier(0.65,0,0.35,1), width 700ms cubic-bezier(0.65,0,0.35,1), border-radius 700ms cubic-bezier(0.65,0,0.35,1)",
+            "top 700ms cubic-bezier(0.65,0,0.35,1), left 700ms cubic-bezier(0.65,0,0.35,1), width 700ms cubic-bezier(0.65,0,0.35,1), height 700ms cubic-bezier(0.65,0,0.35,1), border-radius 700ms cubic-bezier(0.65,0,0.35,1), box-shadow 700ms",
           overflow: "hidden",
-          boxShadow:
-            "0 0 0 4px rgba(255,255,255,0.92), 0 18px 36px -12px rgba(15,23,42,0.55)",
+          boxShadow: webcamPos.boxShadow,
         }}
       >
         <video
@@ -663,36 +678,122 @@ function Stage({
           disableRemotePlayback
           disablePictureInPicture
           className="block w-full h-full object-cover"
-          style={{
-            aspectRatio: webcamPos.aspectRatio,
-          }}
         />
       </div>
     </div>
   );
 }
 
-// Webcam-Geometrie pro Step (in % vom Stage). aspectRatio macht ihn rund/eckig.
-const WEBCAM_LAYOUT: Array<{
+type WebcamPos = {
   top: string;
   left: string;
   width: string;
-  aspectRatio: string;
+  height?: string;
+  aspectRatio?: string;
   borderRadius: string;
-}> = [
-  // 0 Webcam — zentriert, großes Rund
-  { top: "16%", left: "33%", width: "34%", aspectRatio: "1/1", borderRadius: "9999px" },
-  // 1 Szenen — bottom-left PiP, Kreis
-  { top: "62%", left: "5%", width: "16%", aspectRatio: "1/1", borderRadius: "9999px" },
-  // 2 Landingpage — rechts im Hero, Rounded-Rect
-  { top: "28%", left: "57%", width: "36%", aspectRatio: "4/3", borderRadius: "24px" },
-  // 3 Leads — in der ersten LP-Kachel des 2x2-Grids, Rounded-Rect
-  { top: "20%", left: "31%", width: "16%", aspectRatio: "4/3", borderRadius: "10px" },
-  // 4 Brief — verschwindet aus dem Hauptfokus, kleines PiP rechts oben
-  { top: "8%", left: "82%", width: "12%", aspectRatio: "1/1", borderRadius: "9999px" },
-  // 5 Tracking — kleines PiP rechts oben
-  { top: "8%", left: "82%", width: "12%", aspectRatio: "1/1", borderRadius: "9999px" },
-];
+  boxShadow: string;
+};
+
+const PIP_SHADOW =
+  "0 0 0 4px rgba(255,255,255,0.92), 0 18px 36px -12px rgba(15,23,42,0.55)";
+const FLAT_SHADOW = "0 18px 36px -12px rgba(15,23,42,0.55)";
+
+function computeWebcamPos(step: number, sceneId: SceneId): WebcamPos {
+  const isSolo = sceneId === "solo";
+
+  if (step === 0) {
+    // Zentriert großer Kreis
+    return {
+      top: "16%",
+      left: "33%",
+      width: "34%",
+      aspectRatio: "1/1",
+      borderRadius: "9999px",
+      boxShadow: PIP_SHADOW,
+    };
+  }
+
+  if (step === 1) {
+    // Solo = Vollbild über Stage, kein Border-Radius
+    if (isSolo) {
+      return {
+        top: "0%",
+        left: "0%",
+        width: "100%",
+        height: "100%",
+        borderRadius: "0px",
+        boxShadow: "none",
+      };
+    }
+    // Mit Szene = PiP-Kreis unten links
+    return {
+      top: "62%",
+      left: "5%",
+      width: "16%",
+      aspectRatio: "1/1",
+      borderRadius: "9999px",
+      boxShadow: PIP_SHADOW,
+    };
+  }
+
+  if (step === 2) {
+    // LP-Video-Slot Bounds (Stage-%):
+    //   top 28%, left 57%, width 36%, height ~50% → aspectRatio 4/3 angenähert
+    if (isSolo) {
+      // Webcam füllt den ganzen Slot
+      return {
+        top: "28%",
+        left: "57%",
+        width: "36%",
+        height: "55%",
+        borderRadius: "20px",
+        boxShadow: FLAT_SHADOW,
+      };
+    }
+    // Sonst: PiP-Kreis bottom-left INNERHALB des Slots, Szene darunter sichtbar
+    return {
+      top: "62%",
+      left: "60%",
+      width: "12%",
+      aspectRatio: "1/1",
+      borderRadius: "9999px",
+      boxShadow: PIP_SHADOW,
+    };
+  }
+
+  if (step === 3) {
+    // Erste Multi-Grid-Kachel oben links — Video-Slot innerhalb (Stage-%):
+    //   top 18%, left 28%, width 19%, height 22%
+    if (isSolo) {
+      return {
+        top: "18%",
+        left: "28%",
+        width: "19%",
+        height: "22%",
+        borderRadius: "8px",
+        boxShadow: FLAT_SHADOW,
+      };
+    }
+    return {
+      top: "32%",
+      left: "30%",
+      width: "9%",
+      aspectRatio: "1/1",
+      borderRadius: "9999px",
+      boxShadow: PIP_SHADOW,
+    };
+  }
+
+  // 4 + 5: kleines PiP oben rechts
+  return {
+    top: "8%",
+    left: "82%",
+    width: "12%",
+    aspectRatio: "1/1",
+    borderRadius: "9999px",
+    boxShadow: PIP_SHADOW,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Stage Layers
@@ -796,19 +897,25 @@ function LandingPageLayer({
   active,
   template,
   lead,
-  showVideoSlot,
+  sceneId,
 }: {
   active: boolean;
   template: Template;
   lead: (typeof LEADS)[number];
-  showVideoSlot?: boolean;
+  sceneId: SceneId;
 }) {
   return (
     <div
       className="absolute inset-0 transition-opacity duration-700 z-10"
       style={{ opacity: active ? 1 : 0, pointerEvents: "none" }}
     >
-      <LandingPageInner template={template} lead={lead} videoSlot={!!showVideoSlot} fullSize />
+      <LandingPageInner
+        template={template}
+        lead={lead}
+        videoSlot
+        fullSize
+        sceneId={sceneId}
+      />
     </div>
   );
 }
@@ -818,11 +925,13 @@ function LandingPageInner({
   lead,
   videoSlot,
   fullSize,
+  sceneId,
 }: {
   template: Template;
   lead: (typeof LEADS)[number];
   videoSlot: boolean;
   fullSize: boolean;
+  sceneId: SceneId;
 }) {
   return (
     <div
@@ -925,22 +1034,124 @@ function LandingPageInner({
           </div>
         </div>
 
-        {/* Video slot — only on full-size LP (step 2) */}
-        {videoSlot && fullSize ? (
+        {/* Video slot — Scene fillt das, Webcam liegt von außen als PiP drüber */}
+        {videoSlot ? (
           <div className="flex-1 max-w-[40%]">
-            {/* Placeholder for the actual webcam <video> which sits over this area */}
             <div
-              className="rounded-2xl aspect-[4/3] w-full"
+              className={cn(
+                "relative w-full overflow-hidden",
+                fullSize ? "rounded-2xl" : "rounded-md",
+              )}
               style={{
+                aspectRatio: "4/3",
                 backgroundColor:
-                  template.id === "bold" ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                  template.id === "bold"
+                    ? "rgba(255,255,255,0.05)"
+                    : "rgba(0,0,0,0.04)",
               }}
-            />
+            >
+              {sceneId !== "solo" ? (
+                <SceneInline sceneId={sceneId} compact={!fullSize} />
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
     </div>
   );
+}
+
+/**
+ * Scene gerendert in einem beliebigen Container (Video-Slot). Skaliert mit.
+ */
+function SceneInline({
+  sceneId,
+  compact,
+}: {
+  sceneId: SceneId;
+  compact: boolean;
+}) {
+  if (sceneId === "website") {
+    return (
+      <img
+        src="/demo-assets/website-max.png"
+        alt=""
+        aria-hidden
+        className="w-full h-full object-cover object-top"
+      />
+    );
+  }
+  if (sceneId === "slides") {
+    return (
+      <div className="w-full h-full bg-gradient-to-br from-[#F3EEFF] to-white flex items-center justify-center px-2">
+        <div className="text-center">
+          <div
+            className={cn(
+              "font-bold tracking-[0.2em] uppercase text-brand-deep mb-1",
+              compact ? "text-[6px]" : "text-[9px]",
+            )}
+          >
+            Persönlich
+          </div>
+          <div
+            className={cn(
+              "font-extrabold text-ink leading-[1.05]",
+              compact ? "text-[10px]" : "text-base md:text-lg",
+            )}
+          >
+            Video für
+            <br />
+            <span className="text-brand-deep">Max Mustermann</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (sceneId === "doc") {
+    return (
+      <div className="w-full h-full bg-gradient-to-br from-[#F8FAFC] to-[#E2E8F0] flex items-center justify-center p-2">
+        <div className="bg-white rounded shadow w-full h-full p-2 flex flex-col">
+          <div
+            className={cn(
+              "h-0.5 rounded bg-brand mb-1",
+              compact ? "w-6" : "w-10",
+            )}
+          />
+          <div
+            className={cn(
+              "font-bold text-ink",
+              compact ? "text-[7px]" : "text-[10px]",
+            )}
+          >
+            Notiz für Max
+          </div>
+          <div
+            className={cn(
+              "text-ink-muted mb-1",
+              compact ? "text-[5px]" : "text-[7px]",
+            )}
+          >
+            mustermann-industrie.de
+          </div>
+          <div className="space-y-0.5 mt-1">
+            <div className="h-0.5 bg-ink/15 w-full rounded" />
+            <div className="h-0.5 bg-ink/15 w-5/6 rounded" />
+            <div className="h-0.5 bg-ink/15 w-4/6 rounded" />
+          </div>
+          <div
+            className={cn(
+              "mt-1 px-1 py-0.5 rounded bg-red-50 border-l border-red-400 text-[5px] font-bold text-red-900",
+              compact ? "" : "px-1.5 py-1",
+            )}
+          >
+            1. Datenblatt fehlt
+          </div>
+        </div>
+      </div>
+    );
+  }
+  // solo handled outside
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -950,9 +1161,11 @@ function LandingPageInner({
 function MultiGridLayer({
   active,
   template,
+  sceneId,
 }: {
   active: boolean;
   template: Template;
+  sceneId: SceneId;
 }) {
   return (
     <div
@@ -974,13 +1187,32 @@ function MultiGridLayer({
             <LandingPageInner
               template={template}
               lead={l}
-              videoSlot={i === 0}
+              videoSlot
               fullSize={false}
+              sceneId={sceneId}
             />
-            {/* For non-first cards, show a static video placeholder gradient */}
-            {i !== 0 ? (
+            {/* Karten 2-4: Scene zeigt schon den Mock, zusätzlich kleiner
+                Webcam-Placeholder als PiP unten links im Video-Slot
+                (das echte Video sitzt nur in Karte 1) */}
+            {i !== 0 && sceneId !== "solo" ? (
               <div
-                className="absolute rounded-md"
+                className="absolute rounded-full border-2 border-white shadow-md flex items-center justify-center text-white font-bold"
+                style={{
+                  // Selbe relative Position wie der echte Webcam-PiP in Karte 1
+                  top: "65%",
+                  left: "62%",
+                  width: "8%",
+                  aspectRatio: "1/1",
+                  background: `linear-gradient(135deg, ${l.color}, ${l.color}cc)`,
+                  fontSize: "6px",
+                }}
+              >
+                {l.first[0]}
+              </div>
+            ) : null}
+            {i !== 0 && sceneId === "solo" ? (
+              <div
+                className="absolute rounded-md flex items-center justify-center text-white"
                 style={{
                   top: "30%",
                   left: "58%",
@@ -989,12 +1221,8 @@ function MultiGridLayer({
                   background: `linear-gradient(135deg, ${l.color}, ${l.color}88)`,
                   boxShadow: "0 6px 14px -4px rgba(15,23,42,0.3)",
                   border: "2px solid white",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "white",
+                  fontSize: "16px",
                   fontWeight: 800,
-                  fontSize: "10px",
                 }}
               >
                 ▶
