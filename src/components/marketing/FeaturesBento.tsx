@@ -2,32 +2,23 @@
 
 import * as React from "react";
 import {
-  ArrowUpRight,
   Bell,
-  CheckCircle2,
   Eye,
   FlaskConical,
-  Globe,
   LineChart,
   Mail,
   MousePointerClick,
   PlayCircle,
   Plug,
-  Sparkles,
-  Video,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RevealOnScroll } from "./RevealOnScroll";
 
 /**
- * Features-Bento: Apple-Keynote-Style Grid mit unterschiedlich grossen
- * Cards. Jede Card hat ein eigenes Visual (Mock-UI, Animation, Illustration).
- * Layout: 12-col Grid, 4 Zeilen, 7 Cards.
- *
- *   [   Video (8x2)   ][ Push  (4x1) ]
- *                     [ Analytics (4x1) ]
- *   [Brief(4x1)][  Landingpage (8x1)  ]
- *   [ A/B (4x1)][  Anbindungen (8x1)  ]
+ * Features-Bento — Apple-Style Grid mit glas-morphismus, transparenten
+ * Gradients und fokussierten Visuals. Jede Card hat EIN klares Visual,
+ * ruhige Typo, viel Whitespace.
  */
 export function FeaturesBento() {
   return (
@@ -35,19 +26,19 @@ export function FeaturesBento() {
       id="features"
       className="relative z-[2] w-full bg-white py-24 md:py-32 overflow-hidden"
     >
-      {/* Subtle background gradient for depth */}
+      {/* sehr softer Background-Gradient für Tiefe */}
       <div
         aria-hidden
-        className="absolute inset-0 pointer-events-none opacity-50"
+        className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "radial-gradient(80% 50% at 50% 0%, rgba(243,238,255,0.6) 0%, rgba(255,255,255,0) 60%)",
+            "radial-gradient(80% 50% at 50% 0%, rgba(243,238,255,0.5) 0%, rgba(255,255,255,0) 60%)",
         }}
       />
 
       <div className="relative max-w-6xl mx-auto px-6 md:px-10">
         {/* Header */}
-        <div className="max-w-2xl mx-auto text-center mb-12 md:mb-16">
+        <div className="max-w-2xl mx-auto text-center mb-14 md:mb-20">
           <RevealOnScroll delay={0}>
             <div className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-brand-soft text-brand-deep text-[11px] font-semibold tracking-[0.18em] uppercase mb-6">
               Die Features
@@ -57,72 +48,69 @@ export function FeaturesBento() {
             <h2 className="font-light tracking-[-0.035em] text-ink leading-[1.05] text-[clamp(32px,4.2vw,56px)] mb-5 text-balance">
               Alles drin.
               <br />
-              <span className="font-semibold text-brand-deep">Nichts halb.</span>
+              <span className="font-semibold text-brand-deep">
+                Nichts halb.
+              </span>
             </h2>
           </RevealOnScroll>
           <RevealOnScroll delay={300}>
             <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-xl mx-auto">
-              Von der Webcam-Aufnahme bis zum CRM-Sync. Alles, was du
+              Von der Webcam-Aufnahme bis ins CRM. Alles, was du
               brauchst, um Akquise wirklich persönlich zu machen.
             </p>
           </RevealOnScroll>
         </div>
 
         {/* Bento Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 auto-rows-[minmax(220px,_auto)] gap-3 md:gap-4">
-          <RevealOnScroll delay={400} className="lg:col-span-8 lg:row-span-2">
-            <BentoCard
-              dark
-              className="bg-gradient-to-br from-[#1a1d35] via-[#0F172A] to-black h-full"
-            >
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4 auto-rows-[minmax(260px,_auto)]">
+          {/* 1) Video — large hero */}
+          <RevealOnScroll
+            delay={400}
+            className="lg:col-span-7 lg:row-span-2"
+          >
+            <BentoCard dark className="bg-[#0B0D1A]">
               <VideoBento />
             </BentoCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={520} className="lg:col-span-4 lg:row-span-1">
-            <BentoCard
-              dark
-              className="bg-gradient-to-br from-[#059669] via-[#047857] to-[#064E3B] h-full"
-            >
+          {/* 2) Push */}
+          <RevealOnScroll delay={520} className="lg:col-span-5">
+            <BentoCard dark className="bg-[#0F2E26]">
               <PushBento />
             </BentoCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={640} className="lg:col-span-4 lg:row-span-1">
-            <BentoCard
-              dark
-              className="bg-gradient-to-br from-[#0284C7] via-[#0369A1] to-[#1E3A8A] h-full"
-            >
+          {/* 3) Analytics */}
+          <RevealOnScroll delay={640} className="lg:col-span-5">
+            <BentoCard dark className="bg-[#0B2540]">
               <AnalyticsBento />
             </BentoCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={760} className="lg:col-span-8 lg:row-span-1">
-            <BentoCard className="bg-gradient-to-br from-[#F3EEFF] via-white to-[#E8DEFC] h-full">
+          {/* 4) Landingpage — light, wide */}
+          <RevealOnScroll delay={760} className="lg:col-span-7">
+            <BentoCard className="bg-[#FAFAFE]">
               <LandingpageBento />
             </BentoCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={880} className="lg:col-span-4 lg:row-span-1">
-            <BentoCard
-              dark
-              className="bg-gradient-to-br from-[#F97316] via-[#EA580C] to-[#9A3412] h-full"
-            >
+          {/* 5) Brief */}
+          <RevealOnScroll delay={880} className="lg:col-span-5">
+            <BentoCard dark className="bg-[#2A1505]">
               <BriefBento />
             </BentoCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={1000} className="lg:col-span-4 lg:row-span-1">
-            <BentoCard
-              dark
-              className="bg-gradient-to-br from-[#FBBF24] via-[#F59E0B] to-[#92400E] h-full"
-            >
+          {/* 6) A/B-Testing — light */}
+          <RevealOnScroll delay={1000} className="lg:col-span-4">
+            <BentoCard className="bg-[#FEF3C7]">
               <ABBento />
             </BentoCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={1120} className="lg:col-span-4 lg:row-span-1">
-            <BentoCard className="bg-gradient-to-br from-[#FAFAFE] via-white to-[#EDE9FE] h-full">
+          {/* 7) Anbindungen — light, wide */}
+          <RevealOnScroll delay={1120} className="lg:col-span-8">
+            <BentoCard className="bg-white">
               <IntegrationsBento />
             </BentoCard>
           </RevealOnScroll>
@@ -133,7 +121,7 @@ export function FeaturesBento() {
 }
 
 // ---------------------------------------------------------------------------
-// Card-Shell
+// Card-Shell + decorative gradient layer
 // ---------------------------------------------------------------------------
 
 function BentoCard({
@@ -148,14 +136,14 @@ function BentoCard({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-3xl border h-full group transition-shadow",
+        "relative w-full h-full overflow-hidden rounded-3xl border transition-shadow",
         dark
-          ? "border-white/10 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.5)] hover:shadow-[0_28px_70px_-25px_rgba(15,23,42,0.6)]"
-          : "border-line shadow-[0_24px_60px_-30px_rgba(15,23,42,0.25)] hover:shadow-[0_28px_70px_-25px_rgba(15,23,42,0.32)]",
+          ? "border-white/[0.07] shadow-[0_24px_60px_-30px_rgba(15,23,42,0.6)]"
+          : "border-line shadow-[0_24px_60px_-30px_rgba(15,23,42,0.18)]",
         className,
       )}
     >
-      {/* Subtle inner highlight at top — apple "shine" */}
+      {/* Apple "shine" — Top edge highlight */}
       <div
         aria-hidden
         className="absolute inset-x-0 top-0 h-px"
@@ -170,7 +158,7 @@ function BentoCard({
   );
 }
 
-function CardLabel({
+function Eyebrow({
   children,
   dark = false,
 }: {
@@ -180,8 +168,8 @@ function CardLabel({
   return (
     <div
       className={cn(
-        "text-[10px] font-semibold tracking-[0.22em] uppercase mb-2",
-        dark ? "text-white/55" : "text-brand-deep",
+        "text-[10px] font-semibold tracking-[0.22em] uppercase",
+        dark ? "text-white/45" : "text-brand-deep",
       )}
     >
       {children}
@@ -189,145 +177,146 @@ function CardLabel({
   );
 }
 
-function CardTitle({
+function GlassIcon({
   children,
-  dark = false,
+  tint = "white",
   size = "md",
 }: {
   children: React.ReactNode;
-  dark?: boolean;
-  size?: "md" | "lg";
+  tint?: "white" | "brand";
+  size?: "sm" | "md";
 }) {
   return (
-    <h3
-      className={cn(
-        "font-semibold leading-[1.1] tracking-[-0.02em] text-balance",
-        dark ? "text-white" : "text-ink",
-        size === "lg" ? "text-3xl md:text-4xl" : "text-xl md:text-2xl",
-      )}
-    >
-      {children}
-    </h3>
-  );
-}
-
-function CardSub({
-  children,
-  dark = false,
-}: {
-  children: React.ReactNode;
-  dark?: boolean;
-}) {
-  return (
-    <p
-      className={cn(
-        "text-sm leading-relaxed text-balance",
-        dark ? "text-white/65" : "text-ink-muted",
-      )}
-    >
-      {children}
-    </p>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 1) Videogenerierung — large hero
-// ---------------------------------------------------------------------------
-
-function VideoBento() {
-  const STACK = [
-    { name: "Max Mustermann", company: "Mustermann Industrie", grad: "from-[#7C5CE8] to-[#5232C7]", rotation: -8, offset: 0 },
-    { name: "Lisa Lust", company: "Lust Cosmetics", grad: "from-[#EC4899] to-[#BE185D]", rotation: -2, offset: 1 },
-    { name: "Franz Friedrich", company: "Friedrich Manufaktur", grad: "from-[#F97316] to-[#C2410C]", rotation: 5, offset: 2 },
-  ];
-  return (
-    <div className="absolute inset-0 flex flex-col">
-      {/* Visual area — stacked video preview cards */}
-      <div className="relative flex-1 overflow-hidden">
-        {/* Glow */}
-        <div
-          aria-hidden
-          className="absolute -top-20 right-0 size-[420px] rounded-full blur-3xl pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(170,140,245,0.45), rgba(170,140,245,0) 60%)",
-          }}
-        />
-        <div
-          aria-hidden
-          className="absolute bottom-0 left-0 size-[320px] rounded-full blur-3xl pointer-events-none opacity-50"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(236,72,153,0.30), transparent 60%)",
-          }}
-        />
-
-        {/* Stacked video previews — Apple-style fanned-out cards */}
-        <div className="absolute right-8 top-8 flex flex-col">
-          {STACK.map((s, i) => (
-            <div
-              key={s.name}
-              className="relative w-[280px] md:w-[320px] aspect-[16/10] rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
-              style={{
-                transform: `translateY(${i * 24}px) translateX(${-i * 16}px) rotate(${s.rotation}deg)`,
-                zIndex: STACK.length - i,
-                backgroundColor: "#11131F",
-              }}
-            >
-              <VideoPreviewMock {...s} />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Foreground text — bottom-left */}
-      <div className="relative p-8 md:p-10 pt-0 max-w-md">
-        <CardLabel dark>Videogenerierung</CardLabel>
-        <CardTitle dark size="lg">
-          743 Videos.{" "}
-          <span className="text-brand-light">In 2 Minuten.</span>
-        </CardTitle>
-        <CardSub dark>
-          Eine Aufnahme reicht. VIDEOCOMET rendert jedes Video individuell
-          mit Name, Firma und Webseite des Empfängers.
-        </CardSub>
+    <div className="relative inline-flex shrink-0">
+      <div
+        aria-hidden
+        className={cn(
+          "absolute inset-0 rounded-2xl blur-2xl",
+          size === "sm" ? "scale-110" : "scale-125",
+          tint === "white" ? "bg-white/25" : "bg-brand/30",
+        )}
+      />
+      <div
+        className={cn(
+          "relative rounded-2xl flex items-center justify-center border backdrop-blur-xl",
+          size === "sm" ? "size-10" : "size-12",
+          tint === "white"
+            ? "bg-white/10 text-white border-white/20"
+            : "bg-brand-soft/80 text-brand-deep border-brand/30",
+        )}
+      >
+        {children}
       </div>
     </div>
   );
 }
 
-function VideoPreviewMock({
-  name,
-  company,
-  grad,
-}: {
-  name: string;
-  company: string;
-  grad: string;
-}) {
+// ---------------------------------------------------------------------------
+// 1) Videogenerierung — large hero card
+// ---------------------------------------------------------------------------
+
+function VideoBento() {
   return (
-    <div className="absolute inset-0 flex flex-col">
-      {/* Hero band with gradient */}
+    <div className="relative w-full h-full flex flex-col p-8 md:p-10">
+      {/* Decorative purple glow */}
       <div
-        className={cn("h-2/3 relative bg-gradient-to-br", grad)}
-      >
-        <div className="absolute top-2.5 left-3 right-3 flex items-center gap-1">
-          <div className="size-1.5 rounded-full bg-white/40" />
-          <div className="size-1.5 rounded-full bg-white/40" />
-          <div className="size-1.5 rounded-full bg-white/40" />
-          <div className="flex-1 ml-1.5 h-2.5 rounded bg-white/15" />
+        aria-hidden
+        className="absolute -top-32 -right-24 size-[520px] rounded-full pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(closest-side, rgba(170,140,245,0.45), rgba(170,140,245,0) 70%)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="absolute bottom-0 left-0 size-[280px] rounded-full pointer-events-none opacity-60"
+        style={{
+          background:
+            "radial-gradient(closest-side, rgba(236,72,153,0.30), transparent 75%)",
+        }}
+      />
+
+      {/* Visual area top */}
+      <div className="relative flex-1 flex items-start justify-end min-h-[200px]">
+        {/* Two ghost cards behind */}
+        <div
+          aria-hidden
+          className="absolute top-8 right-4 w-[300px] aspect-[16/10] rounded-2xl border border-white/[0.06] shadow-2xl opacity-40 blur-sm"
+          style={{
+            transform: "rotate(-10deg) translate(-30px, 30px)",
+            background:
+              "linear-gradient(135deg, rgba(124,92,232,0.6), rgba(82,50,199,0.4))",
+          }}
+        />
+        <div
+          aria-hidden
+          className="absolute top-2 right-10 w-[300px] aspect-[16/10] rounded-2xl border border-white/[0.08] shadow-2xl opacity-70"
+          style={{
+            transform: "rotate(-5deg) translate(-12px, 18px)",
+            background:
+              "linear-gradient(135deg, rgba(170,140,245,0.5), rgba(124,92,232,0.6))",
+          }}
+        />
+
+        {/* Foreground crisp video preview */}
+        <div
+          className="relative w-[320px] aspect-[16/10] rounded-2xl border border-white/15 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] overflow-hidden"
+          style={{ transform: "rotate(2deg) translate(-6px, 0)" }}
+        >
+          <VideoPreviewMock />
         </div>
-        <div className="absolute bottom-3 left-3 right-3 text-white">
-          <div className="text-[8px] font-bold tracking-widest uppercase opacity-80">
+      </div>
+
+      {/* Text bottom-left */}
+      <div className="relative mt-6 max-w-[320px]">
+        <Eyebrow dark>Videogenerierung</Eyebrow>
+        <h3 className="mt-3 text-3xl md:text-4xl font-semibold tracking-[-0.02em] text-white leading-[1.05]">
+          Persönliche Videos.
+          <br />
+          <span className="text-brand-light">In Serie.</span>
+        </h3>
+        <p className="mt-3 text-sm md:text-base text-white/65 leading-relaxed">
+          Eine Aufnahme. Hunderte personalisierte Videos. Vollautomatisch.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function VideoPreviewMock() {
+  return (
+    <div className="absolute inset-0 flex flex-col bg-[#11131F]">
+      {/* Browser chrome */}
+      <div className="h-6 bg-white/95 flex items-center px-3 gap-1.5">
+        <div className="size-1.5 rounded-full bg-red-400" />
+        <div className="size-1.5 rounded-full bg-yellow-400" />
+        <div className="size-1.5 rounded-full bg-green-400" />
+        <div className="flex-1 ml-2 h-2 rounded-full bg-surface-soft" />
+      </div>
+      {/* LP hero */}
+      <div
+        className="flex-1 relative p-3 flex items-center"
+        style={{
+          background: "linear-gradient(135deg, #7C5CE8, #5232C7)",
+        }}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="text-[7px] font-bold tracking-[0.2em] uppercase text-white/80 mb-1">
             Persönlich für dich
           </div>
-          <div className="text-sm font-extrabold leading-tight mt-0.5">
-            {name},<br />
+          <div className="text-[13px] font-extrabold text-white leading-tight">
+            Max Mustermann,
+            <br />
             schau dir das an.
+          </div>
+          <div
+            className="mt-2 inline-flex text-[7px] font-bold text-brand-deep bg-white rounded px-1.5 py-0.5"
+          >
+            Termin sichern →
           </div>
         </div>
         {/* Webcam PiP */}
-        <div className="absolute bottom-2 right-3 size-9 rounded-full border-2 border-white shadow-lg overflow-hidden">
+        <div className="shrink-0 size-12 rounded-full overflow-hidden border-[2px] border-white shadow-xl ml-2">
           <video
             src="/demo-assets/webcam.mp4"
             muted
@@ -339,64 +328,48 @@ function VideoPreviewMock({
           />
         </div>
       </div>
-      {/* Footer */}
-      <div className="flex-1 bg-white p-2.5 flex items-center justify-between">
-        <div className="min-w-0">
-          <div className="text-[10px] font-bold text-ink truncate">
-            {company}
-          </div>
-          <div className="text-[8px] text-ink-muted font-mono truncate">
-            deine-domain.de/{name.split(" ")[0].toLowerCase()}
-          </div>
-        </div>
-        <PlayCircle className="size-4 text-brand-deep shrink-0" />
-      </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// 2) Push-Notifications
+// 2) Push Notifications
 // ---------------------------------------------------------------------------
 
 function PushBento() {
-  const NOTIFS = [
-    { icon: <Eye className="size-3" />, who: "Max", what: "öffnete deine Seite" },
-    { icon: <PlayCircle className="size-3" />, who: "Lisa", what: "schaut gerade" },
-    { icon: <MousePointerClick className="size-3" />, who: "Franz", what: "klickte Termin" },
-  ];
   return (
-    <div className="absolute inset-0 flex flex-col p-7 md:p-8">
-      {/* Decorative bell with glow */}
-      <div className="relative shrink-0">
-        <div className="absolute inset-0 size-12 rounded-2xl bg-white/15 blur-xl" />
-        <div className="relative size-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-white border border-white/20">
-          <Bell className="size-5" />
-        </div>
-      </div>
+    <div className="relative w-full h-full flex flex-col p-7">
+      {/* Background glow */}
+      <div
+        aria-hidden
+        className="absolute -top-12 -right-12 size-72 rounded-full pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(closest-side, rgba(16,185,129,0.45), transparent 70%)",
+        }}
+      />
 
-      <div className="mt-auto">
-        <CardLabel dark>Push-Notifications</CardLabel>
-        <CardTitle dark>Sofort wissen, wer reagiert.</CardTitle>
-        <CardSub dark>
-          Jede Öffnung, jedes Klick, in Echtzeit auf deinem Bildschirm.
-        </CardSub>
-      </div>
+      <GlassIcon>
+        <Bell className="size-5" />
+      </GlassIcon>
 
-      {/* Stacked notif previews top-right */}
-      <div className="absolute top-6 right-6 flex flex-col gap-1.5 w-[170px]">
-        {NOTIFS.map((n, i) => (
+      {/* Stacked notifs floating */}
+      <div className="absolute top-6 right-4 flex flex-col gap-1.5 w-[170px]">
+        {[
+          { icon: <Eye className="size-3" />, who: "Max", what: "öffnete deine Seite" },
+          { icon: <PlayCircle className="size-3" />, who: "Lisa", what: "schaut gerade" },
+          { icon: <MousePointerClick className="size-3" />, who: "Franz", what: "klickte Termin" },
+        ].map((n, i) => (
           <div
             key={i}
-            className="rounded-xl bg-black/40 backdrop-blur-md border border-white/15 p-2 flex items-center gap-2"
+            className="rounded-xl backdrop-blur-md border border-white/15 p-2 flex items-center gap-2"
             style={{
-              transform: `translateX(${i * 8}px) translateY(${i * -2}px)`,
+              backgroundColor: "rgba(15,23,42,0.55)",
+              transform: `translateX(${-i * 4}px) translateY(${i * -2}px)`,
               opacity: 1 - i * 0.18,
             }}
           >
-            <div
-              className="size-6 shrink-0 rounded-md bg-white/20 flex items-center justify-center text-white"
-            >
+            <div className="size-5 shrink-0 rounded-md bg-white/15 flex items-center justify-center text-white">
               {n.icon}
             </div>
             <div className="text-[9px] leading-tight text-white">
@@ -405,6 +378,16 @@ function PushBento() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="mt-auto pt-12">
+        <Eyebrow dark>Push-Notifications</Eyebrow>
+        <h3 className="mt-3 text-xl md:text-2xl font-semibold tracking-[-0.02em] text-white leading-tight">
+          Live, wenn jemand reagiert.
+        </h3>
+        <p className="mt-2 text-sm text-white/60 leading-relaxed">
+          Jede Öffnung, jeden Klick sofort sehen.
+        </p>
       </div>
     </div>
   );
@@ -416,42 +399,54 @@ function PushBento() {
 
 function AnalyticsBento() {
   return (
-    <div className="absolute inset-0 flex flex-col p-7 md:p-8">
-      <div className="relative shrink-0">
-        <div className="absolute inset-0 size-12 rounded-2xl bg-white/15 blur-xl" />
-        <div className="relative size-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-white border border-white/20">
-          <LineChart className="size-5" />
-        </div>
-      </div>
+    <div className="relative w-full h-full flex flex-col p-7">
+      <div
+        aria-hidden
+        className="absolute -top-20 -right-10 size-72 rounded-full pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(closest-side, rgba(14,165,233,0.45), transparent 70%)",
+        }}
+      />
 
-      {/* Chart + KPIs */}
-      <div className="absolute top-7 right-6 w-[170px]">
-        {/* Mini KPI */}
-        <div className="rounded-xl bg-white/10 backdrop-blur-md border border-white/15 p-2.5 mb-2">
-          <div className="text-[8px] font-bold uppercase tracking-wider text-white/65">
-            Watch-Time ø
+      <GlassIcon>
+        <LineChart className="size-5" />
+      </GlassIcon>
+
+      {/* KPI floating + Chart floating */}
+      <div className="absolute top-6 right-4 w-[170px] flex flex-col gap-2">
+        <div className="rounded-xl backdrop-blur-md border border-white/15 p-2.5"
+          style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[8px] font-bold uppercase tracking-wider text-white/55">
+              Watch-Time ø
+            </span>
+            <TrendingUp className="size-3 text-emerald-300" />
           </div>
-          <div className="text-lg font-extrabold text-white">83 %</div>
-          <div className="text-[8px] text-emerald-200">+12 % vs. letzte Wo.</div>
+          <div className="text-xl font-extrabold text-white leading-none">
+            83 %
+          </div>
         </div>
-        {/* Mini chart */}
-        <div className="rounded-xl bg-white/10 backdrop-blur-md border border-white/15 p-2.5">
-          <svg viewBox="0 0 100 30" className="w-full h-8">
+        <div className="rounded-xl backdrop-blur-md border border-white/15 p-2"
+          style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
+        >
+          <svg viewBox="0 0 100 28" className="w-full h-8">
             <defs>
               <linearGradient id="vc-bento-chart" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="rgba(255,255,255,0.6)" />
+                <stop offset="0%" stopColor="rgba(255,255,255,0.55)" />
                 <stop offset="100%" stopColor="rgba(255,255,255,0)" />
               </linearGradient>
             </defs>
             <path
-              d="M0,24 L15,22 L30,18 L45,16 L60,10 L75,12 L90,5 L100,3 L100,30 L0,30 Z"
+              d="M0,24 L15,22 L30,18 L45,16 L60,10 L75,12 L90,5 L100,3 L100,28 L0,28 Z"
               fill="url(#vc-bento-chart)"
             />
             <path
               d="M0,24 L15,22 L30,18 L45,16 L60,10 L75,12 L90,5 L100,3"
               fill="none"
               stroke="white"
-              strokeWidth="1.4"
+              strokeWidth="1.3"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -459,50 +454,64 @@ function AnalyticsBento() {
         </div>
       </div>
 
-      <div className="mt-auto">
-        <CardLabel dark>Analytics</CardLabel>
-        <CardTitle dark>Zahlen, die wirklich zählen.</CardTitle>
-        <CardSub dark>
-          Öffnungen, Watch-Time und CTAs auf einen Blick.
-        </CardSub>
+      <div className="mt-auto pt-12">
+        <Eyebrow dark>Analytics</Eyebrow>
+        <h3 className="mt-3 text-xl md:text-2xl font-semibold tracking-[-0.02em] text-white leading-tight">
+          Zahlen, die zählen.
+        </h3>
+        <p className="mt-2 text-sm text-white/60 leading-relaxed">
+          Watch-Time und CTAs auf einen Blick.
+        </p>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// 4) Landingpage-Generierung (light)
+// 4) Landingpage — wide light card
 // ---------------------------------------------------------------------------
 
 function LandingpageBento() {
-  const LEADS = ["Max", "Lisa", "Franz", "Sofia"];
+  const LEADS = ["Max", "Lisa", "Franz"];
   return (
-    <div className="absolute inset-0 flex">
+    <div className="relative w-full h-full flex p-8 md:p-10 gap-6">
+      {/* Subtle brand wash */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(60% 80% at 0% 50%, rgba(243,238,255,0.6), rgba(243,238,255,0) 70%)",
+        }}
+      />
+
       {/* Left text */}
-      <div className="relative flex-1 flex flex-col justify-end p-8 md:p-10 max-w-sm">
-        <CardLabel>Landingpage-Generierung</CardLabel>
-        <CardTitle size="lg">
-          Eigene Landingpage{" "}
-          <span className="text-brand-deep">für jeden Lead</span>.
-        </CardTitle>
-        <CardSub>
-          Automatisch personalisiert. Vorname, Firma, Branche und ihr
-          Video, sauber im Hero platziert.
-        </CardSub>
+      <div className="relative flex-1 flex flex-col justify-center max-w-[280px]">
+        <Eyebrow>Landingpages</Eyebrow>
+        <h3 className="mt-3 text-3xl font-semibold tracking-[-0.02em] text-ink leading-[1.05]">
+          Eine eigene Seite.
+          <br />
+          <span className="text-brand-deep">Für jeden Lead.</span>
+        </h3>
+        <p className="mt-3 text-sm text-ink-muted leading-relaxed">
+          Automatisch personalisiert. Vorname, Firma und das Video
+          sauber im Hero.
+        </p>
       </div>
 
-      {/* Right mockup — stacked LPs */}
-      <div className="hidden md:block relative w-[55%] overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center">
+      {/* Right visual — fanned LP thumbnails */}
+      <div className="relative flex-1 hidden md:flex items-center justify-end pr-4">
+        <div className="relative w-[280px] h-[180px]">
           {LEADS.map((name, i) => (
             <div
               key={name}
-              className="absolute rounded-2xl bg-white shadow-xl border border-line overflow-hidden"
+              className="absolute top-0 rounded-xl bg-white shadow-[0_18px_40px_-16px_rgba(15,23,42,0.4)] border border-line overflow-hidden"
               style={{
-                width: "260px",
+                width: "240px",
                 aspectRatio: "16/10",
-                transform: `translate(${(i - 1.5) * 28}px, ${(i - 1.5) * 14}px) rotate(${(i - 1.5) * 3}deg)`,
-                zIndex: i,
+                right: 0,
+                transform: `translate(${-i * 18}px, ${i * 12}px) rotate(${(i - 1) * -3}deg)`,
+                zIndex: LEADS.length - i,
               }}
             >
               <LpThumbMock name={name} />
@@ -516,7 +525,7 @@ function LandingpageBento() {
 
 function LpThumbMock({ name }: { name: string }) {
   return (
-    <div className="w-full h-full bg-white flex flex-col">
+    <div className="w-full h-full flex flex-col bg-white">
       <div className="h-3 bg-surface-soft border-b border-line flex items-center px-2 gap-1">
         <div className="size-1 rounded-full bg-red-400" />
         <div className="size-1 rounded-full bg-yellow-400" />
@@ -525,20 +534,19 @@ function LpThumbMock({ name }: { name: string }) {
       </div>
       <div className="h-4 bg-white border-b border-line flex items-center px-2 gap-1">
         <div className="size-2 rounded bg-brand" />
-        <div className="text-[6px] font-bold text-ink">DEIN LOGO</div>
+        <div className="text-[6px] font-bold tracking-wider uppercase text-ink">
+          Dein Logo
+        </div>
       </div>
       <div className="flex-1 flex items-center px-3 gap-2">
         <div className="flex-1 min-w-0">
           <div className="text-[5px] font-bold tracking-wider uppercase text-brand-deep mb-0.5">
             Persönlich für dich
           </div>
-          <div className="text-[10px] font-extrabold text-ink leading-tight">
+          <div className="text-[11px] font-extrabold text-ink leading-[1.05]">
             {name},
             <br />
             schau dir das an.
-          </div>
-          <div className="text-[6px] text-ink-muted mt-1 line-clamp-1">
-            Drei Punkte zu deiner Firma.
           </div>
           <div
             className="mt-1 inline-block text-[5px] font-bold text-white rounded px-1 py-0.5"
@@ -547,8 +555,16 @@ function LpThumbMock({ name }: { name: string }) {
             Termin sichern →
           </div>
         </div>
-        <div className="shrink-0 w-12 h-9 rounded bg-gradient-to-br from-brand to-brand-deep border-2 border-white shadow flex items-center justify-center text-white text-[8px]">
-          ▶
+        <div className="shrink-0 w-14 aspect-video rounded bg-gradient-to-br from-[#AA8CF5] to-[#7C5CE8] border-2 border-white shadow flex items-center justify-center text-white text-[8px] overflow-hidden">
+          <video
+            src="/demo-assets/webcam.mp4"
+            muted
+            autoPlay
+            loop
+            playsInline
+            preload="metadata"
+            className="w-full h-full object-cover"
+          />
         </div>
       </div>
     </div>
@@ -561,172 +577,217 @@ function LpThumbMock({ name }: { name: string }) {
 
 function BriefBento() {
   return (
-    <div className="absolute inset-0 flex flex-col p-7 md:p-8">
-      {/* Icon */}
-      <div className="relative shrink-0">
-        <div className="absolute inset-0 size-12 rounded-2xl bg-white/15 blur-xl" />
-        <div className="relative size-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-white border border-white/20">
-          <Mail className="size-5" />
-        </div>
-      </div>
+    <div className="relative w-full h-full flex flex-col p-7">
+      <div
+        aria-hidden
+        className="absolute -top-20 -right-12 size-72 rounded-full pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(closest-side, rgba(251,146,60,0.5), transparent 70%)",
+        }}
+      />
 
-      {/* Letter peek top-right */}
-      <div className="absolute top-6 right-2">
+      <GlassIcon>
+        <Mail className="size-5" />
+      </GlassIcon>
+
+      {/* Letter peek floating top-right */}
+      <div
+        className="absolute top-5 right-3 bg-white rounded-md shadow-2xl border border-black/5"
+        style={{
+          width: 100,
+          aspectRatio: "210/297",
+          transform: "rotate(10deg)",
+          padding: "8px 10px 6px",
+        }}
+      >
+        <div className="text-[3.5px] text-ink/60 leading-tight font-medium">
+          Max Mustermann
+          <br />
+          Industriestr. 42
+          <br />
+          85737 Ismaning
+        </div>
+        <div className="text-[4px] font-bold text-ink/80 mt-2.5">
+          Sehr geehrter
+        </div>
+        <div className="space-y-0.5 mt-1.5">
+          <div className="h-px bg-ink/15 w-full" />
+          <div className="h-px bg-ink/15 w-5/6" />
+          <div className="h-px bg-ink/15 w-3/4" />
+        </div>
         <div
-          className="bg-white rounded-md shadow-xl border border-black/5 p-1.5"
+          className="text-[3.5px] font-mono font-bold mt-1.5 px-1 py-0.5 rounded inline-block"
           style={{
-            width: "92px",
-            aspectRatio: "210/297",
-            transform: "rotate(8deg)",
+            backgroundColor: "#F3EEFF",
+            color: "#5232C7",
           }}
         >
-          <div className="w-1.5 h-0.5 bg-ink/40 mb-1" />
-          <div className="w-full h-px bg-ink/15 mb-1.5" />
-          <div className="text-[4px] text-ink/80 leading-tight">
-            Max Mustermann
-          </div>
-          <div className="text-[3.5px] text-ink/50 leading-tight mt-0.5">
-            Industriestr. 42
-            <br />
-            85737 Ismaning
-          </div>
-          <div className="text-[4px] font-bold text-ink/80 mt-2">
-            Sehr geehrter
-          </div>
-          <div className="space-y-0.5 mt-1">
-            <div className="h-px bg-ink/12 w-full" />
-            <div className="h-px bg-ink/12 w-5/6" />
-            <div className="h-px bg-ink/12 w-3/4" />
-          </div>
-          <div className="text-[3.5px] text-brand-deep font-mono mt-1">
-            deine-domain.de/max
-          </div>
-          <div className="absolute bottom-1.5 right-1.5 size-3 bg-ink"
-            style={{ background: "repeating-conic-gradient(#0F172A 0deg 90deg, white 90deg 180deg)" }}
-          />
+          deine-domain.de/max
         </div>
+        <div className="absolute bottom-1 right-1 size-4"
+          style={{
+            background: "repeating-conic-gradient(#0F172A 0deg 90deg, white 90deg 180deg)",
+            backgroundSize: "2px 2px",
+          }}
+        />
       </div>
 
-      <div className="mt-auto">
-        <CardLabel dark>Briefgenerierung</CardLabel>
-        <CardTitle dark>PDF-Brief pro Lead.</CardTitle>
-        <CardSub dark>
-          Mit echtem QR-Code zur persönlichen Landingpage. DIN-5008.
-        </CardSub>
+      <div className="mt-auto pt-12">
+        <Eyebrow dark>Briefe</Eyebrow>
+        <h3 className="mt-3 text-xl md:text-2xl font-semibold tracking-[-0.02em] text-white leading-tight">
+          Briefe pro Lead.
+        </h3>
+        <p className="mt-2 text-sm text-white/60 leading-relaxed">
+          Persönlich adressiert, mit QR-Code zum Video.
+        </p>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// 6) A/B Testing
+// 6) A/B Testing — light, amber
 // ---------------------------------------------------------------------------
 
 function ABBento() {
   return (
-    <div className="absolute inset-0 flex flex-col p-7 md:p-8">
-      <div className="relative shrink-0">
-        <div className="absolute inset-0 size-12 rounded-2xl bg-white/15 blur-xl" />
-        <div className="relative size-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-amber-900 border border-white/30">
-          <FlaskConical className="size-5" />
-        </div>
-      </div>
+    <div className="relative w-full h-full flex flex-col p-7">
+      <div
+        aria-hidden
+        className="absolute -top-16 -right-12 size-72 rounded-full pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(closest-side, rgba(251,191,36,0.5), transparent 70%)",
+        }}
+      />
 
-      {/* Split comparison top-right */}
-      <div className="absolute top-7 right-6 w-[150px] flex gap-1.5">
+      <GlassIcon tint="brand">
+        <FlaskConical className="size-5" />
+      </GlassIcon>
+
+      {/* Split comparison floating top-right */}
+      <div className="absolute top-6 right-4 flex gap-1.5 w-[140px]">
         {[
           { label: "A", v: "12 %", win: false },
           { label: "B", v: "18 %", win: true },
-        ].map((v) => (
+        ].map((c) => (
           <div
-            key={v.label}
+            key={c.label}
             className={cn(
-              "flex-1 rounded-lg p-2 border",
-              v.win
-                ? "bg-white border-white"
-                : "bg-white/20 border-white/30",
+              "flex-1 rounded-xl p-2 border backdrop-blur-md",
+              c.win
+                ? "bg-white border-amber-900/20"
+                : "bg-white/40 border-amber-900/10",
             )}
           >
-            <div className="flex items-center justify-between mb-1">
-              <span
-                className={cn(
-                  "size-4 rounded-full flex items-center justify-center text-[8px] font-extrabold",
-                  v.win ? "bg-amber-900 text-white" : "bg-white/40 text-amber-900",
-                )}
-              >
-                {v.label}
-              </span>
-              {v.win ? <CheckCircle2 className="size-3 text-amber-900" /> : null}
+            <div
+              className={cn(
+                "size-4 rounded-full flex items-center justify-center text-[8px] font-extrabold mb-1",
+                c.win
+                  ? "bg-amber-900 text-white"
+                  : "bg-amber-900/30 text-amber-900",
+              )}
+            >
+              {c.label}
             </div>
             <div
               className={cn(
-                "text-base font-extrabold",
-                v.win ? "text-amber-900" : "text-amber-900/60",
+                "text-base font-extrabold leading-none",
+                c.win ? "text-amber-900" : "text-amber-900/60",
               )}
             >
-              {v.v}
+              {c.v}
             </div>
-            <div className="text-[7px] text-amber-900/60">Conversion</div>
+            <div className="text-[7px] text-amber-900/55 mt-0.5">
+              Conversion
+            </div>
           </div>
         ))}
       </div>
 
-      <div className="mt-auto">
-        <CardLabel>A/B-Testing</CardLabel>
-        <CardTitle>Versionen gegeneinander testen.</CardTitle>
-        <CardSub>
-          Templates, Headlines und CTAs vergleichen. Was wirkt, wirkt.
-        </CardSub>
+      <div className="mt-auto pt-12">
+        <Eyebrow>A/B-Testing</Eyebrow>
+        <h3 className="mt-3 text-xl md:text-2xl font-semibold tracking-[-0.02em] text-ink leading-tight">
+          Was wirklich wirkt.
+        </h3>
+        <p className="mt-2 text-sm text-ink-muted leading-relaxed">
+          Templates und Headlines vergleichen.
+        </p>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// 7) Anbindungen
+// 7) Anbindungen — light, wider
 // ---------------------------------------------------------------------------
 
 function IntegrationsBento() {
-  const LOGOS = ["HubSpot", "Salessuite", "Close", "Zapier", "Make"];
+  const LOGOS = [
+    { name: "HubSpot", color: "#FF7A59" },
+    { name: "Salessuite", color: "#0EA5E9" },
+    { name: "Close", color: "#22C55E" },
+    { name: "Zapier", color: "#FF4F00" },
+    { name: "Make", color: "#6D28D9" },
+  ];
   return (
-    <div className="absolute inset-0 flex flex-col p-7 md:p-8">
-      <div className="relative shrink-0">
-        <div className="absolute inset-0 size-12 rounded-2xl bg-brand-soft blur-xl" />
-        <div className="relative size-12 rounded-2xl bg-brand-soft backdrop-blur-md flex items-center justify-center text-brand-deep border border-brand/20">
-          <Plug className="size-5" />
-        </div>
-      </div>
+    <div className="relative w-full h-full flex p-7 md:p-8 gap-6">
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(60% 80% at 0% 50%, rgba(243,238,255,0.6), rgba(243,238,255,0) 70%)",
+        }}
+      />
 
-      {/* Floating logo chips */}
-      <div className="absolute top-7 right-6 flex flex-wrap gap-1.5 w-[170px] justify-end">
-        {LOGOS.map((l, i) => (
-          <div
-            key={l}
-            className="px-2 py-1 rounded-full bg-white border border-line shadow-sm text-[10px] font-semibold text-ink"
-            style={{
-              transform: `translateY(${(i % 2) * 6}px)`,
-            }}
-          >
-            {l}
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-auto">
-        <CardLabel>Anbindungen</CardLabel>
-        <CardTitle>In dein Setup eingebunden.</CardTitle>
-        <CardSub>
+      {/* Left text */}
+      <div className="relative flex-1 flex flex-col justify-center max-w-[260px]">
+        <Eyebrow>Anbindungen</Eyebrow>
+        <h3 className="mt-3 text-xl md:text-2xl font-semibold tracking-[-0.02em] text-ink leading-tight">
+          Verbunden mit deinen Tools.
+        </h3>
+        <p className="mt-2 text-sm text-ink-muted leading-relaxed">
           HubSpot, Salessuite, Close, Zapier oder Make. Webhook-Events
           pro Aktion.
-        </CardSub>
+        </p>
+      </div>
+
+      {/* Right floating logo cards */}
+      <div className="relative flex-1 hidden md:flex items-center justify-end pr-4">
+        <div className="relative w-[300px] h-[180px]">
+          {LOGOS.map((l, i) => {
+            // Staggered floating chip positions
+            const positions = [
+              { top: 0, left: 0 },
+              { top: 8, left: 110 },
+              { top: 14, left: 215 },
+              { top: 90, left: 30 },
+              { top: 100, left: 150 },
+            ];
+            const pos = positions[i];
+            return (
+              <div
+                key={l.name}
+                className="absolute px-3 py-2 rounded-xl bg-white border border-line shadow-[0_10px_25px_-8px_rgba(15,23,42,0.18)] flex items-center gap-2"
+                style={{ top: pos.top, left: pos.left }}
+              >
+                <span
+                  className="size-2 rounded-full"
+                  style={{ backgroundColor: l.color }}
+                />
+                <span className="text-[12px] font-semibold text-ink">
+                  {l.name}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 }
 
-// keep unused imports happy (Sparkles + ArrowUpRight + Globe + Video reserved
-// for future variants without warning)
-void Sparkles;
-void ArrowUpRight;
-void Globe;
-void Video;
+// Silence unused-import warnings for icons reserved for future variants
+void Plug;
