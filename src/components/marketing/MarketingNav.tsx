@@ -73,10 +73,10 @@ export function MarketingNav() {
   return (
     <header
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-colors duration-300",
+        "fixed top-0 left-0 right-0 z-50 transition-colors duration-300 backdrop-blur-xl",
         overDark
-          ? "bg-transparent"
-          : "bg-surface/85 backdrop-blur-md border-b border-line",
+          ? "bg-black/40 border-b border-white/[0.06]"
+          : "bg-surface/85 border-b border-line",
       )}
     >
       <div className="max-w-6xl mx-auto px-6 md:px-10 py-4 flex items-center justify-between gap-6">

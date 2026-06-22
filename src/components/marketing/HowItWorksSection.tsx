@@ -12,6 +12,7 @@ import {
   Eye,
   FileText,
   Image as ImageIcon,
+  Infinity as InfinityIcon,
   Linkedin,
   AtSign,
   Mail,
@@ -274,18 +275,22 @@ export function HowItWorksSection() {
       <div className="max-w-6xl mx-auto px-6 md:px-10">
         <div className="max-w-2xl mx-auto text-center mb-12">
           <div className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-brand-soft text-brand-deep text-[11px] font-semibold tracking-[0.18em] uppercase mb-6">
-            So funktioniert es
+            Der Ablauf
           </div>
           <h2 className="font-light tracking-[-0.035em] text-ink leading-[1.05] text-[clamp(32px,4.2vw,56px)] mb-5 text-balance">
-            In sechs Schritten zu deiner
+            Wie läuft die
             <br />
             <span className="font-semibold text-brand-deep">
-              ersten Kampagne.
+              Videoerstellung ab?
             </span>
           </h2>
-          <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-xl mx-auto">
-            Klick dich durch und sieh, wie aus einer Webcam-Aufnahme
-            persönliche Videos für hunderte Leads werden.
+          <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-2xl mx-auto">
+            Einmaliger Setup-Aufwand von ungefähr 30 Minuten und du kannst{" "}
+            <span className="inline-flex items-center align-baseline gap-1 font-semibold text-ink">
+              <InfinityIcon className="size-5 text-brand-deep" aria-hidden />
+              unendlich
+            </span>{" "}
+            viele Leads personalisiert erreichen und überzeugen.
           </p>
         </div>
 
