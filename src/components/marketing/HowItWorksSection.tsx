@@ -1460,9 +1460,41 @@ function FallbackWebsite({ lead }: { lead: LeadLike }) {
 // Multi-grid Layer — 2x2 of the same LP, different names
 // ---------------------------------------------------------------------------
 
-// Erweiterte Lead-Pool fuer die Multiplikations-Animation. Die ersten
-// 4 = Haupt-Leads (mit echtem Screenshot etc.), Rest sind generierte
-// Variationen die einfach durch die 4 Hauptleads cycle-en + andere Farben.
+// Generische Lead-Pool fuer die Multiplikations-Animation. Die ersten 4
+// sind die Haupt-Leads (mit echtem Screenshot etc.), die naechsten 28
+// sind variantenreiche deutsche Namen + Firmennamen damit man visuell
+// erkennt: jede Karte = ein anderer Lead.
+const EXTRA_PEOPLE = [
+  { first: "Daniel", company: "Kessler Agentur" },
+  { first: "Fabian", company: "Wagner Solutions" },
+  { first: "Stefan", company: "Reuter Beratung" },
+  { first: "Franziska", company: "Klein Werkstatt" },
+  { first: "Saskia", company: "Berger Studio" },
+  { first: "Tobias", company: "Hoffmann Software" },
+  { first: "Anna", company: "König Wellness" },
+  { first: "Mira", company: "Schmidt Manufaktur" },
+  { first: "Tim", company: "Berger Bau" },
+  { first: "Julia", company: "Roth Design" },
+  { first: "Hannah", company: "Vogel Praxis" },
+  { first: "Leo", company: "Lang Maschinen" },
+  { first: "Eva", company: "Maier Service" },
+  { first: "Niko", company: "Brandt Labor" },
+  { first: "Clara", company: "Schulze Holding" },
+  { first: "Paul", company: "Krüger Tech" },
+  { first: "Lena", company: "Becker Coaching" },
+  { first: "Jan", company: "Meier Markt" },
+  { first: "Tina", company: "Engel Studio" },
+  { first: "Felix", company: "Walter Group" },
+  { first: "Mona", company: "Adler Werke" },
+  { first: "Rolf", company: "Voss Logistik" },
+  { first: "Linda", company: "Frank Atelier" },
+  { first: "Bernd", company: "Otto Sanierung" },
+  { first: "Vera", company: "Sommer Stoffe" },
+  { first: "Dirk", company: "Lehmann Holz" },
+  { first: "Ines", company: "Brunner Beton" },
+  { first: "Olaf", company: "Werner Steuern" },
+];
+
 const EXTENDED_LEADS = (() => {
   const PALETTE = [
     "#7C5CE8", "#EC4899", "#92400E", "#10B981",
@@ -1470,10 +1502,14 @@ const EXTENDED_LEADS = (() => {
     "#06B6D4", "#F97316", "#84CC16", "#A855F7",
   ];
   return Array.from({ length: 32 }, (_, i) => {
+    if (i < 4) return LEADS[i];
+    const p = EXTRA_PEOPLE[(i - 4) % EXTRA_PEOPLE.length];
     const base = LEADS[i % 4];
     return {
       ...base,
-      color: i < 4 ? base.color : PALETTE[i % PALETTE.length],
+      first: p.first,
+      company: p.company,
+      color: PALETTE[i % PALETTE.length],
     } as LeadLike;
   });
 })();
@@ -1544,7 +1580,7 @@ function MultiGridLayer({
                 height: 320,
                 transformOrigin: "top left",
                 transform:
-                  "scale(min(calc(100cqw / 480px), calc(100cqh / 320px)))",
+                  "scale(max(calc(100cqw / 480px), calc(100cqh / 320px)))",
               }}
             >
               <LandingPageInner
