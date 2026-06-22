@@ -12,7 +12,6 @@ import {
   Eye,
   FileText,
   Image as ImageIcon,
-  Infinity as InfinityIcon,
   Linkedin,
   AtSign,
   Mail,
@@ -286,10 +285,12 @@ export function HowItWorksSection() {
           </h2>
           <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-2xl mx-auto">
             Einmaliger Setup-Aufwand von ungefähr 30 Minuten und du kannst{" "}
-            <span className="inline-flex items-center align-baseline gap-1 font-semibold text-ink">
-              <InfinityIcon className="size-5 text-brand-deep" aria-hidden />
+            <strong className="font-semibold text-ink whitespace-nowrap">
+              <span className="text-brand-deep mr-0.5 text-xl align-[-2px]" aria-hidden>
+                ∞
+              </span>
               unendlich
-            </span>{" "}
+            </strong>{" "}
             viele Leads personalisiert erreichen und überzeugen.
           </p>
         </div>
