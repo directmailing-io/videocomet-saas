@@ -1288,49 +1288,115 @@ function SceneDocGoogleDocs({
         ))}
       </div>
 
-      {/* Document area */}
+      {/* Document area — voll gefuellt wie in der Live-Demo: Title +
+          Subline + Trennlinie + Greeting + Body-Lines + 3 rote Findings +
+          Closing + Signatur-Block */}
       <div
-        className="flex-1 flex justify-center overflow-hidden"
-        style={{ padding: compact ? "6px" : "10px", backgroundColor: "#F8F9FA" }}
+        className="flex-1 flex justify-center overflow-y-hidden"
+        style={{ padding: compact ? "6px" : "16px", backgroundColor: "#F8F9FA" }}
       >
         <div
-          className="bg-white shadow-sm"
+          className="bg-white shadow-sm flex flex-col gap-1.5"
           style={{
-            width: "82%",
-            padding: compact ? "8px 10px" : "12px 16px",
+            width: "78%",
+            padding: compact ? "8px 12px" : "20px 32px",
           }}
         >
+          {/* Top accent */}
           <div
-            className="rounded mb-1.5"
+            className="rounded"
             style={{
               height: 2,
-              width: compact ? 18 : 30,
+              width: compact ? 18 : 36,
               backgroundColor: lead.color,
             }}
           />
+
+          {/* Title */}
           <div
             className="font-bold text-ink leading-tight"
-            style={{ fontSize: compact ? 8 : 11 }}
+            style={{ fontSize: compact ? 8 : 18 }}
           >
             Notiz für {lead.first}
           </div>
+
+          {/* Subline */}
           <div
-            className="text-ink-muted truncate mb-1.5"
-            style={{ fontSize: compact ? 5 : 7 }}
+            className="text-ink-muted"
+            style={{ fontSize: compact ? 5 : 9 }}
           >
             Schnell-Check für {domain}
           </div>
-          <div className="space-y-0.5 mt-1">
-            <div className="h-0.5 bg-ink/15 w-full rounded" />
-            <div className="h-0.5 bg-ink/15 w-5/6 rounded" />
-            <div className="h-0.5 bg-ink/15 w-4/6 rounded" />
-          </div>
+
+          {/* Trennlinie */}
           <div
-            className="mt-2 px-1.5 py-0.5 rounded bg-red-50 border-l-2 border-red-400 font-bold text-red-900"
-            style={{ fontSize: compact ? 5 : 7 }}
+            className="my-1"
+            style={{ height: 1, backgroundColor: "#E2E8F0" }}
+          />
+
+          {/* Greeting */}
+          <div
+            className="font-medium text-ink"
+            style={{ fontSize: compact ? 5 : 9, marginTop: compact ? 0 : 4 }}
           >
-            1. Datenblatt fehlt
+            Hey {lead.first},
           </div>
+
+          {/* Body line cluster 1 — "Ich habe deine Seite angeschaut..." */}
+          <div className="space-y-0.5">
+            <div className="h-0.5 bg-ink/15 w-full rounded" />
+            <div className="h-0.5 bg-ink/15 w-[95%] rounded" />
+            <div className="h-0.5 bg-ink/15 w-[88%] rounded" />
+          </div>
+
+          {/* 3 rote Findings (kompakt) */}
+          {[1, 2, 3].map((n) => (
+            <div
+              key={n}
+              className="rounded border-l-2 border-red-400 bg-red-50 flex items-center gap-1"
+              style={{
+                padding: compact ? "1px 4px" : "4px 8px",
+                marginTop: compact ? 1 : 2,
+              }}
+            >
+              <span
+                className="font-bold text-red-900 rounded-full bg-red-500 text-white flex items-center justify-center shrink-0"
+                style={{
+                  fontSize: compact ? 4 : 7,
+                  width: compact ? 6 : 12,
+                  height: compact ? 6 : 12,
+                }}
+              >
+                {n}
+              </span>
+              <div
+                className="font-bold text-red-900 truncate"
+                style={{ fontSize: compact ? 5 : 8 }}
+              >
+                {n === 1
+                  ? "Kein Datenblatt zum Download"
+                  : n === 2
+                    ? "Keine echten Fallstudien"
+                    : "Stockfoto im Hero-Bild"}
+              </div>
+            </div>
+          ))}
+
+          {/* Body line cluster 2 — Schluss */}
+          <div className="space-y-0.5" style={{ marginTop: compact ? 2 : 6 }}>
+            <div className="h-0.5 bg-ink/15 w-full rounded" />
+            <div className="h-0.5 bg-ink/15 w-[80%] rounded" />
+          </div>
+
+          {/* Closing */}
+          {!compact ? (
+            <div
+              className="text-ink mt-2"
+              style={{ fontSize: 9, fontStyle: "italic" }}
+            >
+              Lieben Gruß
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -1462,24 +1528,20 @@ function MultiGridLayer({
               transform: active ? "scale(1)" : "scale(0.94)",
             }}
           >
-            {leadCount === 4 ? (
-              <LandingPageInner
-                template={template}
-                lead={l}
-                videoSlot
-                fullSize={false}
-                sceneId={sceneId}
-              />
-            ) : (
-              <ThumbnailCard lead={l} minimal={leadCount === 32} />
-            )}
-            {/* Webcam-Video in JEDER Karte — gleicher Stream, gleiche
-                Geometrie. User-Anforderung: "dass da jedes Video wirklich
-                1:1 perfekt identisch aussieht". */}
-            <CellWebcam
-              isSolo={isSolo}
-              leadCount={leadCount}
+            {/* Jede Karte rendert die KOMPLETTE Step-3-Landingpage —
+                personalisiert mit dem jeweiligen Lead. In 16/32 wird das
+                Layout extrem winzig, das ist beabsichtigt: User soll
+                erkennen, dass DIE SELBE LP fuer jeden Lead dupliziert wird. */}
+            <LandingPageInner
+              template={template}
+              lead={l}
+              videoSlot
+              fullSize={false}
+              sceneId={sceneId}
             />
+            {/* Webcam-Video in JEDER Karte an exakt derselben relativen
+                Position wie das Video-Slot der LP. */}
+            <CellWebcam isSolo={isSolo} />
           </div>
         ))}
       </div>
@@ -1491,58 +1553,27 @@ function MultiGridLayer({
  * Identisches Webcam-Element pro Karte. Position/Geometrie haengt vom
  * leadCount-Modus ab.
  */
-function CellWebcam({
-  isSolo,
-  leadCount,
-}: {
-  isSolo: boolean;
-  leadCount: 4 | 16 | 32;
-}) {
-  let style: React.CSSProperties;
-
-  if (leadCount === 4) {
-    // Im LP-Layout: PiP-Kreis bottom-left des LP-Video-Slots (oder Solo-Slot)
-    style = isSolo
-      ? {
-          top: "30%",
-          left: "58%",
-          width: "36%",
-          height: "44%",
-          borderRadius: "6px",
-          boxShadow: "0 6px 14px -4px rgba(15,23,42,0.3)",
-        }
-      : {
-          top: "60%",
-          left: "60%",
-          width: "10%",
-          aspectRatio: "1/1",
-          borderRadius: "9999px",
-          boxShadow:
-            "0 0 0 2px rgba(255,255,255,0.92), 0 6px 14px -4px rgba(15,23,42,0.45)",
-        };
-  } else if (leadCount === 16) {
-    // Mittiger Kreis in jeder Thumbnail-Karte
-    style = {
-      top: "50%",
-      left: "50%",
-      width: "55%",
-      aspectRatio: "1/1",
-      borderRadius: "9999px",
-      transform: "translate(-50%, -45%)",
-      boxShadow: "0 0 0 1.5px rgba(255,255,255,0.95), 0 3px 8px rgba(15,23,42,0.35)",
-    };
-  } else {
-    // 32 — sehr klein, mittig
-    style = {
-      top: "50%",
-      left: "50%",
-      width: "60%",
-      aspectRatio: "1/1",
-      borderRadius: "9999px",
-      transform: "translate(-50%, -45%)",
-      boxShadow: "0 0 0 1px rgba(255,255,255,0.95), 0 2px 5px rgba(15,23,42,0.3)",
-    };
-  }
+function CellWebcam({ isSolo }: { isSolo: boolean }) {
+  // Webcam-PiP sitzt bei JEDEM Layout an derselben relativen Position
+  // im LP-Video-Slot. Bei Solo fuellt die Webcam den ganzen Slot.
+  const style: React.CSSProperties = isSolo
+    ? {
+        top: "30%",
+        left: "58%",
+        width: "36%",
+        height: "44%",
+        borderRadius: "6px",
+        boxShadow: "0 6px 14px -4px rgba(15,23,42,0.3)",
+      }
+    : {
+        top: "60%",
+        left: "60%",
+        width: "10%",
+        aspectRatio: "1/1",
+        borderRadius: "9999px",
+        boxShadow:
+          "0 0 0 1.5px rgba(255,255,255,0.92), 0 3px 8px rgba(15,23,42,0.45)",
+      };
 
   return (
     <div className="absolute overflow-hidden" style={style}>
