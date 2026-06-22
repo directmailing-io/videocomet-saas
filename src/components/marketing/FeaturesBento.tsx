@@ -2,15 +2,21 @@
 
 import * as React from "react";
 import {
-  ArrowRight,
+  AlignLeft,
   Bell,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Globe,
+  HelpCircle,
+  Image as ImageIcon,
   Lock,
-  Maximize2,
+  MousePointerClick,
   Play,
+  Shapes,
   TrendingUp,
-  Volume2,
+  Type,
+  UploadCloud,
 } from "lucide-react";
 import { RevealOnScroll } from "./RevealOnScroll";
 
@@ -85,8 +91,8 @@ export function FeaturesBento() {
 
           <RevealOnScroll delay={500}>
             <FeatureCard
-              title="Landingpage. Builder oder ZIP."
-              sub="Mit dem Schnell-Builder in Minuten gebaut. Oder komplett eigene Website als ZIP hochladen, von Claude generiert."
+              title="Selber bauen, oder einfach hochladen."
+              sub="Schnell-Builder mit allen Blocks in Minuten zusammengesteckt. Oder komplette ZIP-Webseite hochladen, auch direkt von Claude generiert."
             >
               <LandingPageVisual />
             </FeatureCard>
@@ -236,172 +242,161 @@ function FeatureCardMesh({
 }
 
 // ===========================================================================
-// Scroll-Animation — Video-Player mit gescrollter Webseite/Dokument
+// Scroll-Animation — 3-Frame-Storyboard: selbe Seite, 3 Scroll-Positionen
 // ===========================================================================
 
 function ScrollAnimationVisual() {
   return (
-    <div className="relative w-full max-w-[360px] mx-auto">
-      <div
-        aria-hidden
-        className="absolute -inset-x-6 -bottom-6 h-8 rounded-full"
-        style={{
-          background:
-            "radial-gradient(50% 100% at 50% 0%, rgba(124,92,232,0.25), transparent 70%)",
-          filter: "blur(8px)",
-        }}
-      />
+    <div className="relative w-full max-w-[340px] mx-auto">
+      {/* 3 thumbnails: time progression LEFT to RIGHT */}
+      <div className="flex items-center gap-2">
+        {/* T1 — Hero */}
+        <ScrollThumb time="0:02" inactive>
+          <div className="p-1 space-y-0.5">
+            <div className="h-2 rounded-sm bg-[#F4F4F8]" />
+            <div className="h-6 rounded-sm bg-gradient-to-br from-[#E0E7FF] to-[#F3EEFF]" />
+            <div className="h-2 rounded-sm bg-white border border-line/60" />
+            <div className="h-1.5 rounded-sm bg-white border border-line/60" />
+          </div>
+        </ScrollThumb>
 
-      <div
-        className="relative rounded-2xl overflow-hidden border border-line/60 bg-black aspect-video"
-        style={{
-          boxShadow:
-            "0 30px 60px -20px rgba(15,23,42,0.45), 0 10px 25px -8px rgba(15,23,42,0.2)",
-        }}
-      >
-        {/* Inside-Video: Webseite des Kunden, gescrollt */}
-        <div className="absolute inset-0 bg-white">
-          {/* Pseudo-Browser-Bar des Video-Inhalts */}
-          <div className="absolute inset-x-0 top-0 h-3 bg-[#F4F4F8] border-b border-line/80 flex items-center gap-1 px-2">
-            <div className="size-1 rounded-full bg-[#FF5F57]" />
-            <div className="size-1 rounded-full bg-[#FEBC2E]" />
-            <div className="size-1 rounded-full bg-[#28C840]" />
-            <div className="ml-1 text-[5px] text-ink-muted tabular-nums">
-              kunde.de
+        <ScrollArrow />
+
+        {/* T2 — Karriere (current, highlighted) */}
+        <ScrollThumb time="0:14" label="Im Video" active>
+          <div className="p-1 space-y-0.5">
+            <div className="text-[4.5px] font-bold tracking-[0.1em] uppercase text-brand-deep px-0.5">
+              Karriere
             </div>
-          </div>
-
-          {/* Gescrollter Seiteninhalt (Container fix, Inhalt nach oben verschoben) */}
-          <div
-            className="absolute inset-x-0 top-3 bottom-0 overflow-hidden"
-            style={{ paddingRight: 8 }}
-          >
-            <div
-              className="absolute inset-x-0 top-0 flex flex-col gap-2 p-3"
-              style={{ transform: "translateY(-58px)" }}
-            >
-              {/* Hero (teilweise ausserhalb) */}
-              <div className="h-12 rounded-md bg-gradient-to-br from-[#E0E7FF] to-[#F3EEFF] p-2 flex items-end gap-2 shrink-0">
-                <div className="size-5 rounded bg-brand-deep" />
-                <div className="flex-1">
-                  <div className="h-2 w-3/4 bg-brand-deep/40 rounded mb-1" />
-                  <div className="h-1.5 w-1/2 bg-brand-deep/20 rounded" />
-                </div>
-              </div>
-              {/* Section 1 */}
-              <div className="rounded-md border border-line/60 bg-white p-2 shrink-0">
-                <div className="h-1.5 w-2/3 bg-ink/20 rounded mb-1.5" />
-                <div className="h-1 w-full bg-ink/10 rounded mb-1" />
-                <div className="h-1 w-5/6 bg-ink/10 rounded" />
-              </div>
-              {/* Section 2 — Karriere */}
-              <div className="rounded-md border border-line/60 bg-white p-2 shrink-0">
-                <div className="text-[5.5px] font-bold tracking-[0.15em] uppercase text-brand-deep mb-1">
-                  Karriere
-                </div>
-                <div className="h-1 w-full bg-ink/10 rounded mb-1" />
-                <div className="h-1 w-3/4 bg-ink/10 rounded mb-1.5" />
-                <div className="grid grid-cols-2 gap-1">
-                  <div className="h-4 rounded bg-brand-soft" />
-                  <div className="h-4 rounded bg-brand-soft" />
-                </div>
-              </div>
-              {/* Section 3 — Testimonials */}
-              <div className="rounded-md border border-line/60 bg-white p-2 shrink-0">
-                <div className="flex gap-1.5">
-                  <div className="size-3 rounded-full bg-ink/15" />
-                  <div className="flex-1">
-                    <div className="h-1 w-3/4 bg-ink/15 rounded mb-1" />
-                    <div className="h-1 w-1/2 bg-ink/10 rounded" />
-                  </div>
-                </div>
-              </div>
-              {/* Section 4 */}
-              <div className="rounded-md border border-line/60 bg-white p-2 shrink-0 grid grid-cols-3 gap-1">
-                <div className="h-3 rounded bg-ink/5" />
-                <div className="h-3 rounded bg-ink/5" />
-                <div className="h-3 rounded bg-ink/5" />
-              </div>
+            <div className="grid grid-cols-2 gap-0.5">
+              <div className="h-3 rounded-sm bg-brand-soft/80" />
+              <div className="h-3 rounded-sm bg-brand-soft/80" />
             </div>
+            <div className="h-1 rounded-sm bg-ink/15 w-full" />
+            <div className="h-1 rounded-sm bg-ink/15 w-3/4" />
+            <div className="h-1 rounded-sm bg-ink/15 w-1/2" />
           </div>
+        </ScrollThumb>
 
-          {/* Scrollbar rechts */}
-          <div className="absolute right-1.5 top-5 bottom-9 w-[3px] rounded-full bg-ink/8">
-            <div
-              className="absolute inset-x-0 rounded-full bg-ink/35"
-              style={{ top: "32%", height: "26%" }}
-            />
+        <ScrollArrow />
+
+        {/* T3 — Kontakt */}
+        <ScrollThumb time="0:28" inactive>
+          <div className="p-1 space-y-0.5">
+            <div className="h-1.5 rounded-sm bg-white border border-line/60" />
+            <div className="h-2 rounded-sm bg-white border border-line/60" />
+            <div className="h-4 rounded-sm bg-white border border-line/60" />
+            <div className="h-2 rounded-sm bg-ink/15" />
           </div>
-        </div>
+        </ScrollThumb>
+      </div>
 
-        {/* Webcam STILL IMAGE — bottom-left, HINTER den Controls */}
+      {/* Caption: scroll explanation */}
+      <div className="mt-6 flex items-center justify-center gap-2.5">
         <div
-          className="absolute left-3 bottom-3 size-16 rounded-2xl overflow-hidden border-2 border-white/95 shadow-[0_8px_22px_-4px_rgba(0,0,0,0.55)]"
-          style={{ zIndex: 1 }}
+          className="size-7 rounded-full bg-brand text-white flex items-center justify-center shadow-md"
+          style={{ boxShadow: "0 8px 18px -4px rgba(124,92,232,0.5)" }}
         >
-          <img
-            src="/demo-assets/webcam-still.jpg"
-            alt=""
-            className="w-full h-full object-cover"
-          />
+          <ChevronDown className="size-4" />
         </div>
-
-        {/* Center play button */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 3 }}>
-          <div
-            className="size-14 rounded-full flex items-center justify-center backdrop-blur-md border border-white/30"
-            style={{
-              background: "rgba(0,0,0,0.45)",
-              boxShadow: "0 10px 30px -6px rgba(0,0,0,0.5)",
-            }}
-          >
-            <Play className="size-5 text-white fill-white ml-0.5" />
-          </div>
-        </div>
-
-        {/* Bottom controls — ueber dem Webcam-Bild */}
-        <div
-          className="absolute inset-x-0 bottom-0 px-3.5 pt-8 pb-2.5"
-          style={{
-            zIndex: 2,
-            background:
-              "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0) 100%)",
-          }}
-        >
-          <div className="h-[3px] bg-white/25 rounded-full mb-2 overflow-hidden">
-            <div
-              className="h-full bg-white rounded-full relative"
-              style={{ width: "38%" }}
-            >
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 size-2.5 rounded-full bg-white shadow-md" />
-            </div>
-          </div>
-          <div className="flex items-center justify-between text-white">
-            <div className="flex items-center gap-2">
-              <Play className="size-3 fill-white" />
-              <span className="text-[10px] font-medium tabular-nums">
-                0:32 / 1:24
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-white/85">
-              <span className="text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-white/15">
-                1080p
-              </span>
-              <Volume2 className="size-3" />
-              <Maximize2 className="size-3" />
-            </div>
-          </div>
+        <div className="text-[12px] font-semibold text-ink leading-tight">
+          Selbe Seite.<br />
+          <span className="text-ink-muted font-medium">
+            Automatisch gescrollt im Video.
+          </span>
         </div>
       </div>
     </div>
   );
 }
 
+function ScrollThumb({
+  time,
+  label,
+  active,
+  inactive,
+  children,
+}: {
+  time: string;
+  label?: string;
+  active?: boolean;
+  inactive?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="relative flex-1">
+      <div
+        className={`relative rounded-lg overflow-hidden bg-white aspect-[3/4] border ${
+          active
+            ? "border-2 border-brand"
+            : "border-line/70"
+        } ${inactive ? "opacity-60" : ""}`}
+        style={
+          active
+            ? {
+                boxShadow:
+                  "0 0 0 4px rgba(124,92,232,0.18), 0 14px 28px -10px rgba(15,23,42,0.35)",
+              }
+            : { boxShadow: "0 6px 14px -8px rgba(15,23,42,0.2)" }
+        }
+      >
+        {children}
+        {/* Bottom video controls — only on active */}
+        {active ? (
+          <div
+            className="absolute inset-x-0 bottom-0 px-1 py-0.5 flex items-center justify-between"
+            style={{
+              background:
+                "linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0) 100%)",
+            }}
+          >
+            <Play className="size-1.5 fill-white text-white" />
+            <span className="text-[7px] text-white/95 font-medium tabular-nums">
+              {time}
+            </span>
+          </div>
+        ) : (
+          <div className="absolute inset-x-0 bottom-0 px-1 py-0.5 bg-black/45 flex items-center justify-end">
+            <span className="text-[7px] text-white/85 font-medium tabular-nums">
+              {time}
+            </span>
+          </div>
+        )}
+      </div>
+      {label ? (
+        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[8px] font-bold bg-brand-deep text-white rounded px-1.5 py-0.5 shadow-md whitespace-nowrap">
+          {label}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ScrollArrow() {
+  return (
+    <div className="shrink-0 flex flex-col items-center gap-0.5">
+      <ChevronRight className="size-3 text-ink-muted/40" />
+      <span className="text-[6.5px] font-bold tracking-wider uppercase text-ink-muted/50">
+        Scroll
+      </span>
+      <ChevronDown className="size-3 text-brand-deep/70" />
+    </div>
+  );
+}
+
 // ===========================================================================
-// 2) Landingpage — ECHTE LP mit Brand, Nav, Hero, Trust-Row
+// 2) Landingpage — LP-Builder mit Claude/ZIP-Indikator
 // ===========================================================================
 
 function LandingPageVisual() {
+  const BLOCKS = [
+    { label: "Hero", icon: <Type className="size-2.5" /> },
+    { label: "Text", icon: <AlignLeft className="size-2.5" /> },
+    { label: "Bild", icon: <ImageIcon className="size-2.5" /> },
+    { label: "CTA", icon: <MousePointerClick className="size-2.5" /> },
+    { label: "Logo", icon: <Shapes className="size-2.5" /> },
+    { label: "FAQ", icon: <HelpCircle className="size-2.5" /> },
+  ];
   return (
     <div className="relative w-full max-w-[400px] mx-auto">
       <div
@@ -421,115 +416,98 @@ function LandingPageVisual() {
             "0 30px 60px -20px rgba(15,23,42,0.4), 0 8px 22px -8px rgba(15,23,42,0.18)",
         }}
       >
-        {/* Browser chrome */}
-        <div className="h-7 bg-[#F4F4F8] border-b border-line flex items-center px-3 gap-1.5">
-          <div className="size-2 rounded-full bg-[#FF5F57]" />
-          <div className="size-2 rounded-full bg-[#FEBC2E]" />
-          <div className="size-2 rounded-full bg-[#28C840]" />
-          <div className="flex-1 mx-3 h-4 rounded-md bg-white border border-line flex items-center px-2.5 gap-1.5">
-            <div className="size-1.5 rounded-full bg-emerald-500" />
-            <span className="text-[8px] text-ink-muted truncate font-medium">
-              domain.de/max-mustermann
-            </span>
+        {/* Toolbar */}
+        <div className="h-8 bg-[#FAFAFE] border-b border-line flex items-center px-2.5 gap-2">
+          <div className="flex items-center gap-1">
+            <div className="size-1.5 rounded-full bg-[#FF5F57]" />
+            <div className="size-1.5 rounded-full bg-[#FEBC2E]" />
+            <div className="size-1.5 rounded-full bg-[#28C840]" />
           </div>
-          <div className="size-2.5 rounded-sm bg-line" />
-        </div>
-
-        {/* Nav */}
-        <div className="h-8 bg-white border-b border-line flex items-center px-4 gap-4">
-          <div className="flex items-center gap-1.5">
-            <div
-              className="size-3.5 rounded"
-              style={{
-                background:
-                  "conic-gradient(from 220deg at 50% 50%, #7C5CE8, #D946EF, #7C5CE8)",
-              }}
+          <div className="ml-1.5 text-[9px] font-extrabold text-ink tracking-tight">
+            Builder
+          </div>
+          <span className="text-[8px] text-ink-muted">/ max-mustermann</span>
+          <div className="flex-1" />
+          {/* Claude-Import-Alternative */}
+          <div className="inline-flex items-center gap-1.5 text-[8px] font-semibold bg-white border border-line rounded-md px-1.5 py-1 shadow-sm">
+            <img
+              src="https://cdn.simpleicons.org/anthropic/D97757"
+              alt=""
+              className="size-3"
             />
-            <span className="text-[9px] font-extrabold tracking-tight text-ink">
-              ZENITH
-            </span>
-          </div>
-          <div className="flex-1 flex justify-center gap-3.5 text-[7.5px] font-medium text-ink-muted">
-            <span>Plattform</span>
-            <span>Preise</span>
-            <span>Kunden</span>
-            <span>Über uns</span>
-          </div>
-          <div className="text-[7.5px] font-semibold text-ink">Login</div>
-          <div className="text-[7.5px] font-bold bg-ink text-white rounded-md px-2 py-1">
-            Demo
+            <span className="font-mono tabular-nums">claude-site.zip</span>
+            <UploadCloud className="size-2.5 text-ink-muted" />
           </div>
         </div>
 
-        {/* Hero */}
-        <div
-          className="p-5 flex items-center gap-4 relative overflow-hidden"
-          style={{
-            background:
-              "linear-gradient(135deg, #FAFAFE 0%, #FFFFFF 70%, #F3EEFF 100%)",
-          }}
-        >
-          <div className="flex-1 min-w-0 relative">
-            <div className="inline-flex items-center gap-1.5 text-[7px] font-bold tracking-[0.15em] uppercase text-brand-deep bg-brand-soft rounded-full px-2 py-1 mb-2">
-              <span className="size-1 rounded-full bg-brand-deep" />
-              Persönlich für dich
+        <div className="flex" style={{ height: 240 }}>
+          {/* Block sidebar */}
+          <div className="w-[78px] border-r border-line bg-[#FAFAFE] p-2 flex flex-col gap-1">
+            <div className="text-[6.5px] font-bold uppercase tracking-[0.1em] text-ink-muted px-0.5 mb-1">
+              Blöcke
             </div>
-            <div className="text-[15px] font-extrabold text-ink leading-[1.05] tracking-[-0.02em]">
-              Max, schau dir
-              <br />
-              das an.
-            </div>
-            <div className="text-[8px] text-ink-muted mt-2 leading-snug">
-              Drei Punkte zu Ihrer Webseite. <br />
-              In 90 Sekunden, persönlich erklärt.
-            </div>
-            <div className="mt-3 inline-flex items-center gap-1 text-[8px] font-bold text-white bg-ink rounded-full px-3 py-1.5 shadow-md">
-              Termin sichern
-              <ArrowRight className="size-2.5" />
-            </div>
-          </div>
-
-          {/* Video tile */}
-          <div className="shrink-0 w-[96px] aspect-video rounded-lg overflow-hidden border border-white/80 shadow-[0_10px_24px_-8px_rgba(0,0,0,0.3)] relative">
-            <div
-              className="absolute inset-0"
-              style={{
-                background:
-                  "linear-gradient(135deg, #6D28D9 0%, #7C5CE8 35%, #D946EF 100%)",
-              }}
-            />
-            <div className="absolute inset-0 flex items-center justify-center">
+            {BLOCKS.map((b) => (
               <div
-                className="size-6 rounded-full backdrop-blur-md border border-white/30 flex items-center justify-center"
-                style={{ background: "rgba(0,0,0,0.4)" }}
+                key={b.label}
+                className="text-[8.5px] font-semibold text-ink bg-white border border-line rounded-md px-1.5 py-1 flex items-center gap-1.5"
               >
-                <Play className="size-2.5 fill-white text-white ml-px" />
+                {b.icon}
+                {b.label}
               </div>
-            </div>
-            <div className="absolute inset-x-1.5 bottom-1.5">
-              <div className="h-[1.5px] bg-white/30 rounded-full overflow-hidden">
-                <div className="h-full bg-white rounded-full w-2/5" />
-              </div>
-            </div>
+            ))}
           </div>
-        </div>
 
-        {/* Trust row */}
-        <div className="px-4 py-2.5 bg-white border-t border-line flex items-center justify-between gap-3">
-          <div className="text-[6.5px] font-bold tracking-[0.18em] uppercase text-ink-muted shrink-0">
-            Vertraut von
-          </div>
-          <div className="flex-1 flex items-center justify-around opacity-55">
-            <span className="text-[9px] font-extrabold tracking-tighter italic">
-              forbes
-            </span>
-            <span className="text-[9px] font-black tracking-tight">t3n</span>
-            <span className="text-[8px] font-bold tracking-widest">
-              HORIZONT
-            </span>
-            <span className="text-[8px] font-bold tracking-wider">
-              CAPITAL
-            </span>
+          {/* Canvas */}
+          <div className="flex-1 bg-[#F4F4F8] p-2.5 space-y-1.5 overflow-hidden relative">
+            <div className="text-[6.5px] font-bold tracking-[0.1em] uppercase text-ink-muted mb-1">
+              Canvas · 1280 px
+            </div>
+
+            {/* Hero block — selected */}
+            <div
+              className="rounded-md bg-white p-2 relative shadow-md"
+              style={{ border: "2px solid #7C5CE8" }}
+            >
+              <div className="absolute -top-1.5 left-2 text-[6.5px] font-bold uppercase tracking-wider bg-brand-deep text-white rounded px-1 py-0.5">
+                Hero
+              </div>
+              <div className="text-[6px] font-bold tracking-wider uppercase text-brand-deep mb-0.5 pt-0.5">
+                Persönlich für dich
+              </div>
+              <div className="text-[10px] font-extrabold text-ink leading-tight">
+                Max, schau dir das an.
+              </div>
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <div className="text-[6.5px] font-bold text-white bg-ink rounded px-1.5 py-0.5">
+                  Termin sichern
+                </div>
+                <div className="size-3.5 rounded bg-gradient-to-br from-[#7C5CE8] to-[#D946EF]" />
+              </div>
+              {/* Handles */}
+              <div
+                className="absolute -left-1 top-1/2 -translate-y-1/2 size-1.5 rounded-full border border-white"
+                style={{ background: "#7C5CE8" }}
+              />
+              <div
+                className="absolute -right-1 top-1/2 -translate-y-1/2 size-1.5 rounded-full border border-white"
+                style={{ background: "#7C5CE8" }}
+              />
+            </div>
+
+            {/* Text block */}
+            <div className="rounded-md bg-white border border-line p-2">
+              <div className="text-[6px] font-bold uppercase tracking-wider text-ink-muted mb-1">
+                Text
+              </div>
+              <div className="h-1 w-full bg-ink/15 rounded mb-1" />
+              <div className="h-1 w-5/6 bg-ink/15 rounded mb-1" />
+              <div className="h-1 w-2/3 bg-ink/15 rounded" />
+            </div>
+
+            {/* Drop zone */}
+            <div className="rounded-md border-2 border-dashed border-brand/40 bg-brand-soft/30 p-1.5 text-center text-[7.5px] font-bold text-brand-deep">
+              + Block hier ablegen
+            </div>
           </div>
         </div>
       </div>
@@ -628,7 +606,7 @@ function BriefVisual() {
             Sehr geehrter Herr Mustermann,
           </div>
 
-          {/* Body — Lorem ipsum */}
+          {/* Body — Lorem ipsum mit URL */}
           <div
             className="text-[7px] leading-[1.55] text-ink"
             style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
@@ -643,8 +621,18 @@ function BriefVisual() {
               Stet clita kasd gubergren, no sea takimata sanctus est.
             </p>
             <p className="mt-1.5">
-              Duis autem vel eum iriure dolor in hendrerit in vulputate
-              velit esse molestie consequat.
+              Besuchen Sie:{" "}
+              <span
+                className="inline-block font-mono font-bold text-[6.5px] px-1 py-px rounded"
+                style={{
+                  fontFamily:
+                    "ui-monospace, SFMono-Regular, Menlo, monospace",
+                  backgroundColor: "#F3EEFF",
+                  color: "#5232C7",
+                }}
+              >
+                domain.de/max-mustermann
+              </span>
             </p>
           </div>
 
@@ -929,40 +917,46 @@ function ABVisual() {
 function IntegrationsVisual() {
   const TARGETS: { name: string; src: string }[] = [
     { name: "HubSpot", src: "https://cdn.simpleicons.org/hubspot" },
+    { name: "Salesforce", src: "https://cdn.simpleicons.org/salesforce" },
+    { name: "Pipedrive", src: "https://cdn.simpleicons.org/pipedrive" },
+    { name: "Close", src: "/brand-logos/close-mark.svg" },
+    { name: "Slack", src: "https://cdn.simpleicons.org/slack" },
     { name: "Zapier", src: "https://cdn.simpleicons.org/zapier" },
     { name: "Make", src: "https://cdn.simpleicons.org/make" },
-    { name: "Close", src: "/brand-logos/close-mark.svg" },
+    { name: "n8n", src: "https://cdn.simpleicons.org/n8n" },
+    { name: "ActiveCampaign", src: "https://cdn.simpleicons.org/activecampaign" },
+    { name: "Mailchimp", src: "https://cdn.simpleicons.org/mailchimp" },
   ];
   return (
-    <div className="relative w-full max-w-[520px] mx-auto py-4">
-      <div className="flex justify-center mb-4">
-        <div className="inline-flex items-center gap-3 pr-4 pl-2 py-2 rounded-full bg-white shadow-[0_12px_28px_-14px_rgba(15,23,42,0.3)] border border-line">
+    <div className="relative w-full max-w-[560px] mx-auto py-2">
+      <div className="flex justify-center mb-3">
+        <div className="inline-flex items-center gap-2.5 pr-3.5 pl-1.5 py-1.5 rounded-full bg-white shadow-[0_12px_28px_-14px_rgba(15,23,42,0.3)] border border-line">
           <div
-            className="size-8 rounded-full flex items-center justify-center text-white shadow-md"
+            className="size-7 rounded-full flex items-center justify-center text-white shadow-md"
             style={{ background: "linear-gradient(135deg, #AA8CF5, #5232C7)" }}
           >
-            <Bell className="size-4" />
+            <Bell className="size-3.5" />
           </div>
           <div>
-            <div className="text-[13px] font-bold text-ink leading-tight">
+            <div className="text-[12px] font-bold text-ink leading-tight">
               CTA geklickt
             </div>
-            <div className="text-[10px] text-ink-muted leading-tight mt-0.5">
+            <div className="text-[9px] text-ink-muted leading-tight mt-0.5">
               Max Mustermann · gerade eben
             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex justify-center mb-3 h-10">
+      <div className="flex justify-center mb-2.5 h-6">
         <svg
-          width="280"
-          height="40"
-          viewBox="0 0 280 40"
+          width="220"
+          height="24"
+          viewBox="0 0 220 24"
           className="text-ink-muted/35"
         >
           <path
-            d="M140 0 L140 14 M40 38 L140 16 L240 38"
+            d="M110 0 L110 10 M20 22 L110 12 L200 22"
             stroke="currentColor"
             strokeWidth="1.5"
             fill="none"
@@ -973,25 +967,26 @@ function IntegrationsVisual() {
         </svg>
       </div>
 
-      <div className="grid grid-cols-4 gap-3">
+      {/* 5x2 grid */}
+      <div className="grid grid-cols-5 gap-2.5">
         {TARGETS.map((t) => (
           <div
             key={t.name}
-            className="rounded-2xl bg-white border border-line shadow-[0_10px_24px_-14px_rgba(15,23,42,0.22)] p-3 flex flex-col items-center gap-2 relative"
+            className="rounded-xl bg-white border border-line shadow-[0_8px_18px_-14px_rgba(15,23,42,0.2)] px-2 py-2.5 flex flex-col items-center gap-1.5 relative"
           >
-            <div className="h-8 flex items-center justify-center">
+            <div className="h-7 flex items-center justify-center">
               <img
                 src={t.src}
                 alt={t.name}
                 loading="lazy"
-                className="max-h-8 w-auto object-contain"
+                className="max-h-7 w-auto object-contain"
               />
             </div>
-            <div className="text-[11px] font-semibold text-ink text-center leading-tight">
+            <div className="text-[9.5px] font-semibold text-ink text-center leading-tight">
               {t.name}
             </div>
-            <div className="absolute -top-1.5 -right-1.5 size-4 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-md">
-              <CheckCircle2 className="size-3" />
+            <div className="absolute -top-1 -right-1 size-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow">
+              <CheckCircle2 className="size-2.5" />
             </div>
           </div>
         ))}
