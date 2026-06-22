@@ -2,27 +2,35 @@
 
 import * as React from "react";
 import {
+  ArrowRight,
   Bell,
   CheckCircle2,
-  Database,
   Eye,
-  FileText,
-  Globe,
-  Mail,
+  Maximize2,
   MousePointerClick,
-  PenLine,
+  Play,
   PlayCircle,
   TrendingUp,
+  Volume2,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { RevealOnScroll } from "./RevealOnScroll";
 
 /**
- * Features-Bento — Style nach User-Referenz:
- *   - Helle Cards mit fokussiertem zentriertem Visual oben
- *   - Title + Sub UNTER dem Visual, zentriert
- *   - Floating Mockups mit Schatten + Ghost-Layers fuer Tiefe
- *   - 1 grosse colorful-mesh-Card als visueller Anker (Anbindungen)
+ * Features-Bento — Polished Edition
+ *
+ * Layout:
+ *   - 2-col-Grid auf desktop (cards groesser, mehr Platz fuer Detail)
+ *   - 6 helle Cards mit zentriertem realistischen UI-Mockup
+ *   - 1 wide Hero-Card mit colorful mesh-gradient (Anbindungen)
+ *
+ * Visuals:
+ *   - Video → echter Video-Player (NICHT wie eine LP)
+ *   - Landingpage → echte LP mit Brand-Logo, Nav, Hero, Trust-Row
+ *   - Brief → DIN-Padding, echter Body-Text, REAL QR-Code
+ *   - Push → polished Notification-Stack
+ *   - Analytics → polished Mini-Dashboard
+ *   - A/B → polished Variant-Compare
+ *   - Anbindungen → workflow-diagram mit echten Brand-Logos
  */
 export function FeaturesBento() {
   return (
@@ -64,23 +72,23 @@ export function FeaturesBento() {
           </RevealOnScroll>
         </div>
 
-        {/* Bento Grid — 3-column layout, alles consistent */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Bento Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
           <RevealOnScroll delay={400}>
             <FeatureCard
               title="Persönliche Videos in Serie."
               sub="Eine Aufnahme reicht. Jeder Lead bekommt sein eigenes Video, automatisch zusammengesetzt."
             >
-              <VideoVisual />
+              <VideoPlayerVisual />
             </FeatureCard>
           </RevealOnScroll>
 
           <RevealOnScroll delay={500}>
             <FeatureCard
               title="Eine Landingpage pro Lead."
-              sub="Vorname, Firma und das Video sauber im Hero. Vollständig automatisch generiert."
+              sub="Vorname, Firma und das Video sauber im Hero. Komplett automatisch generiert."
             >
-              <LandingVisual />
+              <LandingPageVisual />
             </FeatureCard>
           </RevealOnScroll>
 
@@ -96,7 +104,7 @@ export function FeaturesBento() {
           <RevealOnScroll delay={700}>
             <FeatureCard
               title="Live, sobald jemand reagiert."
-              sub="Push-Notifications für jede Öffnung, jeden Klick. Du bist immer informiert."
+              sub="Push-Notifications für jede Öffnung und jeden Klick. Du bist immer informiert."
             >
               <PushVisual />
             </FeatureCard>
@@ -120,8 +128,8 @@ export function FeaturesBento() {
             </FeatureCard>
           </RevealOnScroll>
 
-          {/* Wide hero-card — Anbindungen mit colorful mesh-bg */}
-          <RevealOnScroll delay={1050} className="md:col-span-2 lg:col-span-3">
+          {/* Wide mesh card */}
+          <RevealOnScroll delay={1050} className="md:col-span-2">
             <FeatureCardMesh
               title="Eingebunden in deine Tools."
               sub="Jedes Tracking-Event landet automatisch in deinem CRM oder Automation-Tool. Per Webhook, ohne Umweg."
@@ -136,7 +144,7 @@ export function FeaturesBento() {
 }
 
 // ---------------------------------------------------------------------------
-// Card Shell
+// Card Shells
 // ---------------------------------------------------------------------------
 
 function FeatureCard({
@@ -149,7 +157,7 @@ function FeatureCard({
   sub: string;
 }) {
   return (
-    <div className="relative h-full overflow-hidden rounded-3xl border border-line bg-gradient-to-b from-white to-[#FAFAFE] p-7 md:p-8 flex flex-col shadow-[0_4px_22px_-12px_rgba(15,23,42,0.12)] transition-shadow hover:shadow-[0_8px_30px_-12px_rgba(15,23,42,0.18)]">
+    <div className="relative h-full overflow-hidden rounded-3xl border border-line bg-gradient-to-b from-white to-[#FAFAFE] p-8 md:p-10 flex flex-col shadow-[0_4px_22px_-12px_rgba(15,23,42,0.12)] transition-shadow hover:shadow-[0_8px_30px_-12px_rgba(15,23,42,0.18)]">
       <div
         aria-hidden
         className="absolute inset-x-0 top-0 h-px"
@@ -158,14 +166,14 @@ function FeatureCard({
             "linear-gradient(90deg, transparent, rgba(255,255,255,0.9), transparent)",
         }}
       />
-      <div className="relative flex-1 flex items-center justify-center min-h-[240px]">
+      <div className="relative flex-1 flex items-center justify-center min-h-[320px] mb-8">
         {children}
       </div>
-      <div className="text-center mt-6">
-        <h3 className="text-[19px] md:text-xl font-bold tracking-[-0.015em] text-ink leading-tight text-balance">
+      <div className="text-center">
+        <h3 className="text-[22px] md:text-[26px] font-bold tracking-[-0.02em] text-ink leading-[1.15] text-balance">
           {title}
         </h3>
-        <p className="mt-3 text-sm text-ink-muted leading-relaxed text-balance max-w-[28ch] mx-auto">
+        <p className="mt-3 text-[15px] text-ink-muted leading-relaxed text-balance max-w-[36ch] mx-auto">
           {sub}
         </p>
       </div>
@@ -183,8 +191,7 @@ function FeatureCardMesh({
   sub: string;
 }) {
   return (
-    <div className="relative h-full overflow-hidden rounded-3xl border border-line p-7 md:p-10 flex flex-col md:flex-row gap-8 md:gap-10 items-stretch shadow-[0_4px_22px_-12px_rgba(15,23,42,0.12)]">
-      {/* Mesh gradient background */}
+    <div className="relative h-full overflow-hidden rounded-3xl border border-line p-8 md:p-12 flex flex-col md:flex-row gap-10 md:gap-14 items-center shadow-[0_4px_22px_-12px_rgba(15,23,42,0.12)]">
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
@@ -194,7 +201,6 @@ function FeatureCardMesh({
           filter: "saturate(1.15)",
         }}
       />
-      {/* Fine grain noise */}
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none opacity-[0.4] mix-blend-overlay"
@@ -204,17 +210,15 @@ function FeatureCardMesh({
         }}
       />
 
-      {/* Visual */}
-      <div className="relative flex-1 flex items-center justify-center min-h-[260px]">
+      <div className="relative flex-1 flex items-center justify-center min-h-[280px] w-full">
         {children}
       </div>
 
-      {/* Text */}
-      <div className="relative md:w-[340px] md:shrink-0 md:self-center text-center md:text-left">
-        <h3 className="text-2xl md:text-3xl font-bold tracking-[-0.02em] text-ink leading-tight text-balance">
+      <div className="relative md:w-[360px] md:shrink-0 text-center md:text-left">
+        <h3 className="text-[26px] md:text-[32px] font-bold tracking-[-0.02em] text-ink leading-[1.1] text-balance">
           {title}
         </h3>
-        <p className="mt-3 text-sm md:text-base text-ink-soft leading-relaxed text-balance">
+        <p className="mt-4 text-[15px] md:text-base text-ink-soft leading-relaxed text-balance">
           {sub}
         </p>
       </div>
@@ -222,294 +226,114 @@ function FeatureCardMesh({
   );
 }
 
-// ---------------------------------------------------------------------------
-// 1) Videogenerierung — Floating LP-Card mit Video-Hero
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// 1) Videogenerierung — ECHTER Video-Player
+// ===========================================================================
 
-function VideoVisual() {
+function VideoPlayerVisual() {
   return (
-    <div className="relative w-full max-w-[300px] aspect-[16/12] mx-auto">
-      {/* Ghost 2 */}
+    <div className="relative w-full max-w-[360px] mx-auto">
       <div
         aria-hidden
-        className="absolute inset-0 rounded-2xl bg-white border border-line/60"
+        className="absolute -inset-x-6 -bottom-6 h-8 rounded-full"
         style={{
-          transform: "translate(-20px, -10px) rotate(-4deg)",
-          opacity: 0.45,
-          filter: "blur(1px)",
-          boxShadow: "0 18px 40px -16px rgba(15,23,42,0.25)",
+          background:
+            "radial-gradient(50% 100% at 50% 0%, rgba(124,92,232,0.25), transparent 70%)",
+          filter: "blur(8px)",
         }}
       />
-      {/* Ghost 1 */}
+
       <div
-        aria-hidden
-        className="absolute inset-0 rounded-2xl bg-white border border-line/80"
-        style={{
-          transform: "translate(-10px, -4px) rotate(-2deg)",
-          opacity: 0.75,
-          boxShadow: "0 22px 50px -18px rgba(15,23,42,0.30)",
-        }}
-      />
-      {/* Front */}
-      <div
-        className="absolute inset-0 rounded-2xl overflow-hidden border border-line bg-white"
+        className="relative rounded-2xl overflow-hidden border border-line/60 bg-black aspect-video"
         style={{
           boxShadow:
-            "0 30px 60px -20px rgba(15,23,42,0.4), 0 8px 22px -8px rgba(15,23,42,0.18)",
+            "0 30px 60px -20px rgba(15,23,42,0.45), 0 10px 25px -8px rgba(15,23,42,0.2)",
         }}
       >
-        <BrowserMock>
-          <div
-            className="relative h-full p-4 flex items-center gap-3"
-            style={{
-              background: "linear-gradient(135deg, #7C5CE8, #5232C7)",
-            }}
-          >
-            <div className="flex-1 min-w-0">
-              <div className="text-[8px] font-bold tracking-[0.2em] uppercase text-white/80 mb-1.5">
-                Persönlich für dich
-              </div>
-              <div className="text-[14px] font-extrabold text-white leading-[1.05]">
-                Max Mustermann,
-                <br />
-                schau dir das an.
-              </div>
-              <div className="mt-2 inline-flex text-[9px] font-bold text-ink bg-white rounded px-2 py-1 shadow-sm">
-                Termin sichern →
-              </div>
-            </div>
-            <div className="shrink-0 size-14 rounded-full overflow-hidden border-2 border-white shadow-xl">
-              <video
-                src="/demo-assets/webcam.mp4"
-                muted
-                autoPlay
-                loop
-                playsInline
-                preload="metadata"
-                className="w-full h-full object-cover"
-              />
-            </div>
-          </div>
-        </BrowserMock>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 2) Landingpage — Browser mit klarer LP-Komposition
-// ---------------------------------------------------------------------------
-
-function LandingVisual() {
-  return (
-    <div className="relative w-full max-w-[300px] aspect-[16/12] mx-auto">
-      {/* Ghosts */}
-      <div
-        aria-hidden
-        className="absolute inset-0 rounded-2xl bg-white border border-line/60"
-        style={{
-          transform: "translate(-20px, -10px) rotate(-4deg)",
-          opacity: 0.45,
-          filter: "blur(1px)",
-          boxShadow: "0 18px 40px -16px rgba(15,23,42,0.25)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="absolute inset-0 rounded-2xl bg-white border border-line/80"
-        style={{
-          transform: "translate(-10px, -4px) rotate(-2deg)",
-          opacity: 0.75,
-          boxShadow: "0 22px 50px -18px rgba(15,23,42,0.30)",
-        }}
-      />
-      {/* Front */}
-      <div
-        className="absolute inset-0 rounded-2xl overflow-hidden border border-line bg-white"
-        style={{
-          boxShadow:
-            "0 30px 60px -20px rgba(15,23,42,0.4), 0 8px 22px -8px rgba(15,23,42,0.18)",
-        }}
-      >
-        <BrowserMock url="deine-domain.de/lisa">
-          <div className="h-full flex flex-col">
-            {/* Header */}
-            <div className="h-6 bg-white border-b border-line flex items-center px-3 gap-1.5">
-              <div className="size-2.5 rounded bg-brand" />
-              <div className="text-[7px] font-extrabold tracking-wider uppercase text-ink">
-                Dein Logo
-              </div>
-              <div className="flex-1" />
-              <div className="text-[6px] text-ink-muted flex gap-2">
-                <span>Home</span>
-                <span>Über</span>
-              </div>
-            </div>
-            {/* Hero */}
-            <div className="flex-1 p-3 flex items-center gap-2 bg-gradient-to-br from-[#F3EEFF] to-white">
-              <div className="flex-1 min-w-0">
-                <div className="text-[6px] font-bold tracking-wider uppercase text-brand-deep mb-0.5">
-                  Persönlich für dich
-                </div>
-                <div className="text-[12px] font-extrabold text-ink leading-[1.05]">
-                  Lisa,
-                  <br />
-                  schau dir das an.
-                </div>
-                <div className="mt-1.5 inline-block text-[7px] font-bold text-white rounded px-1.5 py-0.5 bg-brand-deep">
-                  Termin sichern →
-                </div>
-              </div>
-              <div className="shrink-0 w-16 aspect-video rounded overflow-hidden border-2 border-white shadow-md">
-                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#AA8CF5] to-[#7C5CE8] text-white text-[10px]">
-                  ▶
-                </div>
-              </div>
-            </div>
-          </div>
-        </BrowserMock>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 3) Brief — Floating cream A4 paper card mit Footer-QR
-// ---------------------------------------------------------------------------
-
-function BriefVisual() {
-  return (
-    <div className="relative w-full mx-auto" style={{ height: 280, maxWidth: 220 }}>
-      {/* Ghosts */}
-      <div
-        aria-hidden
-        className="absolute top-0 right-0 rounded-md"
-        style={{
-          width: 180,
-          aspectRatio: "210/297",
-          background: "#FAF6EE",
-          border: "1px solid rgba(0,0,0,0.05)",
-          transform: "translate(-30px, 14px) rotate(-12deg)",
-          opacity: 0.35,
-          filter: "blur(2px)",
-          boxShadow: "0 18px 50px -16px rgba(0,0,0,0.45)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="absolute top-0 right-0 rounded-md"
-        style={{
-          width: 180,
-          aspectRatio: "210/297",
-          background: "#FFFCF5",
-          border: "1px solid rgba(0,0,0,0.07)",
-          transform: "translate(-14px, 6px) rotate(-6deg)",
-          opacity: 0.6,
-          filter: "blur(0.6px)",
-          boxShadow: "0 22px 50px -18px rgba(0,0,0,0.5)",
-        }}
-      />
-      {/* Front */}
-      <div
-        className="absolute top-0 left-1/2 -translate-x-1/2 rounded-md overflow-hidden"
-        style={{
-          width: 195,
-          aspectRatio: "210/297",
-          background: "linear-gradient(180deg, #FFFEFA 0%, #FAF6EE 100%)",
-          border: "1px solid rgba(0,0,0,0.06)",
-          boxShadow:
-            "0 30px 60px -20px rgba(0,0,0,0.5), 0 10px 25px -10px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.8)",
-        }}
-      >
+        {/* Hero composition */}
         <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-2"
+          className="absolute inset-0 flex items-center"
           style={{
-            background: "linear-gradient(90deg, #7C5CE8, #AA8CF5)",
+            background:
+              "linear-gradient(135deg, #6D28D9 0%, #7C5CE8 35%, #D946EF 100%)",
           }}
-        />
-        <div
-          className="relative h-full flex flex-col"
-          style={{ padding: "18px 16px 14px" }}
         >
-          {/* Sender */}
           <div
-            className="text-[4.5px] text-ink-muted pb-1 mb-2 border-b leading-tight"
-            style={{ borderColor: "#E8DECC" }}
-          >
-            Deine Firma · Musterstraße 1 · 12345 Stadt
-          </div>
-
-          {/* Adresse + Datum */}
-          <div className="flex justify-between items-start mb-3">
-            <div className="text-[5.5px] leading-[1.35] text-ink">
-              Herrn
-              <br />
-              <strong>Max Mustermann</strong>
-              <br />
-              Mustermann Industrie
-              <br />
-              Industriestr. 42
-              <br />
-              85737 Ismaning
-            </div>
-            <div className="text-[4.5px] text-ink-muted text-right">
-              22.06.2026
-            </div>
-          </div>
-
-          {/* Subject */}
-          <div className="text-[6px] font-bold text-ink mb-1.5">
-            Drei Punkte zu Ihrer Webseite
-          </div>
-
-          {/* Anrede */}
-          <div className="text-[5.5px] text-ink mb-1.5">
-            Sehr geehrter Herr Mustermann,
-          </div>
-
-          {/* Body lines */}
-          <div className="space-y-[2px] mb-2">
-            <div className="h-[1.5px] bg-ink/15 w-full rounded" />
-            <div className="h-[1.5px] bg-ink/15 w-[92%] rounded" />
-            <div className="h-[1.5px] bg-ink/15 w-[78%] rounded" />
-          </div>
-
-          {/* URL highlight */}
-          <div
-            className="text-[5.5px] font-mono font-bold inline-flex self-start px-1.5 py-0.5 rounded mb-2"
+            aria-hidden
+            className="absolute inset-0"
             style={{
-              backgroundColor: "#F3EEFF",
-              color: "#5232C7",
+              background:
+                "radial-gradient(50% 80% at 30% 30%, rgba(255,255,255,0.18), transparent 60%)",
+            }}
+          />
+
+          <div className="relative flex-1 px-6 pr-24">
+            <div className="text-[9px] font-bold tracking-[0.25em] uppercase text-white/85 mb-2">
+              Persönlich für dich
+            </div>
+            <div className="text-[20px] font-extrabold text-white leading-[1.05] tracking-[-0.02em]">
+              Max,
+              <br />
+              schau dir das an.
+            </div>
+          </div>
+        </div>
+
+        {/* Webcam PiP */}
+        <div className="absolute top-3 right-3 size-14 rounded-full overflow-hidden border-2 border-white/95 shadow-[0_6px_20px_-2px_rgba(0,0,0,0.5)]">
+          <video
+            src="/demo-assets/webcam.mp4"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            className="w-full h-full object-cover"
+          />
+        </div>
+
+        {/* Center play button */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div
+            className="size-14 rounded-full flex items-center justify-center backdrop-blur-md border border-white/30"
+            style={{
+              background: "rgba(0,0,0,0.45)",
+              boxShadow: "0 10px 30px -6px rgba(0,0,0,0.5)",
             }}
           >
-            deine-domain.de/max
+            <Play className="size-5 text-white fill-white ml-0.5" />
           </div>
+        </div>
 
-          <div className="flex-1" />
-
-          {/* Footer */}
-          <div className="flex items-end justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <div className="text-[5px] text-ink mb-1">Mit besten Grüßen</div>
-              <div
-                className="text-[9px] italic"
-                style={{
-                  fontFamily: "'Georgia', 'Times New Roman', serif",
-                }}
-              >
-                Dein Name
-              </div>
+        {/* Bottom controls */}
+        <div
+          className="absolute inset-x-0 bottom-0 px-3.5 pt-8 pb-2.5"
+          style={{
+            background:
+              "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)",
+          }}
+        >
+          <div className="h-[3px] bg-white/25 rounded-full mb-2 overflow-hidden">
+            <div
+              className="h-full bg-white rounded-full relative"
+              style={{ width: "38%" }}
+            >
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 size-2.5 rounded-full bg-white shadow-md" />
             </div>
-            <div className="shrink-0 size-7 rounded-[2px] border border-ink/15 overflow-hidden bg-white p-[1px]">
-              <div
-                className="size-full"
-                style={{
-                  background:
-                    "repeating-conic-gradient(#0F172A 0deg 90deg, white 90deg 180deg)",
-                  backgroundSize: "2px 2px",
-                }}
-              />
+          </div>
+          <div className="flex items-center justify-between text-white">
+            <div className="flex items-center gap-2">
+              <Play className="size-3 fill-white" />
+              <span className="text-[10px] font-medium tabular-nums">
+                0:32 / 1:24
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-white/85">
+              <span className="text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-white/15">
+                1080p
+              </span>
+              <Volume2 className="size-3" />
+              <Maximize2 className="size-3" />
             </div>
           </div>
         </div>
@@ -518,61 +342,378 @@ function BriefVisual() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// 4) Push — vertikale Pills wie Mac-Notifications
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// 2) Landingpage — ECHTE LP mit Brand, Nav, Hero, Trust-Row
+// ===========================================================================
+
+function LandingPageVisual() {
+  return (
+    <div className="relative w-full max-w-[400px] mx-auto">
+      <div
+        aria-hidden
+        className="absolute -inset-x-6 -bottom-4 h-8 rounded-full"
+        style={{
+          background:
+            "radial-gradient(50% 100% at 50% 0%, rgba(124,92,232,0.18), transparent 70%)",
+          filter: "blur(10px)",
+        }}
+      />
+
+      <div
+        className="relative rounded-xl overflow-hidden border border-line/80 bg-white"
+        style={{
+          boxShadow:
+            "0 30px 60px -20px rgba(15,23,42,0.4), 0 8px 22px -8px rgba(15,23,42,0.18)",
+        }}
+      >
+        {/* Browser chrome */}
+        <div className="h-7 bg-[#F4F4F8] border-b border-line flex items-center px-3 gap-1.5">
+          <div className="size-2 rounded-full bg-[#FF5F57]" />
+          <div className="size-2 rounded-full bg-[#FEBC2E]" />
+          <div className="size-2 rounded-full bg-[#28C840]" />
+          <div className="flex-1 mx-3 h-4 rounded-md bg-white border border-line flex items-center px-2.5 gap-1.5">
+            <div className="size-1.5 rounded-full bg-emerald-500" />
+            <span className="text-[8px] text-ink-muted truncate font-medium">
+              zenith.io/max-mustermann
+            </span>
+          </div>
+          <div className="size-2.5 rounded-sm bg-line" />
+        </div>
+
+        {/* Nav */}
+        <div className="h-8 bg-white border-b border-line flex items-center px-4 gap-4">
+          <div className="flex items-center gap-1.5">
+            <div
+              className="size-3.5 rounded"
+              style={{
+                background:
+                  "conic-gradient(from 220deg at 50% 50%, #7C5CE8, #D946EF, #7C5CE8)",
+              }}
+            />
+            <span className="text-[9px] font-extrabold tracking-tight text-ink">
+              ZENITH
+            </span>
+          </div>
+          <div className="flex-1 flex justify-center gap-3.5 text-[7.5px] font-medium text-ink-muted">
+            <span>Plattform</span>
+            <span>Preise</span>
+            <span>Kunden</span>
+            <span>Über uns</span>
+          </div>
+          <div className="text-[7.5px] font-semibold text-ink">Login</div>
+          <div className="text-[7.5px] font-bold bg-ink text-white rounded-md px-2 py-1">
+            Demo
+          </div>
+        </div>
+
+        {/* Hero */}
+        <div
+          className="p-5 flex items-center gap-4 relative overflow-hidden"
+          style={{
+            background:
+              "linear-gradient(135deg, #FAFAFE 0%, #FFFFFF 70%, #F3EEFF 100%)",
+          }}
+        >
+          <div className="flex-1 min-w-0 relative">
+            <div className="inline-flex items-center gap-1.5 text-[7px] font-bold tracking-[0.15em] uppercase text-brand-deep bg-brand-soft rounded-full px-2 py-1 mb-2">
+              <span className="size-1 rounded-full bg-brand-deep" />
+              Persönlich für dich
+            </div>
+            <div className="text-[15px] font-extrabold text-ink leading-[1.05] tracking-[-0.02em]">
+              Max, schau dir
+              <br />
+              das an.
+            </div>
+            <div className="text-[8px] text-ink-muted mt-2 leading-snug">
+              Drei Punkte zu Ihrer Webseite. <br />
+              In 90 Sekunden, persönlich erklärt.
+            </div>
+            <div className="mt-3 inline-flex items-center gap-1 text-[8px] font-bold text-white bg-ink rounded-full px-3 py-1.5 shadow-md">
+              Termin sichern
+              <ArrowRight className="size-2.5" />
+            </div>
+          </div>
+
+          {/* Video tile */}
+          <div className="shrink-0 w-[96px] aspect-video rounded-lg overflow-hidden border border-white/80 shadow-[0_10px_24px_-8px_rgba(0,0,0,0.3)] relative">
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(135deg, #6D28D9 0%, #7C5CE8 35%, #D946EF 100%)",
+              }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div
+                className="size-6 rounded-full backdrop-blur-md border border-white/30 flex items-center justify-center"
+                style={{ background: "rgba(0,0,0,0.4)" }}
+              >
+                <Play className="size-2.5 fill-white text-white ml-px" />
+              </div>
+            </div>
+            <div className="absolute inset-x-1.5 bottom-1.5">
+              <div className="h-[1.5px] bg-white/30 rounded-full overflow-hidden">
+                <div className="h-full bg-white rounded-full w-2/5" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Trust row */}
+        <div className="px-4 py-2.5 bg-white border-t border-line flex items-center justify-between gap-3">
+          <div className="text-[6.5px] font-bold tracking-[0.18em] uppercase text-ink-muted shrink-0">
+            Vertraut von
+          </div>
+          <div className="flex-1 flex items-center justify-around opacity-55">
+            <span className="text-[9px] font-extrabold tracking-tighter italic">
+              forbes
+            </span>
+            <span className="text-[9px] font-black tracking-tight">t3n</span>
+            <span className="text-[8px] font-bold tracking-widest">
+              HORIZONT
+            </span>
+            <span className="text-[8px] font-bold tracking-wider">
+              CAPITAL
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// 3) Brief — DIN-Padding + echter Text + ECHTER QR-Code
+// ===========================================================================
+
+function BriefVisual() {
+  const [qrSrc, setQrSrc] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    import("qrcode")
+      .then((mod) =>
+        mod.default.toDataURL("https://zenith.io/max-mustermann", {
+          margin: 0,
+          width: 200,
+          errorCorrectionLevel: "M",
+          color: { dark: "#0F172A", light: "#FFFFFF00" },
+        }),
+      )
+      .then((url) => {
+        if (!cancelled) setQrSrc(url);
+      })
+      .catch(() => {
+        /* swallow */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div className="relative w-full mx-auto" style={{ maxWidth: 260 }}>
+      <div
+        aria-hidden
+        className="absolute -inset-x-3 -bottom-4 h-8 rounded-full"
+        style={{
+          background:
+            "radial-gradient(50% 100% at 50% 0%, rgba(0,0,0,0.18), transparent 70%)",
+          filter: "blur(10px)",
+        }}
+      />
+
+      <div
+        className="relative rounded-md overflow-hidden mx-auto"
+        style={{
+          width: "100%",
+          aspectRatio: "210/297",
+          background: "linear-gradient(180deg, #FFFEFA 0%, #FAF5EB 100%)",
+          border: "1px solid rgba(0,0,0,0.07)",
+          boxShadow:
+            "0 30px 60px -20px rgba(0,0,0,0.45), 0 10px 25px -10px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.9)",
+        }}
+      >
+        <div
+          aria-hidden
+          className="absolute inset-0 opacity-[0.35] mix-blend-multiply pointer-events-none"
+          style={{
+            backgroundImage:
+              'url("data:image/svg+xml;utf8,<svg xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"100\\" height=\\"100\\" viewBox=\\"0 0 100 100\\"><filter id=\\"n\\"><feTurbulence type=\\"fractalNoise\\" baseFrequency=\\"1.2\\" numOctaves=\\"2\\" stitchTiles=\\"stitch\\"/></filter><rect width=\\"100%\\" height=\\"100%\\" filter=\\"url(%23n)\\" opacity=\\"0.18\\"/></svg>")',
+          }}
+        />
+
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-1.5"
+          style={{
+            background:
+              "linear-gradient(90deg, #5232C7 0%, #7C5CE8 50%, #D946EF 100%)",
+          }}
+        />
+
+        {/* DIN-ähnliche Ränder */}
+        <div
+          className="relative h-full flex flex-col text-ink"
+          style={{ padding: "8.5% 9% 7%" }}
+        >
+          {/* Sender mini-line */}
+          <div
+            className="text-[6.5px] text-ink-muted pb-1.5 leading-tight"
+            style={{
+              borderBottom: "1px solid rgba(0,0,0,0.08)",
+              letterSpacing: "0.01em",
+            }}
+          >
+            Deine Firma GmbH · Musterstraße 1 · 12345 Stadt
+          </div>
+
+          {/* Address + Date */}
+          <div className="flex justify-between items-start mt-3.5 mb-3">
+            <div className="text-[7.5px] leading-[1.4]">
+              <div>Herrn</div>
+              <div className="font-bold">Max Mustermann</div>
+              <div>Mustermann Industrie GmbH</div>
+              <div>Industriestraße 42</div>
+              <div>85737 Ismaning</div>
+            </div>
+            <div className="text-[6.5px] text-ink-muted text-right">
+              22.06.2026
+            </div>
+          </div>
+
+          {/* Subject */}
+          <div className="text-[8.5px] font-bold mt-1 mb-2.5 leading-tight">
+            Drei Punkte zu Ihrer Webseite.
+          </div>
+
+          {/* Anrede */}
+          <div className="text-[7.5px] mb-2">
+            Sehr geehrter Herr Mustermann,
+          </div>
+
+          {/* Body — echter Text */}
+          <div
+            className="text-[7px] leading-[1.55] text-ink"
+            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+          >
+            <p>
+              ich habe mir Ihre Webseite angesehen und drei Punkte
+              gefunden, die Sie täglich Kunden kosten.
+            </p>
+            <p className="mt-1.5">
+              In neunzig Sekunden zeige ich Ihnen die wichtigsten
+              Optimierungen, persönlich auf Sie zugeschnitten.
+            </p>
+            <p className="mt-1.5">
+              Scannen Sie einfach den QR-Code unten rechts, dann öffnet
+              sich Ihr Video.
+            </p>
+          </div>
+
+          <div className="flex-1" />
+
+          {/* Footer mit echtem QR */}
+          <div className="flex items-end justify-between gap-3 pt-2">
+            <div className="flex-1 min-w-0">
+              <div className="text-[7px] mb-1">Mit besten Grüßen</div>
+              <div
+                className="text-[12px] leading-tight"
+                style={{
+                  fontFamily:
+                    "'Caveat', 'Brush Script MT', 'Lucida Handwriting', cursive",
+                  color: "#1A237E",
+                  transform: "rotate(-2deg)",
+                  transformOrigin: "left bottom",
+                  display: "inline-block",
+                }}
+              >
+                Daniel Kurzeja
+              </div>
+              <div className="text-[5.5px] text-ink-muted mt-0.5 tracking-wide">
+                Daniel Kurzeja · Gründer
+              </div>
+            </div>
+            <div
+              className="shrink-0 rounded-[3px] bg-white p-[2px]"
+              style={{
+                width: 42,
+                height: 42,
+                border: "1px solid rgba(0,0,0,0.12)",
+              }}
+            >
+              {qrSrc ? (
+                <img
+                  src={qrSrc}
+                  alt="QR-Code zur personalisierten Landingpage"
+                  className="w-full h-full block"
+                />
+              ) : (
+                <div className="w-full h-full bg-ink/5 rounded-sm" />
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// 4) Push — Mac-Notification-Stack
+// ===========================================================================
 
 function PushVisual() {
   const NOTIFS = [
     {
-      icon: <Eye className="size-3" />,
+      icon: <Eye className="size-3.5" />,
       who: "Max Mustermann",
       what: "öffnete deine Seite",
-      delay: 0,
+      time: "gerade eben",
+      gradient: ["#10B981", "#047857"],
     },
     {
-      icon: <PlayCircle className="size-3" />,
+      icon: <PlayCircle className="size-3.5" />,
       who: "Lisa Lust",
-      what: "schaut gerade",
-      delay: 0.1,
+      what: "schaut gerade Sek. 0:18",
+      time: "vor 4 Sek.",
+      gradient: ["#AA8CF5", "#7C5CE8"],
     },
     {
-      icon: <MousePointerClick className="size-3" />,
+      icon: <MousePointerClick className="size-3.5" />,
       who: "Franz Friedrich",
-      what: "klickte Termin",
-      delay: 0.2,
+      what: "klickte „Termin sichern“",
+      time: "vor 12 Sek.",
+      gradient: ["#FBBF24", "#D97706"],
     },
   ];
   return (
-    <div className="relative w-full max-w-[260px] mx-auto flex flex-col items-stretch gap-2.5">
+    <div className="relative w-full max-w-[300px] mx-auto flex flex-col gap-2.5">
       {NOTIFS.map((n, i) => (
         <div
           key={i}
-          className="rounded-2xl bg-white border border-line/80 px-3 py-2.5 flex items-center gap-3 shadow-[0_8px_20px_-12px_rgba(15,23,42,0.25)]"
-          style={{
-            transform: `translateY(${i * 0}px)`,
-          }}
+          className="rounded-[18px] bg-white/95 backdrop-blur-md border border-line/70 px-3.5 py-3 flex items-center gap-3 shadow-[0_10px_28px_-14px_rgba(15,23,42,0.32)]"
         >
           <div
-            className="size-7 shrink-0 rounded-lg flex items-center justify-center text-white"
+            className="size-9 shrink-0 rounded-xl flex items-center justify-center text-white shadow-md"
             style={{
-              background:
-                i === 0
-                  ? "linear-gradient(135deg, #10B981, #047857)"
-                  : i === 1
-                    ? "linear-gradient(135deg, #AA8CF5, #7C5CE8)"
-                    : "linear-gradient(135deg, #FBBF24, #D97706)",
+              background: `linear-gradient(135deg, ${n.gradient[0]}, ${n.gradient[1]})`,
+              boxShadow: `0 6px 16px -4px ${n.gradient[1]}66`,
             }}
           >
             {n.icon}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[12px] text-ink leading-tight">
-              <span className="font-bold">{n.who}</span>{" "}
-              <span className="text-ink-muted">{n.what}</span>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[12px] font-bold text-ink leading-tight">
+                {n.who}
+              </span>
+              <span className="text-[10px] text-ink-muted shrink-0 tabular-nums">
+                {n.time}
+              </span>
             </div>
-            <div className="text-[10px] text-ink-muted mt-0.5">
-              {i === 0 ? "gerade eben" : i === 1 ? "vor 4 s" : "vor 12 s"}
+            <div className="text-[11px] text-ink-muted leading-tight mt-0.5 truncate">
+              {n.what}
             </div>
           </div>
         </div>
@@ -581,23 +722,20 @@ function PushVisual() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// 5) Analytics — Floating Mini-Dashboard
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// 5) Analytics — Mini-Dashboard
+// ===========================================================================
 
 function AnalyticsVisual() {
   return (
-    <div className="relative w-full max-w-[260px] mx-auto">
-      <div
-        className="rounded-2xl bg-white border border-line p-5 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.22)]"
-      >
-        {/* KPI big */}
-        <div className="flex items-end justify-between mb-3">
+    <div className="relative w-full max-w-[300px] mx-auto">
+      <div className="rounded-2xl bg-white border border-line p-5 shadow-[0_14px_36px_-16px_rgba(15,23,42,0.25)]">
+        <div className="flex items-end justify-between mb-4">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
               Watch-Time ø
             </div>
-            <div className="text-[40px] font-extrabold leading-none mt-1 text-ink">
+            <div className="text-[44px] font-extrabold leading-none mt-1.5 text-ink tracking-[-0.02em] tabular-nums">
               83%
             </div>
           </div>
@@ -607,37 +745,37 @@ function AnalyticsVisual() {
           </div>
         </div>
 
-        {/* Chart */}
-        <div className="rounded-xl bg-surface-soft border border-line/60 p-3">
-          <svg viewBox="0 0 200 50" className="w-full h-14">
+        <div className="rounded-xl bg-[#FAFAFE] border border-line/60 p-3">
+          <svg viewBox="0 0 220 56" className="w-full h-16">
             <defs>
-              <linearGradient
-                id="vc-feat-chart"
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop offset="0%" stopColor="#7C5CE8" stopOpacity="0.45" />
+              <linearGradient id="vc-feat-chart" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#7C5CE8" stopOpacity="0.5" />
                 <stop offset="100%" stopColor="#7C5CE8" stopOpacity="0" />
               </linearGradient>
             </defs>
             <path
-              d="M0,40 L20,35 L40,30 L60,32 L80,22 L100,18 L120,20 L140,12 L160,10 L200,4 L200,50 L0,50 Z"
+              d="M0,42 L24,38 L48,32 L72,34 L96,24 L120,20 L144,22 L168,12 L192,10 L220,4 L220,56 L0,56 Z"
               fill="url(#vc-feat-chart)"
             />
             <path
-              d="M0,40 L20,35 L40,30 L60,32 L80,22 L100,18 L120,20 L140,12 L160,10 L200,4"
+              d="M0,42 L24,38 L48,32 L72,34 L96,24 L120,20 L144,22 L168,12 L192,10 L220,4"
               fill="none"
               stroke="#7C5CE8"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
+            <circle
+              cx="220"
+              cy="4"
+              r="3"
+              fill="white"
+              stroke="#7C5CE8"
+              strokeWidth="2"
+            />
           </svg>
         </div>
 
-        {/* Mini-KPIs */}
         <div className="grid grid-cols-3 gap-2 mt-3">
           {[
             { l: "Versendet", v: "743" },
@@ -646,12 +784,12 @@ function AnalyticsVisual() {
           ].map((k, i) => (
             <div
               key={i}
-              className="rounded-lg bg-surface-soft border border-line/60 px-2 py-1.5"
+              className="rounded-lg bg-[#FAFAFE] border border-line/60 px-2.5 py-2"
             >
-              <div className="text-[8px] uppercase tracking-wider text-ink-muted font-bold">
+              <div className="text-[8px] uppercase tracking-[0.1em] text-ink-muted font-bold">
                 {k.l}
               </div>
-              <div className="text-[14px] font-extrabold text-ink mt-0.5 leading-none">
+              <div className="text-[15px] font-extrabold text-ink mt-0.5 leading-none tabular-nums">
                 {k.v}
               </div>
             </div>
@@ -662,55 +800,62 @@ function AnalyticsVisual() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// 6) A/B Testing — zwei Cards mit Winner-Markierung
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// 6) A/B Testing
+// ===========================================================================
 
 function ABVisual() {
   return (
-    <div className="relative w-full max-w-[300px] mx-auto flex items-end gap-3">
-      {/* A */}
+    <div className="relative w-full max-w-[340px] mx-auto flex items-end gap-3">
       <div
-        className="flex-1 rounded-2xl bg-white border border-line p-3 shadow-[0_8px_20px_-12px_rgba(15,23,42,0.18)] relative"
-        style={{ minHeight: 180 }}
+        className="flex-1 rounded-2xl bg-white border border-line p-3.5 shadow-[0_10px_24px_-14px_rgba(15,23,42,0.22)] relative"
+        style={{ minHeight: 200 }}
       >
-        <div className="size-6 rounded-full bg-ink-muted/15 flex items-center justify-center text-[10px] font-extrabold text-ink-muted mb-3">
-          A
+        <div className="flex items-center justify-between mb-3">
+          <div className="size-6 rounded-full bg-ink-muted/15 flex items-center justify-center text-[10px] font-extrabold text-ink-muted">
+            A
+          </div>
         </div>
         <div className="space-y-1 mb-3">
           <div className="h-1.5 bg-ink/15 w-full rounded" />
           <div className="h-1.5 bg-ink/15 w-3/4 rounded" />
         </div>
-        <div className="rounded-lg bg-surface-soft h-12 mb-3" />
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+        <div className="rounded-lg bg-[#F4F4F8] h-14 mb-3" />
+        <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
           Conversion
         </div>
-        <div className="text-2xl font-extrabold text-ink-muted/70 leading-none mt-1">
+        <div className="text-[24px] font-extrabold text-ink-muted/70 leading-none mt-1 tabular-nums">
           12%
         </div>
       </div>
 
-      {/* B winner */}
       <div
-        className="flex-1 rounded-2xl bg-white border-2 border-brand p-3 shadow-[0_14px_30px_-14px_rgba(124,92,232,0.4)] relative"
-        style={{ minHeight: 200 }}
+        className="flex-1 rounded-2xl bg-white p-3.5 relative"
+        style={{
+          minHeight: 230,
+          border: "2px solid #7C5CE8",
+          boxShadow:
+            "0 14px 32px -14px rgba(124,92,232,0.5), 0 0 0 4px rgba(124,92,232,0.08)",
+        }}
       >
-        <div className="absolute -top-2 -right-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand text-white text-[9px] font-bold shadow-md">
+        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-brand-deep text-white text-[9px] font-bold shadow-md whitespace-nowrap">
           <CheckCircle2 className="size-2.5" />
           Winner
         </div>
-        <div className="size-6 rounded-full bg-brand text-white flex items-center justify-center text-[10px] font-extrabold mb-3">
-          B
+        <div className="flex items-center justify-between mb-3">
+          <div className="size-6 rounded-full bg-brand-deep text-white flex items-center justify-center text-[10px] font-extrabold">
+            B
+          </div>
         </div>
         <div className="space-y-1 mb-3">
-          <div className="h-1.5 bg-brand/40 w-full rounded" />
-          <div className="h-1.5 bg-brand/40 w-3/4 rounded" />
+          <div className="h-1.5 bg-brand/50 w-full rounded" />
+          <div className="h-1.5 bg-brand/50 w-3/4 rounded" />
         </div>
-        <div className="rounded-lg bg-brand-soft h-12 mb-3" />
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-brand-deep">
+        <div className="rounded-lg bg-brand-soft h-14 mb-3" />
+        <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-brand-deep">
           Conversion
         </div>
-        <div className="text-2xl font-extrabold text-brand-deep leading-none mt-1">
+        <div className="text-[24px] font-extrabold text-brand-deep leading-none mt-1 tabular-nums">
           18%
         </div>
       </div>
@@ -718,9 +863,9 @@ function ABVisual() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// 7) Integrations — Workflow VIDEOCOMET → CRM
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// 7) Integrations — Workflow
+// ===========================================================================
 
 function IntegrationsVisual() {
   const TARGETS = [
@@ -730,33 +875,35 @@ function IntegrationsVisual() {
     { slug: "close", name: "Close" },
   ];
   return (
-    <div className="relative w-full max-w-[480px] mx-auto py-6">
-      {/* Source Pill: Tracking-Event */}
+    <div className="relative w-full max-w-[520px] mx-auto py-4">
       <div className="flex justify-center mb-4">
-        <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-white shadow-[0_10px_24px_-12px_rgba(15,23,42,0.25)] border border-line">
-          <div className="size-7 rounded-full flex items-center justify-center text-white"
-            style={{
-              background: "linear-gradient(135deg, #AA8CF5, #5232C7)",
-            }}
+        <div className="inline-flex items-center gap-3 pr-4 pl-2 py-2 rounded-full bg-white shadow-[0_12px_28px_-14px_rgba(15,23,42,0.3)] border border-line">
+          <div
+            className="size-8 rounded-full flex items-center justify-center text-white shadow-md"
+            style={{ background: "linear-gradient(135deg, #AA8CF5, #5232C7)" }}
           >
-            <Bell className="size-3.5" />
+            <Bell className="size-4" />
           </div>
           <div>
             <div className="text-[13px] font-bold text-ink leading-tight">
               CTA geklickt
             </div>
-            <div className="text-[10px] text-ink-muted leading-tight">
+            <div className="text-[10px] text-ink-muted leading-tight mt-0.5">
               Max Mustermann · gerade eben
             </div>
           </div>
         </div>
       </div>
 
-      {/* Connector */}
-      <div className="flex justify-center mb-4">
-        <svg width="60" height="40" viewBox="0 0 60 40" className="text-ink-muted/40">
+      <div className="flex justify-center mb-3 h-10">
+        <svg
+          width="280"
+          height="40"
+          viewBox="0 0 280 40"
+          className="text-ink-muted/35"
+        >
           <path
-            d="M30 0 L30 20 M10 38 L30 22 L50 38"
+            d="M140 0 L140 14 M40 38 L140 16 L240 38"
             stroke="currentColor"
             strokeWidth="1.5"
             fill="none"
@@ -767,65 +914,29 @@ function IntegrationsVisual() {
         </svg>
       </div>
 
-      {/* Target tools — fan out */}
-      <div className="grid grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-4 gap-3">
         {TARGETS.map((t) => (
           <div
             key={t.slug}
-            className="rounded-2xl bg-white border border-line shadow-[0_8px_20px_-12px_rgba(15,23,42,0.2)] p-3 flex flex-col items-center gap-2"
+            className="rounded-2xl bg-white border border-line shadow-[0_10px_24px_-14px_rgba(15,23,42,0.22)] p-3 flex flex-col items-center gap-2 relative"
           >
             <img
               src={`https://cdn.simpleicons.org/${t.slug}`}
               alt={t.name}
-              width={28}
-              height={28}
+              width={30}
+              height={30}
               loading="lazy"
-              className="size-7"
+              className="size-8"
             />
-            <div className="text-[11px] font-semibold text-ink text-center">
+            <div className="text-[11px] font-semibold text-ink text-center leading-tight">
               {t.name}
             </div>
-            <CheckCircle2 className="size-3.5 text-emerald-500" />
+            <div className="absolute -top-1.5 -right-1.5 size-4 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-md">
+              <CheckCircle2 className="size-3" />
+            </div>
           </div>
         ))}
       </div>
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Browser-Mock-Helper
-// ---------------------------------------------------------------------------
-
-function BrowserMock({
-  children,
-  url,
-}: {
-  children: React.ReactNode;
-  url?: string;
-}) {
-  return (
-    <div className="relative w-full h-full flex flex-col bg-white">
-      <div className="h-6 bg-white border-b border-line flex items-center px-2 gap-1.5 shrink-0">
-        <div className="size-1.5 rounded-full bg-red-400" />
-        <div className="size-1.5 rounded-full bg-yellow-400" />
-        <div className="size-1.5 rounded-full bg-green-400" />
-        {url ? (
-          <div className="flex-1 ml-2 h-3 rounded-full bg-surface-soft flex items-center px-2">
-            <span className="text-[6px] text-ink-muted truncate">{url}</span>
-          </div>
-        ) : (
-          <div className="flex-1 ml-2 h-2 rounded-full bg-surface-soft" />
-        )}
-      </div>
-      <div className="flex-1 min-h-0">{children}</div>
-    </div>
-  );
-}
-
-// Unused but kept reserved for future variants
-void Database;
-void FileText;
-void Globe;
-void Mail;
-void PenLine;
