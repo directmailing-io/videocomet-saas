@@ -26,52 +26,61 @@ export function HowItWorksSection() {
   const playerRef = React.useRef<PlayerRef>(null);
   const [activeStep, setActiveStep] = React.useState(0);
 
-  // Subscribe to frame updates → highlight current step
+  // Player loads via dynamic import → ref ist im ersten useEffect oft noch
+  // null. Polling-Loop bis er da ist, dann Listener anhaengen + sofort spielen.
   React.useEffect(() => {
-    const p = playerRef.current;
-    if (!p) return;
-    const onFrame = (e: { detail: { frame: number } }) => {
-      const f = e.detail.frame;
-      const idx = HOWITWORKS_STEPS.findIndex(
-        (s) => f >= s.from && f < s.from + s.duration,
-      );
-      if (idx >= 0) setActiveStep(idx);
-    };
-    p.addEventListener("frameupdate", onFrame);
-    return () => p.removeEventListener("frameupdate", onFrame);
-  }, []);
-
-  // Force-play (iOS-safe), Player is silent
-  React.useEffect(() => {
-    const tryPlay = () => {
+    let cleanup: (() => void) | null = null;
+    const interval = window.setInterval(() => {
       const p = playerRef.current;
       if (!p) return;
+      window.clearInterval(interval);
+
+      const onFrame = (e: { detail: { frame: number } }) => {
+        const f = e.detail.frame;
+        const idx = HOWITWORKS_STEPS.findIndex(
+          (s) => f >= s.from && f < s.from + s.duration,
+        );
+        if (idx >= 0) {
+          setActiveStep((prev) => (prev === idx ? prev : idx));
+        }
+      };
+      p.addEventListener("frameupdate", onFrame);
       try {
         p.mute();
         p.play();
       } catch {
         /* noop */
       }
-    };
-    tryPlay();
-    const t1 = window.setTimeout(tryPlay, 300);
-    const t2 = window.setTimeout(tryPlay, 1000);
+      cleanup = () => {
+        p.removeEventListener("frameupdate", onFrame);
+      };
+    }, 80);
     return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
+      window.clearInterval(interval);
+      cleanup?.();
     };
   }, []);
 
   const handleStepClick = (i: number) => {
-    const p = playerRef.current;
-    if (!p) return;
-    try {
-      p.seekTo(HOWITWORKS_STEPS[i].from + 2);
-      p.play();
-    } catch {
-      /* noop */
-    }
     setActiveStep(i);
+    const trySeek = () => {
+      const p = playerRef.current;
+      if (!p) return false;
+      try {
+        p.mute();
+        p.seekTo(HOWITWORKS_STEPS[i].from);
+        p.play();
+      } catch {
+        /* noop */
+      }
+      return true;
+    };
+    if (trySeek()) return;
+    // Player noch nicht geladen — kurz warten und nochmal versuchen
+    const id = window.setInterval(() => {
+      if (trySeek()) window.clearInterval(id);
+    }, 80);
+    window.setTimeout(() => window.clearInterval(id), 3000);
   };
 
   return (

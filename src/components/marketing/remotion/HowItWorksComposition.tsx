@@ -91,10 +91,12 @@ function StepFrame({
 }) {
   const frame = useCurrentFrame();
   const duration = HOWITWORKS_STEPS[stepIndex].duration;
+  // Nur am Ende rausfaden, am Anfang sofort sichtbar — sonst sieht der
+  // User beim Seek auf den Sequence-Start einen leeren Frame.
   const opacity = interpolate(
     frame,
-    [0, 6, duration - 6, duration],
-    [0, 1, 1, 0],
+    [duration - 6, duration],
+    [1, 0],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
 
