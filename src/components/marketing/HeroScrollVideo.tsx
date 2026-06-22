@@ -164,12 +164,14 @@ export function HeroScrollVideo() {
           className="absolute inset-0 w-full h-full block"
           aria-hidden
         />
-        {/* Vignette + top/bottom legibility gradient (static) */}
+        {/* Lesbarkeits-Veil: stark dunkel auf der linken Seite (wo Text sitzt),
+            faded zum rechten Rand hin transparent → der Komet auf der rechten
+            Diagonale bleibt voll sichtbar. Plus dezenter Top- und Bottom-Fade. */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              "radial-gradient(120% 80% at 50% 50%, transparent 0%, rgba(0,0,0,0.40) 65%, rgba(0,0,0,0.88) 100%), linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.88) 100%)",
+              "linear-gradient(105deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.65) 22%, rgba(0,0,0,0.30) 48%, rgba(0,0,0,0) 72%), linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 18%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.75) 100%)",
           }}
         />
         {/* Solid Black-Overlay (Scroll-getrieben): am Start opaque, fadet bis
@@ -199,23 +201,32 @@ export function HeroScrollVideo() {
               <span className="vc-hero-line block">Werde unvergesslich.</span>
             </span>
             <span className="block overflow-hidden">
-              <span
-                className="vc-hero-line vc-hero-accent block bg-clip-text text-transparent"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(96deg, #C7B6FE 0%, #AA8CF5 35%, #7C5CE8 70%, #5232C7 100%)",
-                }}
-              >
-                Bei jedem Kontakt.
+              <span className="vc-hero-line vc-hero-accent-wrap block">
+                <span
+                  className="vc-hero-accent block bg-clip-text text-transparent"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(96deg, #C7B6FE 0%, #AA8CF5 35%, #7C5CE8 70%, #5232C7 100%)",
+                  }}
+                >
+                  Bei jedem Kontakt.
+                </span>
               </span>
             </span>
           </h1>
 
-          <p className="vc-hero-sub max-w-2xl text-[17px] leading-[1.6] text-white/75 opacity-0">
-            Einmal ein Video aufnehmen, danach tausendfach personalisiert an
-            deine Zielgruppe verschicken. Persönlich, authentisch und
-            überzeugend. So bleibst du in Erinnerung und wirst von neuen
-            Kunden kontaktiert.
+          <p className="vc-hero-sub max-w-2xl text-[17px] leading-[1.6] text-white/70 opacity-0">
+            Einmal ein Video aufnehmen, danach{" "}
+            <strong className="font-semibold text-white">
+              tausendfach personalisiert an deine Zielgruppe verschicken
+            </strong>
+            . Persönlich, authentisch und überzeugend. So bleibst du{" "}
+            <strong className="font-semibold text-white">in Erinnerung</strong>{" "}
+            und wirst von{" "}
+            <strong className="font-semibold text-white">
+              neuen Kunden kontaktiert
+            </strong>
+            .
           </p>
 
           <div className="vc-hero-channels flex flex-wrap items-center gap-x-3 gap-y-2 opacity-0">
@@ -295,10 +306,26 @@ export function HeroScrollVideo() {
           0%   { transform: translateY(110%); }
           100% { transform: translateY(0%); }
         }
+        /* Akzent driftet leicht hoch/runter + atmender Glow */
+        @keyframes vc-hero-accent-drift {
+          0%, 100% {
+            transform: translateY(0px) translateZ(0);
+            filter: drop-shadow(0 0 18px rgba(170,140,245,0.22)) drop-shadow(0 0 4px rgba(170,140,245,0.14));
+          }
+          50% {
+            transform: translateY(-4px) translateZ(0);
+            filter: drop-shadow(0 0 42px rgba(170,140,245,0.55)) drop-shadow(0 0 10px rgba(199,182,254,0.30));
+          }
+        }
         .vc-hero-eyebrow { animation: vc-hero-fade-up 0.9s cubic-bezier(0.2,0.8,0.2,1) 0.15s forwards; }
         .vc-hero-line { transform: translateY(110%); will-change: transform; }
         .vc-hero-title .vc-hero-line:nth-child(1) { animation: vc-hero-line-rise 1.15s cubic-bezier(0.16,1,0.3,1) 0.3s forwards; }
         .vc-hero-title > span:nth-child(2) .vc-hero-line { animation: vc-hero-line-rise 1.15s cubic-bezier(0.16,1,0.3,1) 0.4s forwards; }
+        .vc-hero-accent {
+          display: block;
+          will-change: transform, filter;
+          animation: vc-hero-accent-drift 6.5s ease-in-out 1.7s infinite;
+        }
         .vc-hero-sub { animation: vc-hero-fade-up 0.95s cubic-bezier(0.2,0.8,0.2,1) 0.85s forwards; }
         .vc-hero-channels { animation: vc-hero-fade-up 0.9s cubic-bezier(0.2,0.8,0.2,1) 1.05s forwards; }
         .vc-hero-cta { animation: vc-hero-fade-up 0.95s cubic-bezier(0.2,0.8,0.2,1) 1.25s forwards; }
