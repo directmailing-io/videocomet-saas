@@ -222,8 +222,8 @@ export function HowItWorksSection() {
   const [take, setTake] = React.useState(0);
   const [sceneId, setSceneId] = React.useState<SceneId>("website");
   const [templateId, setTemplateId] = React.useState<TemplateId>("soft");
-  // Multiplikations-Animation in Step 4: 4 → 16 → 32
-  const [leadCount, setLeadCount] = React.useState<4 | 16 | 32>(4);
+  // Multiplikations-Animation in Step 4: 4 → 16 → 36 (6x6 = landscape cells)
+  const [leadCount, setLeadCount] = React.useState<4 | 16 | 36>(4);
 
   React.useEffect(() => {
     if (manual) return;
@@ -244,7 +244,7 @@ export function HowItWorksSection() {
     }
     setLeadCount(4);
     const t1 = window.setTimeout(() => setLeadCount(16), 2200);
-    const t2 = window.setTimeout(() => setLeadCount(32), 4400);
+    const t2 = window.setTimeout(() => setLeadCount(36), 4400);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
@@ -679,7 +679,7 @@ function Stage({
   step: number;
   sceneId: SceneId;
   template: Template;
-  leadCount: 4 | 16 | 32;
+  leadCount: 4 | 16 | 36;
 }) {
   const webcamPos = computeWebcamPos(step, sceneId);
   const isSolo = sceneId === "solo";
@@ -1493,6 +1493,10 @@ const EXTRA_PEOPLE = [
   { first: "Dirk", company: "Lehmann Holz" },
   { first: "Ines", company: "Brunner Beton" },
   { first: "Olaf", company: "Werner Steuern" },
+  { first: "David", company: "Schäfer Beratung" },
+  { first: "Nina", company: "Bauer Werbung" },
+  { first: "Robert", company: "Schröder Anlagen" },
+  { first: "Sarah", company: "Huber Naturkost" },
 ];
 
 const EXTENDED_LEADS = (() => {
@@ -1501,7 +1505,7 @@ const EXTENDED_LEADS = (() => {
     "#FBBF24", "#3B82F6", "#EF4444", "#8B5CF6",
     "#06B6D4", "#F97316", "#84CC16", "#A855F7",
   ];
-  return Array.from({ length: 32 }, (_, i) => {
+  return Array.from({ length: 36 }, (_, i) => {
     if (i < 4) return LEADS[i];
     const p = EXTRA_PEOPLE[(i - 4) % EXTRA_PEOPLE.length];
     const base = LEADS[i % 4];
@@ -1523,17 +1527,20 @@ function MultiGridLayer({
   active: boolean;
   template: Template;
   sceneId: SceneId;
-  leadCount: 4 | 16 | 32;
+  leadCount: 4 | 16 | 36;
 }) {
   const isSolo = sceneId === "solo";
   const leads = EXTENDED_LEADS.slice(0, leadCount);
-  // Grid-Layout pro Phase
+  // Grid-Layout pro Phase — alle Cells im Querformat (1.6:1, matched Stage)
+  //   4  =  2x2 → Cell 8:5 / 4 = 1.6:1  ✓
+  //  16  =  4x4 → Cell 4:2.5 = 1.6:1   ✓
+  //  36  =  6x6 → Cell 2.67:1.67 = 1.6:1  ✓
   const gridClass =
     leadCount === 4
       ? "grid-cols-2 grid-rows-2 gap-2"
       : leadCount === 16
         ? "grid-cols-4 grid-rows-4 gap-1.5"
-        : "grid-cols-8 grid-rows-4 gap-1";
+        : "grid-cols-6 grid-rows-6 gap-1";
 
   return (
     <div
