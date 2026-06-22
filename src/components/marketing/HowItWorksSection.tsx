@@ -8,6 +8,7 @@ import {
   Check,
   CheckCircle2,
   ClipboardList,
+  Download,
   Eye,
   FileText,
   Image as ImageIcon,
@@ -17,6 +18,7 @@ import {
   MousePointerClick,
   PlayCircle,
   Presentation,
+  Sparkles,
   Video as VideoIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -36,7 +38,7 @@ type StepId =
   | "scenes"
   | "landing"
   | "leads"
-  | "letter"
+  | "export"
   | "tracking";
 
 const STEPS: ReadonlyArray<{
@@ -48,47 +50,49 @@ const STEPS: ReadonlyArray<{
 }> = [
   {
     id: "webcam",
-    title: "Webcam",
-    eyebrow: "Aufnehmen",
-    headline: "Eine Aufnahme. Drei Takes.",
-    sub: "Nimm dich einmal vor der Webcam auf. Wähle den Take, der am besten sitzt.",
+    title: "Aufnehmen",
+    eyebrow: "Schritt 1",
+    headline: "Setz dich vor die Webcam.",
+    sub: "Eine ruhige Minute, drei Takes. Du wählst, welcher in die Kampagne geht.",
   },
   {
     id: "scenes",
-    title: "Szenen",
-    eyebrow: "Szenen wählen",
-    headline: "Setze deine Aufnahme in Szene.",
-    sub: "Website, Folien, persönliches Dokument oder reines Webcam-Solo. Deine Aufnahme sitzt automatisch im Bild.",
+    title: "Szene",
+    eyebrow: "Schritt 2",
+    headline: "Was sieht dein Lead?",
+    sub: "Webseite, Folie, Doc oder reines Webcam-Solo. Deine Aufnahme sitzt automatisch mit drin.",
   },
   {
     id: "landing",
     title: "Landingpage",
-    eyebrow: "Landingpage gestalten",
-    headline: "Drei Vorlagen. Dein Video sitzt im Hero.",
-    sub: "Wähle ein Design. Headline, Platzhalter und CTA sind schon drin.",
+    eyebrow: "Schritt 3",
+    headline: "Wähle eine Vorlage.",
+    sub: "Headline und Termin-Button sind schon drin. Dein Video sitzt automatisch im Hero.",
   },
   {
     id: "leads",
     title: "Leadliste",
-    eyebrow: "Leadliste hochladen",
-    headline: "Aus eins wird tausend.",
-    sub: "CSV rein, jede Zeile bekommt eine eigene Landingpage. Die fertige Liste wandert in dein Versand-Tool.",
+    eyebrow: "Schritt 4",
+    headline: "Lade deine Leads hoch.",
+    sub: "CSV oder Excel rein. Jede Zeile bekommt automatisch eine eigene, persönliche Landingpage.",
   },
   {
-    id: "letter",
-    title: "Brief",
-    eyebrow: "Brief erstellen",
-    headline: "Druckfertiges PDF pro Empfänger.",
-    sub: "Adresse, Anrede, Inhalt und persönliche URL sind schon drin. Drucke direkt oder gib das Bündel an deinen Druckdienst.",
+    id: "export",
+    title: "Export",
+    eyebrow: "Schritt 5",
+    headline: "CSV oder Briefe. Du entscheidest.",
+    sub: "Entweder die fertige Liste mit Landingpage-URLs zum Versenden, oder druckfertige Briefe als PDF.",
   },
   {
     id: "tracking",
     title: "Tracking",
-    eyebrow: "Live tracken",
-    headline: "Du siehst alles, in Echtzeit.",
-    sub: "Jede Öffnung, Watch-Time, jeder Klick. Optional synchron in HubSpot, Salessuite, Close, Zapier oder Make.",
+    eyebrow: "Schritt 6",
+    headline: "Schau live, was passiert.",
+    sub: "Wer öffnet, wer schaut, wer klickt. Optional synchron in dein CRM.",
   },
 ];
+
+type ExportFormat = "csv" | "pdf";
 
 // ---------------------------------------------------------------------------
 // Webcam-Takes / Szenen / Templates
@@ -228,6 +232,8 @@ export function HowItWorksSection() {
   const [templateId, setTemplateId] = React.useState<TemplateId>("soft");
   // Multiplikations-Animation in Step 4: 4 → 16 → 36 (6x6 = landscape cells)
   const [leadCount, setLeadCount] = React.useState<4 | 16 | 36>(4);
+  // Sub-Auswahl Step 5: CSV-URLs oder PDF-Briefe
+  const [exportFormat, setExportFormat] = React.useState<ExportFormat>("csv");
 
   React.useEffect(() => {
     if (manual) return;
@@ -267,15 +273,19 @@ export function HowItWorksSection() {
     >
       <div className="max-w-6xl mx-auto px-6 md:px-10">
         <div className="max-w-2xl mx-auto text-center mb-12">
-          <div className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-brand-soft text-brand-deep text-[11px] font-semibold tracking-[0.18em] uppercase mb-5">
+          <div className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-brand-soft text-brand-deep text-[11px] font-semibold tracking-[0.18em] uppercase mb-6">
             So funktioniert es
           </div>
-          <h2 className="text-4xl md:text-5xl font-bold tracking-[-0.025em] text-ink leading-[1.05] mb-5 text-balance">
-            Sechs Schritte zur fertigen Kampagne.
+          <h2 className="font-light tracking-[-0.035em] text-ink leading-[1.05] text-[clamp(32px,4.2vw,56px)] mb-5 text-balance">
+            In sechs Schritten zu deiner
+            <br />
+            <span className="font-semibold text-brand-deep">
+              ersten Kampagne.
+            </span>
           </h2>
-          <p className="text-ink-muted text-lg leading-relaxed text-balance">
-            Einmal aufgenommen, einmal aufgesetzt. Danach läuft jede neue
-            Kampagne in Minuten.
+          <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-xl mx-auto">
+            Klick dich durch und sieh, wie aus einer Webcam-Aufnahme
+            persönliche Videos für hunderte Leads werden.
           </p>
         </div>
 
@@ -347,6 +357,7 @@ export function HowItWorksSection() {
               sceneId={sceneId}
               template={TEMPLATES.find((t) => t.id === templateId)!}
               leadCount={leadCount}
+              exportFormat={exportFormat}
             />
           </div>
 
@@ -366,6 +377,11 @@ export function HowItWorksSection() {
               templateId={templateId}
               setTemplateId={(t) => {
                 setTemplateId(t);
+                setManual(true);
+              }}
+              exportFormat={exportFormat}
+              setExportFormat={(f) => {
+                setExportFormat(f);
                 setManual(true);
               }}
               manual={manual}
@@ -389,6 +405,8 @@ function SidePanel({
   setSceneId,
   templateId,
   setTemplateId,
+  exportFormat,
+  setExportFormat,
   manual,
 }: {
   step: number;
@@ -398,6 +416,8 @@ function SidePanel({
   setSceneId: (s: SceneId) => void;
   templateId: TemplateId;
   setTemplateId: (t: TemplateId) => void;
+  exportFormat: ExportFormat;
+  setExportFormat: (f: ExportFormat) => void;
   manual: boolean;
 }) {
   const s = STEPS[step];
@@ -426,7 +446,12 @@ function SidePanel({
           <SelectorTemplates value={templateId} onChange={setTemplateId} />
         ) : null}
         {step === 3 ? <SelectorLeadList /> : null}
-        {step === 4 ? <SelectorLetterInfo /> : null}
+        {step === 4 ? (
+          <SelectorExportFormat
+            value={exportFormat}
+            onChange={setExportFormat}
+          />
+        ) : null}
         {step === 5 ? <SelectorTrackingInfo /> : null}
       </div>
 
@@ -624,30 +649,63 @@ function SelectorLeadList() {
   );
 }
 
-function SelectorLetterInfo() {
+function SelectorExportFormat({
+  value,
+  onChange,
+}: {
+  value: ExportFormat;
+  onChange: (v: ExportFormat) => void;
+}) {
+  const OPTIONS = [
+    {
+      id: "csv" as const,
+      icon: ClipboardList,
+      label: "Liste mit URLs",
+      sub: "CSV mit Landingpage-URL pro Lead. Direkt in dein Mail-Tool einbinden.",
+    },
+    {
+      id: "pdf" as const,
+      icon: FileText,
+      label: "Briefe als PDF",
+      sub: "Druckfertiges Bündel pro Empfänger. Drucken oder versenden lassen.",
+    },
+  ];
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3 p-3 rounded-xl border border-line bg-white">
-        <FileText className="size-5 text-brand-deep shrink-0" />
-        <div className="flex-1">
-          <div className="text-sm font-semibold text-ink">PDF-Bundle</div>
-          <div className="text-xs text-ink-muted">3.631 druckfertige Briefe</div>
-        </div>
-      </div>
-      <div className="flex items-center gap-3 p-3 rounded-xl border border-line bg-white">
-        <ImageIcon className="size-5 text-brand-deep shrink-0" />
-        <div className="flex-1">
-          <div className="text-sm font-semibold text-ink">QR-Code drin</div>
-          <div className="text-xs text-ink-muted">Direkt zum persönlichen Video</div>
-        </div>
-      </div>
-      <div className="flex items-center gap-3 p-3 rounded-xl border border-line bg-white">
-        <Mail className="size-5 text-brand-deep shrink-0" />
-        <div className="flex-1">
-          <div className="text-sm font-semibold text-ink">Anschriften vorbefüllt</div>
-          <div className="text-xs text-ink-muted">Aus deiner Leadliste</div>
-        </div>
-      </div>
+    <div className="flex flex-col gap-2">
+      {OPTIONS.map((o) => {
+        const Icon = o.icon;
+        const active = o.id === value;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
+            className={cn(
+              "flex items-start gap-3 p-3 rounded-xl border transition-all text-left",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
+              active
+                ? "border-brand bg-brand-soft/50"
+                : "border-line bg-white hover:border-brand/40",
+            )}
+          >
+            <Icon
+              className={cn(
+                "size-5 mt-0.5 shrink-0",
+                active ? "text-brand-deep" : "text-ink-muted",
+              )}
+            />
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-ink">{o.label}</div>
+              <div className="text-xs text-ink-muted mt-0.5 leading-snug">
+                {o.sub}
+              </div>
+            </div>
+            {active ? (
+              <CheckCircle2 className="size-4 text-brand mt-1 shrink-0" />
+            ) : null}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -706,11 +764,13 @@ function Stage({
   sceneId,
   template,
   leadCount,
+  exportFormat,
 }: {
   step: number;
   sceneId: SceneId;
   template: Template;
   leadCount: 4 | 16 | 36;
+  exportFormat: ExportFormat;
 }) {
   const webcamPos = computeWebcamPos(step, sceneId);
   const isSolo = sceneId === "solo";
@@ -743,8 +803,10 @@ function Stage({
         leadCount={leadCount}
       />
 
-      {/* Letter — step 4 */}
-      <LetterLayer active={step === 4} />
+      {/* Export — step 4: entweder CSV-Liste oder PDF-Brief, je nach
+          exportFormat-Auswahl */}
+      <ExportCsvLayer active={step === 4 && exportFormat === "csv"} />
+      <LetterLayer active={step === 4 && exportFormat === "pdf"} />
 
       {/* Tracking dashboard + push notifs — step 5 */}
       <TrackingLayer active={step === 5} />
@@ -1714,6 +1776,91 @@ function ThumbnailCard({
         className="h-0.5 mx-1 mb-0.5 rounded"
         style={{ backgroundColor: `${lead.color}80` }}
       />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Export-CSV Layer — Leadliste mit Landingpage-URL als Spalte
+// ---------------------------------------------------------------------------
+
+function ExportCsvLayer({ active }: { active: boolean }) {
+  const SAMPLE = LEADS.slice(0, 4);
+  return (
+    <div
+      className="absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-700 p-6"
+      style={{ opacity: active ? 1 : 0, pointerEvents: "none" }}
+    >
+      <div className="w-full max-w-[640px] rounded-2xl bg-white border border-line shadow-2xl overflow-hidden">
+        {/* File header */}
+        <div className="px-4 py-3 bg-surface-soft border-b border-line flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="size-4 text-brand-deep" />
+            <span className="text-sm font-semibold text-ink">
+              leads-mit-urls.csv
+            </span>
+          </div>
+          <span className="text-[11px] font-mono text-ink-muted">
+            743 Zeilen · 6 Spalten
+          </span>
+        </div>
+
+        {/* Table */}
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-surface-soft border-b border-line text-[10px] uppercase tracking-wider">
+              <th className="text-left py-2 px-3 font-semibold text-ink-muted">
+                Vorname
+              </th>
+              <th className="text-left py-2 px-3 font-semibold text-ink-muted">
+                Firma
+              </th>
+              <th className="text-left py-2 px-3 font-semibold text-brand-deep bg-brand-soft/60 border-l border-brand/20 relative">
+                Landingpage-URL
+                <span
+                  className="ml-1.5 inline-flex items-center gap-0.5 rounded px-1 py-0 text-[8px] font-bold text-white"
+                  style={{ backgroundColor: "#7C5CE8" }}
+                >
+                  <Sparkles className="size-2" /> NEU
+                </span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {SAMPLE.map((l, i) => (
+              <tr key={i} className="border-b border-line/60">
+                <td className="py-2 px-3 text-ink font-medium">{l.first}</td>
+                <td className="py-2 px-3 text-ink-soft">{l.company}</td>
+                <td className="py-2 px-3 text-brand-deep font-mono text-[10px] bg-brand-soft/30 border-l border-brand/20 truncate max-w-[200px]">
+                  videocomet.de/lp/{l.slug}
+                </td>
+              </tr>
+            ))}
+            <tr>
+              <td
+                colSpan={3}
+                className="py-2 px-3 text-center text-[10px] text-ink-muted/70 italic"
+              >
+                +739 weitere Zeilen
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* Download CTA */}
+        <div className="px-4 py-3 border-t border-line bg-brand/5 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs text-ink">
+            <CheckCircle2 className="size-3.5 text-ok" />
+            <span>
+              Persönliche URL pro Lead. Direkt in dein Mail-Tool einbinden.
+            </span>
+          </div>
+          <div className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold">
+            <Download className="size-3.5" />
+            CSV laden
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
