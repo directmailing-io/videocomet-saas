@@ -279,21 +279,20 @@ function VideoPlayerVisual() {
           </div>
         </div>
 
-        {/* Webcam PiP */}
-        <div className="absolute top-3 right-3 size-14 rounded-full overflow-hidden border-2 border-white/95 shadow-[0_6px_20px_-2px_rgba(0,0,0,0.5)]">
-          <video
-            src="/demo-assets/webcam.mp4"
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
+        {/* Webcam STILL IMAGE — bottom-left, HINTER den Controls */}
+        <div
+          className="absolute left-3 bottom-3 size-16 rounded-2xl overflow-hidden border-2 border-white/95 shadow-[0_8px_22px_-4px_rgba(0,0,0,0.55)]"
+          style={{ zIndex: 1 }}
+        >
+          <img
+            src="/demo-assets/webcam-still.jpg"
+            alt=""
             className="w-full h-full object-cover"
           />
         </div>
 
         {/* Center play button */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 3 }}>
           <div
             className="size-14 rounded-full flex items-center justify-center backdrop-blur-md border border-white/30"
             style={{
@@ -305,12 +304,13 @@ function VideoPlayerVisual() {
           </div>
         </div>
 
-        {/* Bottom controls */}
+        {/* Bottom controls — ueber dem Webcam-Bild */}
         <div
           className="absolute inset-x-0 bottom-0 px-3.5 pt-8 pb-2.5"
           style={{
+            zIndex: 2,
             background:
-              "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)",
+              "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0) 100%)",
           }}
         >
           <div className="h-[3px] bg-white/25 rounded-full mb-2 overflow-hidden">
@@ -374,7 +374,7 @@ function LandingPageVisual() {
           <div className="flex-1 mx-3 h-4 rounded-md bg-white border border-line flex items-center px-2.5 gap-1.5">
             <div className="size-1.5 rounded-full bg-emerald-500" />
             <span className="text-[8px] text-ink-muted truncate font-medium">
-              zenith.io/max-mustermann
+              domain.de/max-mustermann
             </span>
           </div>
           <div className="size-2.5 rounded-sm bg-line" />
@@ -493,7 +493,7 @@ function BriefVisual() {
     let cancelled = false;
     import("qrcode")
       .then((mod) =>
-        mod.default.toDataURL("https://zenith.io/max-mustermann", {
+        mod.default.toDataURL("https://domain.de/max-mustermann", {
           margin: 0,
           width: 200,
           errorCorrectionLevel: "M",
@@ -524,34 +524,15 @@ function BriefVisual() {
       />
 
       <div
-        className="relative rounded-md overflow-hidden mx-auto"
+        className="relative rounded-md overflow-hidden mx-auto bg-white"
         style={{
           width: "100%",
           aspectRatio: "210/297",
-          background: "linear-gradient(180deg, #FFFEFA 0%, #FAF5EB 100%)",
-          border: "1px solid rgba(0,0,0,0.07)",
+          border: "1px solid rgba(0,0,0,0.08)",
           boxShadow:
-            "0 30px 60px -20px rgba(0,0,0,0.45), 0 10px 25px -10px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.9)",
+            "0 30px 60px -20px rgba(0,0,0,0.35), 0 10px 25px -10px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.9)",
         }}
       >
-        <div
-          aria-hidden
-          className="absolute inset-0 opacity-[0.35] mix-blend-multiply pointer-events-none"
-          style={{
-            backgroundImage:
-              'url("data:image/svg+xml;utf8,<svg xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"100\\" height=\\"100\\" viewBox=\\"0 0 100 100\\"><filter id=\\"n\\"><feTurbulence type=\\"fractalNoise\\" baseFrequency=\\"1.2\\" numOctaves=\\"2\\" stitchTiles=\\"stitch\\"/></filter><rect width=\\"100%\\" height=\\"100%\\" filter=\\"url(%23n)\\" opacity=\\"0.18\\"/></svg>")',
-          }}
-        />
-
-        <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-1.5"
-          style={{
-            background:
-              "linear-gradient(90deg, #5232C7 0%, #7C5CE8 50%, #D946EF 100%)",
-          }}
-        />
-
         {/* DIN-ähnliche Ränder */}
         <div
           className="relative h-full flex flex-col text-ink"
@@ -584,7 +565,7 @@ function BriefVisual() {
 
           {/* Subject */}
           <div className="text-[8.5px] font-bold mt-1 mb-2.5 leading-tight">
-            Drei Punkte zu Ihrer Webseite.
+            Lorem ipsum dolor sit amet.
           </div>
 
           {/* Anrede */}
@@ -592,22 +573,23 @@ function BriefVisual() {
             Sehr geehrter Herr Mustermann,
           </div>
 
-          {/* Body — echter Text */}
+          {/* Body — Lorem ipsum */}
           <div
             className="text-[7px] leading-[1.55] text-ink"
             style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
           >
             <p>
-              ich habe mir Ihre Webseite angesehen und drei Punkte
-              gefunden, die Sie täglich Kunden kosten.
+              Lorem ipsum dolor sit amet, consetetur sadipscing elitr,
+              sed diam nonumy eirmod tempor invidunt ut labore et
+              dolore magna aliquyam erat.
             </p>
             <p className="mt-1.5">
-              In neunzig Sekunden zeige ich Ihnen die wichtigsten
-              Optimierungen, persönlich auf Sie zugeschnitten.
+              At vero eos et accusam et justo duo dolores et ea rebum.
+              Stet clita kasd gubergren, no sea takimata sanctus est.
             </p>
             <p className="mt-1.5">
-              Scannen Sie einfach den QR-Code unten rechts, dann öffnet
-              sich Ihr Video.
+              Duis autem vel eum iriure dolor in hendrerit in vulputate
+              velit esse molestie consequat.
             </p>
           </div>
 
@@ -868,11 +850,11 @@ function ABVisual() {
 // ===========================================================================
 
 function IntegrationsVisual() {
-  const TARGETS = [
-    { slug: "hubspot", name: "HubSpot" },
-    { slug: "zapier", name: "Zapier" },
-    { slug: "make", name: "Make" },
-    { slug: "close", name: "Close" },
+  const TARGETS: { name: string; src: string }[] = [
+    { name: "HubSpot", src: "https://cdn.simpleicons.org/hubspot" },
+    { name: "Zapier", src: "https://cdn.simpleicons.org/zapier" },
+    { name: "Make", src: "https://cdn.simpleicons.org/make" },
+    { name: "Close", src: "/brand-logos/close-mark.svg" },
   ];
   return (
     <div className="relative w-full max-w-[520px] mx-auto py-4">
@@ -917,17 +899,17 @@ function IntegrationsVisual() {
       <div className="grid grid-cols-4 gap-3">
         {TARGETS.map((t) => (
           <div
-            key={t.slug}
+            key={t.name}
             className="rounded-2xl bg-white border border-line shadow-[0_10px_24px_-14px_rgba(15,23,42,0.22)] p-3 flex flex-col items-center gap-2 relative"
           >
-            <img
-              src={`https://cdn.simpleicons.org/${t.slug}`}
-              alt={t.name}
-              width={30}
-              height={30}
-              loading="lazy"
-              className="size-8"
-            />
+            <div className="h-8 flex items-center justify-center">
+              <img
+                src={t.src}
+                alt={t.name}
+                loading="lazy"
+                className="max-h-8 w-auto object-contain"
+              />
+            </div>
             <div className="text-[11px] font-semibold text-ink text-center leading-tight">
               {t.name}
             </div>
