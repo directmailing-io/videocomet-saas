@@ -1526,22 +1526,39 @@ function MultiGridLayer({
               transitionDelay: `${Math.min(i * 30, 800)}ms`,
               opacity: active ? 1 : 0,
               transform: active ? "scale(1)" : "scale(0.94)",
+              containerType: "size",
             }}
           >
-            {/* Jede Karte rendert die KOMPLETTE Step-3-Landingpage —
-                personalisiert mit dem jeweiligen Lead. In 16/32 wird das
-                Layout extrem winzig, das ist beabsichtigt: User soll
-                erkennen, dass DIE SELBE LP fuer jeden Lead dupliziert wird. */}
-            <LandingPageInner
-              template={template}
-              lead={l}
-              videoSlot
-              fullSize={false}
-              sceneId={sceneId}
-            />
-            {/* Webcam-Video in JEDER Karte an exakt derselben relativen
-                Position wie das Video-Slot der LP. */}
-            <CellWebcam isSolo={isSolo} />
+            {/* Intrinsisch immer 480x320 gerendert (volle LP wie in Step 3,
+                fullSize=true). Per transform:scale() proportional auf die
+                Card-Groesse runtergerechnet via Container-Queries. Damit
+                schrumpfen Text, Padding, Slot UND Webcam-PiP exakt gleich.
+                User-Anforderung: "exakt das Frame, wie bei 03, nur halt viel
+                kleiner skalieren. Alles." */}
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: 480,
+                height: 320,
+                transformOrigin: "top left",
+                transform:
+                  "scale(min(calc(100cqw / 480px), calc(100cqh / 320px)))",
+              }}
+            >
+              <LandingPageInner
+                template={template}
+                lead={l}
+                videoSlot
+                fullSize
+                sceneId={sceneId}
+              />
+              {/* Webcam sitzt INNERHALB des skalierten Wrappers — bei Solo
+                  fuellt sie den ganzen Video-Slot, sonst PiP-Kreis bottom-
+                  left des Slots. Skaliert automatisch mit. */}
+              <CellWebcam isSolo={isSolo} />
+            </div>
           </div>
         ))}
       </div>
