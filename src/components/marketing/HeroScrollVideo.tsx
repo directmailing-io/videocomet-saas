@@ -2,10 +2,26 @@
 
 import Link from "next/link";
 import * as React from "react";
+import { AtSign, Linkedin, Mail } from "lucide-react";
 
 const FRAME_COUNT = 97;
 const FRAME_BASE = "/hero-frames/frame_";
 const FRAME_PAD = 3;
+
+function ChannelChip({
+  icon,
+  label,
+}: {
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.08] border border-white/15 text-white/90 text-xs font-medium backdrop-blur-md">
+      {icon}
+      {label}
+    </span>
+  );
+}
 
 /**
  * Scroll-Pinned Video-Frame-Scrubber für die Marketing-Startseite.
@@ -168,12 +184,12 @@ export function HeroScrollVideo() {
         {/* Hero content */}
         <div
           ref={contentRef}
-          className="relative z-10 w-full h-full max-w-6xl mx-auto px-6 md:px-10 grid grid-rows-[1fr_auto_auto_auto_auto] gap-5 content-end pb-[clamp(72px,9vh,128px)]"
+          className="relative z-10 w-full h-full max-w-6xl mx-auto px-6 md:px-10 grid grid-rows-[1fr_auto_auto_auto_auto_auto] gap-5 content-end pb-[clamp(72px,9vh,128px)]"
         >
           <div />
 
           <div className="vc-hero-eyebrow inline-flex items-center gap-3 text-[10px] tracking-[0.22em] uppercase opacity-0">
-            <span className="text-white/95">Ein Video für jeden Lead</span>
+            <span className="text-white/95">Persönliche Video-Akquise</span>
             <span className="block w-3 h-px bg-white/30" />
             <span className="text-white/45">VIDEOCOMET</span>
           </div>
@@ -190,22 +206,34 @@ export function HeroScrollVideo() {
                     "linear-gradient(96deg, #C7B6FE 0%, #AA8CF5 35%, #7C5CE8 70%, #5232C7 100%)",
                 }}
               >
-                Hunderte Empfänger.
+                Einschlagskraft eines Kometen.
               </span>
             </span>
           </h1>
 
           <p className="vc-hero-sub max-w-xl text-lg leading-relaxed text-white/70 opacity-0">
-            Nimm einmal deine Webcam auf. VIDEOCOMET personalisiert Bild,
-            Webseite und Botschaft für jeden einzelnen Lead.
+            Einmal Webcam, tausendfach personalisiert. Trifft deinen Lead
+            genau dort, wo er erreichbar ist.
           </p>
+
+          <div className="vc-hero-channels flex flex-wrap items-center gap-2 opacity-0">
+            <ChannelChip icon={<AtSign className="size-3.5" />} label="E-Mail" />
+            <ChannelChip
+              icon={<Linkedin className="size-3.5" />}
+              label="LinkedIn"
+            />
+            <ChannelChip
+              icon={<Mail className="size-3.5" />}
+              label="Brief im Briefkasten"
+            />
+          </div>
 
           <div className="vc-hero-cta flex flex-wrap items-center gap-4 mt-2 opacity-0">
             <Link
-              href="/login"
+              href="#demo"
               className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white text-black text-sm font-semibold hover:bg-white/90 transition-colors"
             >
-              Jetzt einsteigen
+              Live-Demo ansehen
               <svg
                 width="14"
                 height="14"
@@ -221,10 +249,10 @@ export function HeroScrollVideo() {
               </svg>
             </Link>
             <Link
-              href="#demo"
+              href="/login"
               className="inline-flex items-center gap-1.5 px-2 py-3 text-white/80 text-sm font-medium hover:text-white transition-colors"
             >
-              Live-Demo ansehen
+              Anmelden
               <svg
                 width="12"
                 height="12"
@@ -267,8 +295,9 @@ export function HeroScrollVideo() {
         .vc-hero-title .vc-hero-line:nth-child(1) { animation: vc-hero-line-rise 1.15s cubic-bezier(0.16,1,0.3,1) 0.3s forwards; }
         .vc-hero-title > span:nth-child(2) .vc-hero-line { animation: vc-hero-line-rise 1.15s cubic-bezier(0.16,1,0.3,1) 0.4s forwards; }
         .vc-hero-sub { animation: vc-hero-fade-up 0.95s cubic-bezier(0.2,0.8,0.2,1) 0.85s forwards; }
-        .vc-hero-cta { animation: vc-hero-fade-up 0.95s cubic-bezier(0.2,0.8,0.2,1) 1.05s forwards; }
-        .vc-hero-hint { animation: vc-hero-fade-up 0.8s cubic-bezier(0.2,0.8,0.2,1) 1.4s forwards; }
+        .vc-hero-channels { animation: vc-hero-fade-up 0.9s cubic-bezier(0.2,0.8,0.2,1) 1.05s forwards; }
+        .vc-hero-cta { animation: vc-hero-fade-up 0.95s cubic-bezier(0.2,0.8,0.2,1) 1.25s forwards; }
+        .vc-hero-hint { animation: vc-hero-fade-up 0.8s cubic-bezier(0.2,0.8,0.2,1) 1.6s forwards; }
       `}</style>
     </section>
   );
