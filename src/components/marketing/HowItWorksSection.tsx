@@ -683,9 +683,10 @@ function Stage({
 }) {
   const webcamPos = computeWebcamPos(step, sceneId);
   const isSolo = sceneId === "solo";
-  // In Step 5 (Brief) und Step 6 (Tracking) ist der Webcam-Stream
-  // visuell stoerend (Letter/Dashboard sprechen fuer sich). Komplett raus.
-  const hideWebcam = step === 4 || step === 5;
+  // Webcam-Sichtbarkeit:
+  // - Step 4 (Leadliste): hidden — jede Multi-Grid-Karte rendert das Video selbst
+  // - Step 5 (Brief), Step 6 (Tracking): hidden — Letter/Dashboard sprechen fuer sich
+  const hideWebcam = step === 3 || step === 4 || step === 5;
 
   return (
     <div className="relative w-full aspect-[16/10] rounded-3xl overflow-hidden bg-gradient-to-br from-[#0F172A] via-[#1a1d35] to-[#0F172A] border border-line shadow-[0_30px_80px_-30px_rgba(15,23,42,0.35)]">
@@ -935,25 +936,12 @@ function SceneSlides() {
 }
 
 function SceneDoc() {
+  // Identisch zum SceneInline-Doc-Renderer, nur full-stage (compact=false).
+  // Bringt die echte Google-Docs-UI (Top-Bar mit Datei-Icon + Title + Menue
+  // + Teilen-Button + Avatar, Toolbar mit Format-Icons, Dokument-Area).
   return (
-    <div className="absolute inset-0 bg-gradient-to-br from-[#F8FAFC] to-[#E2E8F0] p-8 flex items-center justify-center">
-      <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
-        <div className="w-12 h-1 bg-brand mb-4 rounded" />
-        <div className="text-lg font-bold text-ink mb-2">Notiz für Max</div>
-        <div className="text-xs text-ink-muted mb-4">
-          Schnell-Check für mustermann-industrie.de
-        </div>
-        <div className="space-y-1.5">
-          <div className="h-1 bg-ink/15 w-full rounded" />
-          <div className="h-1 bg-ink/15 w-5/6 rounded" />
-          <div className="h-1 bg-ink/15 w-4/6 rounded" />
-        </div>
-        <div className="mt-4 p-2 rounded bg-red-50 border-l-2 border-red-400">
-          <div className="text-[10px] font-bold text-red-900">
-            1. Kein Datenblatt zum Download
-          </div>
-        </div>
-      </div>
+    <div className="absolute inset-0">
+      <SceneDocGoogleDocs lead={LEADS[0]} compact={false} />
     </div>
   );
 }
@@ -1475,66 +1463,100 @@ function MultiGridLayer({
             }}
           >
             {leadCount === 4 ? (
-              <>
-                <LandingPageInner
-                  template={template}
-                  lead={l}
-                  videoSlot
-                  fullSize={false}
-                  sceneId={sceneId}
-                />
-                {/* Cards 2-4: eigenes Webcam-Element. Card 1 wird vom globalen
-                    transitionierenden Stage-Webcam ueberlagert. */}
-                {i !== 0 ? (
-                  <div
-                    className="absolute overflow-hidden"
-                    style={
-                      isSolo
-                        ? {
-                            top: "30%",
-                            left: "58%",
-                            width: "36%",
-                            height: "44%",
-                            borderRadius: "6px",
-                            boxShadow:
-                              "0 6px 14px -4px rgba(15,23,42,0.3)",
-                          }
-                        : {
-                            top: "60%",
-                            left: "60%",
-                            width: "10%",
-                            aspectRatio: "1/1",
-                            borderRadius: "9999px",
-                            boxShadow:
-                              "0 0 0 2px rgba(255,255,255,0.92), 0 6px 14px -4px rgba(15,23,42,0.45)",
-                          }
-                    }
-                  >
-                    <video
-                      src="/demo-assets/webcam.mp4"
-                      muted
-                      autoPlay
-                      loop
-                      playsInline
-                      preload="auto"
-                      disableRemotePlayback
-                      disablePictureInPicture
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <ThumbnailCard
-                lead={l}
+              <LandingPageInner
                 template={template}
+                lead={l}
+                videoSlot
+                fullSize={false}
                 sceneId={sceneId}
-                minimal={leadCount === 32}
               />
+            ) : (
+              <ThumbnailCard lead={l} minimal={leadCount === 32} />
             )}
+            {/* Webcam-Video in JEDER Karte — gleicher Stream, gleiche
+                Geometrie. User-Anforderung: "dass da jedes Video wirklich
+                1:1 perfekt identisch aussieht". */}
+            <CellWebcam
+              isSolo={isSolo}
+              leadCount={leadCount}
+            />
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Identisches Webcam-Element pro Karte. Position/Geometrie haengt vom
+ * leadCount-Modus ab.
+ */
+function CellWebcam({
+  isSolo,
+  leadCount,
+}: {
+  isSolo: boolean;
+  leadCount: 4 | 16 | 32;
+}) {
+  let style: React.CSSProperties;
+
+  if (leadCount === 4) {
+    // Im LP-Layout: PiP-Kreis bottom-left des LP-Video-Slots (oder Solo-Slot)
+    style = isSolo
+      ? {
+          top: "30%",
+          left: "58%",
+          width: "36%",
+          height: "44%",
+          borderRadius: "6px",
+          boxShadow: "0 6px 14px -4px rgba(15,23,42,0.3)",
+        }
+      : {
+          top: "60%",
+          left: "60%",
+          width: "10%",
+          aspectRatio: "1/1",
+          borderRadius: "9999px",
+          boxShadow:
+            "0 0 0 2px rgba(255,255,255,0.92), 0 6px 14px -4px rgba(15,23,42,0.45)",
+        };
+  } else if (leadCount === 16) {
+    // Mittiger Kreis in jeder Thumbnail-Karte
+    style = {
+      top: "50%",
+      left: "50%",
+      width: "55%",
+      aspectRatio: "1/1",
+      borderRadius: "9999px",
+      transform: "translate(-50%, -45%)",
+      boxShadow: "0 0 0 1.5px rgba(255,255,255,0.95), 0 3px 8px rgba(15,23,42,0.35)",
+    };
+  } else {
+    // 32 — sehr klein, mittig
+    style = {
+      top: "50%",
+      left: "50%",
+      width: "60%",
+      aspectRatio: "1/1",
+      borderRadius: "9999px",
+      transform: "translate(-50%, -45%)",
+      boxShadow: "0 0 0 1px rgba(255,255,255,0.95), 0 2px 5px rgba(15,23,42,0.3)",
+    };
+  }
+
+  return (
+    <div className="absolute overflow-hidden" style={style}>
+      <video
+        src="/demo-assets/webcam.mp4"
+        muted
+        autoPlay
+        loop
+        playsInline
+        preload="auto"
+        disableRemotePlayback
+        disablePictureInPicture
+        className="block w-full h-full object-cover"
+      />
     </div>
   );
 }
@@ -1547,52 +1569,25 @@ function MultiGridLayer({
  */
 function ThumbnailCard({
   lead,
-  template,
-  sceneId,
   minimal,
 }: {
   lead: LeadLike;
-  template: Template;
-  sceneId: SceneId;
   minimal: boolean;
 }) {
-  void template;
-  void sceneId;
+  // Mini-Landingpage-Anmutung pro Lead: Top-Accent + Body-Hintergrund +
+  // Bottom-Pseudo-CTA. Der Webcam-Video-Kreis liegt darueber per CellWebcam.
   return (
     <div
       className="w-full h-full relative flex flex-col"
       style={{
-        background: `linear-gradient(135deg, ${lead.color}25, ${lead.color}55)`,
+        background: `linear-gradient(180deg, ${lead.color}30 0%, ${lead.color}10 100%)`,
       }}
     >
-      {/* Top accent stripe */}
       <div
         className={minimal ? "h-1" : "h-1.5"}
         style={{ backgroundColor: lead.color }}
       />
-      <div className="flex-1 flex flex-col items-center justify-center px-1">
-        <div
-          className={cn(
-            "rounded-full flex items-center justify-center text-white font-extrabold",
-            minimal ? "size-3" : "size-5",
-          )}
-          style={{
-            background: `linear-gradient(135deg, ${lead.color}, ${lead.color}cc)`,
-            fontSize: minimal ? "6px" : "9px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.18)",
-          }}
-        >
-          {lead.first[0]}
-        </div>
-        {!minimal ? (
-          <div
-            className="mt-1 text-[7px] font-bold leading-tight text-center text-ink truncate w-full"
-          >
-            {lead.first}
-          </div>
-        ) : null}
-      </div>
-      {/* Tiny CTA-Linie unten */}
+      <div className="flex-1" />
       <div
         className="h-0.5 mx-1 mb-0.5 rounded"
         style={{ backgroundColor: `${lead.color}80` }}
@@ -1649,11 +1644,10 @@ function LetterLayer({ active }: { active: boolean }) {
 
   return (
     <div
-      className="absolute inset-0 z-10 flex items-center transition-opacity duration-700 px-8 py-6 gap-8"
+      className="absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-700"
       style={{ opacity: active ? 1 : 0, pointerEvents: "none" }}
     >
-      {/* Letter-Stack links — Letter selbst behaelt aspect 210/297 */}
-      <div className="relative h-[88%] aspect-[210/297] shrink-0">
+      <div className="relative h-[88%] aspect-[210/297]">
         {STACK.map((s, i) => (
           <div
             key={i}
@@ -1670,39 +1664,20 @@ function LetterLayer({ active }: { active: boolean }) {
           </div>
         ))}
       </div>
-
-      {/* Platzhalter-/Info-Spalte rechts */}
-      <div className="flex-1 flex flex-col gap-4 max-w-[280px] text-white/90">
-        <div className="text-[10px] font-bold tracking-[0.22em] uppercase text-brand-light">
-          743 Briefe · 1 Klick
-        </div>
-        <div className="text-xl font-bold leading-tight">
-          Pro Empfänger
-          <br />
-          ein eigener Brief.
-        </div>
-        <ul className="flex flex-col gap-2.5 mt-1 text-[12px] leading-snug">
-          {[
-            "Anrede und Adresse aus der Leadliste",
-            "Persönliche Landingpage-URL im Fließtext",
-            "Echter QR-Code zum Scannen",
-            "DIN-5008 konformes Layout, druckfertig",
-          ].map((t) => (
-            <li key={t} className="flex items-start gap-2">
-              <span className="mt-1 size-1 rounded-full bg-brand-light shrink-0" />
-              <span className="text-white/75">{t}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
     </div>
   );
 }
 
 function RealisticLetter({ lead }: { lead: LeadLike }) {
+  // DIN-A4-Brief im Lückentext-Stil: Strukturelle Rahmen-Texte (Anrede,
+  // Schluss, Signatur etc.) sind echt, Fließtext-Bereiche werden als
+  // graue Platzhalter-Zeilen ("Lückentext") dargestellt. Variable
+  // Platzhalter wie {Vorname}/{Firma} sind farblich hervorgehoben.
+  // QR-Code sitzt unten in seiner eigenen rechten Spalte, ueberlappt
+  // NICHTS — Text fliesst um ihn herum, weil Layout zweispaltig endet.
   return (
     <div
-      className="relative w-full h-full bg-white shadow-[0_30px_60px_-20px_rgba(15,23,42,0.4)]"
+      className="relative w-full h-full bg-white shadow-[0_30px_60px_-20px_rgba(15,23,42,0.4)] flex flex-col"
       style={{
         fontFamily: "'Inter', -apple-system, sans-serif",
         color: "#0F172A",
@@ -1714,98 +1689,141 @@ function RealisticLetter({ lead }: { lead: LeadLike }) {
         className="text-[6px] leading-tight pb-1 mb-1 border-b"
         style={{ color: "#94A3B8", borderColor: "#E2E8F0" }}
       >
-        Deine Firma GmbH · Musterstraße 1 · 12345 Stadt
+        <Placeholder>{`{Deine Firma GmbH · Strasse · PLZ Stadt}`}</Placeholder>
       </div>
 
-      {/* Adressfeld + Datum nebeneinander */}
-      <div className="flex justify-between mt-3 mb-6">
+      {/* Adressfeld + Datum */}
+      <div className="flex justify-between mt-3 mb-5">
         <div className="text-[9px] leading-[1.35]">
           {lead.salutation}
           <br />
-          <strong>{lead.name}</strong>
+          <strong>
+            <Placeholder>{`{${lead.name}}`}</Placeholder>
+          </strong>
           <br />
-          {lead.company}
+          <Placeholder>{`{${lead.company}}`}</Placeholder>
           <br />
-          {lead.street}
+          <Placeholder>{`{${lead.street}}`}</Placeholder>
           <br />
-          {lead.city}
+          <Placeholder>{`{${lead.city}}`}</Placeholder>
         </div>
         <div className="text-[8px] text-right" style={{ color: "#475569" }}>
-          22. Juni 2026
+          {`{Stadt}, {Datum}`}
         </div>
       </div>
 
-      {/* Betreff */}
-      <div className="text-[10px] font-bold mb-4">
-        Drei Beobachtungen zu Ihrer Webseite
+      {/* Betreff (echt) */}
+      <div className="text-[10px] font-bold mb-3">
+        <Placeholder>{`{Betreff-Zeile}`}</Placeholder>
       </div>
 
-      {/* Anrede */}
-      <div className="text-[9px] mb-3">{lead.polite},</div>
-
-      {/* Fließtext */}
-      <div className="text-[8.5px] leading-[1.55] space-y-2 mb-4">
-        <p>
-          ich habe mir kurz Ihre Webseite angeschaut und drei Punkte
-          aufgeschrieben, die Sie aktuell Anfragen kosten könnten.
-        </p>
-        <p>
-          Das Gespräch dazu habe ich Ihnen in einem zweiminütigen,
-          persönlichen Video aufgenommen. Sie finden es hier:
-        </p>
+      {/* Anrede (mix aus echt + Platzhalter) */}
+      <div className="text-[9px] mb-3">
+        <Placeholder>{`{${lead.polite}}`}</Placeholder>,
       </div>
 
-      {/* URL-Block */}
+      {/* Fließtext als Lückentext — graue Linien stehen fuer
+          frei formulierbaren Inhalt */}
+      <div className="space-y-1.5 mb-3">
+        <BodyLine width="100%" />
+        <BodyLine width="96%" />
+        <BodyLine width="88%" />
+      </div>
+      <div className="space-y-1.5 mb-3">
+        <BodyLine width="100%" />
+        <BodyLine width="92%" />
+      </div>
+
+      {/* URL-Block (echt, weil personalisiert wichtig) */}
       <div
-        className="text-[9px] font-mono font-bold mb-3 px-3 py-2 rounded inline-flex items-center"
+        className="text-[9px] font-mono font-bold mb-3 px-2.5 py-1.5 rounded inline-flex items-center self-start"
         style={{ backgroundColor: "#F3EEFF", color: "#5232C7" }}
       >
         videocomet.de/lp/{lead.slug}
       </div>
 
-      <div className="text-[8.5px] leading-[1.55] mb-1">
-        Oder einfach den QR-Code rechts unten scannen.
+      {/* Ein letzter Lückentext-Block fuer Restinhalt */}
+      <div className="space-y-1.5 mb-4">
+        <BodyLine width="84%" />
+        <BodyLine width="60%" />
       </div>
 
-      {/* Closing */}
-      <div className="text-[9px] mt-6 mb-8">Mit besten Grüßen</div>
+      {/* Spacer schiebt Footer nach unten */}
+      <div className="flex-1" />
 
-      {/* Signatur — handwritten feel */}
-      <div
-        className="text-[16px] italic mb-1"
-        style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}
-      >
-        Dein Name
-      </div>
-      <div className="text-[7px]" style={{ color: "#94A3B8" }}>
-        Deine Firma GmbH
-      </div>
-
-      {/* QR-Code + Caption unten rechts */}
-      <div className="absolute" style={{ bottom: "7%", right: "9%" }}>
-        <div
-          style={{
-            padding: 3,
-            backgroundColor: "white",
-            border: "1px solid #E2E8F0",
-            borderRadius: 2,
-          }}
-        >
-          <RealQrCode
-            value={`https://app.videocomet.de/lp/${lead.slug}`}
-            size={56}
-          />
+      {/* Footer: links = Closing + Signatur, rechts = QR-Code.
+          Beide in flex, kein absolute, also kein Overlap moeglich. */}
+      <div className="flex items-end gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="text-[9px] mb-3">Mit besten Grüßen</div>
+          <div
+            className="text-[14px] italic mb-0.5"
+            style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}
+          >
+            <Placeholder>{`{Dein Name}`}</Placeholder>
+          </div>
+          <div className="text-[7px]" style={{ color: "#94A3B8" }}>
+            <Placeholder>{`{Deine Firma GmbH}`}</Placeholder>
+          </div>
         </div>
-        <div
-          className="text-[6px] text-center mt-1"
-          style={{ color: "#94A3B8" }}
-        >
-          videocomet.de/lp/
-          <br />
-          {lead.slug}
+        <div className="shrink-0 flex flex-col items-center gap-1">
+          <div
+            style={{
+              padding: 3,
+              backgroundColor: "white",
+              border: "1px solid #E2E8F0",
+              borderRadius: 2,
+            }}
+          >
+            <RealQrCode
+              value={`https://app.videocomet.de/lp/${lead.slug}`}
+              size={52}
+            />
+          </div>
+          <div
+            className="text-[6px] text-center"
+            style={{ color: "#94A3B8" }}
+          >
+            Direkt zum Video
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+/** Platzhalter-Token wie {Vorname} — wird visuell als gefuellter
+ *  Mini-Chip gerendert damit sofort erkennbar ist: das ist variabel. */
+function Placeholder({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      style={{
+        backgroundColor: "#F3EEFF",
+        color: "#5232C7",
+        padding: "0 4px",
+        borderRadius: 3,
+        fontFamily: "'JetBrains Mono', monospace",
+        fontWeight: 600,
+        fontSize: "0.92em",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Eine graue Linie steht fuer "hier kommt dein Text". */
+function BodyLine({ width }: { width: string }) {
+  return (
+    <div
+      style={{
+        width,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: "#E2E8F0",
+      }}
+    />
   );
 }
 
