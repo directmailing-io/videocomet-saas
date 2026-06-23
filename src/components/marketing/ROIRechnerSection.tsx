@@ -12,6 +12,11 @@ const DIN_LANG_COST = 0.95 + 1;
 // DIN C4:   1,80 € Porto + 1 € Druck
 const DIN_C4_COST = 1.8 + 1;
 
+// Conversion-Quoten — Durchschnitts-Case, kein Best-Case.
+// Gemessen innerhalb von 30 Tagen nach Versand.
+const CONV_WITHOUT_PHONE = 0.003; // 0,3 %
+const CONV_WITH_PHONE = 0.01; //    1,0 %
+
 type LetterFormat = "din-lang" | "din-c4";
 
 function formatEUR(n: number, withCents = false): string {
@@ -29,7 +34,7 @@ export function ROIRechnerSection() {
     React.useState<LetterFormat>("din-lang");
   const [revenuePerCustomer, setRevenuePerCustomer] = React.useState(5000);
 
-  const conversionRate = withPhone ? 0.03 : 0.01;
+  const conversionRate = withPhone ? CONV_WITH_PHONE : CONV_WITHOUT_PHONE;
   const customers = Math.floor(videos * conversionRate);
 
   const vcCost = BASE_FEE + videos * PER_SEND_COST;
@@ -76,8 +81,8 @@ export function ROIRechnerSection() {
           </RevealOnScroll>
           <RevealOnScroll delay={300}>
             <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-xl mx-auto">
-              Rechne deinen Case durch. In Echtzeit, ohne Mail,
-              ohne Call.
+              Rechne deinen Case durch. Wir nutzen Durchschnittswerte,
+              keine Best-Case-Versprechen.
             </p>
           </RevealOnScroll>
         </div>
@@ -111,12 +116,16 @@ export function ROIRechnerSection() {
               {/* Telefonakquise */}
               <FieldBlock
                 label="Strategie"
-                sub="Wer nachtelefoniert, gewinnt ungefähr dreimal mehr Kunden."
+                sub="Wer nachtelefoniert, gewinnt etwa dreimal mehr Kunden innerhalb der ersten 30 Tage."
               >
                 <Toggle
                   icon={<Phone className="size-3.5" />}
                   label="Mit Telefonakquise nachfassen"
-                  rate={withPhone ? "≈ 3 % Conversion" : "≈ 1 % Conversion"}
+                  rate={
+                    withPhone
+                      ? "≈ 1,0 % Conversion in 30 Tagen"
+                      : "≈ 0,3 % Conversion in 30 Tagen"
+                  }
                   checked={withPhone}
                   onChange={setWithPhone}
                 />
@@ -286,10 +295,13 @@ export function ROIRechnerSection() {
 
         {/* Footer-Note */}
         <RevealOnScroll delay={550}>
-          <p className="text-center text-sm text-ink-muted mt-10 max-w-2xl mx-auto leading-relaxed">
-            Conversion-Quoten basieren auf Erfahrungswerten aus echten Cases.
-            Werte sind Schätzungen und können je nach Branche und
-            Zielgruppe variieren.
+          <p className="text-center text-[13px] text-ink-muted mt-10 max-w-3xl mx-auto leading-relaxed">
+            <strong className="text-ink">Durchschnitts-Case, kein Best-Case.</strong>{" "}
+            Die Conversion-Quoten (0,3 % ohne, 1 % mit Telefonakquise)
+            sind Durchschnittswerte aus echten Kundenfällen, gemessen
+            innerhalb von 30 Tagen nach Versand. Die tatsächliche
+            Quote hängt stark von Leadqualität, Angebot, Marktreife
+            und Vertriebsfähigkeiten ab.
           </p>
         </RevealOnScroll>
       </div>
