@@ -497,18 +497,21 @@ function LandingPageVisual() {
 
       </div>
 
-      {/* === ODER-Pille — brand-colored, gut sichtbar === */}
+      {/* === ODER-Pille — kleiner, horizontal zentriert ueber der Upload-Card === */}
       <div
-        className="absolute top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full"
+        className="absolute inline-flex items-center justify-center rounded-full"
         style={{
-          right: 168,
-          padding: "8px 14px",
+          right: 79,
+          top: 38,
+          transform: "translateX(50%)",
+          padding: "4px 10px",
           background: "linear-gradient(135deg, #7C5CE8 0%, #5232C7 100%)",
           boxShadow:
-            "0 14px 30px -6px rgba(82,50,199,0.55), 0 0 0 5px rgba(255,255,255,1)",
+            "0 10px 22px -6px rgba(82,50,199,0.5), 0 0 0 4px rgba(255,255,255,1)",
+          zIndex: 2,
         }}
       >
-        <span className="text-[12px] font-extrabold tracking-[0.22em] uppercase text-white">
+        <span className="text-[9.5px] font-extrabold tracking-[0.2em] uppercase text-white">
           ODER
         </span>
       </div>
