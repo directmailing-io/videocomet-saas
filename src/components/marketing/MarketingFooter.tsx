@@ -123,30 +123,108 @@ export function MarketingFooter() {
 function GermanyBadge() {
   return (
     <div
-      className="inline-flex items-center gap-3 pl-2 pr-4 py-2 rounded-xl bg-white border border-line"
+      className="inline-flex items-center gap-3.5 pl-2.5 pr-4 py-2.5 rounded-2xl bg-white border border-line"
       style={{
         boxShadow:
-          "0 6px 18px -8px rgba(15,23,42,0.12), 0 2px 4px -2px rgba(15,23,42,0.06)",
+          "0 10px 28px -10px rgba(15,23,42,0.2), 0 2px 6px -2px rgba(15,23,42,0.08)",
       }}
     >
-      {/* Bundesflagge */}
-      <div
-        className="size-10 rounded-md overflow-hidden flex flex-col shrink-0"
-        style={{ border: "1px solid rgba(0,0,0,0.08)" }}
-      >
-        <div className="flex-1 bg-black" />
-        <div className="flex-1" style={{ background: "#DD0000" }} />
-        <div className="flex-1" style={{ background: "#FFCE00" }} />
-      </div>
-      {/* Text */}
+      <FlagSeal />
       <div className="text-left">
-        <div className="text-[13px] font-extrabold text-ink leading-tight tracking-[-0.005em]">
+        <div className="text-[13.5px] font-extrabold text-ink leading-tight tracking-[-0.005em]">
           Hosted in Germany
         </div>
         <div className="text-[11px] text-ink-muted leading-tight mt-0.5">
           Server und Datenbank in Deutschland
         </div>
       </div>
+    </div>
+  );
+}
+
+function FlagSeal() {
+  return (
+    <div
+      className="relative shrink-0"
+      style={{
+        filter:
+          "drop-shadow(0 3px 6px rgba(15,23,42,0.18)) drop-shadow(0 1px 2px rgba(15,23,42,0.12))",
+      }}
+    >
+      <svg
+        width="42"
+        height="42"
+        viewBox="0 0 42 42"
+        aria-label="Bundesflagge Deutschland"
+        role="img"
+      >
+        <defs>
+          {/* Innerer Highlight-Gradient (Glas-Effekt) */}
+          <linearGradient
+            id="seal-shine"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="1"
+          >
+            <stop offset="0%" stopColor="rgba(255,255,255,0.55)" />
+            <stop offset="45%" stopColor="rgba(255,255,255,0)" />
+            <stop offset="100%" stopColor="rgba(0,0,0,0.18)" />
+          </linearGradient>
+          {/* Ring-Gradient (chrome-style) */}
+          <linearGradient
+            id="seal-ring"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="1"
+          >
+            <stop offset="0%" stopColor="rgba(255,255,255,1)" />
+            <stop offset="50%" stopColor="rgba(220,220,228,0.9)" />
+            <stop offset="100%" stopColor="rgba(180,180,195,0.9)" />
+          </linearGradient>
+          <clipPath id="seal-clip">
+            <circle cx="21" cy="21" r="17" />
+          </clipPath>
+        </defs>
+
+        {/* Outer chrome ring */}
+        <circle
+          cx="21"
+          cy="21"
+          r="19"
+          fill="url(#seal-ring)"
+        />
+        {/* Inner edge */}
+        <circle
+          cx="21"
+          cy="21"
+          r="17.5"
+          fill="none"
+          stroke="rgba(0,0,0,0.18)"
+          strokeWidth="0.5"
+        />
+
+        {/* Bundesflagge im Kreis */}
+        <g clipPath="url(#seal-clip)">
+          <rect x="2" y="4" width="38" height="11.3" fill="#000000" />
+          <rect x="2" y="15.3" width="38" height="11.3" fill="#DD0000" />
+          <rect x="2" y="26.6" width="38" height="11.3" fill="#FFCE00" />
+        </g>
+
+        {/* Glas-Highlight ueber dem Flag-Inneren */}
+        <circle cx="21" cy="21" r="17" fill="url(#seal-shine)" />
+
+        {/* Innerer Hairline-Ring */}
+        <circle
+          cx="21"
+          cy="21"
+          r="17"
+          fill="none"
+          stroke="rgba(255,255,255,0.65)"
+          strokeWidth="0.6"
+        />
+      </svg>
     </div>
   );
 }
