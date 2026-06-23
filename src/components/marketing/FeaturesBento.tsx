@@ -502,7 +502,7 @@ function LandingPageVisual() {
         className="absolute inline-flex items-center justify-center rounded-full"
         style={{
           right: 79,
-          top: 92,
+          top: 114,
           transform: "translate(50%, -50%)",
           padding: "4px 10px",
           background: "linear-gradient(135deg, #7C5CE8 0%, #5232C7 100%)",
@@ -516,11 +516,13 @@ function LandingPageVisual() {
         </span>
       </div>
 
-      {/* === Claude+Upload Card — smaller floating overlay rechts === */}
+      {/* === Claude+Upload Card — smaller floating overlay rechts (tiefer) === */}
       <div
-        className="absolute right-3 top-1/2 -translate-y-1/2 bg-white rounded-2xl border border-line p-3.5 flex flex-col items-center"
+        className="absolute right-3 bg-white rounded-2xl border border-line p-3.5 flex flex-col items-center"
         style={{
           width: 152,
+          top: 185,
+          transform: "translateY(-50%)",
           boxShadow:
             "0 18px 40px -10px rgba(15,23,42,0.32), 0 6px 18px -6px rgba(15,23,42,0.16)",
         }}
