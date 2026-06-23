@@ -85,7 +85,7 @@ export function WhyItWorksSection() {
           <RevealOnScroll delay={400}>
             <Benefit
               index="01"
-              title="Du fällst auf, ohne lauter zu sein."
+              title="Du hebst dich von der Masse ab."
               body="Einen Brief mit Video bekommt kaum jemand. Schon das fällt auf, noch bevor das Video überhaupt läuft."
             />
           </RevealOnScroll>
