@@ -7,20 +7,16 @@ import { RevealOnScroll } from "./RevealOnScroll";
 
 const NUTZEN: ReadonlyArray<{ title: string; body: string }> = [
   {
-    title: "Du erreichst Menschen statt Algorithmen.",
-    body: "Briefe und Videos landen direkt im Briefkasten oder Postfach. Kein Bidding, kein Spam-Filter, kein Glück.",
+    title: "Du überzeugst neue Kunden mit einem persönlichen Video.",
+    body: "Dein Gesicht, deine Stimme, deine Botschaft. Direkt bei dem, der gerade zählt.",
   },
   {
-    title: "Du sparst Stunden pro Kampagne.",
-    body: "Eine Aufnahme reicht. Der Rest passiert automatisch im Hintergrund — mit Vorname, Firma, Logo und allem drumherum.",
+    title: "Du bleibst bei deiner Zielgruppe besser in Erinnerung.",
+    body: "Was persönlich war, vergisst niemand schnell. Auch dann nicht, wenn die Entscheidung erst Wochen später fällt.",
   },
   {
-    title: "Du behältst die volle Kontrolle.",
-    body: "Live-Tracking, A/B-Tests, Slack-Push und Analytics zu jeder Sendung. Du weißt jederzeit, was läuft.",
-  },
-  {
-    title: "Du wächst flexibel mit.",
-    body: "Pay what you need. Keine Tarif-Tricks, keine versteckten Limits, keine Mindestabnahme.",
+    title: "Du erhältst proaktiv Anfragen von überzeugten Kunden.",
+    body: "Wer dich einmal gesehen hat, meldet sich von selbst, sobald der Moment kommt.",
   },
 ];
 
@@ -206,7 +202,7 @@ export function PricingSection() {
               <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted text-center mb-6">
                 Was du davon hast
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
                 {NUTZEN.map((n) => (
                   <div key={n.title} className="flex items-start gap-3.5">
                     <div className="size-7 shrink-0 rounded-full bg-brand flex items-center justify-center mt-0.5 shadow-sm">
