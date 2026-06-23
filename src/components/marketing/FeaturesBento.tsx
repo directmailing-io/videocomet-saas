@@ -234,12 +234,36 @@ function FeatureCardMesh({
 }
 
 // ===========================================================================
-// Scroll-Animation — Webseite + Maus-Icon mit Scroll-Chevrons
+// Scroll-Animation — Webseite, deren Inhalt live rauf/runter scrollt
 // ===========================================================================
 
 function ScrollAnimationVisual() {
   return (
     <div className="relative mx-auto" style={{ width: 280, height: 300 }}>
+      <style>{`
+        @keyframes vc-scroll-page {
+          0%, 8%   { transform: translateY(0); }
+          42%, 58% { transform: translateY(-140px); }
+          92%, 100% { transform: translateY(0); }
+        }
+        @keyframes vc-scroll-thumb {
+          0%, 8%   { top: 4%; }
+          42%, 58% { top: 62%; }
+          92%, 100% { top: 4%; }
+        }
+        @keyframes vc-mouse-pulse {
+          0%, 8%   { transform: translateY(0); }
+          25%      { transform: translateY(2px); }
+          42%, 58% { transform: translateY(4px); }
+          75%      { transform: translateY(2px); }
+          92%, 100% { transform: translateY(0); }
+        }
+        @keyframes vc-chevron-fade {
+          0%, 100% { opacity: 0.35; }
+          50%      { opacity: 1; }
+        }
+      `}</style>
+
       {/* Browser/webpage mockup */}
       <div
         className="absolute inset-0 rounded-2xl border border-line bg-white overflow-hidden"
@@ -248,8 +272,8 @@ function ScrollAnimationVisual() {
             "0 30px 60px -20px rgba(15,23,42,0.4), 0 8px 22px -8px rgba(15,23,42,0.18)",
         }}
       >
-        {/* Browser chrome */}
-        <div className="h-6 bg-[#F4F4F8] border-b border-line flex items-center px-2 gap-1">
+        {/* Browser chrome — sticky on top */}
+        <div className="absolute inset-x-0 top-0 h-6 bg-[#F4F4F8] border-b border-line flex items-center px-2 gap-1 z-10">
           <div className="size-1.5 rounded-full bg-[#FF5F57]" />
           <div className="size-1.5 rounded-full bg-[#FEBC2E]" />
           <div className="size-1.5 rounded-full bg-[#28C840]" />
@@ -258,8 +282,14 @@ function ScrollAnimationVisual() {
           </div>
         </div>
 
-        {/* Webpage content — sichtbarer Seiten-Ausschnitt */}
-        <div className="p-3 space-y-2">
+        {/* Scrollable content — animated translateY */}
+        <div
+          className="absolute inset-x-0 p-3 space-y-2"
+          style={{
+            top: 24,
+            animation: "vc-scroll-page 6.5s ease-in-out infinite",
+          }}
+        >
           {/* Karriere Hero */}
           <div className="h-14 rounded-md bg-gradient-to-br from-brand-soft to-white border border-line p-2">
             <div className="text-[6.5px] font-bold tracking-[0.1em] uppercase text-brand-deep mb-1">
@@ -279,38 +309,65 @@ function ScrollAnimationVisual() {
               <div className="h-0.5 w-1/2 bg-brand-deep/20 rounded" />
             </div>
           </div>
-          {/* Text-Block */}
+          {/* Text */}
           <div className="h-10 rounded-md bg-white border border-line p-2">
             <div className="h-1 w-2/3 bg-ink/15 rounded mb-1" />
             <div className="h-1 w-1/2 bg-ink/15 rounded" />
           </div>
-          {/* Mehr Content */}
-          <div className="h-10 rounded-md bg-white border border-line p-2">
+          {/* Team */}
+          <div className="h-14 rounded-md bg-white border border-line p-2">
+            <div className="text-[6px] font-bold tracking-[0.1em] uppercase text-brand-deep mb-1">
+              Team
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+              <div className="size-3 rounded-full bg-ink/15" />
+              <div className="size-3 rounded-full bg-ink/15" />
+              <div className="size-3 rounded-full bg-ink/15" />
+            </div>
+            <div className="h-1 w-3/4 bg-ink/10 rounded mt-1" />
+          </div>
+          {/* Testimonials */}
+          <div className="h-12 rounded-md bg-white border border-line p-2">
+            <div className="h-1 w-2/3 bg-ink/15 rounded mb-1" />
+            <div className="h-1 w-1/2 bg-ink/15 rounded" />
+          </div>
+          {/* Kontakt */}
+          <div className="h-14 rounded-md bg-gradient-to-br from-brand-soft to-white border border-line p-2">
+            <div className="text-[6px] font-bold tracking-[0.1em] uppercase text-brand-deep mb-1">
+              Kontakt
+            </div>
             <div className="h-1 w-3/4 bg-ink/15 rounded mb-1" />
             <div className="h-1 w-1/2 bg-ink/15 rounded" />
           </div>
+          {/* Footer */}
+          <div className="h-8 rounded-md bg-white border border-line" />
         </div>
 
-        {/* Page-Scrollbar inside the browser — subtle */}
-        <div className="absolute right-1 top-8 bottom-2 w-1 rounded-full bg-ink/10">
+        {/* Animierter Scrollbar-Thumb rechts innen */}
+        <div className="absolute right-1 top-8 bottom-2 w-1 rounded-full bg-ink/10 z-10">
           <div
-            className="absolute inset-x-0 rounded-full bg-ink/30"
-            style={{ top: "30%", height: "30%" }}
+            className="absolute inset-x-0 rounded-full bg-brand"
+            style={{
+              height: "30%",
+              top: "4%",
+              animation: "vc-scroll-thumb 6.5s ease-in-out infinite",
+              boxShadow: "0 0 6px rgba(124,92,232,0.4)",
+            }}
           />
         </div>
       </div>
 
-      {/* MAUS-Icon mit Scroll-Pfeilen — direkt rechts auf der Webseite */}
+      {/* Maus + Chevrons rechts neben dem Browser */}
       <div
         className="absolute pointer-events-none flex flex-col items-center"
-        style={{ right: -20, top: 80 }}
+        style={{ right: -20, top: 100 }}
       >
-        {/* Maus */}
         <div
           className="size-12 rounded-full bg-white flex items-center justify-center"
           style={{
             border: "1.5px solid #E2E2EE",
             boxShadow: "0 14px 28px -6px rgba(15,23,42,0.3)",
+            animation: "vc-mouse-pulse 6.5s ease-in-out infinite",
           }}
         >
           <svg
@@ -322,16 +379,35 @@ function ScrollAnimationVisual() {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            {/* Maus-Body */}
             <rect x="6" y="3" width="12" height="18" rx="6" />
-            {/* Scroll-Wheel */}
-            <line x1="12" y1="7" x2="12" y2="11" stroke="#7C5CE8" strokeWidth="2.5" />
+            <line
+              x1="12"
+              y1="7"
+              x2="12"
+              y2="11"
+              stroke="#7C5CE8"
+              strokeWidth="2.5"
+            />
           </svg>
         </div>
-        {/* Animierte Scroll-Pfeile nach unten */}
-        <ChevronDown className="size-4 text-brand mt-1" />
-        <ChevronDown className="size-4 text-brand -mt-2 opacity-65" />
-        <ChevronDown className="size-4 text-brand -mt-2 opacity-35" />
+        <ChevronDown
+          className="size-4 text-brand mt-1"
+          style={{ animation: "vc-chevron-fade 1.4s ease-in-out infinite" }}
+        />
+        <ChevronDown
+          className="size-4 text-brand -mt-2"
+          style={{
+            animation: "vc-chevron-fade 1.4s ease-in-out infinite",
+            animationDelay: "0.2s",
+          }}
+        />
+        <ChevronDown
+          className="size-4 text-brand -mt-2"
+          style={{
+            animation: "vc-chevron-fade 1.4s ease-in-out infinite",
+            animationDelay: "0.4s",
+          }}
+        />
       </div>
     </div>
   );
@@ -425,6 +501,21 @@ function LandingPageVisual() {
               "linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 35%, rgba(255,255,255,0.95) 80%)",
           }}
         />
+      </div>
+
+      {/* === ODER-Pille — schwebt in der Fade-Zone, links von der Upload-Card === */}
+      <div
+        className="absolute top-1/2 -translate-y-1/2 inline-flex items-center justify-center bg-white rounded-full border border-line shadow-sm"
+        style={{
+          right: 168,
+          padding: "5px 11px",
+          boxShadow:
+            "0 6px 14px -4px rgba(15,23,42,0.18), 0 0 0 4px rgba(255,255,255,0.9)",
+        }}
+      >
+        <span className="text-[10.5px] font-extrabold tracking-[0.2em] uppercase text-ink">
+          ODER
+        </span>
       </div>
 
       {/* === Claude+Upload Card — smaller floating overlay rechts === */}
