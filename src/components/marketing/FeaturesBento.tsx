@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Globe,
   Lock,
+  Play,
   TrendingUp,
   UploadCloud,
 } from "lucide-react";
@@ -84,7 +85,7 @@ export function FeaturesBento() {
           <RevealOnScroll delay={500}>
             <FeatureCard
               title="Selber bauen, oder einfach hochladen."
-              sub="Schnell-Builder mit allen Blocks in Minuten zusammengesteckt. Oder komplette ZIP-Webseite hochladen, auch direkt von Claude generiert."
+              sub="Nutze unseren integrierten Builder oder lass deine Webseite mit Claude erstellen und lade sie einfach als .zip-Datei hoch."
             >
               <LandingPageVisual />
             </FeatureCard>
@@ -234,91 +235,115 @@ function FeatureCardMesh({
 }
 
 // ===========================================================================
-// Scroll-Animation — Ein Screen, klarer Scrollbar, Chevron-Indikator
+// Scroll-Animation — Langes Dokument + Viewport-Frame (= "im Video sichtbar")
 // ===========================================================================
 
 function ScrollAnimationVisual() {
   return (
-    <div className="relative mx-auto" style={{ maxWidth: 220 }}>
+    <div
+      className="relative mx-auto overflow-hidden"
+      style={{ maxWidth: 280, height: 320 }}
+    >
+      {/* Long page mockup — extends BEYOND the visible area at top + bottom */}
       <div
-        className="relative rounded-2xl border border-line bg-white overflow-hidden"
+        className="absolute left-0 right-0 mx-auto rounded-xl border border-line bg-white"
         style={{
-          aspectRatio: "3/4",
-          boxShadow:
-            "0 30px 60px -20px rgba(15,23,42,0.35), 0 8px 22px -8px rgba(15,23,42,0.15)",
+          width: "84%",
+          height: 460,
+          top: "50%",
+          marginTop: -230,
+          boxShadow: "0 14px 36px -16px rgba(15,23,42,0.25)",
         }}
       >
-        {/* Page content — currently visible chunk */}
-        <div className="p-3 space-y-2">
-          {/* Hint of content above */}
-          <div className="h-1.5 rounded bg-ink/8 w-2/3 -mt-1" />
-
-          <div className="h-10 rounded bg-gradient-to-br from-brand-soft to-white border border-line/60 p-1.5">
+        <div className="p-2.5 space-y-1.5">
+          {/* Top — Browser-Bar */}
+          <div className="h-3 rounded bg-[#F4F4F8] border border-line/60 flex items-center px-1.5 gap-0.5">
+            <div className="size-1 rounded-full bg-[#FF5F57]" />
+            <div className="size-1 rounded-full bg-[#FEBC2E]" />
+            <div className="size-1 rounded-full bg-[#28C840]" />
+            <span className="ml-1 text-[5px] text-ink-muted">kunde.de</span>
+          </div>
+          {/* Hero */}
+          <div className="h-12 rounded bg-gradient-to-br from-brand-soft to-white border border-line/60 p-1.5">
             <div className="h-1.5 w-3/4 bg-brand-deep/35 rounded mb-1" />
             <div className="h-1.5 w-1/2 bg-brand-deep/20 rounded" />
           </div>
-
-          <div className="h-12 rounded bg-white border border-line/60 p-1.5">
-            <div className="text-[5.5px] font-bold tracking-[0.1em] uppercase text-brand-deep mb-1">
+          {/* Über uns */}
+          <div className="h-10 rounded bg-white border border-line/60 p-1.5">
+            <div className="h-1 w-1/2 bg-ink/20 rounded mb-1" />
+            <div className="h-1 w-full bg-ink/10 rounded" />
+          </div>
+          {/* Karriere — wird im Viewport sichtbar */}
+          <div className="h-16 rounded bg-white border border-line/60 p-1.5">
+            <div className="text-[5px] font-bold tracking-[0.1em] uppercase text-brand-deep mb-1">
               Karriere
             </div>
-            <div className="h-1 w-2/3 bg-ink/15 rounded mb-1" />
-            <div className="h-1 w-3/4 bg-ink/15 rounded" />
+            <div className="grid grid-cols-2 gap-1 mb-1">
+              <div className="h-4 rounded bg-brand-soft" />
+              <div className="h-4 rounded bg-brand-soft" />
+            </div>
+            <div className="h-1 w-full bg-ink/10 rounded" />
           </div>
-
+          {/* Mehr Sections */}
           <div className="h-10 rounded bg-white border border-line/60 p-1.5">
-            <div className="h-1 w-2/3 bg-ink/15 rounded mb-1" />
-            <div className="h-1 w-1/2 bg-ink/15 rounded" />
+            <div className="h-1 w-2/3 bg-ink/20 rounded mb-1" />
+            <div className="h-1 w-1/2 bg-ink/10 rounded" />
           </div>
-
+          <div className="h-12 rounded bg-white border border-line/60" />
+          <div className="h-10 rounded bg-white border border-line/60" />
           <div className="h-8 rounded bg-white border border-line/60" />
-
-          {/* Hint of content below */}
-          <div className="h-1.5 rounded bg-ink/8 w-3/4" />
-        </div>
-
-        {/* Top fade-out (signals scrolled past) */}
-        <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-6 pointer-events-none"
-          style={{
-            background:
-              "linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(255,255,255,0))",
-          }}
-        />
-
-        {/* Bottom fade-out (signals more below) */}
-        <div
-          aria-hidden
-          className="absolute inset-x-0 bottom-0 h-6 pointer-events-none"
-          style={{
-            background:
-              "linear-gradient(to top, rgba(255,255,255,0.95), rgba(255,255,255,0))",
-          }}
-        />
-
-        {/* Prominent scroll bar with brand-colored thumb */}
-        <div className="absolute right-2 top-4 bottom-4 w-1.5 rounded-full bg-ink/10">
-          <div
-            className="absolute inset-x-0 rounded-full bg-brand"
-            style={{
-              top: "34%",
-              height: "26%",
-              boxShadow: "0 2px 8px rgba(124,92,232,0.5)",
-            }}
-          />
+          <div className="h-6 rounded bg-white border border-line/60" />
+          <div className="h-4 rounded bg-white border border-line/60" />
         </div>
       </div>
 
-      {/* ChevronDown circle indicator — outside, right side */}
+      {/* Fade-out at top + bottom — page disappears outside the card */}
       <div
-        className="absolute -right-3 top-1/2 -translate-y-1/2 size-9 rounded-full bg-brand text-white flex items-center justify-center"
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-12 pointer-events-none"
         style={{
+          background:
+            "linear-gradient(to bottom, white 10%, rgba(255,255,255,0))",
+        }}
+      />
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-12 pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(to top, white 10%, rgba(255,255,255,0))",
+        }}
+      />
+
+      {/* Viewport frame — "Im Video" */}
+      <div
+        className="absolute left-0 right-0 mx-auto top-1/2 -translate-y-1/2 pointer-events-none"
+        style={{
+          width: "92%",
+          height: 96,
+          borderRadius: 14,
+          border: "3px solid #7C5CE8",
+          background: "rgba(124,92,232,0.04)",
           boxShadow:
-            "0 10px 25px -6px rgba(124,92,232,0.55), 0 0 0 4px rgba(255,255,255,1)",
+            "0 0 0 9999px rgba(255,255,255,0.45), 0 16px 32px -12px rgba(124,92,232,0.4)",
         }}
       >
-        <ChevronDown className="size-4" />
+        {/* "Im Video" badge — top */}
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-brand-deep text-white text-[10px] font-bold whitespace-nowrap shadow-md">
+          <Play className="size-2.5 fill-white" />
+          Im Video
+        </div>
+
+        {/* Chevron-Down — right side, indicates scroll direction */}
+        <div
+          className="absolute -right-3.5 top-1/2 -translate-y-1/2 size-8 rounded-full bg-brand text-white flex items-center justify-center"
+          style={{
+            boxShadow:
+              "0 8px 20px -4px rgba(124,92,232,0.55), 0 0 0 3px rgba(255,255,255,1)",
+          }}
+        >
+          <ChevronDown className="size-4" />
+        </div>
       </div>
     </div>
   );
@@ -868,19 +893,14 @@ function ABVisual() {
 // ===========================================================================
 
 function IntegrationsVisual() {
-  // Lokale SVGs fuer Brands die simpleicons entfernt hat
-  // (Slack, Salesforce, Pipedrive, ActiveCampaign, Close)
+  // Tatsaechliche Anbindungen — 6 Tools, kein Mehr-Show-Off
   const TARGETS: { name: string; src: string }[] = [
     { name: "HubSpot", src: "https://cdn.simpleicons.org/hubspot" },
-    { name: "Salesforce", src: "/brand-logos/salesforce.svg" },
-    { name: "Pipedrive", src: "/brand-logos/pipedrive.svg" },
+    { name: "Salessuite", src: "/brand-logos/salessuite.svg" },
     { name: "Close", src: "/brand-logos/close-mark.svg" },
-    { name: "Slack", src: "/brand-logos/slack.svg" },
     { name: "Zapier", src: "https://cdn.simpleicons.org/zapier" },
     { name: "Make", src: "https://cdn.simpleicons.org/make" },
     { name: "n8n", src: "https://cdn.simpleicons.org/n8n" },
-    { name: "ActiveCampaign", src: "/brand-logos/activecampaign.svg" },
-    { name: "Mailchimp", src: "https://cdn.simpleicons.org/mailchimp" },
   ];
   return (
     <div className="relative w-full max-w-[560px] mx-auto py-2">
@@ -922,26 +942,26 @@ function IntegrationsVisual() {
         </svg>
       </div>
 
-      {/* 5x2 grid */}
-      <div className="grid grid-cols-5 gap-2.5">
+      {/* 6 logos in 6-col single row */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
         {TARGETS.map((t) => (
           <div
             key={t.name}
-            className="rounded-xl bg-white border border-line shadow-[0_8px_18px_-14px_rgba(15,23,42,0.2)] px-2 py-2.5 flex flex-col items-center gap-1.5 relative"
+            className="rounded-xl bg-white border border-line shadow-[0_8px_18px_-14px_rgba(15,23,42,0.2)] px-2 py-3 flex flex-col items-center gap-2 relative"
           >
-            <div className="h-7 w-full flex items-center justify-center">
+            <div className="h-8 w-full flex items-center justify-center">
               <img
                 src={t.src}
                 alt={t.name}
                 loading="lazy"
-                className="max-h-7 max-w-full w-auto object-contain"
+                className="max-h-8 max-w-full w-auto object-contain"
                 style={{ maxWidth: "85%" }}
               />
             </div>
-            <div className="text-[9.5px] font-semibold text-ink text-center leading-tight">
+            <div className="text-[10px] font-semibold text-ink text-center leading-tight">
               {t.name}
             </div>
-            <div className="absolute -top-1 -right-1 size-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow">
+            <div className="absolute -top-1 -right-1 size-4 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow">
               <CheckCircle2 className="size-2.5" />
             </div>
           </div>
