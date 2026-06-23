@@ -11,11 +11,14 @@ export default function HomePage() {
       <MarketingNav />
       <HeroScrollVideo />
       <DemoSection />
-      <WhyItWorksSection />
       <HowItWorksSection />
       <FeaturesBento />
+      <WhyItWorksSection />
 
-      <footer className="w-full px-6 py-5 border-t border-line bg-surface">
+      <footer
+        id="page-footer"
+        className="w-full px-6 py-5 border-t border-line bg-surface"
+      >
         <div className="max-w-6xl mx-auto flex items-center justify-between text-xs text-ink-muted">
           <span>© {new Date().getFullYear()} VIDEOCOMET</span>
           <span>Made in Germany</span>
