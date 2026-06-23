@@ -75,50 +75,34 @@ export function WhyItWorksSection() {
           </h2>
         </RevealOnScroll>
 
-        {/* Layout: 2 Benefits links | Video Mitte | 2 Benefits rechts */}
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_1.4fr_1fr] items-center gap-12 md:gap-7 lg:gap-12">
-          {/* LEFT: 01 + 02 */}
-          <div className="space-y-12 md:space-y-14 order-2 md:order-1">
-            <RevealOnScroll delay={400}>
-              <Benefit
-                index="01"
-                title="Du fällst auf, ohne lauter zu sein."
-                body="Ein Brief mit deinem Gesicht darin ist ein Statement. Du investierst Zeit, und genau das wird gesehen, geöffnet und gewürdigt."
-              />
-            </RevealOnScroll>
-            <RevealOnScroll delay={460}>
-              <Benefit
-                index="02"
-                title="Du bleibst im Kopf, wo es zählt."
-                body="Ein persönliches Video sieht man bis zum Schluss. Was bis zum Schluss läuft, bleibt dort, wo später die Entscheidung fällt."
-              />
-            </RevealOnScroll>
-          </div>
+        {/* Hero Video */}
+        <RevealOnScroll delay={300}>
+          <HeroComposition />
+        </RevealOnScroll>
 
-          {/* CENTER: Video */}
-          <div className="order-1 md:order-2">
-            <RevealOnScroll delay={300}>
-              <HeroComposition />
-            </RevealOnScroll>
-          </div>
-
-          {/* RIGHT: 03 + 04 */}
-          <div className="space-y-12 md:space-y-14 order-3">
-            <RevealOnScroll delay={520}>
-              <Benefit
-                index="03"
-                title="Du gewinnst Vertrauen, bevor du fragst."
-                body="Wer dich gesehen hat, kennt dich schon ein Stück. Persönlichkeit schafft Sympathie, und Sympathie öffnet jede Tür schneller."
-              />
-            </RevealOnScroll>
-            <RevealOnScroll delay={580}>
-              <Benefit
-                index="04"
-                title="Du erreichst Menschen, nicht Algorithmen."
-                body="Kein Bidding-System, kein Spam-Filter, kein Algorithmus dazwischen. Dein Brief landet direkt bei dem, der zählt."
-              />
-            </RevealOnScroll>
-          </div>
+        {/* 3 Benefits unter dem Video */}
+        <div className="mt-24 md:mt-36 grid grid-cols-1 md:grid-cols-3 gap-16 md:gap-12 lg:gap-20">
+          <RevealOnScroll delay={400}>
+            <Benefit
+              index="01"
+              title="Du fällst auf, ohne lauter zu sein."
+              body="Ein Brief mit deinem Gesicht darin ist ein Statement. Du investierst Zeit, und genau das wird gesehen, geöffnet und gewürdigt."
+            />
+          </RevealOnScroll>
+          <RevealOnScroll delay={500}>
+            <Benefit
+              index="02"
+              title="Du bleibst im Kopf, wo es zählt."
+              body="Ein persönliches Video sieht man bis zum Schluss. Was bis zum Schluss läuft, bleibt dort, wo später die Entscheidung fällt."
+            />
+          </RevealOnScroll>
+          <RevealOnScroll delay={600}>
+            <Benefit
+              index="03"
+              title="Du gewinnst Vertrauen, bevor du fragst."
+              body="Wer dich gesehen hat, kennt dich schon ein Stück. Persönlichkeit schafft Sympathie, und Sympathie öffnet jede Tür schneller."
+            />
+          </RevealOnScroll>
         </div>
       </div>
     </section>
@@ -131,27 +115,27 @@ export function WhyItWorksSection() {
 
 function HeroComposition() {
   return (
-    <div className="relative mx-auto" style={{ maxWidth: 520 }}>
-      {/* Brand backdrop glow (not masked, gibt Tiefe) */}
+    <div className="relative mx-auto" style={{ maxWidth: 720 }}>
+      {/* Brand backdrop glow — nicht masked, gibt Tiefe */}
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "radial-gradient(50% 50% at 50% 50%, rgba(124,92,232,0.35) 0%, transparent 65%)",
-          transform: "scale(1.5)",
-          filter: "blur(45px)",
+            "radial-gradient(50% 50% at 50% 50%, rgba(124,92,232,0.4) 0%, transparent 70%)",
+          transform: "scale(1.7)",
+          filter: "blur(60px)",
         }}
       />
 
-      {/* MAIN: Video player — RADIAL MASK so dass Raender in den BG verschwinden */}
+      {/* MAIN: Video player — Nebelartig in den BG verschwindend */}
       <div
-        className="relative rounded-2xl overflow-hidden aspect-video"
+        className="relative rounded-3xl overflow-hidden aspect-video"
         style={{
           WebkitMaskImage:
-            "radial-gradient(105% 95% at 50% 38%, black 32%, rgba(0,0,0,0.7) 65%, transparent 100%)",
+            "radial-gradient(85% 78% at 50% 45%, black 12%, rgba(0,0,0,0.92) 32%, rgba(0,0,0,0.5) 58%, rgba(0,0,0,0.15) 82%, transparent 100%)",
           maskImage:
-            "radial-gradient(105% 95% at 50% 38%, black 32%, rgba(0,0,0,0.7) 65%, transparent 100%)",
+            "radial-gradient(85% 78% at 50% 45%, black 12%, rgba(0,0,0,0.92) 32%, rgba(0,0,0,0.5) 58%, rgba(0,0,0,0.15) 82%, transparent 100%)",
         }}
       >
         {/* Premium Dark Hero */}
@@ -181,10 +165,10 @@ function HeroComposition() {
             }}
           />
 
-          <div className="relative flex-1 px-5 md:px-7 pr-20 md:pr-24">
+          <div className="relative flex-1 px-8 md:px-14 pr-28 md:pr-44">
             <div
-              className="font-extrabold text-white leading-[1.1] tracking-[-0.02em]"
-              style={{ fontSize: "clamp(14px, 1.9vw, 22px)" }}
+              className="font-extrabold text-white leading-[1.08] tracking-[-0.02em]"
+              style={{ fontSize: "clamp(17px, 2.4vw, 32px)" }}
             >
               Herr Müller, die Wahrheit
               <br />
@@ -261,7 +245,7 @@ function HeroComposition() {
 }
 
 // ---------------------------------------------------------------------------
-// Benefit — premium editorial mit Index + Accent
+// Benefit — Mega-Number Apple-Style
 // ---------------------------------------------------------------------------
 
 function Benefit({
@@ -274,34 +258,27 @@ function Benefit({
   body: string;
 }) {
   return (
-    <div className="text-left group">
-      {/* Index + Brand-Accent-Line */}
-      <div className="flex items-center gap-3 mb-6">
-        <span
-          className="text-[13px] font-semibold tabular-nums tracking-wider"
-          style={{
-            background:
-              "linear-gradient(135deg, #DDD0FF 0%, rgba(201,186,255,0.5) 100%)",
-            WebkitBackgroundClip: "text",
-            backgroundClip: "text",
-            color: "transparent",
-          }}
-        >
-          {index}
-        </span>
-        <div
-          className="h-px flex-1 max-w-[64px]"
-          style={{
-            background:
-              "linear-gradient(to right, rgba(201,186,255,0.55), rgba(201,186,255,0.05))",
-          }}
-        />
+    <div className="relative text-left">
+      {/* Mega Brand-Soft Number — visueller Akzent */}
+      <div
+        className="font-extralight tracking-[-0.06em] leading-[0.85] mb-7 md:mb-9 tabular-nums"
+        style={{
+          fontSize: "clamp(72px, 8.5vw, 124px)",
+          background:
+            "linear-gradient(180deg, rgba(221,208,255,0.95) 0%, rgba(201,186,255,0.5) 35%, rgba(124,92,232,0.08) 100%)",
+          WebkitBackgroundClip: "text",
+          backgroundClip: "text",
+          color: "transparent",
+          paddingBottom: "0.05em",
+        }}
+      >
+        {index}
       </div>
 
       {/* Title */}
       <h3
-        className="font-semibold tracking-[-0.02em] leading-[1.15] text-white mb-4 transition-colors group-hover:text-white"
-        style={{ fontSize: "clamp(20px, 1.9vw, 26px)" }}
+        className="font-semibold tracking-[-0.02em] leading-[1.15] text-white mb-4"
+        style={{ fontSize: "clamp(20px, 1.85vw, 26px)" }}
       >
         {title}
       </h3>
@@ -309,7 +286,7 @@ function Benefit({
       {/* Body */}
       <p
         className="text-white/55 leading-relaxed"
-        style={{ fontSize: "clamp(14.5px, 1.05vw, 16px)" }}
+        style={{ fontSize: "clamp(14.5px, 1.05vw, 16.5px)" }}
       >
         {body}
       </p>
