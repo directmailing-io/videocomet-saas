@@ -6,6 +6,7 @@
  */
 
 import type {
+  CanvaSegment,
   GDocsSegment,
   GSlideSegment,
   ImageLayer,
@@ -32,6 +33,12 @@ export const DEFAULT_SEGMENT_DURATION_MS = 5000;
  */
 export const DEFAULT_GSLIDE_DURATION_MS = 4000;
 
+/**
+ * Smart-Default für Canva-Folien. Spiegelt `DEFAULT_GSLIDE_DURATION_MS` —
+ * Canva-Decks werden im selben Akquise-Kontext eingesetzt.
+ */
+export const DEFAULT_CANVA_DURATION_MS = 4000;
+
 /** Lesbarer Default-Label pro Segment-Typ. */
 export const SEGMENT_KIND_LABELS: Record<SegmentKind, string> = {
   text: "Textfolie",
@@ -40,6 +47,7 @@ export const SEGMENT_KIND_LABELS: Record<SegmentKind, string> = {
   website: "Website",
   gdocs: "Google Docs",
   gslide: "Google Slide",
+  canva: "Canva-Folie",
   slide: "Freie Folie",
 };
 
@@ -166,6 +174,39 @@ export function createGSlideSegment(
     ...base,
     kind: "gslide",
     publishedUrl: "",
+    slideIndex: 0,
+    thumbnailUrl: null,
+    detectedPlaceholders: [],
+    lastFetchedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Factory für ein Canva-Folien-Segment.
+ *
+ * Default-Dauer 4 s (statt DEFAULT_SEGMENT_DURATION_MS=5000) — spiegelt
+ * `createGSlideSegment` (gleicher Akquise-Kontext). Der Caller kann via
+ * `opts.durationMs` überschreiben.
+ *
+ * `pptxMediaId` / `pptxPublicUrl` starten leer; das UI füllt sie nach
+ * erfolgreichem PPTX-Upload + Slide-Auswahl. `lastFetchedAt` wird auf
+ * "now" gesetzt, damit der "Aktualisieren"-Button im Editor von Anfang
+ * an einen sinnvollen Wert anzeigt.
+ */
+export function createCanvaSegment(
+  opts?: CreateSegmentOptions,
+): CanvaSegment {
+  const base = {
+    id: opts?.id ?? newId(),
+    durationMs: opts?.durationMs ?? DEFAULT_CANVA_DURATION_MS,
+    label: opts?.label ?? SEGMENT_KIND_LABELS.canva,
+  };
+  return {
+    ...base,
+    kind: "canva",
+    pptxMediaId: "",
+    pptxPublicUrl: "",
+    fileName: null,
     slideIndex: 0,
     thumbnailUrl: null,
     detectedPlaceholders: [],
@@ -321,6 +362,8 @@ export function createSegment(
       return createGDocsSegment(opts);
     case "gslide":
       return createGSlideSegment(opts);
+    case "canva":
+      return createCanvaSegment(opts);
     case "slide":
       return createSlideSegment(opts);
     default: {

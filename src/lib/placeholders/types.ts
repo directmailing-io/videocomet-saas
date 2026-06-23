@@ -17,6 +17,7 @@ export type PlaceholderSourceKind =
   | "text" // TextSegment.text
   | "gdocs" // Google-Doc-Brief / Segment
   | "gslide" // Google-Slides-Folie (kind: "gslide")
+  | "canva" // Canva-Folie (kind: "canva", PPTX-Upload)
   | "pdf" // PDF-Brief der Kampagne (= campaigns.pdfGoogleDocsUrl)
   | "lp-block" // Block-Landingpage-Template
   | "lp-custom" // Custom-HTML-LP (ZIP-Upload)

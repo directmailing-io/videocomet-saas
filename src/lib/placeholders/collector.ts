@@ -35,6 +35,7 @@ import {
   isSlideSegment,
   isGDocsSegment,
   isGSlideSegment,
+  isCanvaSegment,
 } from "@/lib/segments/types";
 import type {
   DetectedPlaceholder,
@@ -196,6 +197,20 @@ function scanSegments(
         seg.label?.trim() ||
         `Google-Slide-Segment ${ordinal} (Folie ${seg.slideIndex + 1})`;
       const source: PlaceholderSource = { kind: "gslide", label };
+      for (const key of seg.detectedPlaceholders ?? []) {
+        pushHit(acc, key, source);
+      }
+    }
+    if (isCanvaSegment(seg)) {
+      // Analog zu gslide: der Cache `detectedPlaceholders[]` (gefüllt
+      // beim PPTX-Processing + beim manuellen "Aktualisieren") ist die
+      // Wahrheit. Wir fetchen die PPTX nicht pro Collector-Run, damit
+      // der Wizard schnell bleibt und nicht durch Bunny-CDN-Latenz
+      // blockiert wird.
+      const label =
+        seg.label?.trim() ||
+        `Canva-Segment ${ordinal} (Folie ${seg.slideIndex + 1})`;
+      const source: PlaceholderSource = { kind: "canva", label };
       for (const key of seg.detectedPlaceholders ?? []) {
         pushHit(acc, key, source);
       }

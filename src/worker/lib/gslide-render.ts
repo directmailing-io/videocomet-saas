@@ -31,7 +31,10 @@ import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "puppeteer-core";
 import type { GSlideSegment } from "@/lib/segments/types";
-import { substitute } from "@/lib/placeholders/substitute";
+import {
+  substitute,
+  type SubstitutionSystemContext,
+} from "@/lib/placeholders/substitute";
 import type {
   LegacyMapping,
   PlaceholderMapping,
@@ -40,7 +43,6 @@ import { getContext } from "./browser-pool";
 import {
   isEditMode,
   parsePublishedSlidesUrl,
-  type ParsedGSlidesEdit,
   type ParsedGSlidesPubembed,
 } from "@/lib/gslides/validate-url";
 import { downloadPptx } from "@/lib/gslides/pptx-fetch";
@@ -107,6 +109,8 @@ export interface RenderGSlideToMp4Options {
   outputDir: string;
   /** Pfad der finalen MP4. */
   outputPath: string;
+  /** Optionaler System-Context (z. B. {{pageUrl}}). */
+  systemContext?: SubstitutionSystemContext;
 }
 
 /**
@@ -128,11 +132,32 @@ export async function renderGSlideToMp4(
   }
   const parsed = parsePublishedSlidesUrl(opts.slide.publishedUrl);
 
+  if (isEditMode(parsed)) {
+    // Edit-Mode: PPTX downloaden (mit Cache) und über die generische
+    // `renderPptxSlideToMp4`-Pipeline laufen lassen.
+    const pptxBuffer = await getCachedPptx(parsed.docId);
+    await withTimeout(
+      renderPptxSlideToMp4({
+        pptxBuffer,
+        slideIndex: opts.slide.slideIndex,
+        detectedPlaceholders: opts.slide.detectedPlaceholders,
+        leadData: opts.leadData,
+        mapping: opts.mapping,
+        durationMs: opts.durationMs,
+        outputDir: opts.outputDir,
+        outputPath: opts.outputPath,
+        systemContext: opts.systemContext,
+      }),
+      HARD_TIMEOUT_MS,
+      "renderPptxSlideToMp4",
+    );
+    return;
+  }
+
+  // Pubembed-Mode (Legacy): Puppeteer-Screenshot → MP4.
   const pngPath = join(opts.outputDir, "slide.png");
   await withTimeout(
-    isEditMode(parsed)
-      ? renderEditModeToPng(parsed, opts, pngPath)
-      : renderPubembedToPng(parsed, opts, pngPath),
+    renderPubembedToPng(parsed, opts, pngPath),
     HARD_TIMEOUT_MS,
     "renderGSlideToPng",
   );
@@ -147,44 +172,74 @@ export async function renderGSlideToMp4(
   });
 }
 
-// ── Edit-Mode-Renderer ─────────────────────────────────────────────────────
+// ── Generischer PPTX-Renderer (gslide-Edit + Canva teilen ihn) ─────────────
+
+export interface RenderPptxSlideToMp4Options {
+  /** PPTX-Buffer (bereits im RAM — Caller managed Download/Cache). */
+  pptxBuffer: Buffer;
+  /** 0-basierter Index der gewünschten Folie. */
+  slideIndex: number;
+  /**
+   * Optionaler Hint, welche Keys auf dieser Folie verwendet werden. Wird
+   * für die Resolution-Map gebraucht; wenn leer/undefined, leiten wir die
+   * Keys aus `leadData` + `mapping` ab.
+   */
+  detectedPlaceholders?: string[];
+  leadData: Record<string, string>;
+  mapping: PlaceholderMapping | LegacyMapping | undefined;
+  /** Pfad der finalen MP4. */
+  outputPath: string;
+  /** Arbeitsverzeichnis für LibreOffice + Zwischen-PNGs. */
+  outputDir: string;
+  durationMs: number;
+  width?: number;
+  height?: number;
+  systemContext?: SubstitutionSystemContext;
+}
 
 /**
- * PPTX-basierter Render-Pfad. Substituiert XML, lässt LibreOffice das
- * Deck zu PNGs konvertieren, und schreibt den passenden Index als
- * `slide.png` ins Arbeitsverzeichnis.
+ * Rendert eine einzelne Folie aus einem PPTX-Buffer als personalisiertes
+ * MP4. Geteilte Pipeline für `kind: "gslide"` (Edit-Mode) und
+ * `kind: "canva"` — der Caller stellt den Buffer (Download/Cache).
+ *
+ * Pipeline:
+ *   1. `{{key}}`-Tokens im XML mit aus Lead/Mapping aufgelösten Werten ersetzen.
+ *   2. LibreOffice headless → PDF → PNG-Sequenz (via `renderPptxToPngs`).
+ *   3. PNG mit `slideIndex` → FFmpeg-Loop → MP4 mit Ziel-Dauer.
+ *
+ * Wirft, wenn der `slideIndex` out-of-range ist oder LibreOffice keine
+ * PNG für die Folie liefert. Caller (renderSegmentsBase) fängt das ab.
  */
-async function renderEditModeToPng(
-  parsed: ParsedGSlidesEdit,
-  opts: RenderGSlideToMp4Options,
-  pngPath: string,
+export async function renderPptxSlideToMp4(
+  opts: RenderPptxSlideToMp4Options,
 ): Promise<void> {
-  // 1) PPTX aus Cache holen (oder downloaden).
-  const pptxBuf = await getCachedPptx(parsed.docId);
+  await mkdir(opts.outputDir, { recursive: true });
 
-  // 2) Lead-Mapping bauen — die zentrale `substitute()`-Funktion pre-
-  //    rechnet jeden Key, damit das PPTX-XML rein-mechanisch ersetzen
-  //    kann.
+  // 1) Lead-Mapping bauen — die zentrale `substitute()`-Funktion pre-
+  //    rechnet jeden Key, damit das PPTX-XML rein-mechanisch ersetzen kann.
   const resolved = buildResolvedKeyValueMap(
-    opts.slide.detectedPlaceholders,
+    opts.detectedPlaceholders,
     opts.leadData,
     opts.mapping,
+    opts.systemContext,
   );
 
-  // 3) PPTX in-memory substituieren.
-  const substitutedPptx = await substitutePptxPlaceholders(pptxBuf, resolved);
+  // 2) PPTX in-memory substituieren.
+  const substitutedPptx = await substitutePptxPlaceholders(
+    opts.pptxBuffer,
+    resolved,
+  );
 
-  // 4) Wieviele Folien hat das Deck? Wenn der gespeicherte Index out-
-  //    of-range ist (User hat im Original eine Folie gelöscht), werfen wir.
-  //    Caller fängt das auf und liefert einen Black-Clip.
-  const totalSlides = (await extractSlidesFromPptx(pptxBuf)).length;
-  if (opts.slide.slideIndex >= totalSlides) {
+  // 3) Wieviele Folien hat das Deck? Wenn der gespeicherte Index out-
+  //    of-range ist (User hat eine Folie gelöscht), werfen wir.
+  const totalSlides = (await extractSlidesFromPptx(opts.pptxBuffer)).length;
+  if (opts.slideIndex >= totalSlides) {
     throw new Error(
-      `[gslide-render] Folie ${opts.slide.slideIndex} existiert nicht (Deck hat ${totalSlides}).`,
+      `[pptx-render] Folie ${opts.slideIndex} existiert nicht (Deck hat ${totalSlides}).`,
     );
   }
 
-  // 5) Render als PNG-Sequenz; LibreOffice bekommt sein eigenes
+  // 4) Render als PNG-Sequenz; LibreOffice bekommt sein eigenes
   //    Profile-Verzeichnis, daher parallel-tauglich.
   const tmpRenderDir = join(opts.outputDir, "lo-out");
   await mkdir(tmpRenderDir, { recursive: true });
@@ -194,16 +249,27 @@ async function renderEditModeToPng(
     dpi: 150,
   });
 
-  // 6) PNG mit dem gewünschten Index nach `pngPath` kopieren.
-  const sourcePng = rendered.pngPaths[opts.slide.slideIndex];
+  // 5) PNG mit dem gewünschten Index nach `outputDir/slide.png` ziehen.
+  const sourcePng = rendered.pngPaths[opts.slideIndex];
   if (!sourcePng) {
     throw new Error(
-      `[gslide-render] LibreOffice lieferte keine PNG für Folie ${opts.slide.slideIndex} (${rendered.pngPaths.length} insgesamt).`,
+      `[pptx-render] LibreOffice lieferte keine PNG für Folie ${opts.slideIndex} (${rendered.pngPaths.length} insgesamt).`,
     );
   }
+  const pngPath = join(opts.outputDir, "slide.png");
   const buf = await readFile(sourcePng);
   const { writeFile } = await import("node:fs/promises");
   await writeFile(pngPath, buf);
+
+  // 6) PNG → MP4.
+  const { renderImageToMp4 } = await import("./ffmpeg");
+  await renderImageToMp4({
+    imagePath: pngPath,
+    durationMs: opts.durationMs,
+    outputPath: opts.outputPath,
+    width: opts.width ?? SLIDE_W,
+    height: opts.height ?? SLIDE_H,
+  });
 }
 
 // ── Pubembed-Renderer (Legacy, unverändert) ────────────────────────────────
@@ -357,6 +423,7 @@ function buildResolvedKeyValueMap(
   detectedKeys: string[] | undefined,
   leadData: Record<string, string>,
   mapping: PlaceholderMapping | LegacyMapping | undefined,
+  systemContext?: SubstitutionSystemContext,
 ): Record<string, string> {
   const out: Record<string, string> = {};
   const keys = new Set<string>(detectedKeys ?? []);
@@ -367,7 +434,13 @@ function buildResolvedKeyValueMap(
   for (const key of Array.from(keys)) {
     if (!key) continue;
     try {
-      const v = substitute(`{{${key}}}`, leadData, mapping, "double-brace");
+      const v = substitute(
+        `{{${key}}}`,
+        leadData,
+        mapping,
+        "double-brace",
+        systemContext,
+      );
       out[key] = v;
     } catch {
       out[key] = "";

@@ -9,12 +9,13 @@ import {
   FileText,
   Presentation,
   Sparkles,
+  Wand2,
   ChevronLeft,
   ChevronRight,
   GripVertical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Segment, SegmentKind } from "@/lib/segments/types";
+import { isCanvaSegment, type Segment, type SegmentKind } from "@/lib/segments/types";
 
 /**
  * Visuelle Konfiguration pro Segment-Typ.
@@ -67,6 +68,15 @@ const KIND_STYLES: Record<
     text: "text-sky-900",
     label: "Google Slide",
     icon: Presentation,
+  },
+  canva: {
+    // Canva-Brand-Mint als Akzent — unterscheidet sich klar von "gslide"
+    // (sky/blau) und gibt der Folie ihren eigenen visuellen Anker.
+    bg: "bg-teal-200",
+    border: "border-teal-300",
+    text: "text-teal-900",
+    label: "Canva",
+    icon: Wand2,
   },
   slide: {
     bg: "bg-fuchsia-200",
@@ -215,7 +225,14 @@ export function TimelineSegmentBlock({
   }
 
   const durationSec = (segment.durationMs / 1000).toFixed(1);
-  const displayLabel = segment.label?.trim() || style.label;
+  // Canva-Blöcke zeigen Datei-Name (falls vorhanden) + Folien-Nummer,
+  // damit der User bei einem mehr-Folien-Deck direkt sieht, welche
+  // Folie wo sitzt. Andere Segment-Typen behalten ihr generisches Label.
+  const displayLabel = isCanvaSegment(segment)
+    ? segment.fileName
+      ? `${segment.fileName} · Folie ${segment.slideIndex + 1}`
+      : `Canva · Folie ${segment.slideIndex + 1}`
+    : segment.label?.trim() || style.label;
   // Compact-Modus: Wenn der Block sehr schmal ist, blenden wir Text aus.
   const compact = widthPx < 80;
   const veryCompact = widthPx < 44;

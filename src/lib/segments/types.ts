@@ -16,6 +16,7 @@ export type SegmentKind =
   | "website"
   | "gdocs"
   | "gslide"
+  | "canva"
   | "slide";
 
 export type TextAlign = "left" | "center" | "right";
@@ -160,6 +161,43 @@ export interface GSlideSegment extends SegmentBase {
   lastFetchedAt: string;
 }
 
+/**
+ * Canva-Folie als personalisiertes Segment.
+ *
+ * Analog zu `GSlideSegment` (Edit-Mode-Pipeline), aber mit einer vom User
+ * hochgeladenen PPTX-Datei statt einem Google-Slides-URL-Fetch. Der
+ * Upload landet in `media_items` (Bunny Storage), das Segment hält den
+ * FK + die Bunny-CDN-URL für den Render-Worker.
+ *
+ * Render-Pipeline (siehe `worker/lib/canva-render.ts`):
+ *
+ *   1. PPTX-Buffer via Bunny-CDN-URL holen (mit LRU-Cache pro Render-Process).
+ *   2. `{{key}}`-Tokens im Office-Open-XML mit Lead-Werten ersetzen.
+ *   3. LibreOffice headless → PDF → PNG-Sequenz.
+ *   4. PNG mit `slideIndex` als Standbild → FFmpeg-Loop → MP4.
+ *
+ * `pptxMediaId` + `slideIndex` sind Single Source of Truth.
+ * `thumbnailUrl` und `detectedPlaceholders` werden beim Upload-Processing +
+ * beim manuellen „Aktualisieren" gefüllt.
+ */
+export interface CanvaSegment extends SegmentBase {
+  kind: "canva";
+  /** FK auf `media_items.id` der hochgeladenen PPTX. */
+  pptxMediaId: string;
+  /** Bunny-CDN-URL der PPTX (für den Worker-Download). */
+  pptxPublicUrl: string;
+  /** Originaler Dateiname (z. B. "Pitch-Deck.pptx") für UI-Anzeige. null = unbekannt. */
+  fileName: string | null;
+  /** Index der Folie im Deck, 0-basiert. */
+  slideIndex: number;
+  /** Thumbnail in Bunny-Storage (für Editor-Vorschau). null = nicht generiert. */
+  thumbnailUrl: string | null;
+  /** Cache der zuletzt erkannten Platzhalter-Keys auf dieser Folie. */
+  detectedPlaceholders: string[];
+  /** Wann zuletzt aus dem PPTX gescannt (ISO-8601, für „Aktualisieren"). */
+  lastFetchedAt: string;
+}
+
 // ── Freier Folien-Editor (kind: "slide") ────────────────────────────────────
 //
 // Eine Slide-Folie besteht aus einer Liste von Layers über einem Hintergrund.
@@ -262,6 +300,7 @@ export type Segment =
   | WebsiteSegment
   | GDocsSegment
   | GSlideSegment
+  | CanvaSegment
   | SlideSegment;
 
 // ── Type Guards ──────────────────────────────────────────────────────────────
@@ -288,6 +327,10 @@ export function isGDocsSegment(s: Segment): s is GDocsSegment {
 
 export function isGSlideSegment(s: Segment): s is GSlideSegment {
   return s.kind === "gslide";
+}
+
+export function isCanvaSegment(s: Segment): s is CanvaSegment {
+  return s.kind === "canva";
 }
 
 export function isSlideSegment(s: Segment): s is SlideSegment {

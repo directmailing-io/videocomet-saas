@@ -10,10 +10,12 @@ import {
   Trash2,
   Type as TypeIcon,
   Video as VideoIcon,
+  Wand2,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type {
+  CanvaSegment,
   GDocsSegment,
   GSlideSegment,
   ImageSegment,
@@ -31,6 +33,7 @@ import { SegmentEditorVideo } from "./segment-editor-video";
 import { SegmentEditorWebsite } from "./segment-editor-website";
 import { SegmentEditorGDocs } from "./segment-editor-gdocs";
 import { SegmentEditorGSlide } from "./segment-editor-gslide";
+import { SegmentEditorCanva } from "./segment-editor-canva";
 import { SegmentEditorSlide } from "./segment-editor-slide";
 
 export interface SegmentEditorMediaItem {
@@ -77,6 +80,7 @@ const KIND_META: Record<SegmentKind, { label: string; Icon: React.ComponentType<
   website: { label: "Website", Icon: Globe },
   gdocs: { label: "Google Docs", Icon: FileText },
   gslide: { label: "Google Slide", Icon: Presentation },
+  canva: { label: "Canva-Folie", Icon: Wand2 },
   slide: { label: "Freie Folie", Icon: Sparkles },
 };
 
@@ -224,6 +228,13 @@ function SegmentBody({
           segment={segment}
           onChange={(s: SlideSegment) => onChange(s)}
           mediaItems={mediaItems}
+        />
+      );
+    case "canva":
+      return (
+        <SegmentEditorCanva
+          segment={segment}
+          onChange={(s: CanvaSegment) => onChange(s)}
         />
       );
     default: {

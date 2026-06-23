@@ -12,12 +12,14 @@ import {
   Sparkles,
   Info,
   AlertTriangle,
+  Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
+  type CanvaSegment,
   type GSlideSegment,
   type Segment,
   type SegmentKind,
@@ -35,6 +37,7 @@ import { PreviewPlayer } from "@/components/editor/preview-player";
 import { Timeline } from "@/components/editor/timeline";
 import { SegmentEditor } from "@/components/editor/segment-editor";
 import { GSlideImportDialog } from "@/components/editor/gslide-import-dialog";
+import { CanvaImportDialog } from "@/components/editor/canva-import-dialog";
 
 export interface WizardStep3Props {
   segments: Segment[];
@@ -76,6 +79,13 @@ const ADD_CARDS: AddCard[] = [
     title: "Google Slides",
     description:
       "Veröffentlichtes Slides-Deck importieren — jede Folie wird ein Segment mit Platzhalter-Ersetzung.",
+  },
+  {
+    kind: "canva",
+    icon: Wand2,
+    title: "Canva",
+    description:
+      "Importiere ein Design aus Canva. Platzhalter werden in den Folien erkannt und personalisiert.",
   },
   {
     kind: "website",
@@ -126,6 +136,7 @@ export function WizardStep3Editor({
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [currentTimeMs, setCurrentTimeMs] = React.useState(0);
   const [gslideDialogOpen, setGslideDialogOpen] = React.useState(false);
+  const [canvaDialogOpen, setCanvaDialogOpen] = React.useState(false);
 
   // Wir bekommen webcamDurationSec evtl. nicht aus den Props (ältere Media-
   // Items wurden ohne durationSec hochgeladen). In dem Fall sniffen wir die
@@ -211,6 +222,10 @@ export function WizardStep3Editor({
       setGslideDialogOpen(true);
       return;
     }
+    if (kind === "canva") {
+      setCanvaDialogOpen(true);
+      return;
+    }
     // Smart-Add: nimm den verbleibenden Rest, wenn weniger als Default frei.
     const durationMs = Math.min(DEFAULT_SEGMENT_DURATION_MS, remainingMs);
     const seg = createSegment(kind, { durationMs });
@@ -239,6 +254,27 @@ export function WizardStep3Editor({
     onSegmentsChange([...segments, ...accepted]);
     // Erstes neues Segment selektieren — gibt dem User direkt visuelles
     // Feedback und macht den Refresh-Button erreichbar.
+    setSelectedId(accepted[0].id);
+  }
+
+  /**
+   * Wird vom Canva-Import-Dialog aufgerufen. Identisches Smart-Budgeting
+   * wie bei GSlide: kappt pro Segment am verbleibenden Webcam-Budget,
+   * sodass die Summe nie das harte Limit überschreitet.
+   */
+  function handleAddCanvaSegments(newSegs: CanvaSegment[]) {
+    if (webcamDurationMs == null) return;
+    let remaining = Math.max(0, webcamDurationMs - total);
+    const accepted: CanvaSegment[] = [];
+    for (const seg of newSegs) {
+      if (remaining < MIN_REMAINING_FOR_ADD_MS) break;
+      const capped = Math.min(seg.durationMs, remaining);
+      if (capped < MIN_REMAINING_FOR_ADD_MS) break;
+      accepted.push({ ...seg, durationMs: capped });
+      remaining -= capped;
+    }
+    if (accepted.length === 0) return;
+    onSegmentsChange([...segments, ...accepted]);
     setSelectedId(accepted[0].id);
   }
 
@@ -573,6 +609,15 @@ export function WizardStep3Editor({
         remainingBudgetMs={remainingMs === Number.POSITIVE_INFINITY ? null : remainingMs}
         minPerSegmentMs={MIN_REMAINING_FOR_ADD_MS}
         onAddSegments={handleAddGSlideSegments}
+      />
+
+      {/* Canva-Import-Dialog (PPTX-Pipeline). */}
+      <CanvaImportDialog
+        open={canvaDialogOpen}
+        onOpenChange={setCanvaDialogOpen}
+        remainingBudgetMs={remainingMs === Number.POSITIVE_INFINITY ? null : remainingMs}
+        minPerSegmentMs={MIN_REMAINING_FOR_ADD_MS}
+        onAddSegments={handleAddCanvaSegments}
       />
     </div>
   );

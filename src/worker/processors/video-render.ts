@@ -679,6 +679,28 @@ async function renderSegmentsBase(opts: {
             outputPath: partPath,
           });
         }
+      } else if (seg.kind === "canva") {
+        // Canva-Segment: vom User hochgeladenes PPTX → Bunny-CDN-Fetch
+        // (mit Cache) → Substitution → LibreOffice → MP4. Pipeline ist
+        // 1:1 der gslide-Edit-Mode-Pfad. Crasht der Fetch oder
+        // LibreOffice, fängt der catch weiter unten und liefert einen
+        // Black-Clip.
+        if (!seg.pptxPublicUrl?.trim()) {
+          await generateBlackClip({
+            outputPath: partPath,
+            durationSec: durationMs / 1000,
+          });
+        } else {
+          const { renderCanvaSlideToMp4 } = await import("../lib/canva-render");
+          await renderCanvaSlideToMp4({
+            segment: seg,
+            leadData: opts.leadData ?? {},
+            mapping: opts.placeholderMapping,
+            durationMs,
+            outputDir: join(opts.outDir, `canva-${i}`),
+            outputPath: partPath,
+          });
+        }
       } else {
         // image / video not yet rendered in v1 — black clip placeholder.
         console.warn(
