@@ -5,15 +5,44 @@ import Link from "next/link";
 import { ArrowRight, Check, Plus } from "lucide-react";
 import { RevealOnScroll } from "./RevealOnScroll";
 
+const NUTZEN: ReadonlyArray<{ title: string; body: string }> = [
+  {
+    title: "Du erreichst Menschen statt Algorithmen.",
+    body: "Briefe und Videos landen direkt im Briefkasten oder Postfach. Kein Bidding, kein Spam-Filter, kein Glück.",
+  },
+  {
+    title: "Du sparst Stunden pro Kampagne.",
+    body: "Eine Aufnahme reicht. Der Rest passiert automatisch im Hintergrund — mit Vorname, Firma, Logo und allem drumherum.",
+  },
+  {
+    title: "Du behältst die volle Kontrolle.",
+    body: "Live-Tracking, A/B-Tests, Slack-Push und Analytics zu jeder Sendung. Du weißt jederzeit, was läuft.",
+  },
+  {
+    title: "Du wächst flexibel mit.",
+    body: "Pay what you need. Keine Tarif-Tricks, keine versteckten Limits, keine Mindestabnahme.",
+  },
+];
+
 const FEATURES: ReadonlyArray<string> = [
-  "Landingpage-Builder und ZIP-Upload",
-  "Scroll-Animationen im Video",
-  "A/B-Testing für Videos und Briefe",
-  "Slack-Push in Echtzeit",
-  "Alle CRM-Anbindungen",
-  "Brief-Generierung mit QR-Code",
-  "Eigene Domain anbindbar",
-  "Tracking und Analytics live",
+  "Du kannst beliebig viele Aufnahmen ins System laden.",
+  "Du nutzt unseren integrierten Landingpage-Builder.",
+  "Du kannst deine eigene Webseite als ZIP hochladen.",
+  "Du kannst eine eigene Domain anbinden, auch mit Subdomains.",
+  "Du bekommst SSL-Zertifikate automatisch erneuert.",
+  "Du baust Scroll-Animationen direkt ins Video ein.",
+  "Du zeigst Webseiten, Google-Docs oder Karriere-Seiten live im Video.",
+  "Du generierst persönliche Briefe mit QR-Code zum Video.",
+  "Du wählst zwischen DIN Lang und DIN C4 als Briefformat.",
+  "Du lädst Druckdaten als PDF direkt herunter.",
+  "Du trackst Watch-Time, Klicks und Conversions live.",
+  "Du bekommst Slack-Push für jede Lead-Aktivität in Echtzeit.",
+  "Du bindest HubSpot, Salessuite, Close, Zapier, Make oder n8n an.",
+  "Du setzt eigene Webhooks für deine Workflows auf.",
+  "Du fährst A/B-Tests mit Videos und Briefen gegeneinander.",
+  "Du importierst und exportierst Leadlisten als CSV.",
+  "Du bekommst alle neuen Features automatisch dazu.",
+  "Du erhältst E-Mail-Support innerhalb von 24 Stunden.",
 ];
 
 const BASE_FEE = 40;
@@ -172,45 +201,65 @@ export function PricingSection() {
               </div>
             </div>
 
-            {/* Features + CTA Grid */}
-            <div className="pt-8 md:pt-10 grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-8 md:gap-10 items-center">
-              {/* Features */}
-              <div>
-                <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted mb-4">
-                  Alle Features inklusive
-                </div>
-                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
-                  {FEATURES.map((f) => (
-                    <li
-                      key={f}
-                      className="flex items-start gap-2.5 text-[14px] text-ink leading-snug"
-                    >
-                      <div className="size-4 shrink-0 rounded-full bg-brand flex items-center justify-center mt-0.5">
-                        <Check
-                          className="size-2.5 text-white"
-                          strokeWidth={3.5}
-                        />
-                      </div>
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
+            {/* NUTZEN */}
+            <div className="pt-8 md:pt-10">
+              <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted text-center mb-6">
+                Was du davon hast
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+                {NUTZEN.map((n) => (
+                  <div key={n.title} className="flex items-start gap-3.5">
+                    <div className="size-7 shrink-0 rounded-full bg-brand flex items-center justify-center mt-0.5 shadow-sm">
+                      <Check
+                        className="size-4 text-white"
+                        strokeWidth={3}
+                      />
+                    </div>
+                    <div>
+                      <h4 className="text-[15.5px] font-bold text-ink leading-snug mb-1">
+                        {n.title}
+                      </h4>
+                      <p className="text-[13.5px] text-ink-muted leading-relaxed">
+                        {n.body}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-              {/* CTA-Block */}
-              <div className="md:text-center">
-                <Link
-                  href="/login"
-                  className="inline-flex items-center justify-center gap-1.5 rounded-full px-6 py-3.5 text-sm font-semibold bg-ink text-white hover:bg-ink/90 transition-all shadow-[0_10px_28px_-8px_rgba(15,23,42,0.45)] w-full md:w-auto"
-                >
-                  Jetzt starten
-                  <ArrowRight className="size-4" />
-                </Link>
-                <div className="text-[12px] text-ink-muted mt-4 leading-relaxed">
-                  12 Monate Laufzeit.
-                  <br />
-                  Danach monatlich kündbar.
-                </div>
+            {/* FEATURES — viele, dezent */}
+            <div className="mt-10 pt-8 border-t border-line">
+              <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted text-center mb-5">
+                Und das ist alles drin
+              </div>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-2">
+                {FEATURES.map((f) => (
+                  <li
+                    key={f}
+                    className="flex items-start gap-2 text-[12.5px] text-ink-soft leading-snug"
+                  >
+                    <Check
+                      className="size-3 text-brand-deep mt-[3px] shrink-0"
+                      strokeWidth={3}
+                    />
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* CTA */}
+            <div className="mt-10 text-center">
+              <Link
+                href="/login"
+                className="inline-flex items-center justify-center gap-1.5 rounded-full px-7 py-3.5 text-sm font-semibold bg-ink text-white hover:bg-ink/90 transition-all shadow-[0_10px_28px_-8px_rgba(15,23,42,0.45)]"
+              >
+                Jetzt starten
+                <ArrowRight className="size-4" />
+              </Link>
+              <div className="text-[12px] text-ink-muted mt-4">
+                12 Monate Laufzeit. Danach monatlich kündbar.
               </div>
             </div>
           </div>
