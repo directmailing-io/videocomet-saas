@@ -40,7 +40,7 @@ export function WhyItWorksSection() {
         <RevealOnScroll delay={0}>
           <div className="text-center mb-10">
             <div className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-white/[0.08] border border-white/10 text-white/80 text-[11px] font-semibold tracking-[0.2em] uppercase">
-              Die Strategie
+              Der Unterschied
             </div>
           </div>
         </RevealOnScroll>
@@ -86,21 +86,21 @@ export function WhyItWorksSection() {
             <Benefit
               index="01"
               title="Du fällst auf, ohne lauter zu sein."
-              body="Ein Brief mit deinem Gesicht darin ist ein Statement. Du investierst Zeit, und genau das wird gesehen, geöffnet und gewürdigt."
+              body="Einen Brief mit Video bekommt kaum jemand. Schon das fällt auf, noch bevor das Video überhaupt läuft."
             />
           </RevealOnScroll>
           <RevealOnScroll delay={500}>
             <Benefit
               index="02"
-              title="Du bleibst im Kopf, wo es zählt."
-              body="Ein persönliches Video sieht man bis zum Schluss. Was bis zum Schluss läuft, bleibt dort, wo später die Entscheidung fällt."
+              title="Du bleibst lange positiv in Erinnerung."
+              body="Was persönlich war, vergisst niemand schnell. Wo Werbung nach Sekunden weg ist, denkt der Empfänger noch Wochen später an dich."
             />
           </RevealOnScroll>
           <RevealOnScroll delay={600}>
             <Benefit
               index="03"
-              title="Du gewinnst Vertrauen, bevor du fragst."
-              body="Wer dich gesehen hat, kennt dich schon ein Stück. Persönlichkeit schafft Sympathie, und Sympathie öffnet jede Tür schneller."
+              title="Du gewinnst Vertrauen noch vor dem echten Gespräch."
+              body="Beim ersten Termin bist du kein Unbekannter mehr. Du hast schon Sympathie aufgebaut, bevor das erste Wort gesprochen wurde."
             />
           </RevealOnScroll>
         </div>
