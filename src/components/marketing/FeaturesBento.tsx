@@ -491,13 +491,13 @@ function LandingPageVisual() {
           </div>
         </div>
 
-        {/* Full-width Builder-Fade von links nach rechts */}
+        {/* Full-width Builder-Fade von links nach rechts — aggressiver */}
         <div
           aria-hidden
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              "linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 30%, rgba(255,255,255,0.35) 50%, rgba(255,255,255,0.8) 72%, rgba(255,255,255,0.98) 92%, white 100%)",
+              "linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.05) 18%, rgba(255,255,255,0.5) 36%, rgba(255,255,255,0.88) 56%, white 78%)",
           }}
         />
       </div>
