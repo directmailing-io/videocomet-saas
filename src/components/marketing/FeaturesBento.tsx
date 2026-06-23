@@ -7,7 +7,6 @@ import {
   ChevronDown,
   Globe,
   Lock,
-  Play,
   TrendingUp,
   UploadCloud,
 } from "lucide-react";
@@ -235,258 +234,224 @@ function FeatureCardMesh({
 }
 
 // ===========================================================================
-// Scroll-Animation — Langes Dokument + Viewport-Frame (= "im Video sichtbar")
+// Scroll-Animation — Page mit prominenter Scrollbar-Column + Direction-Chevron
 // ===========================================================================
 
 function ScrollAnimationVisual() {
   return (
-    <div
-      className="relative mx-auto overflow-hidden"
-      style={{ maxWidth: 280, height: 320 }}
-    >
-      {/* Long page mockup — extends BEYOND the visible area at top + bottom */}
+    <div className="relative mx-auto" style={{ maxWidth: 240 }}>
+      {/* Device frame */}
       <div
-        className="absolute left-0 right-0 mx-auto rounded-xl border border-line bg-white"
+        className="relative rounded-2xl border border-line bg-white overflow-hidden"
         style={{
-          width: "84%",
-          height: 460,
-          top: "50%",
-          marginTop: -230,
-          boxShadow: "0 14px 36px -16px rgba(15,23,42,0.25)",
+          aspectRatio: "3/4",
+          boxShadow:
+            "0 30px 60px -20px rgba(15,23,42,0.35), 0 8px 22px -8px rgba(15,23,42,0.15)",
         }}
       >
-        <div className="p-2.5 space-y-1.5">
-          {/* Top — Browser-Bar */}
+        {/* Page content — leave right side free for scrollbar column */}
+        <div
+          className="absolute inset-y-0 left-0 p-2.5 space-y-1.5"
+          style={{ right: 24 }}
+        >
           <div className="h-3 rounded bg-[#F4F4F8] border border-line/60 flex items-center px-1.5 gap-0.5">
             <div className="size-1 rounded-full bg-[#FF5F57]" />
             <div className="size-1 rounded-full bg-[#FEBC2E]" />
             <div className="size-1 rounded-full bg-[#28C840]" />
             <span className="ml-1 text-[5px] text-ink-muted">kunde.de</span>
           </div>
-          {/* Hero */}
           <div className="h-12 rounded bg-gradient-to-br from-brand-soft to-white border border-line/60 p-1.5">
             <div className="h-1.5 w-3/4 bg-brand-deep/35 rounded mb-1" />
             <div className="h-1.5 w-1/2 bg-brand-deep/20 rounded" />
           </div>
-          {/* Über uns */}
-          <div className="h-10 rounded bg-white border border-line/60 p-1.5">
-            <div className="h-1 w-1/2 bg-ink/20 rounded mb-1" />
-            <div className="h-1 w-full bg-ink/10 rounded" />
+          <div className="h-9 rounded bg-white border border-line/60 p-1.5">
+            <div className="h-1 w-2/3 bg-ink/15 rounded mb-1" />
+            <div className="h-1 w-1/2 bg-ink/15 rounded" />
           </div>
-          {/* Karriere — wird im Viewport sichtbar */}
-          <div className="h-16 rounded bg-white border border-line/60 p-1.5">
+          <div className="h-14 rounded bg-white border border-line/60 p-1.5">
             <div className="text-[5px] font-bold tracking-[0.1em] uppercase text-brand-deep mb-1">
               Karriere
             </div>
-            <div className="grid grid-cols-2 gap-1 mb-1">
+            <div className="grid grid-cols-2 gap-1">
               <div className="h-4 rounded bg-brand-soft" />
               <div className="h-4 rounded bg-brand-soft" />
             </div>
-            <div className="h-1 w-full bg-ink/10 rounded" />
           </div>
-          {/* Mehr Sections */}
-          <div className="h-10 rounded bg-white border border-line/60 p-1.5">
-            <div className="h-1 w-2/3 bg-ink/20 rounded mb-1" />
-            <div className="h-1 w-1/2 bg-ink/10 rounded" />
+          <div className="h-9 rounded bg-white border border-line/60 p-1.5">
+            <div className="h-1 w-2/3 bg-ink/15 rounded mb-1" />
+            <div className="h-1 w-1/2 bg-ink/15 rounded" />
           </div>
-          <div className="h-12 rounded bg-white border border-line/60" />
-          <div className="h-10 rounded bg-white border border-line/60" />
-          <div className="h-8 rounded bg-white border border-line/60" />
-          <div className="h-6 rounded bg-white border border-line/60" />
-          <div className="h-4 rounded bg-white border border-line/60" />
+        </div>
+
+        {/* Right-side scrollbar column — prominent */}
+        <div className="absolute right-0 top-0 bottom-0 w-6 bg-[#FAFAFE] border-l border-line/80 flex flex-col items-center justify-stretch py-2.5">
+          {/* Up chevron */}
+          <div className="size-3 flex items-center justify-center text-ink-muted/50">
+            <ChevronDown className="size-2.5 rotate-180" />
+          </div>
+          {/* Track */}
+          <div className="flex-1 w-2 rounded-full bg-ink/10 my-1.5 relative">
+            <div
+              className="absolute inset-x-0 rounded-full bg-brand"
+              style={{
+                top: "32%",
+                height: "32%",
+                boxShadow:
+                  "0 0 0 1.5px white, 0 4px 10px rgba(124,92,232,0.45)",
+              }}
+            />
+          </div>
+          {/* Down chevron */}
+          <div className="size-3 flex items-center justify-center text-brand-deep">
+            <ChevronDown className="size-2.5" />
+          </div>
         </div>
       </div>
 
-      {/* Fade-out at top + bottom — page disappears outside the card */}
+      {/* External brand Chevron — communicates scroll direction */}
       <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-12 pointer-events-none"
+        className="absolute -right-3 top-1/2 -translate-y-1/2 size-10 rounded-full bg-brand text-white flex items-center justify-center"
         style={{
-          background:
-            "linear-gradient(to bottom, white 10%, rgba(255,255,255,0))",
-        }}
-      />
-      <div
-        aria-hidden
-        className="absolute inset-x-0 bottom-0 h-12 pointer-events-none"
-        style={{
-          background:
-            "linear-gradient(to top, white 10%, rgba(255,255,255,0))",
-        }}
-      />
-
-      {/* Viewport frame — "Im Video" */}
-      <div
-        className="absolute left-0 right-0 mx-auto top-1/2 -translate-y-1/2 pointer-events-none"
-        style={{
-          width: "92%",
-          height: 96,
-          borderRadius: 14,
-          border: "3px solid #7C5CE8",
-          background: "rgba(124,92,232,0.04)",
           boxShadow:
-            "0 0 0 9999px rgba(255,255,255,0.45), 0 16px 32px -12px rgba(124,92,232,0.4)",
+            "0 12px 28px -6px rgba(124,92,232,0.55), 0 0 0 4px white",
         }}
       >
-        {/* "Im Video" badge — top */}
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-brand-deep text-white text-[10px] font-bold whitespace-nowrap shadow-md">
-          <Play className="size-2.5 fill-white" />
-          Im Video
-        </div>
-
-        {/* Chevron-Down — right side, indicates scroll direction */}
-        <div
-          className="absolute -right-3.5 top-1/2 -translate-y-1/2 size-8 rounded-full bg-brand text-white flex items-center justify-center"
-          style={{
-            boxShadow:
-              "0 8px 20px -4px rgba(124,92,232,0.55), 0 0 0 3px rgba(255,255,255,1)",
-          }}
-        >
-          <ChevronDown className="size-4" />
-        </div>
+        <ChevronDown className="size-5" />
       </div>
     </div>
   );
 }
 
 // ===========================================================================
-// 2) Landingpage — Builder im BG, Claude+Upload-Card im FG
+// 2) Landingpage — A) Builder  ODER  B) Claude+Upload (side-by-side mit Divider)
 // ===========================================================================
 
 function LandingPageVisual() {
   return (
-    <div className="relative w-full max-w-[400px] mx-auto">
+    <div className="relative w-full max-w-[440px] mx-auto flex items-stretch gap-2.5">
+      {/* === LEFT: Builder === */}
       <div
-        aria-hidden
-        className="absolute -inset-x-6 -bottom-4 h-8 rounded-full"
+        className="flex-1 rounded-2xl border border-line bg-white overflow-hidden flex flex-col"
         style={{
-          background:
-            "radial-gradient(50% 100% at 50% 0%, rgba(124,92,232,0.18), transparent 70%)",
-          filter: "blur(10px)",
-        }}
-      />
-
-      <div
-        className="relative rounded-2xl overflow-hidden border border-line bg-white"
-        style={{
-          aspectRatio: "5/4",
+          height: 260,
           boxShadow:
-            "0 30px 60px -20px rgba(15,23,42,0.35), 0 8px 22px -8px rgba(15,23,42,0.15)",
+            "0 20px 40px -16px rgba(15,23,42,0.25), 0 6px 14px -6px rgba(15,23,42,0.12)",
         }}
       >
-        {/* === BG: Builder UI faded === */}
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none"
-          style={{ opacity: 0.38 }}
-        >
-          {/* Toolbar */}
-          <div className="h-6 bg-[#FAFAFE] border-b border-line flex items-center px-2 gap-1.5">
-            <div className="size-1.5 rounded-full bg-[#FF5F57]" />
-            <div className="size-1.5 rounded-full bg-[#FEBC2E]" />
-            <div className="size-1.5 rounded-full bg-[#28C840]" />
-            <span className="ml-1.5 text-[8px] font-extrabold text-ink">
-              Builder
-            </span>
-            <span className="text-[7px] text-ink-muted">/ max-mustermann</span>
-          </div>
-          <div className="flex" style={{ height: "calc(100% - 24px)" }}>
-            {/* Sidebar */}
-            <div className="w-[64px] border-r border-line bg-[#FAFAFE] p-1.5 flex flex-col gap-1">
-              <div className="text-[6px] font-bold uppercase tracking-wider text-ink-muted">
-                Blöcke
-              </div>
-              {["Hero", "Text", "Bild", "CTA", "Logo", "FAQ"].map((b) => (
-                <div
-                  key={b}
-                  className="text-[7.5px] font-semibold text-ink bg-white border border-line rounded px-1.5 py-0.5"
-                >
-                  {b}
-                </div>
-              ))}
+        {/* Toolbar */}
+        <div className="h-6 bg-[#FAFAFE] border-b border-line flex items-center px-2 gap-1.5 shrink-0">
+          <div className="size-1.5 rounded-full bg-[#FF5F57]" />
+          <div className="size-1.5 rounded-full bg-[#FEBC2E]" />
+          <div className="size-1.5 rounded-full bg-[#28C840]" />
+          <span className="ml-1.5 text-[8px] font-extrabold text-ink">
+            Builder
+          </span>
+        </div>
+        <div className="flex flex-1 min-h-0">
+          {/* Block sidebar */}
+          <div className="w-[58px] border-r border-line bg-[#FAFAFE] p-1.5 flex flex-col gap-0.5">
+            <div className="text-[5.5px] font-bold uppercase tracking-wider text-ink-muted mb-0.5">
+              Blöcke
             </div>
-            {/* Canvas */}
-            <div className="flex-1 bg-[#F4F4F8] p-2 space-y-1">
-              <div className="text-[6px] font-bold uppercase tracking-wider text-ink-muted">
-                Canvas · 1280 px
-              </div>
+            {["Hero", "Text", "Bild", "CTA", "Logo"].map((b) => (
               <div
-                className="rounded bg-white p-1.5"
-                style={{ border: "1.5px solid #7C5CE8" }}
+                key={b}
+                className="text-[7.5px] font-semibold text-ink bg-white border border-line rounded px-1.5 py-0.5"
               >
-                <div className="text-[5.5px] font-bold uppercase text-brand-deep mb-0.5">
-                  Persönlich für dich
-                </div>
-                <div className="text-[9px] font-extrabold text-ink leading-tight">
-                  Max, schau dir das an.
-                </div>
+                {b}
               </div>
-              <div className="rounded bg-white border border-line h-6" />
-              <div className="rounded border-2 border-dashed border-brand/40 bg-brand-soft/30 h-5" />
+            ))}
+          </div>
+          {/* Canvas */}
+          <div className="flex-1 bg-[#F4F4F8] p-2 space-y-1 overflow-hidden">
+            <div className="text-[5.5px] font-bold uppercase tracking-wider text-ink-muted">
+              Canvas · 1280 px
+            </div>
+            <div
+              className="rounded bg-white p-1.5 shadow-sm"
+              style={{ border: "1.5px solid #7C5CE8" }}
+            >
+              <div className="text-[5px] font-bold uppercase tracking-wider text-brand-deep mb-0.5">
+                Persönlich für dich
+              </div>
+              <div className="text-[9px] font-extrabold text-ink leading-tight">
+                Max, schau dir das an.
+              </div>
+              <div className="mt-1 flex items-center gap-1">
+                <div className="text-[5.5px] font-bold text-white bg-ink rounded px-1 py-px">
+                  Termin sichern
+                </div>
+                <div className="size-2.5 rounded bg-gradient-to-br from-brand to-brand-deep" />
+              </div>
+            </div>
+            <div className="rounded bg-white border border-line h-5 p-1">
+              <div className="h-0.5 w-2/3 bg-ink/15 rounded mb-0.5" />
+              <div className="h-0.5 w-1/2 bg-ink/15 rounded" />
+            </div>
+            <div className="rounded border-2 border-dashed border-brand/40 bg-brand-soft/30 h-4 flex items-center justify-center text-[5.5px] font-bold text-brand-deep">
+              + Block
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Light haze over background to push it back */}
+      {/* === DIVIDER mit "ODER" === */}
+      <div className="shrink-0 flex flex-col items-center justify-center gap-1.5 py-2">
+        <div className="flex-1 w-px bg-line/80" />
         <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none"
+          className="text-[11px] font-extrabold tracking-[0.18em] uppercase text-ink bg-white rounded-full border border-line px-2.5 py-1 shadow-sm"
+          style={{ minWidth: 50, textAlign: "center" }}
+        >
+          ODER
+        </div>
+        <div className="flex-1 w-px bg-line/80" />
+      </div>
+
+      {/* === RIGHT: Claude + Upload === */}
+      <div
+        className="flex-1 rounded-2xl border border-line bg-white p-4 flex flex-col items-center justify-center"
+        style={{
+          height: 260,
+          boxShadow:
+            "0 20px 40px -16px rgba(15,23,42,0.25), 0 6px 14px -6px rgba(15,23,42,0.12)",
+        }}
+      >
+        {/* 1:1 Claude icon */}
+        <div
+          className="size-14 rounded-2xl flex items-center justify-center mb-2.5"
           style={{
             background:
-              "radial-gradient(60% 70% at 50% 50%, rgba(255,255,255,0.85), rgba(255,255,255,0.55))",
+              "linear-gradient(135deg, #FFF7F1 0%, #FFEDDF 100%)",
+            border: "1px solid rgba(217,119,87,0.18)",
           }}
-        />
+        >
+          <img
+            src="https://cdn.simpleicons.org/anthropic/D97757"
+            alt="Claude"
+            className="size-8"
+          />
+        </div>
 
-        {/* === FG: Claude + Upload overlay === */}
-        <div className="absolute inset-0 flex items-center justify-center p-5">
-          <div
-            className="bg-white rounded-2xl border border-line p-5 w-full max-w-[260px]"
-            style={{
-              boxShadow:
-                "0 24px 50px -16px rgba(15,23,42,0.35), 0 6px 18px -6px rgba(15,23,42,0.18)",
-            }}
-          >
-            {/* 1:1 Claude icon */}
-            <div
-              className="size-14 mx-auto rounded-2xl flex items-center justify-center mb-3"
-              style={{
-                background: "linear-gradient(135deg, #FFF7F1 0%, #FFEDDF 100%)",
-                border: "1px solid rgba(217,119,87,0.18)",
-              }}
-            >
-              <img
-                src="https://cdn.simpleicons.org/anthropic/D97757"
-                alt="Claude"
-                className="size-8"
-              />
-            </div>
+        {/* Filename + label */}
+        <div
+          className="text-[12px] font-bold text-ink leading-tight text-center"
+          style={{
+            fontFamily:
+              "ui-monospace, SFMono-Regular, Menlo, monospace",
+          }}
+        >
+          claude-site.zip
+        </div>
+        <div className="text-[9.5px] text-ink-muted mt-0.5 text-center mb-3">
+          Mit Claude erstellt
+        </div>
 
-            {/* Filename */}
-            <div className="text-center mb-3">
-              <div
-                className="text-[12px] font-bold text-ink leading-tight"
-                style={{
-                  fontFamily:
-                    "ui-monospace, SFMono-Regular, Menlo, monospace",
-                }}
-              >
-                claude-site.zip
-              </div>
-              <div className="text-[9.5px] text-ink-muted mt-0.5">
-                Mit Claude erstellt
-              </div>
-            </div>
-
-            {/* Upload zone */}
-            <div
-              className="rounded-xl border-2 border-dashed border-brand/40 bg-brand-soft/30 px-3 py-2.5 flex items-center justify-center gap-1.5"
-            >
-              <UploadCloud className="size-3.5 text-brand-deep" />
-              <span className="text-[10.5px] font-bold text-brand-deep">
-                ZIP hochladen
-              </span>
-            </div>
-          </div>
+        {/* Upload zone */}
+        <div className="w-full rounded-xl border-2 border-dashed border-brand/40 bg-brand-soft/30 px-3 py-2 flex items-center justify-center gap-1.5">
+          <UploadCloud className="size-3.5 text-brand-deep" />
+          <span className="text-[10.5px] font-bold text-brand-deep">
+            ZIP hochladen
+          </span>
         </div>
       </div>
     </div>
