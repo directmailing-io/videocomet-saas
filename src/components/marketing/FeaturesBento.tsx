@@ -491,29 +491,29 @@ function LandingPageVisual() {
           </div>
         </div>
 
-        {/* RIGHT-edge fade-out — transparent gradient blends into Upload-Card */}
+        {/* Full-width Builder-Fade von links nach rechts */}
         <div
           aria-hidden
-          className="absolute top-0 bottom-0 right-0 pointer-events-none"
+          className="absolute inset-0 pointer-events-none"
           style={{
-            width: 210,
             background:
-              "linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 35%, rgba(255,255,255,0.95) 80%)",
+              "linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 30%, rgba(255,255,255,0.35) 50%, rgba(255,255,255,0.8) 72%, rgba(255,255,255,0.98) 92%, white 100%)",
           }}
         />
       </div>
 
-      {/* === ODER-Pille — schwebt in der Fade-Zone, links von der Upload-Card === */}
+      {/* === ODER-Pille — brand-colored, gut sichtbar === */}
       <div
-        className="absolute top-1/2 -translate-y-1/2 inline-flex items-center justify-center bg-white rounded-full border border-line shadow-sm"
+        className="absolute top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-full"
         style={{
           right: 168,
-          padding: "5px 11px",
+          padding: "8px 14px",
+          background: "linear-gradient(135deg, #7C5CE8 0%, #5232C7 100%)",
           boxShadow:
-            "0 6px 14px -4px rgba(15,23,42,0.18), 0 0 0 4px rgba(255,255,255,0.9)",
+            "0 14px 30px -6px rgba(82,50,199,0.55), 0 0 0 5px rgba(255,255,255,1)",
         }}
       >
-        <span className="text-[10.5px] font-extrabold tracking-[0.2em] uppercase text-ink">
+        <span className="text-[12px] font-extrabold tracking-[0.22em] uppercase text-white">
           ODER
         </span>
       </div>
