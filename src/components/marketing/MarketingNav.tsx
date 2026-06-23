@@ -30,21 +30,34 @@ export function MarketingNav() {
   const [featuresOpen, setFeaturesOpen] = React.useState(false);
   const menuWrapperRef = React.useRef<HTMLDivElement>(null);
 
-  // Dark/Light je nach Scroll-Position relativ zur weissen HowItWorks-Section
+  // Dark/Light je nach Scroll-Position. Light = ueber #how-it-works ODER
+  // #features. Dark = alles davor und dazwischen liegende Dark-Sections.
   React.useEffect(() => {
-    const target = document.getElementById("how-it-works");
-    if (!target) {
+    const ids = ["how-it-works", "features"];
+    const targets = ids
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => el !== null);
+
+    if (targets.length === 0) {
       const onScroll = () =>
         setOverDark(window.scrollY < window.innerHeight * 3.5);
       onScroll();
       window.addEventListener("scroll", onScroll, { passive: true });
       return () => window.removeEventListener("scroll", onScroll);
     }
+
+    const visible = new Set<Element>();
     const obs = new IntersectionObserver(
-      ([entry]) => setOverDark(!entry.isIntersecting),
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) visible.add(entry.target);
+          else visible.delete(entry.target);
+        });
+        setOverDark(visible.size === 0);
+      },
       { rootMargin: "-60px 0px -85% 0px", threshold: 0 },
     );
-    obs.observe(target);
+    targets.forEach((t) => obs.observe(t));
     return () => obs.disconnect();
   }, []);
 
