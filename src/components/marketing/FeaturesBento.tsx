@@ -502,7 +502,7 @@ function LandingPageVisual() {
         className="absolute inline-flex items-center justify-center rounded-full"
         style={{
           right: 79,
-          top: 78,
+          top: 92,
           transform: "translate(50%, -50%)",
           padding: "4px 10px",
           background: "linear-gradient(135deg, #7C5CE8 0%, #5232C7 100%)",
