@@ -5,6 +5,7 @@ import { HowItWorksSection } from "@/components/marketing/HowItWorksSection";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { PricingSection } from "@/components/marketing/PricingSection";
+import { ROIRechnerSection } from "@/components/marketing/ROIRechnerSection";
 import { WhyItWorksSection } from "@/components/marketing/WhyItWorksSection";
 
 export default function HomePage() {
@@ -17,6 +18,7 @@ export default function HomePage() {
       <FeaturesBento />
       <WhyItWorksSection />
       <PricingSection />
+      <ROIRechnerSection />
       <MarketingFooter />
     </div>
   );
