@@ -420,12 +420,16 @@ function ScrollAnimationVisual() {
 function LandingPageVisual() {
   return (
     <div className="relative mx-auto" style={{ width: 440, height: 300 }}>
-      {/* === Builder UI — wide, full width === */}
+      {/* === Builder UI — wide, full width; rechts via mask-image transparent === */}
       <div
         className="absolute inset-0 rounded-2xl border border-line bg-white overflow-hidden"
         style={{
           boxShadow:
             "0 20px 40px -16px rgba(15,23,42,0.22), 0 6px 14px -6px rgba(15,23,42,0.12)",
+          WebkitMaskImage:
+            "linear-gradient(to right, black 0%, black 50%, rgba(0,0,0,0.6) 72%, transparent 92%)",
+          maskImage:
+            "linear-gradient(to right, black 0%, black 50%, rgba(0,0,0,0.6) 72%, transparent 92%)",
         }}
       >
         {/* Toolbar */}
@@ -491,15 +495,6 @@ function LandingPageVisual() {
           </div>
         </div>
 
-        {/* Full-width Builder-Fade von links nach rechts — aggressiver */}
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.05) 18%, rgba(255,255,255,0.5) 36%, rgba(255,255,255,0.88) 56%, white 78%)",
-          }}
-        />
       </div>
 
       {/* === ODER-Pille — brand-colored, gut sichtbar === */}
