@@ -508,12 +508,13 @@ async function main(): Promise<void> {
   // vor Container-Restart) werden im naechsten Minutenfenster aufgeraeumt.
   const stopBunnyPurger = startBunnyPurger();
 
-  // 4 min global cap — sum of per-stage timeouts in processors/pipeline.ts
-  // (videoRender 120 + videoUpload 60 + landingPage 10 + thumb 15 + qr 5 +
-  // docxModify 30 + docxToPdf 60 + pdfCompress 20 + pdfUpload 30 = 350s)
-  // plus ~10s orchestration headroom. The per-stage timeouts are the
-  // first line of defense; this is the belt-and-suspenders catch-all.
-  const PIPELINE_HARD_TIMEOUT_MS = 4 * 60 * 1000;
+  // 8 min global cap — sum of per-stage timeouts in processors/pipeline.ts
+  // (videoRender 300 + videoUpload 60 + landingPage 10 + thumb 15 + qr 5 +
+  // docxModify 30 + docxToPdf 60 + pdfCompress 20 + pdfUpload 30 = 530s)
+  // plus ~70s orchestration headroom. videoRender wurde von 120s -> 300s
+  // erhoeht, weil PPTX-Slides (gslide/canva) deutlich teurer sind als
+  // CDP-Screencast.
+  const PIPELINE_HARD_TIMEOUT_MS = 10 * 60 * 1000;
   const worker = pipelineWorker(async (job: Job<LeadJobData>) => {
     incrementInFlight();
     try {

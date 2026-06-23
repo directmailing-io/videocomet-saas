@@ -78,7 +78,11 @@ import { parseStorageUrl } from "@/lib/bunny/storage";
  * pipeline timeout in `src/worker/index.ts`.
  */
 const STAGE_TIMEOUTS_MS = {
-  videoRender: 120_000, // CDP screencast is realtime: 60s clip + 60s buffer
+  // PPTX-basierte Segmente (gslide/canva) sind teuer: LibreOffice (5-15s)
+  // + pdftoppm + ffmpeg-Loop, multiplied with parallel leads under
+  // BullMQ concurrency=16. 300s gibt realistischen Puffer auch fuer
+  // mehrere Slides pro Lead.
+  videoRender: 300_000,
   videoCompress: 90_000, // ffmpeg re-encode + remux (passthrough is fast)
   videoUpload: 60_000, // Bunny stream upload is fast
   landingPageCreate: 10_000, // single DB write
