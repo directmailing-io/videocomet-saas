@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Sparkles } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RevealOnScroll } from "./RevealOnScroll";
 
@@ -10,7 +10,10 @@ type Tier = {
   name: string;
   tagline: string;
   price: string;
+  priceCurrency?: string;
   priceSub: string;
+  videosLine: string;
+  perVideo?: string;
   features: string[];
   cta: { label: string; href: string };
   highlighted?: boolean;
@@ -18,15 +21,21 @@ type Tier = {
 
 const TIERS: ReadonlyArray<Tier> = [
   {
-    name: "Starter",
+    name: "Standard",
     tagline: "Für den Einstieg",
-    price: "49 €",
-    priceSub: "/ Monat",
+    price: "224",
+    priceCurrency: "€",
+    priceSub: "netto / Monat",
+    videosLine: "300 Videos pro Monat",
+    perVideo: "≈ 0,75 € pro Video",
     features: [
-      "50 personalisierte Videos / Monat",
-      "1 Landingpage-Template",
-      "Brief-Generierung als PDF",
-      "Watch-Time und Klick-Tracking",
+      "Landingpage-Builder und ZIP-Upload",
+      "Scroll-Animationen im Video",
+      "A/B-Testing",
+      "Slack-Push in Echtzeit",
+      "Alle CRM-Anbindungen",
+      "Brief-Generierung mit QR-Code",
+      "Eigene Domain anbindbar",
       "E-Mail-Support",
     ],
     cta: { label: "Jetzt starten", href: "/login" },
@@ -34,16 +43,19 @@ const TIERS: ReadonlyArray<Tier> = [
   {
     name: "Pro",
     tagline: "Für ernsthafte Akquise",
-    price: "149 €",
-    priceSub: "/ Monat",
+    price: "379",
+    priceCurrency: "€",
+    priceSub: "netto / Monat",
+    videosLine: "1.000 Videos pro Monat",
+    perVideo: "≈ 0,38 € pro Video",
     features: [
-      "500 personalisierte Videos / Monat",
-      "Alle Landingpage-Templates",
-      "Eigene Webseite als ZIP hochladen",
+      "Landingpage-Builder und ZIP-Upload",
       "Scroll-Animationen im Video",
-      "A/B-Testing für Videos und Briefe",
+      "A/B-Testing",
       "Slack-Push in Echtzeit",
       "Alle CRM-Anbindungen",
+      "Brief-Generierung mit QR-Code",
+      "Eigene Domain anbindbar",
       "Prioritäts-Support",
     ],
     cta: { label: "Pro starten", href: "/login" },
@@ -54,13 +66,14 @@ const TIERS: ReadonlyArray<Tier> = [
     tagline: "Für Skalierung",
     price: "Individuell",
     priceSub: "auf Anfrage",
+    videosLine: "Unbegrenzte Videos",
     features: [
-      "Unbegrenzte Videos",
       "Eigene Domain und White-Label",
       "Dedicated Account-Manager",
       "SSO und Custom-Integrationen",
       "SLA mit Premium-Support",
       "Eigenes Reporting",
+      "Höhere API-Limits",
     ],
     cta: { label: "Termin vereinbaren", href: "/kontakt" },
   },
@@ -100,8 +113,8 @@ export function PricingSection() {
           </RevealOnScroll>
           <RevealOnScroll delay={300}>
             <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-xl mx-auto">
-              Drei Tarife, transparent. Keine versteckten Kosten,
-              jederzeit kündbar.
+              Drei Tarife, transparent. Nur 3 Monate Mindestlaufzeit
+              statt 12. Wir wollen nicht binden, sondern überzeugen.
             </p>
           </RevealOnScroll>
         </div>
@@ -118,7 +131,7 @@ export function PricingSection() {
         {/* Footer-Note */}
         <RevealOnScroll delay={750}>
           <p className="text-center text-sm text-ink-muted mt-10">
-            Alle Preise zzgl. MwSt. Monatlich kündbar.
+            Alle Preise netto, zzgl. MwSt. Nach 3 Monaten monatlich kündbar.
           </p>
         </RevealOnScroll>
       </div>
@@ -148,17 +161,16 @@ function TierCard({ tier }: { tier: Tier }) {
             }
       }
     >
-      {/* Empfohlen Badge */}
+      {/* Beliebt-Pille */}
       {highlighted ? (
         <div
-          className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-bold tracking-wider uppercase text-white whitespace-nowrap shadow-md"
+          className="absolute -top-3 left-1/2 -translate-x-1/2 px-3.5 py-1 rounded-full text-[10.5px] font-bold tracking-[0.18em] uppercase text-white whitespace-nowrap shadow-md"
           style={{
             background:
               "linear-gradient(135deg, #7C5CE8 0%, #5232C7 100%)",
           }}
         >
-          <Sparkles className="size-3" />
-          Empfohlen
+          Beliebt
         </div>
       ) : null}
 
@@ -170,35 +182,55 @@ function TierCard({ tier }: { tier: Tier }) {
         <p className="text-sm text-ink-muted">{tier.tagline}</p>
       </div>
 
-      {/* Price */}
-      <div className="mb-7 pb-7 border-b border-line">
-        <div className="flex items-baseline gap-1.5">
+      {/* Price block */}
+      <div className="mb-6 pb-6 border-b border-line">
+        <div className="flex items-baseline gap-1">
           <span
             className="font-light tracking-[-0.04em] leading-none text-ink"
             style={{ fontSize: "clamp(40px, 4.4vw, 56px)" }}
           >
             {tier.price}
           </span>
-          <span className="text-sm text-ink-muted">{tier.priceSub}</span>
+          {tier.priceCurrency ? (
+            <span
+              className="font-light tracking-[-0.04em] leading-none text-ink"
+              style={{ fontSize: "clamp(24px, 2.6vw, 32px)" }}
+            >
+              {tier.priceCurrency}
+            </span>
+          ) : null}
         </div>
+        <div className="text-xs text-ink-muted mt-2">{tier.priceSub}</div>
+      </div>
+
+      {/* Volumen-Headline */}
+      <div className="mb-5">
+        <div className="text-[15px] font-bold text-ink leading-tight">
+          {tier.videosLine}
+        </div>
+        {tier.perVideo ? (
+          <div className="text-[12.5px] text-brand-deep font-semibold mt-1">
+            {tier.perVideo}
+          </div>
+        ) : null}
       </div>
 
       {/* Features */}
-      <ul className="flex-1 space-y-3 mb-8">
+      <ul className="flex-1 space-y-2.5 mb-7">
         {tier.features.map((f) => (
-          <li key={f} className="flex items-start gap-2.5 text-[14.5px] text-ink leading-snug">
+          <li
+            key={f}
+            className="flex items-start gap-2.5 text-[14px] text-ink leading-snug"
+          >
             <div
               className={cn(
-                "size-5 shrink-0 rounded-full flex items-center justify-center mt-0.5",
-                highlighted ? "bg-brand-soft" : "bg-surface-soft",
+                "size-4 shrink-0 rounded-full flex items-center justify-center mt-0.5",
+                highlighted ? "bg-brand" : "bg-ink",
               )}
             >
               <Check
-                className={cn(
-                  "size-3",
-                  highlighted ? "text-brand-deep" : "text-ink-muted",
-                )}
-                strokeWidth={3}
+                className="size-2.5 text-white"
+                strokeWidth={3.5}
               />
             </div>
             <span>{f}</span>
@@ -219,6 +251,11 @@ function TierCard({ tier }: { tier: Tier }) {
         {tier.cta.label}
         <ArrowRight className="size-3.5" />
       </Link>
+
+      {/* Footer: Mindestlaufzeit */}
+      <div className="mt-4 text-center text-[11px] text-ink-muted">
+        3 Monate Mindestlaufzeit
+      </div>
     </div>
   );
 }
