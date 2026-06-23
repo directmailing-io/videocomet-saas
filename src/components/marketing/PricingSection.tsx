@@ -16,10 +16,13 @@ const FEATURES: ReadonlyArray<string> = [
   "Tracking und Analytics live",
 ];
 
+const BASE_FEE = 40;
+const PER_VIDEO = 1;
+
 const EXAMPLES: ReadonlyArray<{ count: number; label: string }> = [
-  { count: 0, label: "0 Versand" },
-  { count: 250, label: "250 Versand" },
-  { count: 1000, label: "1.000 Versand" },
+  { count: 0, label: "0 Videos" },
+  { count: 250, label: "250 Videos" },
+  { count: 1000, label: "1.000 Videos" },
 ];
 
 export function PricingSection() {
@@ -47,17 +50,18 @@ export function PricingSection() {
           </RevealOnScroll>
           <RevealOnScroll delay={150}>
             <h2 className="font-light tracking-[-0.035em] text-ink leading-[1.05] text-[clamp(32px,4.2vw,56px)] mb-5 text-balance">
-              Ein Tarif.
+              Zahl nur,
               <br />
               <span className="font-semibold text-brand-deep">
-                So einfach, wie es sein sollte.
+                was du wirklich brauchst.
               </span>
             </h2>
           </RevealOnScroll>
           <RevealOnScroll delay={300}>
             <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-xl mx-auto">
-              Eine Grundgebühr, plus ein fairer Preis pro Versand.
-              Keine Tarif-Tricks, keine versteckten Limits.
+              40 € Grundgebühr im Monat. 1 € pro Video, das du
+              versendest. Egal ob mit Brief, mit Landingpage oder
+              ohne. Mehr nicht.
             </p>
           </RevealOnScroll>
         </div>
@@ -83,7 +87,7 @@ export function PricingSection() {
                     className="font-light tracking-[-0.04em] leading-none text-ink"
                     style={{ fontSize: "clamp(52px, 6.5vw, 88px)" }}
                   >
-                    70
+                    40
                   </span>
                   <span
                     className="font-light tracking-[-0.04em] leading-none text-ink"
@@ -119,10 +123,10 @@ export function PricingSection() {
                 />
               </div>
 
-              {/* Pro Versand */}
+              {/* Pro Video */}
               <div className="text-center md:text-left">
                 <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted mb-3">
-                  Pro Versand
+                  Pro Video
                 </div>
                 <div className="flex items-baseline gap-1 justify-center md:justify-start">
                   <span
@@ -139,7 +143,7 @@ export function PricingSection() {
                   </span>
                 </div>
                 <div className="text-sm text-ink-muted mt-2">
-                  pauschal, Video oder Brief
+                  egal ob mit Brief oder ohne
                 </div>
               </div>
             </div>
@@ -159,7 +163,9 @@ export function PricingSection() {
                       {ex.label}
                     </div>
                     <div className="text-lg md:text-xl font-bold text-ink tabular-nums">
-                      {(70 + ex.count).toLocaleString("de-DE")} €
+                      {(BASE_FEE + ex.count * PER_VIDEO).toLocaleString(
+                        "de-DE",
+                      )} €
                     </div>
                   </div>
                 ))}
@@ -213,8 +219,8 @@ export function PricingSection() {
         {/* Footer note */}
         <RevealOnScroll delay={500}>
           <p className="text-center text-sm text-ink-muted mt-10">
-            Alle Preise netto, zzgl. MwSt. Versand-Credits werden
-            taggenau abgerechnet.
+            Alle Preise netto, zzgl. MwSt. Videos werden taggenau
+            abgerechnet. Keine Mindestabnahme.
           </p>
         </RevealOnScroll>
       </div>
