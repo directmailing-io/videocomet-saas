@@ -33,7 +33,7 @@ export function MarketingNav() {
   // Dark/Light je nach Scroll-Position. Light = ueber #how-it-works ODER
   // #features. Dark = alles davor und dazwischen liegende Dark-Sections.
   React.useEffect(() => {
-    const ids = ["how-it-works", "features", "page-footer"];
+    const ids = ["how-it-works", "features", "pricing", "page-footer"];
     const targets = ids
       .map((id) => document.getElementById(id))
       .filter((el): el is HTMLElement => el !== null);
