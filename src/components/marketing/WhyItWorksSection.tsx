@@ -45,22 +45,32 @@ export function WhyItWorksSection() {
           </div>
         </RevealOnScroll>
 
-        {/* Mega editorial headline */}
+        {/* Kleiner muted Kontext-Satz */}
         <RevealOnScroll delay={150}>
-          <h2
-            className="text-center font-light tracking-[-0.04em] leading-[1.02] mb-20 md:mb-28"
-            style={{ fontSize: "clamp(34px, 5.4vw, 68px)" }}
+          <p
+            className="text-center text-white/45 leading-relaxed max-w-2xl mx-auto mb-7"
+            style={{ fontSize: "clamp(14.5px, 1.1vw, 17px)" }}
           >
-            <span className="text-white/25 block">Alle senden E-Mails.</span>
-            <span className="text-white/25 block">Alle schalten Ads.</span>
-            <span className="block mt-7 text-white">
-              Du schickst einen Brief,
+            Deine Mitbewerber senden E-Mails, die nicht gelesen werden,
+            schalten Ads, die weggescrollt werden, und rufen ständig
+            mit denselben Floskeln an.
+          </p>
+        </RevealOnScroll>
+
+        {/* Mega editorial headline — die positive Antithese */}
+        <RevealOnScroll delay={250}>
+          <h2
+            className="text-center font-light tracking-[-0.04em] leading-[1.05] mb-20 md:mb-28 max-w-4xl mx-auto"
+            style={{ fontSize: "clamp(32px, 5vw, 64px)" }}
+          >
+            <span className="block text-white">
+              Du hebst dich mit einem persönlichen Video ab
             </span>
             <span
               className="block font-semibold"
               style={{ color: "#C9BAFF" }}
             >
-              in dem ein Video sitzt.
+              und bleibst positiv in Erinnerung.
             </span>
           </h2>
         </RevealOnScroll>
@@ -70,24 +80,27 @@ export function WhyItWorksSection() {
           <HeroComposition />
         </RevealOnScroll>
 
-        {/* Drei Benefits — editorial, kein Card-Grid */}
+        {/* Drei Benefits — premium editorial, mit Index */}
         <div className="mt-24 md:mt-36 grid grid-cols-1 md:grid-cols-3 gap-14 md:gap-12">
           <RevealOnScroll delay={400}>
             <Benefit
-              title="Du hebst dich von der Masse ab."
-              body="Niemand erwartet einen Brief mit Video. Schon der Briefkasten verrät, dass hier jemand mehr getan hat als alle anderen."
+              index="01"
+              title="Du fällst auf, ohne lauter zu sein."
+              body="Ein Brief mit deinem Gesicht darin ist ein Statement. Du investierst Zeit, und genau das wird gesehen, geöffnet und gewürdigt."
             />
           </RevealOnScroll>
           <RevealOnScroll delay={500}>
             <Benefit
-              title="Du bleibst in Erinnerung."
-              body="Was du in der Hand hattest, vergisst du nicht. Wo Ads weggeklickt werden, wirst du erinnert."
+              index="02"
+              title="Du bleibst im Kopf, wo es zählt."
+              body="Ein persönliches Video sieht man bis zum Schluss. Was bis zum Schluss läuft, bleibt dort, wo später die Entscheidung fällt."
             />
           </RevealOnScroll>
           <RevealOnScroll delay={600}>
             <Benefit
-              title="Du baust Vertrauen, bevor du verkaufst."
-              body="Wer dich gesehen hat, hört dir später zu. Persönlichkeit schafft Sympathie, und Sympathie öffnet Türen."
+              index="03"
+              title="Du gewinnst Vertrauen, bevor du fragst."
+              body="Wer dich gesehen hat, kennt dich schon ein Stück. Persönlichkeit schafft Sympathie, und Sympathie öffnet jede Tür schneller."
             />
           </RevealOnScroll>
         </div>
@@ -140,26 +153,35 @@ function HeroComposition() {
             "0 40px 100px -30px rgba(0,0,0,0.85), inset 0 0 80px -20px rgba(0,0,0,0.5)",
         }}
       >
-        {/* Brand hero gradient */}
+        {/* Premium Dark Hero — gedaempfte brand-tones, mehr Schwarz */}
         <div
           className="absolute inset-0 flex items-center"
           style={{
             background:
-              "linear-gradient(135deg, #6D28D9 0%, #7C5CE8 35%, #D946EF 100%)",
+              "linear-gradient(135deg, #0B0418 0%, #1A0E3A 35%, #2A1656 65%, #160828 100%)",
           }}
         >
-          {/* radial highlight */}
+          {/* Subtle radial highlight upper-left */}
           <div
             aria-hidden
             className="absolute inset-0"
             style={{
               background:
-                "radial-gradient(50% 80% at 30% 30%, rgba(255,255,255,0.2), transparent 60%)",
+                "radial-gradient(45% 70% at 22% 22%, rgba(170,140,245,0.28) 0%, transparent 65%)",
+            }}
+          />
+          {/* Subtle brand-glow lower-right */}
+          <div
+            aria-hidden
+            className="absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(35% 60% at 85% 85%, rgba(124,92,232,0.20) 0%, transparent 65%)",
             }}
           />
 
           <div className="relative flex-1 px-6 md:px-10 pr-28 md:pr-40">
-            <div className="text-[10px] md:text-[12px] font-bold tracking-[0.3em] uppercase text-white/85 mb-3">
+            <div className="text-[10px] md:text-[12px] font-bold tracking-[0.3em] uppercase text-white/65 mb-3">
               Persönlich für dich
             </div>
             <div
@@ -239,26 +261,52 @@ function HeroComposition() {
 }
 
 // ---------------------------------------------------------------------------
-// Benefit — editorial, kein Card-Grid
+// Benefit — premium editorial mit Index + Accent
 // ---------------------------------------------------------------------------
 
-function Benefit({ title, body }: { title: string; body: string }) {
+function Benefit({
+  index,
+  title,
+  body,
+}: {
+  index: string;
+  title: string;
+  body: string;
+}) {
   return (
-    <div className="text-left">
-      {/* Brand-Accent-Line */}
-      <div
-        className="h-px w-10 mb-6"
-        style={{
-          background:
-            "linear-gradient(to right, #C9BAFF, rgba(201,186,255,0.2))",
-        }}
-      />
+    <div className="text-left group">
+      {/* Index + Brand-Accent-Line */}
+      <div className="flex items-center gap-3 mb-6">
+        <span
+          className="text-[13px] font-semibold tabular-nums tracking-wider"
+          style={{
+            background:
+              "linear-gradient(135deg, #DDD0FF 0%, rgba(201,186,255,0.5) 100%)",
+            WebkitBackgroundClip: "text",
+            backgroundClip: "text",
+            color: "transparent",
+          }}
+        >
+          {index}
+        </span>
+        <div
+          className="h-px flex-1 max-w-[64px]"
+          style={{
+            background:
+              "linear-gradient(to right, rgba(201,186,255,0.55), rgba(201,186,255,0.05))",
+          }}
+        />
+      </div>
+
+      {/* Title */}
       <h3
-        className="font-semibold tracking-[-0.02em] leading-[1.15] text-white mb-4"
+        className="font-semibold tracking-[-0.02em] leading-[1.15] text-white mb-4 transition-colors group-hover:text-white"
         style={{ fontSize: "clamp(20px, 1.9vw, 26px)" }}
       >
         {title}
       </h3>
+
+      {/* Body */}
       <p
         className="text-white/55 leading-relaxed"
         style={{ fontSize: "clamp(14.5px, 1.05vw, 16px)" }}
