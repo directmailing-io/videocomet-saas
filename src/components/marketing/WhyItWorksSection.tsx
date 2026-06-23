@@ -70,28 +70,24 @@ export function WhyItWorksSection() {
           <HeroComposition />
         </RevealOnScroll>
 
-        {/* Stats: drei riesige Zahlen */}
-        <div className="mt-20 md:mt-32 grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-6">
+        {/* Drei Benefits — editorial, kein Card-Grid */}
+        <div className="mt-24 md:mt-36 grid grid-cols-1 md:grid-cols-3 gap-14 md:gap-12">
           <RevealOnScroll delay={400}>
-            <Stat
-              number="9 / 10"
-              line1="öffnen einen Brief,"
-              line2="der echt aussieht."
+            <Benefit
+              title="Du hebst dich von der Masse ab."
+              body="Niemand erwartet einen Brief mit Video. Schon der Briefkasten verrät, dass hier jemand mehr getan hat als alle anderen."
             />
           </RevealOnScroll>
           <RevealOnScroll delay={500}>
-            <Stat
-              number="1 / 30"
-              line1="antwortet auf eine"
-              line2="0815-Cold-Email."
-              muted
+            <Benefit
+              title="Du bleibst in Erinnerung."
+              body="Was du in der Hand hattest, vergisst du nicht. Wo Ads weggeklickt werden, wirst du erinnert."
             />
           </RevealOnScroll>
           <RevealOnScroll delay={600}>
-            <Stat
-              number="∞"
-              line1="bleibt im Kopf,"
-              line2="wenn es persönlich war."
+            <Benefit
+              title="Du baust Vertrauen, bevor du verkaufst."
+              body="Wer dich gesehen hat, hört dir später zu. Persönlichkeit schafft Sympathie, und Sympathie öffnet Türen."
             />
           </RevealOnScroll>
         </div>
@@ -136,12 +132,12 @@ function HeroComposition() {
         }}
       />
 
-      {/* MAIN: Video player */}
+      {/* MAIN: Video player — mit Dark-Vignette die in den BG einblendet */}
       <div
-        className="relative rounded-2xl overflow-hidden border border-white/10 aspect-video"
+        className="relative rounded-2xl overflow-hidden border border-white/[0.06] aspect-video"
         style={{
           boxShadow:
-            "0 50px 100px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06)",
+            "0 40px 100px -30px rgba(0,0,0,0.85), inset 0 0 80px -20px rgba(0,0,0,0.5)",
         }}
       >
         {/* Brand hero gradient */}
@@ -226,47 +222,49 @@ function HeroComposition() {
             />
           </div>
         </div>
+
+        {/* DARK VIGNETTE — Video verblasst zu den Raendern in den BG */}
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(115% 95% at 50% 25%, transparent 45%, rgba(0,0,0,0.55) 85%, rgba(0,0,0,0.85) 100%)",
+            zIndex: 4,
+          }}
+        />
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Big-Number Stat
+// Benefit — editorial, kein Card-Grid
 // ---------------------------------------------------------------------------
 
-function Stat({
-  number,
-  line1,
-  line2,
-  muted,
-}: {
-  number: string;
-  line1: string;
-  line2: string;
-  muted?: boolean;
-}) {
+function Benefit({ title, body }: { title: string; body: string }) {
   return (
-    <div className="text-center md:text-left">
+    <div className="text-left">
+      {/* Brand-Accent-Line */}
       <div
-        className="font-extralight tracking-[-0.05em] leading-none mb-3 md:mb-5"
+        className="h-px w-10 mb-6"
         style={{
-          fontSize: "clamp(68px, 9.5vw, 132px)",
-          background: muted
-            ? "linear-gradient(180deg, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.15) 100%)"
-            : "linear-gradient(180deg, #FFFFFF 0%, rgba(255,255,255,0.55) 100%)",
-          WebkitBackgroundClip: "text",
-          backgroundClip: "text",
-          color: "transparent",
+          background:
+            "linear-gradient(to right, #C9BAFF, rgba(201,186,255,0.2))",
         }}
+      />
+      <h3
+        className="font-semibold tracking-[-0.02em] leading-[1.15] text-white mb-4"
+        style={{ fontSize: "clamp(20px, 1.9vw, 26px)" }}
       >
-        {number}
-      </div>
-      <div className="text-[15px] md:text-base leading-snug">
-        <span className="text-white/75">{line1}</span>
-        <br />
-        <span className="text-white/45">{line2}</span>
-      </div>
+        {title}
+      </h3>
+      <p
+        className="text-white/55 leading-relaxed"
+        style={{ fontSize: "clamp(14.5px, 1.05vw, 16px)" }}
+      >
+        {body}
+      </p>
     </div>
   );
 }
