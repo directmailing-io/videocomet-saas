@@ -75,34 +75,50 @@ export function WhyItWorksSection() {
           </h2>
         </RevealOnScroll>
 
-        {/* Hero Video-Letter visual */}
-        <RevealOnScroll delay={300}>
-          <HeroComposition />
-        </RevealOnScroll>
+        {/* Layout: 2 Benefits links | Video Mitte | 2 Benefits rechts */}
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_1.4fr_1fr] items-center gap-12 md:gap-7 lg:gap-12">
+          {/* LEFT: 01 + 02 */}
+          <div className="space-y-12 md:space-y-14 order-2 md:order-1">
+            <RevealOnScroll delay={400}>
+              <Benefit
+                index="01"
+                title="Du fällst auf, ohne lauter zu sein."
+                body="Ein Brief mit deinem Gesicht darin ist ein Statement. Du investierst Zeit, und genau das wird gesehen, geöffnet und gewürdigt."
+              />
+            </RevealOnScroll>
+            <RevealOnScroll delay={460}>
+              <Benefit
+                index="02"
+                title="Du bleibst im Kopf, wo es zählt."
+                body="Ein persönliches Video sieht man bis zum Schluss. Was bis zum Schluss läuft, bleibt dort, wo später die Entscheidung fällt."
+              />
+            </RevealOnScroll>
+          </div>
 
-        {/* Drei Benefits — premium editorial, mit Index */}
-        <div className="mt-24 md:mt-36 grid grid-cols-1 md:grid-cols-3 gap-14 md:gap-12">
-          <RevealOnScroll delay={400}>
-            <Benefit
-              index="01"
-              title="Du fällst auf, ohne lauter zu sein."
-              body="Ein Brief mit deinem Gesicht darin ist ein Statement. Du investierst Zeit, und genau das wird gesehen, geöffnet und gewürdigt."
-            />
-          </RevealOnScroll>
-          <RevealOnScroll delay={500}>
-            <Benefit
-              index="02"
-              title="Du bleibst im Kopf, wo es zählt."
-              body="Ein persönliches Video sieht man bis zum Schluss. Was bis zum Schluss läuft, bleibt dort, wo später die Entscheidung fällt."
-            />
-          </RevealOnScroll>
-          <RevealOnScroll delay={600}>
-            <Benefit
-              index="03"
-              title="Du gewinnst Vertrauen, bevor du fragst."
-              body="Wer dich gesehen hat, kennt dich schon ein Stück. Persönlichkeit schafft Sympathie, und Sympathie öffnet jede Tür schneller."
-            />
-          </RevealOnScroll>
+          {/* CENTER: Video */}
+          <div className="order-1 md:order-2">
+            <RevealOnScroll delay={300}>
+              <HeroComposition />
+            </RevealOnScroll>
+          </div>
+
+          {/* RIGHT: 03 + 04 */}
+          <div className="space-y-12 md:space-y-14 order-3">
+            <RevealOnScroll delay={520}>
+              <Benefit
+                index="03"
+                title="Du gewinnst Vertrauen, bevor du fragst."
+                body="Wer dich gesehen hat, kennt dich schon ein Stück. Persönlichkeit schafft Sympathie, und Sympathie öffnet jede Tür schneller."
+              />
+            </RevealOnScroll>
+            <RevealOnScroll delay={580}>
+              <Benefit
+                index="04"
+                title="Du erreichst Menschen, nicht Algorithmen."
+                body="Kein Bidding-System, kein Spam-Filter, kein Algorithmus dazwischen. Dein Brief landet direkt bei dem, der zählt."
+              />
+            </RevealOnScroll>
+          </div>
         </div>
       </div>
     </section>
@@ -115,45 +131,30 @@ export function WhyItWorksSection() {
 
 function HeroComposition() {
   return (
-    <div className="relative mx-auto" style={{ maxWidth: 580 }}>
-      {/* Massive glow behind */}
+    <div className="relative mx-auto" style={{ maxWidth: 520 }}>
+      {/* Brand backdrop glow (not masked, gibt Tiefe) */}
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "radial-gradient(50% 50% at 50% 50%, rgba(124,92,232,0.45) 0%, transparent 65%)",
+            "radial-gradient(50% 50% at 50% 50%, rgba(124,92,232,0.35) 0%, transparent 65%)",
           transform: "scale(1.5)",
-          filter: "blur(40px)",
+          filter: "blur(45px)",
         }}
       />
 
-      {/* Subtle letter card behind */}
+      {/* MAIN: Video player — RADIAL MASK so dass Raender in den BG verschwinden */}
       <div
-        aria-hidden
-        className="absolute"
+        className="relative rounded-2xl overflow-hidden aspect-video"
         style={{
-          left: "8%",
-          top: "12%",
-          width: "84%",
-          aspectRatio: "16/10",
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          borderRadius: 16,
-          transform: "rotate(-3deg) translateY(20px)",
-        }}
-      />
-
-      {/* MAIN: Video player — mit Dark-Vignette die in den BG einblendet */}
-      <div
-        className="relative rounded-2xl overflow-hidden border border-white/[0.06] aspect-video"
-        style={{
-          boxShadow:
-            "0 40px 100px -30px rgba(0,0,0,0.85), inset 0 0 80px -20px rgba(0,0,0,0.5)",
+          WebkitMaskImage:
+            "radial-gradient(105% 95% at 50% 38%, black 32%, rgba(0,0,0,0.7) 65%, transparent 100%)",
+          maskImage:
+            "radial-gradient(105% 95% at 50% 38%, black 32%, rgba(0,0,0,0.7) 65%, transparent 100%)",
         }}
       >
-        {/* Premium Dark Hero — gedaempfte brand-tones, mehr Schwarz */}
+        {/* Premium Dark Hero */}
         <div
           className="absolute inset-0 flex items-center"
           style={{
@@ -180,17 +181,16 @@ function HeroComposition() {
             }}
           />
 
-          <div className="relative flex-1 px-6 md:px-10 pr-28 md:pr-40">
-            <div className="text-[10px] md:text-[12px] font-bold tracking-[0.3em] uppercase text-white/65 mb-3">
-              Persönlich für dich
-            </div>
+          <div className="relative flex-1 px-5 md:px-7 pr-20 md:pr-24">
             <div
-              className="font-extrabold text-white leading-[1.02] tracking-[-0.02em]"
-              style={{ fontSize: "clamp(22px,3.4vw,40px)" }}
+              className="font-extrabold text-white leading-[1.1] tracking-[-0.02em]"
+              style={{ fontSize: "clamp(14px, 1.9vw, 22px)" }}
             >
-              Max,
+              Herr Müller, die Wahrheit
               <br />
-              schau dir das an.
+              in der Baubranche sieht
+              <br />
+              folgendermaßen aus:
             </div>
           </div>
         </div>
