@@ -497,13 +497,13 @@ function LandingPageVisual() {
 
       </div>
 
-      {/* === ODER-Pille — kleiner, horizontal zentriert ueber der Upload-Card === */}
+      {/* === ODER-Pille — sitzt auf der Top-Kante der Upload-Card === */}
       <div
         className="absolute inline-flex items-center justify-center rounded-full"
         style={{
           right: 79,
-          top: 38,
-          transform: "translateX(50%)",
+          top: 78,
+          transform: "translate(50%, -50%)",
           padding: "4px 10px",
           background: "linear-gradient(135deg, #7C5CE8 0%, #5232C7 100%)",
           boxShadow:
