@@ -797,7 +797,7 @@ function SlackPushVisual() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2 leading-tight">
                   <span className="text-[12px] font-bold text-ink">
-                    VideoComet
+                    VIDEOCOMET
                   </span>
                   <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 rounded px-1 py-px">
                     APP
