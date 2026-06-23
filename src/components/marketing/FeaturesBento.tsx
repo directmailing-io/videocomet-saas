@@ -234,191 +234,211 @@ function FeatureCardMesh({
 }
 
 // ===========================================================================
-// Scroll-Animation — Page mit prominenter Scrollbar-Column + Direction-Chevron
+// Scroll-Animation — Webseite + Maus-Icon mit Scroll-Chevrons
 // ===========================================================================
 
 function ScrollAnimationVisual() {
   return (
-    <div className="relative mx-auto" style={{ maxWidth: 240 }}>
-      {/* Device frame */}
+    <div className="relative mx-auto" style={{ width: 280, height: 300 }}>
+      {/* Browser/webpage mockup */}
       <div
-        className="relative rounded-2xl border border-line bg-white overflow-hidden"
+        className="absolute inset-0 rounded-2xl border border-line bg-white overflow-hidden"
         style={{
-          aspectRatio: "3/4",
           boxShadow:
-            "0 30px 60px -20px rgba(15,23,42,0.35), 0 8px 22px -8px rgba(15,23,42,0.15)",
+            "0 30px 60px -20px rgba(15,23,42,0.4), 0 8px 22px -8px rgba(15,23,42,0.18)",
         }}
       >
-        {/* Page content — leave right side free for scrollbar column */}
-        <div
-          className="absolute inset-y-0 left-0 p-2.5 space-y-1.5"
-          style={{ right: 24 }}
-        >
-          <div className="h-3 rounded bg-[#F4F4F8] border border-line/60 flex items-center px-1.5 gap-0.5">
-            <div className="size-1 rounded-full bg-[#FF5F57]" />
-            <div className="size-1 rounded-full bg-[#FEBC2E]" />
-            <div className="size-1 rounded-full bg-[#28C840]" />
-            <span className="ml-1 text-[5px] text-ink-muted">kunde.de</span>
+        {/* Browser chrome */}
+        <div className="h-6 bg-[#F4F4F8] border-b border-line flex items-center px-2 gap-1">
+          <div className="size-1.5 rounded-full bg-[#FF5F57]" />
+          <div className="size-1.5 rounded-full bg-[#FEBC2E]" />
+          <div className="size-1.5 rounded-full bg-[#28C840]" />
+          <div className="flex-1 mx-2 h-3 rounded bg-white border border-line flex items-center px-2">
+            <span className="text-[7px] text-ink-muted">kunde.de/karriere</span>
           </div>
-          <div className="h-12 rounded bg-gradient-to-br from-brand-soft to-white border border-line/60 p-1.5">
-            <div className="h-1.5 w-3/4 bg-brand-deep/35 rounded mb-1" />
-            <div className="h-1.5 w-1/2 bg-brand-deep/20 rounded" />
+        </div>
+
+        {/* Webpage content — sichtbarer Seiten-Ausschnitt */}
+        <div className="p-3 space-y-2">
+          {/* Karriere Hero */}
+          <div className="h-14 rounded-md bg-gradient-to-br from-brand-soft to-white border border-line p-2">
+            <div className="text-[6.5px] font-bold tracking-[0.1em] uppercase text-brand-deep mb-1">
+              Karriere
+            </div>
+            <div className="h-1.5 w-3/4 bg-ink/25 rounded mb-1" />
+            <div className="h-1.5 w-1/2 bg-ink/15 rounded" />
           </div>
-          <div className="h-9 rounded bg-white border border-line/60 p-1.5">
+          {/* Job-Cards Grid */}
+          <div className="h-12 rounded-md bg-white border border-line p-1.5 grid grid-cols-2 gap-1">
+            <div className="rounded bg-brand-soft p-1">
+              <div className="h-0.5 w-3/4 bg-brand-deep/30 rounded mb-1" />
+              <div className="h-0.5 w-1/2 bg-brand-deep/20 rounded" />
+            </div>
+            <div className="rounded bg-brand-soft p-1">
+              <div className="h-0.5 w-3/4 bg-brand-deep/30 rounded mb-1" />
+              <div className="h-0.5 w-1/2 bg-brand-deep/20 rounded" />
+            </div>
+          </div>
+          {/* Text-Block */}
+          <div className="h-10 rounded-md bg-white border border-line p-2">
             <div className="h-1 w-2/3 bg-ink/15 rounded mb-1" />
             <div className="h-1 w-1/2 bg-ink/15 rounded" />
           </div>
-          <div className="h-14 rounded bg-white border border-line/60 p-1.5">
-            <div className="text-[5px] font-bold tracking-[0.1em] uppercase text-brand-deep mb-1">
-              Karriere
-            </div>
-            <div className="grid grid-cols-2 gap-1">
-              <div className="h-4 rounded bg-brand-soft" />
-              <div className="h-4 rounded bg-brand-soft" />
-            </div>
-          </div>
-          <div className="h-9 rounded bg-white border border-line/60 p-1.5">
-            <div className="h-1 w-2/3 bg-ink/15 rounded mb-1" />
+          {/* Mehr Content */}
+          <div className="h-10 rounded-md bg-white border border-line p-2">
+            <div className="h-1 w-3/4 bg-ink/15 rounded mb-1" />
             <div className="h-1 w-1/2 bg-ink/15 rounded" />
           </div>
         </div>
 
-        {/* Right-side scrollbar column — prominent */}
-        <div className="absolute right-0 top-0 bottom-0 w-6 bg-[#FAFAFE] border-l border-line/80 flex flex-col items-center justify-stretch py-2.5">
-          {/* Up chevron */}
-          <div className="size-3 flex items-center justify-center text-ink-muted/50">
-            <ChevronDown className="size-2.5 rotate-180" />
-          </div>
-          {/* Track */}
-          <div className="flex-1 w-2 rounded-full bg-ink/10 my-1.5 relative">
-            <div
-              className="absolute inset-x-0 rounded-full bg-brand"
-              style={{
-                top: "32%",
-                height: "32%",
-                boxShadow:
-                  "0 0 0 1.5px white, 0 4px 10px rgba(124,92,232,0.45)",
-              }}
-            />
-          </div>
-          {/* Down chevron */}
-          <div className="size-3 flex items-center justify-center text-brand-deep">
-            <ChevronDown className="size-2.5" />
-          </div>
+        {/* Page-Scrollbar inside the browser — subtle */}
+        <div className="absolute right-1 top-8 bottom-2 w-1 rounded-full bg-ink/10">
+          <div
+            className="absolute inset-x-0 rounded-full bg-ink/30"
+            style={{ top: "30%", height: "30%" }}
+          />
         </div>
       </div>
 
-      {/* External brand Chevron — communicates scroll direction */}
+      {/* MAUS-Icon mit Scroll-Pfeilen — direkt rechts auf der Webseite */}
       <div
-        className="absolute -right-3 top-1/2 -translate-y-1/2 size-10 rounded-full bg-brand text-white flex items-center justify-center"
-        style={{
-          boxShadow:
-            "0 12px 28px -6px rgba(124,92,232,0.55), 0 0 0 4px white",
-        }}
+        className="absolute pointer-events-none flex flex-col items-center"
+        style={{ right: -20, top: 80 }}
       >
-        <ChevronDown className="size-5" />
+        {/* Maus */}
+        <div
+          className="size-12 rounded-full bg-white flex items-center justify-center"
+          style={{
+            border: "1.5px solid #E2E2EE",
+            boxShadow: "0 14px 28px -6px rgba(15,23,42,0.3)",
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="size-6 text-ink"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {/* Maus-Body */}
+            <rect x="6" y="3" width="12" height="18" rx="6" />
+            {/* Scroll-Wheel */}
+            <line x1="12" y1="7" x2="12" y2="11" stroke="#7C5CE8" strokeWidth="2.5" />
+          </svg>
+        </div>
+        {/* Animierte Scroll-Pfeile nach unten */}
+        <ChevronDown className="size-4 text-brand mt-1" />
+        <ChevronDown className="size-4 text-brand -mt-2 opacity-65" />
+        <ChevronDown className="size-4 text-brand -mt-2 opacity-35" />
       </div>
     </div>
   );
 }
 
 // ===========================================================================
-// 2) Landingpage — A) Builder  ODER  B) Claude+Upload (side-by-side mit Divider)
+// 2) Landingpage — Wide Builder + transparenter Fade + kleinere Claude-Card
 // ===========================================================================
 
 function LandingPageVisual() {
   return (
-    <div className="relative w-full max-w-[440px] mx-auto flex items-stretch gap-2.5">
-      {/* === LEFT: Builder === */}
+    <div className="relative mx-auto" style={{ width: 440, height: 300 }}>
+      {/* === Builder UI — wide, full width === */}
       <div
-        className="flex-1 rounded-2xl border border-line bg-white overflow-hidden flex flex-col"
+        className="absolute inset-0 rounded-2xl border border-line bg-white overflow-hidden"
         style={{
-          height: 260,
           boxShadow:
-            "0 20px 40px -16px rgba(15,23,42,0.25), 0 6px 14px -6px rgba(15,23,42,0.12)",
+            "0 20px 40px -16px rgba(15,23,42,0.22), 0 6px 14px -6px rgba(15,23,42,0.12)",
         }}
       >
         {/* Toolbar */}
-        <div className="h-6 bg-[#FAFAFE] border-b border-line flex items-center px-2 gap-1.5 shrink-0">
+        <div className="h-7 bg-[#FAFAFE] border-b border-line flex items-center px-2.5 gap-2 shrink-0">
           <div className="size-1.5 rounded-full bg-[#FF5F57]" />
           <div className="size-1.5 rounded-full bg-[#FEBC2E]" />
           <div className="size-1.5 rounded-full bg-[#28C840]" />
-          <span className="ml-1.5 text-[8px] font-extrabold text-ink">
+          <span className="ml-1.5 text-[10px] font-extrabold text-ink">
             Builder
           </span>
+          <span className="text-[9px] text-ink-muted">/ max-mustermann</span>
         </div>
-        <div className="flex flex-1 min-h-0">
-          {/* Block sidebar */}
-          <div className="w-[58px] border-r border-line bg-[#FAFAFE] p-1.5 flex flex-col gap-0.5">
-            <div className="text-[5.5px] font-bold uppercase tracking-wider text-ink-muted mb-0.5">
+        <div className="flex" style={{ height: "calc(100% - 28px)" }}>
+          {/* Sidebar */}
+          <div className="w-[78px] border-r border-line bg-[#FAFAFE] p-2 flex flex-col gap-1">
+            <div className="text-[6.5px] font-bold uppercase tracking-[0.1em] text-ink-muted mb-0.5">
               Blöcke
             </div>
-            {["Hero", "Text", "Bild", "CTA", "Logo"].map((b) => (
+            {["Hero", "Text", "Bild", "CTA", "Logo", "FAQ"].map((b) => (
               <div
                 key={b}
-                className="text-[7.5px] font-semibold text-ink bg-white border border-line rounded px-1.5 py-0.5"
+                className="text-[9px] font-semibold text-ink bg-white border border-line rounded-md px-2 py-1"
               >
                 {b}
               </div>
             ))}
           </div>
           {/* Canvas */}
-          <div className="flex-1 bg-[#F4F4F8] p-2 space-y-1 overflow-hidden">
-            <div className="text-[5.5px] font-bold uppercase tracking-wider text-ink-muted">
+          <div className="flex-1 bg-[#F4F4F8] p-2.5 space-y-1.5 overflow-hidden">
+            <div className="text-[6.5px] font-bold uppercase tracking-[0.1em] text-ink-muted">
               Canvas · 1280 px
             </div>
             <div
-              className="rounded bg-white p-1.5 shadow-sm"
+              className="rounded-md bg-white p-2 shadow-sm relative"
               style={{ border: "1.5px solid #7C5CE8" }}
             >
-              <div className="text-[5px] font-bold uppercase tracking-wider text-brand-deep mb-0.5">
+              <div className="absolute -top-1.5 left-2 text-[6px] font-bold uppercase tracking-wider bg-brand-deep text-white rounded px-1 py-px">
+                Hero
+              </div>
+              <div className="text-[6px] font-bold tracking-wider uppercase text-brand-deep mb-0.5 pt-0.5">
                 Persönlich für dich
               </div>
-              <div className="text-[9px] font-extrabold text-ink leading-tight">
+              <div className="text-[11px] font-extrabold text-ink leading-tight">
                 Max, schau dir das an.
               </div>
-              <div className="mt-1 flex items-center gap-1">
-                <div className="text-[5.5px] font-bold text-white bg-ink rounded px-1 py-px">
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <div className="text-[7px] font-bold text-white bg-ink rounded px-1.5 py-0.5">
                   Termin sichern
                 </div>
-                <div className="size-2.5 rounded bg-gradient-to-br from-brand to-brand-deep" />
+                <div className="size-3 rounded bg-gradient-to-br from-brand to-brand-deep" />
               </div>
             </div>
-            <div className="rounded bg-white border border-line h-5 p-1">
-              <div className="h-0.5 w-2/3 bg-ink/15 rounded mb-0.5" />
-              <div className="h-0.5 w-1/2 bg-ink/15 rounded" />
+            <div className="rounded-md bg-white border border-line p-1.5">
+              <div className="text-[6px] font-bold uppercase tracking-wider text-ink-muted mb-0.5">
+                Text
+              </div>
+              <div className="h-1 w-full bg-ink/15 rounded mb-0.5" />
+              <div className="h-1 w-3/4 bg-ink/15 rounded" />
             </div>
-            <div className="rounded border-2 border-dashed border-brand/40 bg-brand-soft/30 h-4 flex items-center justify-center text-[5.5px] font-bold text-brand-deep">
-              + Block
+            <div className="rounded-md border-2 border-dashed border-brand/40 bg-brand-soft/30 px-2 py-1.5 text-center text-[8px] font-bold text-brand-deep">
+              + Block hinzufügen
             </div>
           </div>
         </div>
-      </div>
 
-      {/* === DIVIDER mit "ODER" === */}
-      <div className="shrink-0 flex flex-col items-center justify-center gap-1.5 py-2">
-        <div className="flex-1 w-px bg-line/80" />
+        {/* RIGHT-edge fade-out — transparent gradient blends into Upload-Card */}
         <div
-          className="text-[11px] font-extrabold tracking-[0.18em] uppercase text-ink bg-white rounded-full border border-line px-2.5 py-1 shadow-sm"
-          style={{ minWidth: 50, textAlign: "center" }}
-        >
-          ODER
-        </div>
-        <div className="flex-1 w-px bg-line/80" />
+          aria-hidden
+          className="absolute top-0 bottom-0 right-0 pointer-events-none"
+          style={{
+            width: 210,
+            background:
+              "linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 35%, rgba(255,255,255,0.95) 80%)",
+          }}
+        />
       </div>
 
-      {/* === RIGHT: Claude + Upload === */}
+      {/* === Claude+Upload Card — smaller floating overlay rechts === */}
       <div
-        className="flex-1 rounded-2xl border border-line bg-white p-4 flex flex-col items-center justify-center"
+        className="absolute right-3 top-1/2 -translate-y-1/2 bg-white rounded-2xl border border-line p-3.5 flex flex-col items-center"
         style={{
-          height: 260,
+          width: 152,
           boxShadow:
-            "0 20px 40px -16px rgba(15,23,42,0.25), 0 6px 14px -6px rgba(15,23,42,0.12)",
+            "0 18px 40px -10px rgba(15,23,42,0.32), 0 6px 18px -6px rgba(15,23,42,0.16)",
         }}
       >
         {/* 1:1 Claude icon */}
         <div
-          className="size-14 rounded-2xl flex items-center justify-center mb-2.5"
+          className="size-11 rounded-xl flex items-center justify-center mb-2"
           style={{
             background:
               "linear-gradient(135deg, #FFF7F1 0%, #FFEDDF 100%)",
@@ -428,13 +448,13 @@ function LandingPageVisual() {
           <img
             src="https://cdn.simpleicons.org/anthropic/D97757"
             alt="Claude"
-            className="size-8"
+            className="size-6"
           />
         </div>
 
-        {/* Filename + label */}
+        {/* Filename */}
         <div
-          className="text-[12px] font-bold text-ink leading-tight text-center"
+          className="text-[10.5px] font-bold text-ink leading-tight text-center"
           style={{
             fontFamily:
               "ui-monospace, SFMono-Regular, Menlo, monospace",
@@ -442,14 +462,14 @@ function LandingPageVisual() {
         >
           claude-site.zip
         </div>
-        <div className="text-[9.5px] text-ink-muted mt-0.5 text-center mb-3">
+        <div className="text-[8.5px] text-ink-muted mt-0.5 text-center mb-2.5">
           Mit Claude erstellt
         </div>
 
         {/* Upload zone */}
-        <div className="w-full rounded-xl border-2 border-dashed border-brand/40 bg-brand-soft/30 px-3 py-2 flex items-center justify-center gap-1.5">
-          <UploadCloud className="size-3.5 text-brand-deep" />
-          <span className="text-[10.5px] font-bold text-brand-deep">
+        <div className="w-full rounded-lg border-2 border-dashed border-brand/40 bg-brand-soft/30 px-2 py-1.5 flex items-center justify-center gap-1">
+          <UploadCloud className="size-3 text-brand-deep" />
+          <span className="text-[9.5px] font-bold text-brand-deep">
             ZIP hochladen
           </span>
         </div>
