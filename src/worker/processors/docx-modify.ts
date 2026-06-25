@@ -205,29 +205,20 @@ export async function runDocxModify(
     thumbSource = resolved.source;
   }
 
-  // 6. Floating-Image-Normalisierung VOR der Serialisierung.
-  //    Google Docs exportiert Bilder als <wp:anchor> (text-umfliessend).
-  //    LibreOffice hat damit Probleme: das Bild rutscht beim PDF-Export
-  //    ueber den Folgetext, besonders wenn wir vorher Placeholder
-  //    substituiert haben und sich der Text-Reflow veraendert. Wir
-  //    konvertieren <wp:anchor> zu <wp:inline> — Inline-Bilder werden
-  //    deterministisch als Block-Level-Element zwischen Text-Runs
-  //    gesetzt, keine Wrapping-Heuristik. Idempotent: DOCX ohne Anchors
-  //    bleiben unveraendert.
-  //
-  //    Diagnose / Tracing: anchorsConverted >0 bedeutet das Source-DOCX
-  //    hatte floating images. Wenn LibreOffice spaeter trotzdem ein
-  //    falsches PDF liefert, ist das ein Hinweis dass die Inline-
-  //    Konversion nicht alles erfasst hat (z.B. verschachtelte
-  //    Drawings) — dann brauchen wir einen echten XML-Parser statt
-  //    Regex.
-  const { normalizeAnchorImagesInZip } = await import("../lib/docx-normalize");
-  const normalizationResult = normalizeAnchorImagesInZip(zip);
-  if (normalizationResult.anchorsConverted > 0) {
-    // Best-effort log — wenn wir spaeter Telemetry brauchen, sammeln
-    // wir den Counter pro Lead in pipeline_events.
+  // 6. Toxische wp:anchor-Attribute patchen VOR der Serialisierung.
+  //    Google Docs setzt `allowOverlap="1"` auf Floating-Images — kombiniert
+  //    mit floating-positionierten Tabellen rendert LibreOffice die Bilder
+  //    mit kleinem Position-Drift. Mit `allowOverlap="0"` clampt LO auf die
+  //    exakte posOffset-Koordinate.
+  //    Bewusst KEIN Anchor→Inline-Umwurf und KEIN wrapNone-Patch — beide
+  //    haben in lokalen Tests Layout-Bruch verursacht.
+  const { patchToxicAnchorAttributesInZip } = await import(
+    "../lib/docx-normalize"
+  );
+  const anchorPatches = patchToxicAnchorAttributesInZip(zip);
+  if (anchorPatches.allowOverlapPatched > 0) {
     console.info(
-      `[docxModify] normalised ${normalizationResult.anchorsConverted} floating image(s)`,
+      `[docxModify] patched ${anchorPatches.allowOverlapPatched} allowOverlap in anchors`,
     );
   }
 

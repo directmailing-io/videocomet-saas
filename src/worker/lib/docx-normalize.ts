@@ -1,110 +1,93 @@
 /**
- * DOCX-Normalisierung — vor LibreOffice-Konvertierung.
+ * DOCX-Anker-Patches vor LibreOffice-PDF-Konvertierung.
  *
  * Hintergrund
  * -----------
- * Google Docs exportiert seine DOCX-Datei mit "floating" Bildern (text-
- * umfliessend), die als `<wp:anchor>`-Drawings im OOXML stehen. LibreOffice
- * hat bekanntermassen schwierigen Umgang mit `wp:anchor`-Wrapping in
- * Kombination mit dynamisch eingefuegten Bildern (QR + Thumbnail werden
- * von uns nach Layout-Erstellung gegen Marker getauscht). Praxis-Resultat:
- * im exportierten PDF rutscht das Bild ueber den Folgetext.
+ * Google Docs exportiert Bilder als `<wp:anchor>`-Drawings (floating). Das
+ * Default-Attribut `allowOverlap="1"` erlaubt zwei Floating-Objekte (z.B.
+ * floating image + floating table), sich frei zu ueberlappen. LibreOffice
+ * 7.x rendert diese Ueberlappung mit kleinen Position-Drifts, das Bild
+ * wird im Vergleich zu Word leicht verschoben dargestellt.
  *
  * Loesung
  * -------
- * Vor der PDF-Konvertierung normalisieren wir jede `wp:anchor`-Drawing
- * zu einer `wp:inline`-Drawing. Inline-Bilder werden von LibreOffice
- * deterministisch als Block-Level-Element zwischen die Text-Runs gesetzt
- * — keine Wrapping-Heuristik, keine Drift gegen Text-Reflow durch
- * Platzhalter-Substitution.
+ * **Konservativer, minimal-invasiver Patch**: nur `allowOverlap="1"` auf
+ * `<wp:anchor>` zu `"0"` umsetzen. Damit deklarieren wir dass die
+ * Floating-Objekte nicht ueberlappen sollen — LibreOffice clampt dann auf
+ * die exakte `posOffset`-Koordinate ohne Drift.
  *
- * Vorgehen
- * --------
- * 1. `<wp:anchor ...>`-Bloecke finden.
- * 2. Innerer `<a:graphic>`-Subtree und das `<wp:extent ...>` extrahieren
- *    (die behalten wir bei — Bild-Daten + Original-Groesse).
- * 3. Block durch `<wp:inline>` ersetzen, alle Anchor-spezifischen
- *    Properties (`wp:positionH`, `wp:positionV`, `wp:wrap*`, etc.) fallen
- *    weg.
- * 4. Document-XML zurueckschreiben.
+ * NICHT gemacht wird (bewusst):
+ *   - `<wp:wrapNone/>` → `<wp:wrapTopAndBottom/>` — broke `{{landingpage-url}}`-
+ *     Layout in lokalen Tests (Text-Wrap-Mode-Change verschiebt nachbarn Text).
+ *   - `<wp:anchor>` → `<wp:inline>` — komplettes Layout-Bruch (Bild verliert
+ *     Float-Position, rendert als Block irgendwo im Paragraph).
+ *   - `relativeHeight`-Aenderung — Z-Order zwischen floating table und
+ *     floating image ist LibreOffice-spezifisch nicht via OOXML-Attribut
+ *     steuerbar.
  *
- * Die Funktion ist idempotent — eine bereits normalisierte DOCX bleibt
- * unveraendert.
+ * Idempotenz
+ * ----------
+ * Eine bereits gepatchte DOCX (`allowOverlap="0"`) bleibt unveraendert.
  *
  * Limitations
  * -----------
- * - Regex-basierte XML-Manipulation. Wir parsen nicht den vollen DOM,
- *   weil Google-Docs-Export einen sehr begrenzten Subset emittiert. Bei
- *   handcrafteten DOCX mit verschachtelten Drawings koennte ein echter
- *   XML-Parser noetig werden. Lower-risk: wir matchen non-greedy mit
- *   `[\s\S]*?`, also keine inkorrekten Multi-Anchor-Captures.
- * - `wp:extent` ist optional — falls fehlend nutzen wir 1 Zoll (914400
- *   EMU) als sicheren Default, damit LibreOffice nicht crashed.
+ * - Regex statt XML-DOM. Pattern matched ausschliesslich innerhalb
+ *   `<wp:anchor ...>`-Tag-Heads, also kein False-Positive in Styles oder
+ *   anderen Element-Attributen.
+ * - Komplexe Google-Docs-Layouts mit floating tables + floating images
+ *   (z.B. "Game-Changer-Tipp"-Kasten + iPhone-Foto darueber) werden
+ *   prinzipiell von LibreOffice anders gerendert als von Word/Google Docs
+ *   — KEIN OOXML-Patch behebt das vollstaendig. Fuer pixel-perfekte
+ *   Briefe muesste der Template-Designer den Layout vereinfachen
+ *   (z.B. ein einziges komposites PNG statt floating image + table).
  */
 
 import type PizZip from "pizzip";
 import { getDocumentXml, setDocumentXml } from "./docx";
 
-const ANCHOR_RE = /<wp:anchor\b[^>]*?>([\s\S]*?)<\/wp:anchor>/g;
-const EXTENT_RE = /<wp:extent\b[^/]*?cx="(\d+)"\s+cy="(\d+)"[^/]*?\/?>/;
-const GRAPHIC_RE = /<a:graphic\b[\s\S]*?<\/a:graphic>/;
-const DEFAULT_EMU_PER_INCH = 914_400;
+/**
+ * Matched `allowOverlap="1"` nur innerhalb eines `<wp:anchor ...>`-Tag-Heads.
+ * `\s` vor allowOverlap stellt sicher dass wir nicht in der Mitte eines
+ * anderen Attributnamens stehen.
+ */
+const ANCHOR_ALLOW_OVERLAP_RE =
+  /(<wp:anchor[^>]*?\s)allowOverlap="1"([^>]*?>)/g;
+
+export interface AnchorPatchResult {
+  /** Anzahl `<wp:anchor>` deren `allowOverlap` von "1" auf "0" gesetzt wurde. */
+  allowOverlapPatched: number;
+}
 
 /**
- * Konvertiert alle `<wp:anchor>`-Drawings in `<wp:inline>`-Drawings.
- *
- * Gibt das modifizierte XML zurueck. Wenn keine Anchors gefunden wurden,
- * gibt es den Original-String unveraendert zurueck — der Caller kann sich
- * darauf verlassen dass das Schreiben optional ist.
+ * Patcht toxische Anchor-Attribute im OOXML-String. Idempotent.
  */
-export function normalizeAnchorImagesXml(xml: string): {
+export function patchToxicAnchorAttributesXml(xml: string): {
   xml: string;
-  anchorsConverted: number;
+  patches: AnchorPatchResult;
 } {
-  let count = 0;
-  const result = xml.replace(ANCHOR_RE, (_full, inner: string) => {
-    const graphicMatch = GRAPHIC_RE.exec(inner);
-    if (!graphicMatch) {
-      // Kein Graphic-Block → ungueltige Anchor, intakt lassen damit
-      // LibreOffice die Original-Fehlermeldung produziert.
-      return _full;
-    }
-    const graphic = graphicMatch[0];
-
-    const extentMatch = EXTENT_RE.exec(inner);
-    const cx = extentMatch?.[1] ?? String(DEFAULT_EMU_PER_INCH);
-    const cy = extentMatch?.[2] ?? String(DEFAULT_EMU_PER_INCH);
-
-    count += 1;
-    // Minimal-Inline-Drawing. docPr-id wird mit einer pseudo-eindeutigen
-    // Nummer befuellt — Word/LibreOffice akzeptieren auch nicht
-    // eindeutige IDs, aber wir koennen mit dem Match-Index inkrementieren
-    // falls sich das jemals als problematisch erweist.
-    return (
-      `<wp:inline distT="0" distB="0" distL="0" distR="0">` +
-      `<wp:extent cx="${cx}" cy="${cy}"/>` +
-      `<wp:effectExtent l="0" t="0" r="0" b="0"/>` +
-      `<wp:docPr id="${1000 + count}" name="InlineImage${count}"/>` +
-      `<wp:cNvGraphicFramePr/>` +
-      `${graphic}` +
-      `</wp:inline>`
-    );
+  let allowOverlapPatched = 0;
+  const result = xml.replace(ANCHOR_ALLOW_OVERLAP_RE, (_full, before, after) => {
+    allowOverlapPatched += 1;
+    return `${before}allowOverlap="0"${after}`;
   });
-
-  return { xml: result, anchorsConverted: count };
+  return {
+    xml: result,
+    patches: { allowOverlapPatched },
+  };
 }
 
 /**
  * Convenience-Wrapper: angewandt auf eine geladene PizZip-Instanz.
- * Schreibt das Ergebnis zurueck ins DOCX-ZIP (in-place).
+ * Schreibt das Ergebnis zurueck ins DOCX-ZIP (in-place) wenn mindestens
+ * ein Patch angewendet wurde.
  */
-export function normalizeAnchorImagesInZip(
+export function patchToxicAnchorAttributesInZip(
   zip: PizZip,
-): { anchorsConverted: number } {
+): AnchorPatchResult {
   const original = getDocumentXml(zip);
-  const { xml, anchorsConverted } = normalizeAnchorImagesXml(original);
-  if (anchorsConverted > 0) {
+  const { xml, patches } = patchToxicAnchorAttributesXml(original);
+  if (patches.allowOverlapPatched > 0) {
     setDocumentXml(zip, xml);
   }
-  return { anchorsConverted };
+  return patches;
 }
