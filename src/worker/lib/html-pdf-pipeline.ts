@@ -182,15 +182,20 @@ export async function renderViaHtml(
     const ctx = await getContext();
     const page = await ctx.context.newPage();
     try {
-      await page.setViewport({ width: 1280, height: 1024, deviceScaleFactor: 1 });
+      // Google Docs HTML-Export ist auf US-Letter ausgelegt (8.5"x11").
+      // Wir setzen genau das + keine zusaetzlichen Margins (das HTML hat
+      // bereits eigene padding-Werte). Viewport breit genug damit Floats
+      // nicht falsch umbrechen.
+      await page.setViewport({ width: 1600, height: 1200, deviceScaleFactor: 1 });
       await page.goto(pathToFileURL(htmlPath).toString(), {
         waitUntil: "networkidle0",
         timeout: 30_000,
       });
       const pdf = (await page.pdf({
-        format: "A4",
+        format: "Letter",
         printBackground: true,
-        margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" },
+        margin: { top: "0", bottom: "0", left: "0", right: "0" },
+        preferCSSPageSize: true,
       })) as Buffer;
 
       return {
