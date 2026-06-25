@@ -158,7 +158,12 @@ const LEAD_NAME_SQL = sql<string>`
       ${leads.data} ->> 'company',
       ${leads.data} ->> 'Firma',
       ${leads.slug},
-      'Lead #' || ${leads.rowIndex}::text
+      -- Defensive Fallback: rowIndex koennte in alten Daten NULL sein.
+      -- "Lead # || NULL" waere NULL und die ganze COALESCE-Chain
+      -- liefert NULL. Client rendert row.lead.name als undefined und
+      -- crashed mit "Hoppla...". Mit COALESCE(rowIndex::text, ?)
+      -- bleibt der String immer gueltig.
+      'Lead #' || COALESCE(${leads.rowIndex}::text, '?')
     )
   )
 `;

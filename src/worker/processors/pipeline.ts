@@ -332,7 +332,17 @@ function buildDocxVars(
         "double-brace",
         system,
       );
-      if (v) base[key] = v;
+      // WICHTIG: auch leere Strings persistieren. substitute() resolved
+      // immer einen String (egal ob aus CSV-Wert, Fallback oder leer)
+      // und gibt nie undefined zurueck. Wenn wir nur `if (v)` checken,
+      // werden:
+      //   - Mappings mit Fallback="" (User-Intent: "absichtlich leer")
+      //   - Mappings ohne CSV-Wert und ohne Fallback
+      // beide aus `base` ausgelassen — was bewirkt, dass replacePlaceholders
+      // den Token {{key}} als Rohtext im PDF stehen laesst (statt ihn
+      // durch Fallback oder leeren String zu ersetzen). Loesung: jeden
+      // String-Wert uebernehmen, inklusive "".
+      if (typeof v === "string") base[key] = v;
     }
   }
   return base;

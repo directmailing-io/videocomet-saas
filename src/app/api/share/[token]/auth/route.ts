@@ -46,7 +46,16 @@ const FAILURE_DELAY_MS = 200;
 const COOKIE_TTL_SEC = 24 * 60 * 60;
 
 const bodySchema = z.object({
-  password: z.string().min(1, "Passwort fehlt.").max(256),
+  // Server-Trim ist Defense-in-Depth: der Client trimmt auch (siehe
+  // password-prompt.tsx), aber wenn jemand das API direkt aufruft
+  // (z.B. Tests, fremdgesteuerte Buttons) wollen wir den selben Vergleich
+  // wie bei der Erstellung. Sonst: Hash wurde aus "abcd" erzeugt, User
+  // tippt " abcd " → Vergleich schlaegt fehl. Genau dieser Fall war der
+  // berichtete Production-Bug.
+  password: z
+    .string()
+    .transform((s) => s.trim())
+    .pipe(z.string().min(1, "Passwort fehlt.").max(256)),
 });
 
 function hashIpForAttempt(ip: string): string {

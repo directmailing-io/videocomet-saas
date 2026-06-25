@@ -59,6 +59,19 @@ function isPassthroughPath(pathname: string): boolean {
     pathname.startsWith("/static/") ||
     pathname.startsWith("/share/") ||
     pathname.startsWith("/api/share/") ||
+    // KRITISCH (CROSS-TENANT-LEAK-FIX): Interne Block-LP-Route. Wird
+    // vom /v/[slug]-Dispatcher via Loopback-Fetch
+    // (http://127.0.0.1:3000/lp-block/<slug>?_host=...) aufgerufen.
+    // Wenn das Middleware-Rewrite das hier erneut greift, mapped es
+    // /lp-block/<slug> auf /v/lp-block (first segment "lp-block" wird
+    // als slug interpretiert) und das _host-Query-Param geht beim
+    // Re-Rewrite verloren. Folge: lp-block-Page faellt auf
+    // getLeadBySlugForDefaultDomain zurueck und liefert einen
+    // gleichnamigen Slug aus EINER FREMDEN Kampagne aus
+    // (Cross-Campaign-Leak, Beispiel: video.kunde-a.de/felix zeigt
+    // den Lead "felix" aus der Default-Domain Kampagne von kunde-b).
+    // Muss UNBEDINGT passthrough bleiben.
+    pathname.startsWith("/lp-block/") ||
     // Stealth-Tracking-Endpoint. Wird auf lp.videocomet.de und Custom-
     // Domains direkt zur App durchgereicht — first-party-Tracking ohne
     // CORS-Trigger und ohne AdBlocker-Match auf /api/track/event.

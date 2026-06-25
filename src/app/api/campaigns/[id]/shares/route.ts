@@ -23,10 +23,29 @@ import {
 } from "@/lib/db/queries/campaign-shares";
 
 const createSchema = z.object({
+  // Whitespace wird serverseitig getrimmt BEVOR die Laengenpruefung
+  // greift. Hintergrund: Copy-Paste, Mobile-Autocomplete und Password-
+  // Manager fuegen oft fuehrende/abschliessende Leerzeichen ein. Wenn
+  // wir den Hash MIT Whitespace speichern und der User spaeter das
+  // Passwort OHNE Whitespace eintippt, schlaegt verifyPassword fehl —
+  // genau der Bug den der User berichtet hat ("Anmeldung immer
+  // fehlgeschlagen").
+  //
+  // 4 Zeichen Minimum (vorher 8): ein Share-Link-Passwort ist ein
+  // einfacher Access-Token, kein Account-Passwort. Der Token selbst
+  // ist 24 Stellen kryptographisch zufaellig (8.7e36 Moeglichkeiten),
+  // das Passwort schuetzt nur gegen versehentliche Aufrufer mit dem
+  // Link. 4 Stellen reichen dafuer; ein laengerer Wert wuerde die UX
+  // unnoetig belasten.
   password: z
     .string()
-    .min(8, "Passwort muss mindestens 8 Zeichen haben.")
-    .max(256),
+    .transform((s) => s.trim())
+    .pipe(
+      z
+        .string()
+        .min(4, "Passwort muss mindestens 4 Zeichen haben.")
+        .max(256),
+    ),
   label: z.string().min(1).max(120).optional(),
 });
 

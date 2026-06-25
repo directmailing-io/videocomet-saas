@@ -29,7 +29,12 @@ export function PasswordPrompt({ token, campaignName }: PasswordPromptProps) {
     async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       if (pending) return;
-      if (!password) {
+      // Whitespace clientseitig trimmen damit Mobile-Auto-Suggest oder
+      // Copy-Paste mit Trailing-Space nicht zu Mismatches fuehren. Der
+      // Server trimmt zwar nochmal (Defense-in-Depth), aber das fixed
+      // die UX hier sofort und sendet einheitlich.
+      const trimmed = password.trim();
+      if (!trimmed) {
         setError("Bitte Passwort eingeben.");
         return;
       }
@@ -42,7 +47,7 @@ export function PasswordPrompt({ token, campaignName }: PasswordPromptProps) {
             method: "POST",
             credentials: "same-origin",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ password }),
+            body: JSON.stringify({ password: trimmed }),
           },
         );
         if (res.ok) {

@@ -193,8 +193,13 @@ export function ShareDialog({
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (password.length < 8) {
-      setCreateError("Das Passwort muss mindestens 8 Zeichen lang sein.");
+    // Whitespace clientseitig trimmen damit die Laengenpruefung das
+    // tatsaechliche Eingabe-Material betrachtet (Mobile-Autocomplete
+    // setzt gerne ein Leerzeichen ans Ende). Senden wir den getrimmten
+    // Wert — Server trimmt zwar nochmal, aber so geht's konsistent.
+    const trimmed = password.trim();
+    if (trimmed.length < 4) {
+      setCreateError("Das Passwort muss mindestens 4 Zeichen lang sein.");
       return;
     }
     setCreating(true);
@@ -205,7 +210,7 @@ export function ShareDialog({
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
-          password,
+          password: trimmed,
           label: label.trim() ? label.trim() : undefined,
         }),
       });
@@ -420,10 +425,10 @@ export function ShareDialog({
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  minLength={8}
+                  minLength={4}
                   required
                   autoComplete="new-password"
-                  placeholder="Mindestens 8 Zeichen"
+                  placeholder="Mindestens 4 Zeichen"
                 />
                 <div className="mt-2">
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-line">
@@ -436,7 +441,7 @@ export function ShareDialog({
                     />
                   </div>
                   <p className="mt-1 text-[11px] text-ink-muted">
-                    Mindestens 8 Zeichen.{" "}
+                    Mindestens 4 Zeichen.{" "}
                     {strength.bucket === 3
                       ? "Sehr stark."
                       : strength.bucket === 2
