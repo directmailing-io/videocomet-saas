@@ -536,7 +536,9 @@ function SelectedWebcamPreview({
           // keinen Token-Key.
           <iframe
             key={`${webcam.id}-${reloadKey}`}
-            src={`https://iframe.mediadelivery.net/embed/670919/${streamGuid}`}
+            // autoplay=false damit das Vorschau-Video im Wizard nicht von
+            // selbst loslaeuft — User triggert via Play-Button.
+            src={`https://iframe.mediadelivery.net/embed/670919/${streamGuid}?autoplay=false&preload=false`}
             allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
             allowFullScreen
             className="h-full w-full bg-ink border-0"

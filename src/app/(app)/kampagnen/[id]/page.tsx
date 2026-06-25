@@ -516,8 +516,10 @@ function WebcamPreview({
   return (
     <div className="space-y-2">
       {streamMatch ? (
+        // autoplay=false: Kampagnen-Seite zeigt evtl. mehrere Videos auf
+        // einmal — niemand will Auto-Play-Chaos.
         <iframe
-          src={`https://iframe.mediadelivery.net/embed/670919/${streamMatch[1]}`}
+          src={`https://iframe.mediadelivery.net/embed/670919/${streamMatch[1]}?autoplay=false&preload=false`}
           allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
           allowFullScreen
           className={`${aspectClass} rounded-squircle-md bg-ink border border-line border-0`}

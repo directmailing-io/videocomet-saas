@@ -59,7 +59,11 @@ export function getBunnyStreamEmbedUrl(rawUrl: string): string | null {
   if (!m) return null;
   const guid = m[1];
   const env = getBunnyStreamEnv();
-  return `${BUNNY_EMBED_HOST}/embed/${env.libraryId}/${guid}`;
+  // `autoplay=false` ist Pflicht fuer eingebettete Mediathek-/Kampagnen-
+  // Player — Bunny's Default ist Auto-Play, was beim Oeffnen einer Seite
+  // mit mehreren Videos zu Lautstaerke-Chaos fuehrt. User klickt explizit
+  // Play, dann startet's.
+  return `${BUNNY_EMBED_HOST}/embed/${env.libraryId}/${guid}?autoplay=false&preload=false`;
 }
 
 /**

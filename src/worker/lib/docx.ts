@@ -135,9 +135,14 @@ export function replacePlaceholdersInHtml(
 ): string {
   return html.replace(/\{\{([^{}]*?)\}\}/g, (match, inner: string) => {
     const cleaned = inner.replace(/<[^>]+>/g, "").trim();
+    // Nur valid-shape Token ersetzen — falls jemand `{{` als Literal nutzt,
+    // soll das nicht weggeworfen werden.
     if (!/^[a-zA-Z0-9_]+$/.test(cleaned)) return match;
     const value = vars[cleaned];
-    if (value === undefined || value === null) return match;
+    // Unbekannte Keys → Leerstring (siehe Begruendung in
+    // `replacePlaceholders` oben — Wizard schreibt fehlende Mappings nicht
+    // mit). Niemals raw `{{key}}` im finalen Brief stehen lassen.
+    if (value === undefined || value === null) return "";
     return escapeHtml(String(value));
   });
 }
@@ -160,9 +165,12 @@ function joinSplitPlaceholders(xml: string): string {
 
 /**
  * Replaces `{{name}}` placeholders in `word/document.xml` with values from
- * `vars`. Unknown placeholders are LEFT IN PLACE (so the template author
- * can audit visually what was missed). All replacement values are
- * XML-escaped.
+ * `vars`. Unknown placeholders (key not in `vars`) werden zu **Leerstring**
+ * — niemals raw `{{key}}` im finalen Dokument stehen lassen. Hintergrund:
+ * der Run-Wizard schreibt fuer "User hat Mapping leer gelassen" gar keinen
+ * Eintrag in `column_mapping` — der Key landet also nicht in `vars`.
+ * Frueheres Verhalten („leave in place fuer Template-Author-Audit") hat
+ * im PDF Roh-Tokens wie `{{anrede}}` produziert.
  *
  * Accepts either a `PizZip` (preferred) or a `Buffer`. With Buffer-input,
  * a new Buffer is returned; with Zip-input, the zip is mutated in place
@@ -186,10 +194,10 @@ export function replacePlaceholders(
 
   let xml = getDocumentXml(zip);
   xml = joinSplitPlaceholders(xml);
-  xml = xml.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (match, key: string) => {
+  xml = xml.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_match, key: string) => {
     const trimmed = key.trim();
     const value = vars[trimmed];
-    if (value === undefined || value === null) return match;
+    if (value === undefined || value === null) return "";
     return xmlEscape(String(value));
   });
   setDocumentXml(zip, xml);
