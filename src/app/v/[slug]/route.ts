@@ -193,32 +193,52 @@ async function renderCustomLpResponseInline(
 async function proxyBlockLp(
   req: NextRequest,
   slug: string,
+  hostParam: string | null,
 ): Promise<Response> {
   // Direkt-Fetch über localhost:3000 — die public URL hochzuziehen funktioniert
   // im Container nicht (Traefik-Loop produziert "wrong version number" TLS-
   // Fehler). Innerhalb des Containers ist der Next.js-Server unter
   // http://127.0.0.1:3000 erreichbar.
   //
-  // WICHTIG: req.nextUrl.searchParams (NICHT new URL(req.url)!) enthaelt
-  // die von der Middleware gesetzten Query-Params — insbesondere `_host`,
-  // den die Middleware bei Custom-Domain-Requests einsetzt. `req.url`
-  // zeigt auf die unveraenderte Client-URL und wuerde `_host` verlieren.
-  // Folgen: lp-block-Page macht Default-Domain-Lookup und findet evtl.
-  // einen gleichnamigen Lead aus einer fremden Kampagne (Tenant-Leak +
-  // falsches Video).
+  // ENGINEERING-NOTE: Frueher haben wir hier req.nextUrl.searchParams
+  // iteriert, in der Hoffnung dass die Middleware ihre _host-Erweiterung
+  // dort persistiert hat. In der Praxis liefert Next.js 14 in der Node-
+  // Runtime aber UNVERLAESSLICHE Werte: je nach Cache-State / Rewrite-
+  // Reihenfolge fehlt _host. Resultat war ein KRITISCHER Cross-Tenant-
+  // Video-Leak: die LP fiel auf getLeadBySlugForDefaultDomain zurueck
+  // und lieferte einen Lead aus einer fremden Kampagne aus.
+  //
+  // Loesung: hostParam wird vom Caller (GET-Handler) bereits aus dem
+  // Middleware-Param resolved und kommt als expliziter Funktions-
+  // Parameter rein. Wir setzen ihn EXPLIZIT auf den internen URL und
+  // verlassen uns nicht auf nextUrl.searchParams.
+  //
+  // ZUSAETZLICH KRITISCH: Wir setzen den Host-Header auf app.videocomet.de
+  // (eine OWN_HOST), damit die Middleware den internen Loopback-Fetch
+  // NICHT als Custom-Domain klassifiziert und somit nicht erneut auf
+  // /v/lp-block zurueckwirft (das wuerde "lp-block" als slug
+  // interpretieren und in eine Endlosschleife / 404 fuehren).
   const target = new URL(`http://127.0.0.1:3000/lp-block/${slug}`);
+  // Original-Query-Params durchreichen (preview=1 etc.) — aber _host
+  // wir setzen GLEICH NOCHMAL explizit, damit kein Drift entsteht.
   req.nextUrl.searchParams.forEach((value, key) => {
+    if (key === "_host") return;
     target.searchParams.set(key, value);
   });
-  // Public-Host als Header durchreichen, damit die LP-Page den richtigen
-  // Origin-Kontext kennt (für Tracking-Bridge, etc.).
+  if (hostParam) {
+    target.searchParams.set("_host", hostParam);
+  }
   const upstream = await fetch(target.toString(), {
     method: "GET",
     headers: {
       cookie: req.headers.get("cookie") ?? "",
       "user-agent": req.headers.get("user-agent") ?? "",
       accept: "text/html",
-      host: req.headers.get("host") ?? "app.videocomet.de",
+      // KRITISCH: Host auf app.videocomet.de fixieren — das verhindert
+      // dass die Middleware auf dem internen Loopback erneut greift.
+      // Der ECHTE Tenant-Kontext steckt im _host Query-Param, den die
+      // lp-block-Page direkt liest.
+      host: "app.videocomet.de",
       "x-forwarded-host": req.headers.get("host") ?? "app.videocomet.de",
       "x-forwarded-proto": "https",
     },
@@ -280,5 +300,5 @@ export async function GET(
     // tenant-aware Lookup nochmal macht.
   }
 
-  return proxyBlockLp(req, slug);
+  return proxyBlockLp(req, slug, hostParam);
 }
