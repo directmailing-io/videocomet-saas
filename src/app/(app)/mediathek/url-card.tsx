@@ -26,7 +26,7 @@ import {
   TYPE_LABEL,
   type MediaUrlType,
 } from "@/lib/media-urls/detect-type";
-import { truncateUrlMiddle } from "@/lib/media-urls/normalize";
+import { truncateUrlMiddle } from "@/lib/media-urls/format";
 
 export interface UrlCardItem {
   id: string;
