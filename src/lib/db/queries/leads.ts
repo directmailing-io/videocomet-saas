@@ -181,15 +181,30 @@ export async function updateLeadStatus(
 export async function getLeadBySlugForDefaultDomain(
   slug: string,
 ): Promise<PublicLead | null> {
-  const [row] = await db
+  // Wir holen bewusst BIS ZU 2 Treffer um Slug-Kollisionen zwischen
+  // Kampagnen desselben Users (campaign-scoped Uniqueness seit
+  // Migration 0014 erlaubt das) zu erkennen. Wenn mehrere Kampagnen
+  // denselben Slug haben, ist das fuer die LP-Aufloesung gefaehrlich —
+  // wir nehmen technisch den neusten, aber loggen es als Indikator
+  // damit Monitoring/Alarm das mitkriegt.
+  const rows = await db
     .select()
     .from(leads)
     .where(and(eq(leads.slug, slug), isNull(leads.domainId)))
-    // Aktuellster Lead gewinnt — Slug-Kollisionen zwischen Kampagnen
-    // sind seit der Lockerung der Uniqueness (campaign-scoped) moeglich.
     .orderBy(desc(leads.createdAt))
-    .limit(1);
-  return projectPublicLead(row ?? null);
+    .limit(2);
+  if (rows.length > 1) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[leads-lookup] slug-collision on default-domain — newer lead served",
+      {
+        slug,
+        winner: { id: rows[0]!.id, campaignId: rows[0]!.campaignId },
+        loser: { id: rows[1]!.id, campaignId: rows[1]!.campaignId },
+      },
+    );
+  }
+  return projectPublicLead(rows[0] ?? null);
 }
 
 /**
@@ -206,14 +221,30 @@ export async function getLeadBySlugAndDomain(
   slug: string,
   domainId: string,
 ): Promise<PublicLead | null> {
-  const [row] = await db
+  // Genau wie bei der Default-Domain holen wir BIS ZU 2 Treffer um
+  // Slug-Kollisionen zwischen Kampagnen DERSELBEN Custom-Domain zu
+  // erkennen. Ein Custom-Domain-Owner darf eine Domain mit mehreren
+  // Kampagnen teilen — wenn dabei Slugs kollidieren ist das ein
+  // Konfigurations-Issue der gemeldet werden sollte.
+  const rows = await db
     .select()
     .from(leads)
     .where(and(eq(leads.slug, slug), eq(leads.domainId, domainId)))
-    // Siehe Begruendung in getLeadBySlugForDefaultDomain.
     .orderBy(desc(leads.createdAt))
-    .limit(1);
-  return projectPublicLead(row ?? null);
+    .limit(2);
+  if (rows.length > 1) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[leads-lookup] slug-collision on custom-domain — newer lead served",
+      {
+        slug,
+        domainId,
+        winner: { id: rows[0]!.id, campaignId: rows[0]!.campaignId },
+        loser: { id: rows[1]!.id, campaignId: rows[1]!.campaignId },
+      },
+    );
+  }
+  return projectPublicLead(rows[0] ?? null);
 }
 
 export async function listLeadsByRun(runId: string, userId: string): Promise<Lead[]> {

@@ -205,7 +205,33 @@ export async function runDocxModify(
     thumbSource = resolved.source;
   }
 
-  // 6. Serialise + write to outDir.
+  // 6. Floating-Image-Normalisierung VOR der Serialisierung.
+  //    Google Docs exportiert Bilder als <wp:anchor> (text-umfliessend).
+  //    LibreOffice hat damit Probleme: das Bild rutscht beim PDF-Export
+  //    ueber den Folgetext, besonders wenn wir vorher Placeholder
+  //    substituiert haben und sich der Text-Reflow veraendert. Wir
+  //    konvertieren <wp:anchor> zu <wp:inline> — Inline-Bilder werden
+  //    deterministisch als Block-Level-Element zwischen Text-Runs
+  //    gesetzt, keine Wrapping-Heuristik. Idempotent: DOCX ohne Anchors
+  //    bleiben unveraendert.
+  //
+  //    Diagnose / Tracing: anchorsConverted >0 bedeutet das Source-DOCX
+  //    hatte floating images. Wenn LibreOffice spaeter trotzdem ein
+  //    falsches PDF liefert, ist das ein Hinweis dass die Inline-
+  //    Konversion nicht alles erfasst hat (z.B. verschachtelte
+  //    Drawings) — dann brauchen wir einen echten XML-Parser statt
+  //    Regex.
+  const { normalizeAnchorImagesInZip } = await import("../lib/docx-normalize");
+  const normalizationResult = normalizeAnchorImagesInZip(zip);
+  if (normalizationResult.anchorsConverted > 0) {
+    // Best-effort log — wenn wir spaeter Telemetry brauchen, sammeln
+    // wir den Counter pro Lead in pipeline_events.
+    console.info(
+      `[docxModify] normalised ${normalizationResult.anchorsConverted} floating image(s)`,
+    );
+  }
+
+  // 7. Serialise + write to outDir.
   const outBuffer = saveDocx(zip);
   const outPath = join(input.outDir, "letter.docx");
   await writeFile(outPath, outBuffer);
