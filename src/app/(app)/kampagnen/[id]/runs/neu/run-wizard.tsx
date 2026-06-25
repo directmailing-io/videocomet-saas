@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { UrlPicker } from "@/components/media-urls/url-picker";
 import {
   Select,
   SelectContent,
@@ -379,15 +380,16 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
             ) : (
               <div>
                 <Label htmlFor="sheet-url">Google-Sheets-URL</Label>
-                <Input
+                <UrlPicker
                   id="sheet-url"
-                  type="url"
-                  placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=0"
                   value={sheetUrl}
-                  onChange={(e) => setSheetUrl(e.target.value)}
+                  onChange={setSheetUrl}
+                  placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=0"
+                  types={["gsheet"]}
                 />
                 <p className="text-xs text-ink-muted mt-2">
                   Hinweis: Die Datei muss in der Freigabe auf &quot;Jeder mit Link&quot; stehen.
+                  Aus der Mediathek wählbar oder als neue URL eintippen.
                 </p>
               </div>
             )}

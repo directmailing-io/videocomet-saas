@@ -1,4 +1,4 @@
-import { Library, Link2 } from "lucide-react";
+import { Library } from "lucide-react";
 import { requireUser } from "@/lib/auth-guard";
 import { listUserMedia, type MediaItem } from "@/lib/db/queries/media";
 import { listShareLinksForUser } from "@/lib/db/queries/webcam-share";
@@ -9,8 +9,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { UploadDialogTrigger } from "./upload-zone";
 import { ShareLinksSection, type ShareLinkRow } from "./share-links";
 import { MediaCard, type MediaCardItem } from "./media-card";
-import { UrlCard, type UrlCardItem } from "./url-card";
+import { type UrlCardItem } from "./url-card";
 import { UrlAddDialog } from "./url-add-dialog";
+import { UrlList } from "./url-list";
 
 function toCardItem(m: MediaItem): MediaCardItem {
   return {
@@ -151,19 +152,7 @@ export default async function MediathekPage() {
             </div>
             <UrlAddDialog />
           </div>
-          {urlItems.length === 0 ? (
-            <EmptyState
-              icon={<Link2 />}
-              title="Noch keine Links"
-              subtitle="Lege deinen ersten Link an — z.B. das Brief-Template als Google Doc."
-            />
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {urlItems.map((u) => (
-                <UrlCard key={u.id} item={u} />
-              ))}
-            </div>
-          )}
+          <UrlList items={urlItems} />
         </TabsContent>
         <TabsContent value="share">
           <ShareLinksSection

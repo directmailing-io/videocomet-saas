@@ -22,6 +22,7 @@ import { screenshotWorker, type ScreenshotJobData } from "./screenshot-queue";
 import { crmSyncWorker, type CrmSyncJob } from "./crm-queue";
 import { urlPreviewWorker } from "./url-preview-queue";
 import { processUrlPreviewJob } from "./processors/url-preview";
+import { refreshStalePreviews } from "@/lib/media-urls/stale-refresh";
 import {
   WEBHOOK_DELIVERY_QUEUE,
   type WebhookDeliveryJob,
@@ -699,6 +700,23 @@ async function main(): Promise<void> {
   urlPreviewW.on("error", (err) => {
     log("error", "url-preview worker error:", err.message);
   });
+
+  // URL-Preview-Stale-Refresh-Tick. 1×/h scannt nach Preview-Eintraegen
+  // deren TTL ueberfaellig ist und enqueued Refresh-Jobs (max 50 pro Tick).
+  // Beim Boot 1× sofort, damit ein langer Container-Outage Stale-Backlog
+  // schnell abarbeitet.
+  refreshStalePreviews()
+    .then((r) => log("info", `url-preview stale-refresh boot: ${r.enqueued}/${r.scanned}`))
+    .catch((err) => log("error", "stale-refresh boot failed:", err));
+  const stalePreviewTimer = setInterval(() => {
+    refreshStalePreviews()
+      .then((r) => {
+        if (r.enqueued > 0)
+          log("info", `url-preview stale-refresh tick: ${r.enqueued}/${r.scanned}`);
+      })
+      .catch((err) => log("error", "stale-refresh tick failed:", err));
+  }, 60 * 60 * 1000); // 1×/h
+  stalePreviewTimer.unref();
 
   // Preflight-Worker mit-booten. Agent 2 liefert `bootPreflightWorker()` aus
   // `src/worker/preflight-worker-setup.ts` — der Return ist ein BullMQ-
