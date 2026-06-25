@@ -2,10 +2,10 @@
 
 import * as React from "react";
 import { Camera, Image as ImageIcon, MonitorPlay, Play } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { PlaceholderHelper } from "@/components/editor/placeholder-helper";
+import { UrlPicker } from "@/components/media-urls/url-picker";
 import { ThumbnailFramePicker } from "@/components/editor/thumbnail-frame-picker";
 import {
   ThumbnailImageEditor,
@@ -131,18 +131,17 @@ export function WizardStep5Pdf({
         <div className="space-y-5 bg-surface border border-line rounded-squircle-md p-5">
           <div>
             <Label htmlFor="pdf-docs">Google-Docs-URL</Label>
-            <Input
+            <UrlPicker
               id="pdf-docs"
-              type="url"
-              placeholder="https://docs.google.com/document/d/..."
               value={googleDocsUrl}
-              onChange={(e) =>
-                onChange({ pdfGoogleDocsUrl: e.target.value })
-              }
+              onChange={(v) => onChange({ pdfGoogleDocsUrl: v })}
+              placeholder="https://docs.google.com/document/d/..."
+              types={["gdoc"]}
             />
             <p className="text-xs text-ink-muted mt-1.5">
               Das Dokument muss öffentlich freigegeben sein (mindestens
-              "Jeder mit dem Link kann ansehen").
+              "Jeder mit dem Link kann ansehen"). Aus der Mediathek wählbar
+              oder als neue URL eintippen.
             </p>
           </div>
 

@@ -20,6 +20,8 @@ import { and, eq, lt, inArray, sql } from "drizzle-orm";
 import { pipelineWorker, pipelineQueue, getRedisConnection } from "./queue";
 import { screenshotWorker, type ScreenshotJobData } from "./screenshot-queue";
 import { crmSyncWorker, type CrmSyncJob } from "./crm-queue";
+import { urlPreviewWorker } from "./url-preview-queue";
+import { processUrlPreviewJob } from "./processors/url-preview";
 import {
   WEBHOOK_DELIVERY_QUEUE,
   type WebhookDeliveryJob,
@@ -669,6 +671,35 @@ async function main(): Promise<void> {
     log("error", "webhook worker error:", err.message);
   });
 
+  // URL-Mediathek-Preview-Worker. Eigene Queue, eigene Concurrency (4 default).
+  // Trennt kurzlebige Puppeteer-Screenshots von den langlaufenden Render-Jobs.
+  const urlPreviewW = urlPreviewWorker(async (job) => {
+    incrementInFlight();
+    try {
+      log("info", `url-preview start job=${job.id} mediaUrlId=${job.data.mediaUrlId}`);
+      const result = await processUrlPreviewJob(job);
+      log(
+        "info",
+        `url-preview done  job=${job.id} mediaUrlId=${job.data.mediaUrlId} status=${result.status}`,
+      );
+    } catch (err) {
+      log(
+        "error",
+        `url-preview fail  job=${job?.id} mediaUrlId=${job?.data?.mediaUrlId}`,
+        err,
+      );
+      throw err;
+    } finally {
+      decrementInFlight();
+    }
+  });
+  urlPreviewW.on("failed", (job, err) => {
+    log("error", `url-preview job ${job?.id} failed:`, err?.message);
+  });
+  urlPreviewW.on("error", (err) => {
+    log("error", "url-preview worker error:", err.message);
+  });
+
   // Preflight-Worker mit-booten. Agent 2 liefert `bootPreflightWorker()` aus
   // `src/worker/preflight-worker-setup.ts` — der Return ist ein BullMQ-
   // Worker, dessen `.close()` wir im Shutdown aufrufen. Wir umschließen den
@@ -712,6 +743,11 @@ async function main(): Promise<void> {
       await webhookW.close();
     } catch (err) {
       log("error", "webhook worker close failed:", err);
+    }
+    try {
+      await urlPreviewW.close();
+    } catch (err) {
+      log("error", "url-preview worker close failed:", err);
     }
     try {
       await closeBrowserPool();

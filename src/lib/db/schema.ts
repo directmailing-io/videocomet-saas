@@ -20,6 +20,21 @@ export const runStatusEnum = pgEnum("run_status", [
 ]);
 export const leadStatusEnum = pgEnum("lead_status", ["pending", "rendering", "uploading", "completed", "failed"]);
 export const mediaTypeEnum = pgEnum("media_type", ["webcam", "image", "video", "logo"]);
+export const mediaUrlTypeEnum = pgEnum("media_url_type", [
+  "gdoc",
+  "gsheet",
+  "gslides",
+  "gform",
+  "gdrive_file",
+  "youtube",
+  "generic",
+]);
+export const mediaUrlPreviewStatusEnum = pgEnum("media_url_preview_status", [
+  "pending",
+  "ready",
+  "error",
+  "private",
+]);
 
 // ── Users (Admins + App-Users in einer Tabelle, Rolle bestimmt Zugang) ──────
 export const users = pgTable("users", {
@@ -909,6 +924,70 @@ export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
 export type NewWebhookEndpoint = typeof webhookEndpoints.$inferInsert;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;
+
+// ── Media URLs (Migration 0026) ────────────────────────────────────────────
+// User-gespeicherte URLs (Google Docs, Sheets, Slides, beliebige Links) mit
+// auto-generiertem Preview-Bild. Wird im Campaign-Wizard als Auto-Complete
+// fuer Brief-Template-URLs angeboten und vermeidet, dass User dieselbe
+// Google-Docs-URL pro Kampagne neu eintippen.
+//
+// Lifecycle:
+//   - User legt URL an  → status='pending', Worker enqueues Preview-Job.
+//   - Worker fetched die URL (Google-Export-Endpunkt fuer Docs/Sheets,
+//     ansonsten Puppeteer-Screenshot), rendert ein JPEG und uploaded zu
+//     Bunny PDF-Zone. status='ready' + previewBunnyPath gesetzt.
+//   - Preview kann manuell refreshed werden (Card-Button). Hard-TTL 7d fuer
+//     Google-Docs (Content aendert sich), 30d fuer YouTube/generic.
+//   - Hard-Delete (kein Soft-Delete im v1 — Mediathek-Dateien haben auch
+//     keinen, Konsistenz).
+//
+// Sicherheits-Invarianten:
+//   - urlHash + Partial-Unique verhindert Duplikate pro User.
+//   - SSRF-Guard prueft URL VOR Insert UND VOR Preview-Job (Defense-in-Depth).
+export const mediaUrls = pgTable(
+  "media_urls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Original-URL wie vom User eingegeben (mit allen Query-Params). */
+    url: text("url").notNull(),
+    /** sha256 der normalisierten URL — fuer Duplicate-Detection. */
+    urlHash: text("url_hash").notNull(),
+    type: mediaUrlTypeEnum("type").notNull().default("generic"),
+    title: text("title").notNull(),
+    description: text("description"),
+    /** Google-Doc-ID / YouTube-Video-ID / etc. — fuer spaetere Drive-API. */
+    externalResourceId: text("external_resource_id"),
+    /** Bunny-Storage-Pfad (`url-previews/<userId>/<id>.jpg`). NULL bis Job done. */
+    previewBunnyPath: text("preview_bunny_path"),
+    /** Vollständige CDN-URL des Previews (fuer UI). */
+    previewUrl: text("preview_url"),
+    previewStatus: mediaUrlPreviewStatusEnum("preview_status")
+      .notNull()
+      .default("pending"),
+    previewGeneratedAt: timestamp("preview_generated_at", { withTimezone: true }),
+    /** Wann wird das Preview als stale betrachtet? Fuer User-UI-Badge "veraltet". */
+    previewExpiresAt: timestamp("preview_expires_at", { withTimezone: true }),
+    /** Letzter Worker-Fehler — fuer Debug + UI-Tooltip. */
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    userIdx: index("media_urls_user_idx").on(t.userId, t.createdAt),
+    userTypeIdx: index("media_urls_user_type_idx").on(t.userId, t.type),
+    userHashUq: unique("media_urls_user_hash_uq").on(t.userId, t.urlHash),
+  }),
+);
+
+export type MediaUrl = typeof mediaUrls.$inferSelect;
+export type NewMediaUrl = typeof mediaUrls.$inferInsert;
 
 // ── Index-Namen als Konstanten ────────────────────────────────────────────
 //

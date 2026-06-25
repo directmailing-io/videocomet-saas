@@ -1,13 +1,16 @@
-import { Library } from "lucide-react";
+import { Library, Link2 } from "lucide-react";
 import { requireUser } from "@/lib/auth-guard";
 import { listUserMedia, type MediaItem } from "@/lib/db/queries/media";
 import { listShareLinksForUser } from "@/lib/db/queries/webcam-share";
+import { listUserMediaUrls } from "@/lib/media-urls/repo";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { UploadDialogTrigger } from "./upload-zone";
 import { ShareLinksSection, type ShareLinkRow } from "./share-links";
 import { MediaCard, type MediaCardItem } from "./media-card";
+import { UrlCard, type UrlCardItem } from "./url-card";
+import { UrlAddDialog } from "./url-add-dialog";
 
 function toCardItem(m: MediaItem): MediaCardItem {
   return {
@@ -42,14 +45,34 @@ function MediaGrid({ items }: { items: MediaItem[] }) {
 
 export default async function MediathekPage() {
   const { user } = await requireUser();
-  const [all, shareLinks] = await Promise.all([
+  const [all, shareLinks, urls] = await Promise.all([
     listUserMedia(user.id),
     listShareLinksForUser(user.id),
+    listUserMediaUrls(user.id),
   ]);
   const webcams = all.filter((m) => m.type === "webcam");
   const images = all.filter((m) => m.type === "image");
   const videos = all.filter((m) => m.type === "video");
   const logos = all.filter((m) => m.type === "logo");
+
+  // URL-Items in Client-safen Shape umwandeln (Dates -> ISO).
+  const urlItems: UrlCardItem[] = urls.map((u) => ({
+    id: u.id,
+    url: u.url,
+    type: u.type,
+    title: u.title,
+    description: u.description,
+    previewUrl: u.previewUrl,
+    previewStatus: u.previewStatus,
+    previewGeneratedAt: u.previewGeneratedAt
+      ? u.previewGeneratedAt.toISOString()
+      : null,
+    previewExpiresAt: u.previewExpiresAt
+      ? u.previewExpiresAt.toISOString()
+      : null,
+    lastError: u.lastError,
+    createdAt: u.createdAt.toISOString(),
+  }));
 
   // Owner-Anzeigename für die Vorschau im Dialog: Firma > Vor+Nachname > Email.
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
@@ -99,6 +122,7 @@ export default async function MediathekPage() {
           <TabsTrigger value="bilder">Bilder ({images.length})</TabsTrigger>
           <TabsTrigger value="videos">Videos ({videos.length})</TabsTrigger>
           <TabsTrigger value="logos">Logos ({logos.length})</TabsTrigger>
+          <TabsTrigger value="links">Links ({urlItems.length})</TabsTrigger>
           <TabsTrigger value="share">
             Aufnahme-Links ({initialLinks.length})
           </TabsTrigger>
@@ -118,6 +142,28 @@ export default async function MediathekPage() {
         </TabsContent>
         <TabsContent value="logos">
           <MediaGrid items={logos} />
+        </TabsContent>
+        <TabsContent value="links">
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-sm text-ink-muted">
+              Speichere Google Docs, Sheets oder beliebige Links. Wiederverwendbar
+              in Kampagnen-Wizards.
+            </div>
+            <UrlAddDialog />
+          </div>
+          {urlItems.length === 0 ? (
+            <EmptyState
+              icon={<Link2 />}
+              title="Noch keine Links"
+              subtitle="Lege deinen ersten Link an — z.B. das Brief-Template als Google Doc."
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {urlItems.map((u) => (
+                <UrlCard key={u.id} item={u} />
+              ))}
+            </div>
+          )}
         </TabsContent>
         <TabsContent value="share">
           <ShareLinksSection
