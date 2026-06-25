@@ -1157,70 +1157,50 @@ export async function pipelineProcessor(
       }
 
       let drivePdfBuffer: Buffer | null = null;
-      let driveThumbSource: "drive" | null = null;
+      let driveThumbSource: "drive-html" | null = null;
       if (driveRendererAvailable) {
         try {
           await setCurrentStage(data.leadId, "docxModify");
           const driveStart = Date.now();
-          const { renderViaDrive } = await import(
-            "../lib/drive-pdf-pipeline"
+          const { renderViaHtml } = await import(
+            "../lib/html-pdf-pipeline"
           );
 
-          // Bunny-CDN-URL des QR fuer die replaceImage-Request des Drive-Pfads.
-          // Wir uebernehmen den lokalen qrPngPath nach Bunny (bestehende
-          // Lead-Pipeline schreibt das nicht automatisch hoch — nur das
-          // finale PDF). Path-Konvention: `temp/qr/<runId>/<leadId>.png`.
-          let qrBunnyUrl: string | null = null;
-          if (qrPngPath) {
-            try {
-              const { uploadFile } = await import("@/lib/bunny/storage");
-              const { readFile } = await import("node:fs/promises");
-              const buffer = await readFile(qrPngPath);
-              const remote = `temp/qr/${data.runId}/${data.leadId}.png`;
-              const up = await uploadFile({
-                buffer,
-                remotePath: remote,
-                contentType: "image/png",
-              });
-              qrBunnyUrl = up.url;
-            } catch (err) {
-              console.warn(
-                `[pipeline] qr->bunny upload failed for lead=${data.leadId}: ${(err as Error)?.message}`,
-              );
-            }
-          }
-
-          // Thumbnail bevorzugt aus der Generator-Chain (bereits in Bunny):
-          //   customThumbnailUrl > sharedThumbnailUrl > null
-          // Wenn nur ein lokaler Frame-JPG existiert (legacy thumbJpgPath),
-          // heben wir den ebenfalls nach Bunny. Sonst kein Image-Replace.
-          let thumbBunnyUrl: string | null =
+          // Thumbnail: bevorzugte Quelle ist customThumbnailUrl / shared,
+          // wenn vorhanden — falls nur lokaler Frame-JPG existiert, nutzen
+          // wir den direkt. Renderer 3.0 erwartet LOKALE Pfade, keine URLs.
+          let thumbnailLocalPath: string | null = thumbFilePath;
+          // Falls customThumbnailUrl gesetzt ist und nicht der lokale Pfad,
+          // muss der Worker den Bunny-Thumbnail vorher downloaden. Renderer
+          // 2.0 hatte das ueber URLs geloest; 3.0 laedt direkt vom Disk.
+          // Wenn nur Bunny-URL da ist und kein lokaler Path → wir laden
+          // jetzt einmalig.
+          const remoteThumb =
             leadCustomThumbnailUrl ??
             runSharedThumbnailUrlForCustom ??
             run.sharedThumbnailUrl ??
             null;
-          if (!thumbBunnyUrl && thumbFilePath) {
+          if (!thumbnailLocalPath && remoteThumb) {
             try {
-              const { uploadFile } = await import("@/lib/bunny/storage");
-              const { readFile } = await import("node:fs/promises");
-              const buffer = await readFile(thumbFilePath);
-              const remote = `temp/thumb/${data.runId}/${data.leadId}.jpg`;
-              const up = await uploadFile({
-                buffer,
-                remotePath: remote,
-                contentType: "image/jpeg",
-              });
-              thumbBunnyUrl = up.url;
+              const { writeFile } = await import("node:fs/promises");
+              const { join } = await import("node:path");
+              const downloadPath = join(workDir, "thumb-remote.bin");
+              const res = await fetch(remoteThumb);
+              if (res.ok) {
+                const ab = await res.arrayBuffer();
+                await writeFile(downloadPath, Buffer.from(ab));
+                thumbnailLocalPath = downloadPath;
+              }
             } catch (err) {
               console.warn(
-                `[pipeline] thumb->bunny upload failed for lead=${data.leadId}: ${(err as Error)?.message}`,
+                `[pipeline] thumbnail download failed: ${(err as Error)?.message}`,
               );
             }
           }
 
           const driveResult = await withStageTimeout(
             () =>
-              renderViaDrive({
+              renderViaHtml({
                 googleDocsUrl: campaign.pdfGoogleDocsUrl!,
                 textVars: buildDocxVars(
                   lead.data ?? {},
@@ -1228,20 +1208,21 @@ export async function pipelineProcessor(
                   placeholderMapping,
                   pageUrlShort,
                 ),
-                qrImageUrl: qrBunnyUrl,
-                thumbnailImageUrl: thumbBunnyUrl,
+                qrPngPath,
+                thumbnailFilePath: thumbnailLocalPath,
+                workDir,
               }),
             STAGE_TIMEOUTS_MS.docxModify + STAGE_TIMEOUTS_MS.docxToPdf,
-            "driveRender",
+            "htmlRender",
           );
           drivePdfBuffer = driveResult.pdfBuffer;
-          driveThumbSource = "drive";
+          driveThumbSource = "drive-html";
           await insertPipelineEvent({
             runId: data.runId,
             leadId: data.leadId,
             level: "info",
             stage: "docx",
-            message: `${leadLabel}: drive-rendered in ${((Date.now() - driveStart) / 1000).toFixed(1)}s (qr=${driveResult.qrReplaced}, thumb=${driveResult.thumbReplaced}, vars=${driveResult.textReplacements})`,
+            message: `${leadLabel}: html-rendered in ${((Date.now() - driveStart) / 1000).toFixed(1)}s (qr=${driveResult.qrReplaced}, thumb=${driveResult.thumbReplaced}, vars=${driveResult.textReplacements})`,
             durationMs: Date.now() - driveStart,
           });
         } catch (err) {
@@ -1250,7 +1231,7 @@ export async function pipelineProcessor(
             leadId: data.leadId,
             level: "warn",
             stage: "docx",
-            message: `${leadLabel}: drive-render failed (${(err as Error)?.message}); falling back to LibreOffice`,
+            message: `${leadLabel}: html-render failed (${(err as Error)?.message}); falling back to LibreOffice`,
           });
           drivePdfBuffer = null;
         }
