@@ -178,7 +178,7 @@ export function UrlPicker({
       </div>
       {open ? (
         <div
-          className="absolute z-30 mt-1 w-full bg-surface-elevated border border-line rounded-squircle-md shadow-lg overflow-hidden"
+          className="absolute z-50 mt-1 w-full bg-white border border-line rounded-squircle-md shadow-xl ring-1 ring-black/5 overflow-hidden"
           // Prevent input blur when clicking entries.
           onMouseDown={(e) => e.preventDefault()}
         >
