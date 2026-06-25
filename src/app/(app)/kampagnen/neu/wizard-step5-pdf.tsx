@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { PlaceholderHelper } from "@/components/editor/placeholder-helper";
 import { UrlPicker } from "@/components/media-urls/url-picker";
+import { DriveRendererBanner } from "@/components/media-urls/drive-renderer-banner";
 import { ThumbnailFramePicker } from "@/components/editor/thumbnail-frame-picker";
 import {
   ThumbnailImageEditor,
@@ -143,6 +144,7 @@ export function WizardStep5Pdf({
               "Jeder mit dem Link kann ansehen"). Aus der Mediathek wählbar
               oder als neue URL eintippen.
             </p>
+            <DriveRendererBanner />
           </div>
 
           <div className="pt-3 border-t border-line space-y-3">

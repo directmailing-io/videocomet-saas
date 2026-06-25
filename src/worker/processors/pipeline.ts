@@ -1131,56 +1131,194 @@ export async function pipelineProcessor(
     ) {
       const pdfStart = Date.now();
 
-      await setCurrentStage(data.leadId, "docxModify");
-      const docxStart = Date.now();
-      const docx = await withStageTimeout(
-        () =>
-          runDocxModify({
-            outDir: workDir,
-            googleDocsUrl: campaign.pdfGoogleDocsUrl!,
-            vars: buildDocxVars(
-              lead.data ?? {},
-              pageUrl!,
-              placeholderMapping,
-              pageUrlShort,
-            ),
-            qrPngPath,
-            thumbJpgPath: thumbFilePath,
-            // Thumbnail-Generator-Fallback-Chain (Paket E):
-            //   customThumbnailUrl (per Lead) >
-            //   sharedThumbnailUrl (per Run)  >
-            //   thumbJpgPath       (Legacy-Video-Frame)
-            // Wenn alle null sind, bleibt der Bild-Slot im Brief leer.
-            // Wir reichen die LOKAL gepflegten Variablen rein, damit der
-            // gerade vom Thumbnail-Generator gerenderte URL sofort greift
-            // — `lead.customThumbnailUrl` wäre stale (in-memory-Snapshot
-            // aus `loadJobContext` ganz oben).
-            customThumbnailUrl: leadCustomThumbnailUrl,
-            sharedThumbnailUrl:
-              runSharedThumbnailUrlForCustom ?? run.sharedThumbnailUrl ?? null,
-          }),
-        STAGE_TIMEOUTS_MS.docxModify,
-        "docxModify",
-      );
-      await insertPipelineEvent({
-        runId: data.runId,
-        leadId: data.leadId,
-        level: "info",
-        stage: "docx",
-        message: `${leadLabel}: docx generated in ${((Date.now() - docxStart) / 1000).toFixed(1)}s (thumb=${docx.thumbSource})`,
-        durationMs: Date.now() - docxStart,
-      });
+      // ── Renderer-Auswahl ────────────────────────────────────────────
+      // Drive-Renderer ist Erstwahl wenn:
+      //   - Env-Flag USE_GOOGLE_DRIVE_RENDERER=1
+      //   - Service-Account in GOOGLE_DRIVE_SA_KEY konfiguriert
+      // Vorteil: Google rendert mit derselben Engine wie im Browser,
+      // Floating-Tabellen + Anchors werden 1:1 dargestellt.
+      // Bei Fehler: stiller Fallback auf den LibreOffice-Pfad.
+      const driveRendererFlag = process.env.USE_GOOGLE_DRIVE_RENDERER === "1";
+      let driveRendererAvailable = false;
+      if (driveRendererFlag) {
+        const { isDriveRendererConfigured } = await import(
+          "@/lib/google-docs/sa-auth"
+        );
+        driveRendererAvailable = isDriveRendererConfigured();
+        if (!driveRendererAvailable) {
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "warn",
+            stage: "docx",
+            message: `${leadLabel}: Drive-Renderer-Flag gesetzt aber GOOGLE_DRIVE_SA_KEY fehlt — Fallback LibreOffice`,
+          });
+        }
+      }
 
-      await setCurrentStage(data.leadId, "docxToPdf");
-      const pdf = await withStageTimeout(
-        () =>
-          runDocxToPdf({
-            docxPath: docx.docxPath,
-            outDir: workDir,
-          }),
-        STAGE_TIMEOUTS_MS.docxToPdf,
-        "docxToPdf",
-      );
+      let drivePdfBuffer: Buffer | null = null;
+      let driveThumbSource: "drive" | null = null;
+      if (driveRendererAvailable) {
+        try {
+          await setCurrentStage(data.leadId, "docxModify");
+          const driveStart = Date.now();
+          const { renderViaDrive } = await import(
+            "../lib/drive-pdf-pipeline"
+          );
+
+          // Bunny-CDN-URL des QR fuer die replaceImage-Request des Drive-Pfads.
+          // Wir uebernehmen den lokalen qrPngPath nach Bunny (bestehende
+          // Lead-Pipeline schreibt das nicht automatisch hoch — nur das
+          // finale PDF). Path-Konvention: `temp/qr/<runId>/<leadId>.png`.
+          let qrBunnyUrl: string | null = null;
+          if (qrPngPath) {
+            try {
+              const { uploadFile } = await import("@/lib/bunny/storage");
+              const { readFile } = await import("node:fs/promises");
+              const buffer = await readFile(qrPngPath);
+              const remote = `temp/qr/${data.runId}/${data.leadId}.png`;
+              const up = await uploadFile({
+                buffer,
+                remotePath: remote,
+                contentType: "image/png",
+              });
+              qrBunnyUrl = up.url;
+            } catch (err) {
+              console.warn(
+                `[pipeline] qr->bunny upload failed for lead=${data.leadId}: ${(err as Error)?.message}`,
+              );
+            }
+          }
+
+          // Thumbnail bevorzugt aus der Generator-Chain (bereits in Bunny):
+          //   customThumbnailUrl > sharedThumbnailUrl > null
+          // Wenn nur ein lokaler Frame-JPG existiert (legacy thumbJpgPath),
+          // heben wir den ebenfalls nach Bunny. Sonst kein Image-Replace.
+          let thumbBunnyUrl: string | null =
+            leadCustomThumbnailUrl ??
+            runSharedThumbnailUrlForCustom ??
+            run.sharedThumbnailUrl ??
+            null;
+          if (!thumbBunnyUrl && thumbFilePath) {
+            try {
+              const { uploadFile } = await import("@/lib/bunny/storage");
+              const { readFile } = await import("node:fs/promises");
+              const buffer = await readFile(thumbFilePath);
+              const remote = `temp/thumb/${data.runId}/${data.leadId}.jpg`;
+              const up = await uploadFile({
+                buffer,
+                remotePath: remote,
+                contentType: "image/jpeg",
+              });
+              thumbBunnyUrl = up.url;
+            } catch (err) {
+              console.warn(
+                `[pipeline] thumb->bunny upload failed for lead=${data.leadId}: ${(err as Error)?.message}`,
+              );
+            }
+          }
+
+          const driveResult = await withStageTimeout(
+            () =>
+              renderViaDrive({
+                googleDocsUrl: campaign.pdfGoogleDocsUrl!,
+                textVars: buildDocxVars(
+                  lead.data ?? {},
+                  pageUrl!,
+                  placeholderMapping,
+                  pageUrlShort,
+                ),
+                qrImageUrl: qrBunnyUrl,
+                thumbnailImageUrl: thumbBunnyUrl,
+              }),
+            STAGE_TIMEOUTS_MS.docxModify + STAGE_TIMEOUTS_MS.docxToPdf,
+            "driveRender",
+          );
+          drivePdfBuffer = driveResult.pdfBuffer;
+          driveThumbSource = "drive";
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "info",
+            stage: "docx",
+            message: `${leadLabel}: drive-rendered in ${((Date.now() - driveStart) / 1000).toFixed(1)}s (qr=${driveResult.qrReplaced}, thumb=${driveResult.thumbReplaced}, vars=${driveResult.textReplacements})`,
+            durationMs: Date.now() - driveStart,
+          });
+        } catch (err) {
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "warn",
+            stage: "docx",
+            message: `${leadLabel}: drive-render failed (${(err as Error)?.message}); falling back to LibreOffice`,
+          });
+          drivePdfBuffer = null;
+        }
+      }
+
+      let pdfPathForCompress: string;
+      let docxThumbSource: string;
+
+      if (drivePdfBuffer) {
+        // Drive-Pipeline lieferte PDF direkt — auf Disk schreiben, damit
+        // die nachfolgenden Stages (compress/upload) unveraendert greifen.
+        const { writeFile } = await import("node:fs/promises");
+        const { join } = await import("node:path");
+        pdfPathForCompress = join(workDir, "letter.pdf");
+        await writeFile(pdfPathForCompress, drivePdfBuffer);
+        docxThumbSource = driveThumbSource ?? "drive";
+      } else {
+        await setCurrentStage(data.leadId, "docxModify");
+        const docxStart = Date.now();
+        const docx = await withStageTimeout(
+          () =>
+            runDocxModify({
+              outDir: workDir,
+              googleDocsUrl: campaign.pdfGoogleDocsUrl!,
+              vars: buildDocxVars(
+                lead.data ?? {},
+                pageUrl!,
+                placeholderMapping,
+                pageUrlShort,
+              ),
+              qrPngPath,
+              thumbJpgPath: thumbFilePath,
+              customThumbnailUrl: leadCustomThumbnailUrl,
+              sharedThumbnailUrl:
+                runSharedThumbnailUrlForCustom ?? run.sharedThumbnailUrl ?? null,
+            }),
+          STAGE_TIMEOUTS_MS.docxModify,
+          "docxModify",
+        );
+        await insertPipelineEvent({
+          runId: data.runId,
+          leadId: data.leadId,
+          level: "info",
+          stage: "docx",
+          message: `${leadLabel}: docx generated in ${((Date.now() - docxStart) / 1000).toFixed(1)}s (thumb=${docx.thumbSource})`,
+          durationMs: Date.now() - docxStart,
+        });
+
+        await setCurrentStage(data.leadId, "docxToPdf");
+        const pdf = await withStageTimeout(
+          () =>
+            runDocxToPdf({
+              docxPath: docx.docxPath,
+              outDir: workDir,
+            }),
+          STAGE_TIMEOUTS_MS.docxToPdf,
+          "docxToPdf",
+        );
+        pdfPathForCompress = pdf.pdfPath;
+        docxThumbSource = docx.thumbSource;
+      }
+
+      // Variable nicht-mehr-genutzt im neuen Branch, aber alte Compress-
+      // Stage erwartet `pdf.pdfPath`. Wir mappen oben pdfPathForCompress.
+      const pdf = { pdfPath: pdfPathForCompress };
+      // Suppress unused-var warnings — `docxThumbSource` wird via
+      // pipeline events bereits geloggt.
+      void docxThumbSource;
 
       await setCurrentStage(data.leadId, "pdfCompress");
       const compressed = await withStageTimeout(
