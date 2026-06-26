@@ -114,6 +114,21 @@ export async function runLandingpageScreenshot(
 ): Promise<LandingpageScreenshotOutput> {
   const navUrl = withPreviewFlag(input.fullPageUrl);
 
+  // SECURITY: SSRF-Guard VOR Puppeteer-Navigation. Wir verhindern dass
+  // User-controlled Custom-Domains (lead.domainHost) den Browser auf
+  // interne Services wie 127.0.0.1:6379 (Redis), 10.0.0.1 (Internal-
+  // Service) oder 169.254.169.254 (Cloud-Metadata-API) lenken koennen.
+  // Wenn der Guard wirft, faellt der Screenshot-Job als permanenter
+  // Fehler aus — kein Retry, keine Browser-Verbindung.
+  try {
+    const { assertUrlIsSafe } = await import("@/lib/media-urls/ssrf-guard");
+    await assertUrlIsSafe(navUrl);
+  } catch (err) {
+    throw new Error(
+      `landingpage navigation blocked by SSRF-guard: ${(err as Error)?.message ?? err}`,
+    );
+  }
+
   const ctx = await getContext();
   const pageHolder: { current: Page | null } = { current: null };
 

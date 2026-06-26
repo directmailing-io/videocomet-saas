@@ -19,10 +19,15 @@ export async function GET() {
   if (!auth.ok) return auth.response;
   const flag = process.env.USE_GOOGLE_DRIVE_RENDERER === "1";
   const configured = isDriveRendererConfigured();
+  // SECURITY: Die SA-Email ist sensitive Operator-Information (kann fuer
+  // Social-Engineering gegen Google-Workspace-Admin genutzt werden). Nur
+  // Admins sehen den Wert — alle anderen User bekommen `null`, was im
+  // Setup-Banner als "Operator-Setup faellt aus" UX-mässig korrekt ist.
+  const isAdmin = auth.user.role === "admin";
   return NextResponse.json({
     flag,
     configured,
     active: flag && configured,
-    serviceAccountEmail: getServiceAccountEmail(),
+    serviceAccountEmail: isAdmin ? getServiceAccountEmail() : null,
   });
 }

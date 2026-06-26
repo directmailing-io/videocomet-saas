@@ -164,11 +164,19 @@ export function InlinePreview({
             </div>
           )}
           {state.kind === "ready" && state.html && (
+            // SECURITY: bewusst KEIN `allow-same-origin`. Mit srcDoc und
+            // `allow-scripts allow-same-origin` zusammen wuerde User-HTML
+            // dieselbe Origin wie app.videocomet.de bekommen und koennte
+            // window.parent.document.cookie auslesen → Session-Hijack.
+            // `allow-scripts` ohne `allow-same-origin` laeuft in opaquer
+            // Origin: User-JS kann rendern, aber NICHT auf Parent
+            // zugreifen. postMessage(window.parent, ...) funktioniert
+            // weiterhin fuer den Inspector-Bridge.
             <iframe
               key={versionId}
               title="Live-Vorschau der Landingpage"
               srcDoc={state.html}
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts allow-forms"
               className="block w-full bg-white"
               style={{ height: "720px", border: "none" }}
             />

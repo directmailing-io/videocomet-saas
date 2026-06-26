@@ -1,6 +1,38 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  // SECURITY: `X-Powered-By: Next.js`-Leak unterdruecken.
+  poweredByHeader: false,
+  async headers() {
+    // Globale Security-Header auf jeder Response. Pfad-spezifische
+    // Ausnahmen: `/lp-block/*` setzt eigene CSP-Header via csp.ts.
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          // HSTS: 1 Jahr + Sub-Domains + preload-eligible. Browser
+          // ignorieren bei HTTP — also safe als Default.
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains; preload",
+          },
+          // MIME-Sniffing off.
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          // Frame-Embedding nur same-origin (lp-block setzt das selbst).
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          // Cross-Domain Referrer minimieren.
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // Hardware-Permissions: Kamera+Mic nur self (Webcam-Aufnahme),
+          // Rest komplett blocken.
+          {
+            key: "Permissions-Policy",
+            value:
+              "camera=(self), microphone=(self), geolocation=(), payment=(), usb=()",
+          },
+        ],
+      },
+    ];
+  },
   // archiver ships an `exports` map whose "default" entry is not the last
   // condition, which trips webpack's exports-validator. Marking the package
   // as external lets node resolve it natively at runtime in the

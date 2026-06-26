@@ -1,3 +1,7 @@
+// Module-Scope: damit der Warn-Hinweis fuer fehlende Token-Auth nur
+// einmal pro Worker-Lifetime ins Log gelangt (statt pro URL-Sign-Call).
+let warnedTokenAuthMissing = false;
+
 /**
  * Bunny.net Token-Authentication URL signer.
  *
@@ -102,8 +106,19 @@ export function signStreamHlsUrl(
 
   const env = getBunnyStreamEnv();
   if (!env.tokenAuthKey) {
-    // No key configured — return as-is; the request will succeed only if
-    // token-auth is disabled on the pullzone.
+    // SECURITY-WARN: Ohne BUNNY_STREAM_TOKEN_AUTH_KEY sind Video-URLs
+    // unsigniert und potenziell enumerierbar via GUID-Pattern.
+    // Wir loggen das einmal pro Worker-Boot (Logging ist hot-pfad-leicht)
+    // damit der Operator es im Production-Log sieht. Wir BRECHEN aber
+    // nicht — sonst stuerzt die ganze Video-Pipeline beim Rollout ab.
+    // Action-Item: Bunny-Stream-Library "Token Auth Key" enablen,
+    // Key in worker+app env als BUNNY_STREAM_TOKEN_AUTH_KEY setzen.
+    if (!warnedTokenAuthMissing) {
+      warnedTokenAuthMissing = true;
+      console.warn(
+        "[bunny:security] BUNNY_STREAM_TOKEN_AUTH_KEY missing — Stream URLs are UNSIGNED. Enable token-auth in Bunny dashboard ASAP.",
+      );
+    }
     return rawUrl;
   }
 

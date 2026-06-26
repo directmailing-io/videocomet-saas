@@ -35,9 +35,13 @@ export interface ListUsersOptions {
   offset?: number;
 }
 
+// OWASP-Empfehlung (2024) fuer argon2id: m=46 MiB, t=2, p=1.
+// 19_456 KiB (~19 MiB) war unterhalb der OWASP-Schwelle — auf GPU/ASIC
+// krackt das ~100k Hashes/sec. 47_104 KiB (~46 MiB) pusht das auf
+// realistische Brute-Force-Kosten.
 const ARGON2_OPTIONS = {
   type: argon2.argon2id,
-  memoryCost: 19_456,
+  memoryCost: 47_104,
   timeCost: 2,
   parallelism: 1,
 } as const;

@@ -140,9 +140,18 @@ export async function sendPasswordResetMail(input: SendPasswordResetMailInput): 
 
   const resend = getResend();
   if (!resend) {
+    // SECURITY: Reset-Link enthaelt den Token. Wir loggen NUR die
+    // ersten 8 Token-Chars (genug zum Korrelieren in Dev), den Rest
+    // maskieren wir. In Production ist `getResend()` immer gesetzt,
+    // dieser Pfad wird nicht erreicht — aber falls jemand
+    // versehentlich Resend deaktiviert, soll der Volltoken nicht in
+    // Process-Logs landen.
+    const maskedLink = link.replace(/(token=)([^&]+)/, (_m, p1, p2: string) =>
+      `${p1}${p2.slice(0, 8)}***`,
+    );
     console.log("[mail:dev] sendPasswordResetMail -> %s", input.to);
     console.log("[mail:dev] subject: %s", subject);
-    console.log("[mail:dev] link: %s", link);
+    console.log("[mail:dev] link: %s", maskedLink);
     return;
   }
 
@@ -217,10 +226,14 @@ export async function sendAdminInviteMail(input: SendAdminInviteMailInput): Prom
 
   const resend = getResend();
   if (!resend) {
+    // SECURITY: tempPassword im Dev-Modus NICHT mehr loggen — User
+    // bekommt das via Email-Provider oder Admin sieht es im
+    // Onboarding-UI, aber NIE in Prozess-Logs (Docker-Logs sind
+    // weniger zugriffsgeschuetzt als die Mail-Inbox).
     console.log("[mail:dev] sendAdminInviteMail -> %s", input.to);
     console.log("[mail:dev] subject: %s", subject);
-    console.log("[mail:dev] tempPassword: %s", input.tempPassword);
     console.log("[mail:dev] login: %s", loginUrl);
+    console.log("[mail:dev] tempPassword: <masked>");
     return;
   }
 

@@ -32,7 +32,7 @@ import { db } from "@/lib/db";
 import { webhookDeliveries, webhookEndpoints } from "@/lib/db/schema";
 import type { WebhookEndpoint } from "@/lib/db/schema";
 import { signRawBody } from "@/lib/webhooks/signature";
-import { validateWebhookUrl } from "@/lib/webhooks/url-guard";
+import { pinnedFetch, validateWebhookUrl } from "@/lib/webhooks/url-guard";
 import { getRedisConnection } from "../queue";
 import {
   webhookDeliveryQueue,
@@ -427,6 +427,11 @@ export async function processWebhookDelivery(
     let resp: Response | null = null;
     let networkErrorMessage: string | null = null;
     try {
+      // SECURITY: `pinnedFetch` reicht einen undici-Dispatcher rein, der
+      // beim Connect noch einmal DNS aufloest UND private IPs hart
+      // blockiert. Schliesst das DNS-Rebinding-Fenster zwischen
+      // `validateWebhookUrl` (Validation-Zeitpunkt) und tatsaechlichem
+      // POST (kann Sekunden spaeter sein, in BullMQ-Retry sogar Stunden).
       resp = await fetch(guard.url.toString(), {
         method: "POST",
         headers,
@@ -436,6 +441,9 @@ export async function processWebhookDelivery(
         // URL explizit hinterlegt, ein 3xx ist eher ein Konfig-Fehler
         // beim Empfänger und sollte sichtbar werden.
         redirect: "manual",
+        // @ts-expect-error — `dispatcher` ist eine undici-Erweiterung,
+        // global fetch in Node 18+ ist undici-basiert und akzeptiert sie.
+        dispatcher: pinnedFetch(guard.url),
       });
     } catch (err) {
       networkErrorMessage =

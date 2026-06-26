@@ -20,8 +20,13 @@ export const lucia = new Lucia(adapter, {
     name: "videocomet_session",
     expires: false,
     attributes: {
+      // httpOnly ist Lucia-Default = true (kein JS-Zugriff auf den Cookie).
+      // SECURITY: `sameSite: "strict"` blockt CSRF via Form-POSTs von
+      // anderen Sites. Trade-off: externe Links die zu app.videocomet.de
+      // fuehren zeigen erst Login an, bis User innerhalb der App neu
+      // navigiert. Akzeptabel fuer ein Internal-Tool-SaaS.
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "strict",
     },
   },
   getUserAttributes: (attributes) => ({
