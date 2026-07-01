@@ -55,12 +55,27 @@ const MARKETING_HOSTS = new Set<string>([
   "videocomet.de",
   "www.videocomet.de",
 ]);
+/**
+ * Pfade die auf videocomet.de gerendert werden (Marketing-Domain).
+ * `/signup` läuft bewusst auch hier — der User will den Kauf-Flow auf der
+ * Marketing-Domain, nicht auf dem Memberbereich.
+ *
+ * `/signup/success` ist die Stripe-Success-Page; nach Zahlung landet der
+ * User erst auf videocomet.de/signup/success, klickt sich dann per Link
+ * in den Memberbereich rüber. Die Session-Cookie ist auf `.videocomet.de`
+ * gescopet (siehe src/lib/auth.ts), damit der Login domain-übergreifend gilt.
+ */
 const MARKETING_ONLY_PATHS = new Set<string>([
   "/",
   "/agb",
   "/impressum",
   "/datenschutz",
 ]);
+function isMarketingOnlyPath(pathname: string): boolean {
+  if (isMarketingOnlyPath(pathname)) return true;
+  if (pathname === "/signup" || pathname.startsWith("/signup/")) return true;
+  return false;
+}
 
 /**
  * Pfade die NIE durch das Custom-Domain-Rewrite gehen — sonst zerlegen wir
@@ -183,7 +198,7 @@ export function middleware(req: NextRequest) {
     // Auf der Marketing-Domain sind nur die Marketing-Pfade und die
     // technisch-neutralen Passthrough-Endpunkte (/api/health etc.)
     // erlaubt. Alles andere → 302 zur App-Domain.
-    if (!MARKETING_ONLY_PATHS.has(pathname) && !isPassthroughPath(pathname)) {
+    if (!isMarketingOnlyPath(pathname) && !isPassthroughPath(pathname)) {
       return NextResponse.redirect(
         new URL(`https://app.videocomet.de${pathname}${search}`),
         302,
@@ -199,7 +214,7 @@ export function middleware(req: NextRequest) {
     // Marketing-Pfade auf App-Host → auf Marketing-Host umleiten
     // (Kanonisierung). Root bleibt hier ausgeklammert und wird direkt
     // in der App-Root-Handling behandelt (Login/Dashboard-Redirect).
-    if (MARKETING_ONLY_PATHS.has(pathname) && pathname !== "/") {
+    if (isMarketingOnlyPath(pathname) && pathname !== "/") {
       return NextResponse.redirect(
         new URL(`https://videocomet.de${pathname}`),
         302,

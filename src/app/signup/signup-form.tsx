@@ -158,9 +158,10 @@ export function SignupForm() {
               Starte jetzt und schreib nie wieder eine kalte Email allein.
             </h1>
             <p className="text-[15px] sm:text-base text-ink-muted mb-6 leading-relaxed">
-              In zwei Minuten aufgesetzt. Danach schickst du hunderte Kontakte
-              ein personalisiertes Video, in dem du sie namentlich ansprichst,
-              ohne hundertmal vor der Kamera zu stehen.
+              Kinderleicht aufgesetzt. Danach schickst du hunderte, sogar
+              tausende personalisierte Videos an potenzielle Kunden. Du
+              überzeugst sie. Du bleibst positiv in Erinnerung. Du bekommst
+              Kundenanfragen.
             </p>
 
             {/* Preis-Card */}

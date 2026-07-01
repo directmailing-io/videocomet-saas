@@ -29,9 +29,12 @@ export default function LoginPage() {
             <div className="mt-8 pt-6 border-t border-line-soft">
               <p className="text-xs text-ink-muted text-center">
                 Noch kein Konto?{" "}
-                <Link href="/#pricing" className="text-brand font-medium hover:underline">
+                <a
+                  href="https://videocomet.de/signup"
+                  className="text-brand font-medium hover:underline"
+                >
                   Jetzt Zugang holen
-                </Link>
+                </a>
               </p>
             </div>
           </div>

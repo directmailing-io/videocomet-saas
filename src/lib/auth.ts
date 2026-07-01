@@ -28,6 +28,13 @@ export const lucia = new Lucia(adapter, {
       // aus httpOnly + secure + Origin-Check auf state-changing routes.
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
+      // Domain-Scope: In Prod muessen videocomet.de UND app.videocomet.de
+      // dieselbe Session sehen (Signup laeuft auf Marketing-Domain,
+      // Memberbereich auf App-Domain). Leading-Dot = alle Subdomains inkl.
+      // Root gelten als eine Session. Localhost bleibt host-only.
+      ...(process.env.NODE_ENV === "production"
+        ? { domain: ".videocomet.de" }
+        : {}),
     },
   },
   getUserAttributes: (attributes) => ({

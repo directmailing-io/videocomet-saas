@@ -167,10 +167,13 @@ export async function POST(req: NextRequest) {
 
   const stripe = getStripe();
   const { subscription: subPriceId } = getPriceIds();
-  const appOrigin = (process.env.APP_URL ?? "https://app.videocomet.de").replace(
-    /\/+$/,
-    "",
-  );
+  // Signup-Flow lebt auf der Marketing-Domain (videocomet.de). Stripe muss
+  // den User nach Zahlung dorthin zurueckschicken — nicht in den
+  // Memberbereich (app.videocomet.de), sonst kommt er auf einer Seite raus,
+  // die den Kauf-Kontext nicht kennt.
+  const marketingOrigin = (
+    process.env.MARKETING_URL ?? "https://videocomet.de"
+  ).replace(/\/+$/, "");
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
@@ -183,8 +186,8 @@ export async function POST(req: NextRequest) {
     billing_address_collection: "required",
     metadata: { userId, kind: "subscription" },
     subscription_data: { metadata: { userId } },
-    success_url: `${appOrigin}/signup/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appOrigin}/#pricing`,
+    success_url: `${marketingOrigin}/signup/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${marketingOrigin}/#pricing`,
   });
 
   return NextResponse.json({ url: session.url }, { status: 200 });
