@@ -94,9 +94,10 @@ export function CreditBalanceCard() {
             className="object-cover"
             priority={false}
           />
-          {/* Gradient-Overlay: dunkel unten, semi-transparent oben.
-              Zusaetzlich ein Vignette-Effekt fuer premium-Feel. */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/20" />
+          {/* Gradient-Overlay: nur so viel Dunkelheit unten, wie fuer
+              Text-Kontrast noetig. Oben komplett transparent damit das
+              Bild atmet. */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
         </div>
 
         {/* Overlay-Content unten */}
