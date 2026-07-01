@@ -9,6 +9,7 @@ import { DomainsTab } from "./domains-tab";
 import { IntegrationsList } from "./integrationen/integrations-list";
 import { WebhooksList } from "./webhooks/webhooks-list";
 import { WebhooksDocsCallout } from "./webhooks/webhooks-docs-callout";
+import { BillingTab } from "./billing-tab";
 
 export default async function EinstellungenPage() {
   const { user: sessionUser } = await requireUser();
@@ -25,6 +26,7 @@ export default async function EinstellungenPage() {
         <TabsList>
           <TabsTrigger value="profil">Profil</TabsTrigger>
           <TabsTrigger value="passwort">Passwort</TabsTrigger>
+          <TabsTrigger value="abrechnung">Abrechnung</TabsTrigger>
           <TabsTrigger value="rechnung">Rechnungsadresse</TabsTrigger>
           <TabsTrigger value="domains">Domains</TabsTrigger>
           <TabsTrigger value="crm">CRM-Integrationen</TabsTrigger>
@@ -54,6 +56,10 @@ export default async function EinstellungenPage() {
               <PasswordForm />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="abrechnung">
+          <BillingTab />
         </TabsContent>
 
         <TabsContent value="rechnung">

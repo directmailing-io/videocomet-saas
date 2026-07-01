@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UrlPicker } from "@/components/media-urls/url-picker";
+import { RunCostEstimate } from "@/components/billing/run-cost-estimate";
 import {
   Select,
   SelectContent,
@@ -71,6 +72,9 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
   const [creating, setCreating] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Billing-Gate: der Estimate-Component setzt das je nach Balance +
+  // Subscription-Status. Wenn false, disable'n wir den Start-Button.
+  const [billingReady, setBillingReady] = React.useState(true);
 
   const [uploadKind, setUploadKind] = React.useState<"file" | "google">("file");
   const [file, setFile] = React.useState<File | null>(null);
@@ -565,6 +569,15 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
                 )}
                 {pdfEnabled && <Badge variant="success">PDF-Brief aktiv</Badge>}
               </div>
+              <RunCostEstimate
+                leadCount={
+                  Math.max(
+                    0,
+                    preview.totalRows - (dedupeStats?.excluded ?? 0),
+                  )
+                }
+                onSufficient={setBillingReady}
+              />
             </CardContent>
           </Card>
         );
@@ -605,6 +618,7 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
           <Button
             onClick={handleNext}
             loading={submitting}
+            disabled={!billingReady}
             iconLeft={<Play className="size-4" />}
           >
             {preview ? `${preview.totalRows} Leads starten` : "Starten"}

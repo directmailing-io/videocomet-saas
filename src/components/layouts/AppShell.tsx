@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { CreditBalanceCard } from "@/components/billing/credit-balance-card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -192,6 +193,7 @@ function SidebarInner({
       <div className="flex-1 overflow-y-auto py-4">
         <NavList onSelect={onSelect} />
       </div>
+      <CreditBalanceCard />
       <div className="border-t border-line p-3">
         <UserMenu user={user} />
       </div>

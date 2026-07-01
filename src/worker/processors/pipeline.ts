@@ -1353,6 +1353,56 @@ export async function pipelineProcessor(
       status: "completed",
       completedAt: new Date(),
     });
+
+    // ── Stage 11: Credit-Charge fuer erfolgreiche Video-Generation ───
+    // User-Regel: "1 Video = 1 Credit". Nur abziehen wenn wir tatsaechlich
+    // ein Video produziert haben (skipVideo=true heisst Video war schon da
+    // oder wurde per regenerate?mode=pdf explizit uebersprungen).
+    //
+    // Idempotenz kommt aus dem UNIQUE-Constraint (lead_id) WHERE
+    // kind='video_charge' — bei Worker-Retry werfen wir DuplicateChargeError
+    // und schlucken das. Damit ist auch der Fall abgedeckt, wo videoAlreadyDone
+    // aus irgendeinem Grund nicht triggert.
+    //
+    // KEIN Throw wenn Credit-Charge fehlschlaegt — Lead ist bereits als
+    // completed markiert, das Video ist live. Ein Balance-Fehler waere ein
+    // Support-Ticket, kein Pipeline-Abort.
+    if (!skipVideo) {
+      try {
+        const { chargeForVideo, DuplicateChargeError } = await import(
+          "@/lib/billing/credit-service"
+        );
+        await chargeForVideo({
+          userId: run.userId,
+          leadId: data.leadId,
+          runId: data.runId,
+          amount: 1,
+        });
+      } catch (err) {
+        const isDuplicate =
+          err &&
+          typeof err === "object" &&
+          "name" in err &&
+          (err as { name?: string }).name === "DuplicateChargeError";
+        if (!isDuplicate) {
+          // Insufficient sollte durch den Run-Gate bereits verhindert sein.
+          // Wenn es trotzdem passiert (Race mit anderem Run, Admin-Refund
+          // mitten drin), loggen wir und lassen die Pipeline durchlaufen.
+          console.warn(
+            `[pipeline:billing] charge failed for lead=${data.leadId}:`,
+            err instanceof Error ? err.message : err,
+          );
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "warn",
+            stage: "run",
+            message: `${leadLabel}: credit charge failed (${err instanceof Error ? err.message : "unknown"}) — needs admin review`,
+          });
+        }
+      }
+    }
+
     await insertPipelineEvent({
       runId: data.runId,
       leadId: data.leadId,

@@ -36,6 +36,22 @@ export const mediaUrlPreviewStatusEnum = pgEnum("media_url_preview_status", [
   "private",
 ]);
 
+// ── Billing-Enums (Migration 0027) ───────────────────────────────────────
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "active",          // laufend bezahlt
+  "past_due",        // Zahlung fehlgeschlagen, Gnadenfrist
+  "canceled",        // gekündigt, Lese-Zugriff bleibt
+  "incomplete",      // erste Zahlung noch nicht erfolgreich
+  "trialing",        // Trial-Period (Phase 2 Feature)
+  "unpaid",          // Zahlung endgueltig fehlgeschlagen
+]);
+export const creditTxKindEnum = pgEnum("credit_tx_kind", [
+  "topup",           // Credit-Kauf (positive Delta)
+  "video_charge",    // Verbrauch fuer Video-Generation (negative Delta)
+  "admin_adjust",    // Manuelle Korrektur (Refund/Goodwill, +/-)
+  "promo_grant",     // Promo-Code / Welcome-Bonus (positive Delta)
+]);
+
 // ── Users (Admins + App-Users in einer Tabelle, Rolle bestimmt Zugang) ──────
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -56,11 +72,33 @@ export const users = pgTable("users", {
   billingCity: text("billing_city"),
   billingCountry: text("billing_country").default("DE"),
 
+  // ── Billing-Felder (Migration 0027) ────────────────────────────────────
+  // Stripe-Customer-ID — der User existiert auch ohne Stripe-Konto (Admin-
+  // Invite kann passieren bevor er checkout macht). Erste Checkout-Session
+  // erzeugt den Customer und schreibt die ID hier rein.
+  stripeCustomerId: text("stripe_customer_id"),
+  // Aktueller Subscription-Status (synced via Stripe-Webhooks). NULL = keine
+  // Subscription je angelegt.
+  subscriptionStatus: subscriptionStatusEnum("subscription_status"),
+  // Stripe-Subscription-ID — wenn aktiv, koennen wir hier Customer-Portal
+  // und Cancel direkt addressieren.
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  // Wann endet der aktuelle bezahlte Zyklus? Bei `canceled` heisst das
+  // weiterhin Zugriff bis zu diesem Datum (Stripe-Standard).
+  subscriptionCurrentPeriodEnd: timestamp("subscription_current_period_end", {
+    withTimezone: true,
+  }),
+  // Cached Credit-Balance fuer schnelle UI-Lookups. Source-of-Truth bleibt
+  // das credit_transactions-Ledger (SUM(delta)). Wir sync'en den Cache bei
+  // jeder Mutation atomar im selben Transaction-Scope.
+  creditBalance: integer("credit_balance").notNull().default(0),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
 }, (t) => ({
   emailIdx: index("users_email_idx").on(t.email),
+  stripeCustomerIdx: index("users_stripe_customer_idx").on(t.stripeCustomerId),
 }));
 
 // ── Sessions (Lucia) ────────────────────────────────────────────────────────
@@ -988,6 +1026,102 @@ export const mediaUrls = pgTable(
 
 export type MediaUrl = typeof mediaUrls.$inferSelect;
 export type NewMediaUrl = typeof mediaUrls.$inferInsert;
+
+// ── Credit-Transactions (Migration 0027) ─────────────────────────────────
+// Append-Only Ledger jeder Credit-Bewegung. Nie UPDATE, nur INSERT.
+// Aktuelle Balance = SUM(delta) — wir cachen das in users.creditBalance
+// fuer schnelle Lookups, der Cache wird in derselben Transaktion atomar
+// fortgeschrieben.
+//
+// Idempotenz-Garantien:
+//   - `lead_id` UNIQUE bei `kind='video_charge'` verhindert Doppel-Charge
+//     pro Lead (auch wenn der Worker-Job mal retry'd wird).
+//   - `stripe_event_id` UNIQUE bei `kind='topup'` verhindert Doppel-Top-Up
+//     bei Stripe-Webhook-Retries.
+//   - `admin_adjust` und `promo_grant` haben keine externe Idempotenz —
+//     der Admin/Promo-Engine trackt das selbst.
+//
+// Sicherheits-Invarianten:
+//   - `delta` NICHT NULL, kann +/- sein. Positiv = Zugang, Negativ = Verbrauch.
+//   - `balance_after` ist der Snapshot der Balance NACH dieser Zeile (fuer
+//     Audit-Trail und Drift-Detection vs cached Balance).
+//   - `reason` ist Pflicht-Freitext fuer admin_adjust (Refund-Grund etc.).
+export const creditTransactions = pgTable(
+  "credit_transactions",
+  {
+    id: bigserial("id", { mode: "bigint" }).primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: creditTxKindEnum("kind").notNull(),
+    /** Positive = Zugang (topup, promo), Negative = Verbrauch (video_charge). */
+    delta: integer("delta").notNull(),
+    /** Snapshot der Balance NACH dieser Bewegung — fuer Audit/Drift-Check. */
+    balanceAfter: integer("balance_after").notNull(),
+    /** Bei video_charge: der konkrete Lead. Erzwingt 1 Charge pro Lead. */
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    /** Bei video_charge: der Run-Kontext (fuer Reporting). */
+    runId: uuid("run_id").references(() => runs.id, { onDelete: "set null" }),
+    /** Bei topup: Referenz auf Stripe-Event (gegen Webhook-Replay). */
+    stripeEventId: text("stripe_event_id"),
+    /** Bei topup: Stripe-Payment-Intent / Checkout-Session. */
+    stripeRef: text("stripe_ref"),
+    /** Bei admin_adjust: wer hat es gemacht. */
+    adminUserId: uuid("admin_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /** Freitext-Grund (Refund-Reason, Promo-Code, etc.). */
+    reason: text("reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    byUser: index("credit_tx_user_ts_idx").on(t.userId, t.createdAt),
+    // UNIQUE pro Lead bei video_charge — verhindert Doppel-Charge bei
+    // Worker-Retry. Partial-Index, damit nicht-charge Rows nicht erfasst.
+    uniqLeadCharge: uniqueIndex("credit_tx_lead_charge_uq")
+      .on(t.leadId)
+      .where(sql`${t.kind} = 'video_charge'`),
+    // UNIQUE pro Stripe-Event bei topup — Idempotenz gegen Webhook-Replay.
+    uniqStripeEvent: uniqueIndex("credit_tx_stripe_event_uq")
+      .on(t.stripeEventId)
+      .where(sql`${t.kind} = 'topup' AND ${t.stripeEventId} IS NOT NULL`),
+  }),
+);
+
+export type CreditTransaction = typeof creditTransactions.$inferSelect;
+export type NewCreditTransaction = typeof creditTransactions.$inferInsert;
+
+// ── Stripe-Webhook-Events (Migration 0027) ───────────────────────────────
+// Idempotenz-Tabelle gegen Stripe-Webhook-Replay. Stripe sendet bei
+// Timeouts denselben Event mehrfach — wir muessen jeden Event genau einmal
+// verarbeiten. PRIMARY KEY auf der Event-ID.
+//
+// Verarbeitungsmodell:
+//   1. Webhook-Receiver verifiziert Signatur.
+//   2. INSERT INTO stripe_webhook_events (id) — wenn DUP-KEY-VIOLATION,
+//      Event wurde schon verarbeitet, sofort 200 zurueck.
+//   3. Verarbeite Event in Transaction. Bei Erfolg: UPDATE processed_at.
+//   4. Bei Fail: behalte processed_at = NULL, Stripe wird retry'n.
+export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
+  /** Stripe-Event-ID (evt_...). */
+  id: text("id").primaryKey(),
+  /** Event-Type wie "checkout.session.completed". */
+  type: text("type").notNull(),
+  /** Volle Payload als JSONB — fuer Replay/Debug. */
+  payload: jsonb("payload").notNull().$type<unknown>(),
+  /** Wann verarbeitet (NULL = noch nicht / Fehler). */
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  /** Fehler bei Verarbeitung — fuer Debug. */
+  errorMessage: text("error_message"),
+  receivedAt: timestamp("received_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
+export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
 
 // ── Index-Namen als Konstanten ────────────────────────────────────────────
 //

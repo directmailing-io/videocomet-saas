@@ -142,8 +142,48 @@ export async function POST(
     );
   }
 
-  const mapping = cm.mapping;
+  // ── BILLING-GATE ────────────────────────────────────────────────────────
+  // 1) Subscription aktiv? (past_due gilt noch bis Gnadenfrist-Ende)
+  // 2) Credit-Balance >= geplante Lead-Zahl?
+  // Wir muessen VOR dem bulkInsertLeads pruefen — sonst haben wir Leads
+  // in der DB die nie generiert werden koennen.
   const rowsIn = cm.parsed.rows;
+  const plannedLeadCount = rowsIn.length;
+  try {
+    const { assertBillingReadyForRun } = await import(
+      "@/lib/billing/run-gate"
+    );
+    await assertBillingReadyForRun({
+      userId: auth.user.id,
+      plannedLeadCount,
+    });
+  } catch (err) {
+    if (err && typeof err === "object" && "kind" in err) {
+      const billingErr = err as { kind: string; message: string; details?: unknown };
+      if (billingErr.kind === "no_subscription") {
+        return NextResponse.json(
+          {
+            error: billingErr.message,
+            errorKind: "no_subscription",
+          },
+          { status: 402 },
+        );
+      }
+      if (billingErr.kind === "insufficient_credits") {
+        return NextResponse.json(
+          {
+            error: billingErr.message,
+            errorKind: "insufficient_credits",
+            details: billingErr.details,
+          },
+          { status: 402 },
+        );
+      }
+    }
+    throw err;
+  }
+
+  const mapping = cm.mapping;
 
   const bulkRows: BulkLeadRow[] = rowsIn.map((row, index) => {
     // Original columns + flattened mapped values (placeholder names) so the
