@@ -33,12 +33,17 @@ const COLUMNS: ReadonlyArray<{ title: string; links: ReadonlyArray<FooterLink> }
   },
 ];
 
-export function MarketingFooter() {
+export function MarketingFooter({ variant = "light" }: { variant?: "light" | "dark" } = {}) {
   const year = new Date().getFullYear();
+  const dark = variant === "dark";
   return (
     <footer
       id="page-footer"
-      className="relative w-full bg-surface border-t border-line overflow-hidden"
+      className={
+        dark
+          ? "relative w-full bg-[#0B0B12] border-t border-white/10 overflow-hidden"
+          : "relative w-full bg-surface border-t border-line overflow-hidden"
+      }
     >
       {/* Subtle brand backdrop top-right */}
       <div
@@ -60,9 +65,15 @@ export function MarketingFooter() {
               aria-label="Zur Startseite"
               className="inline-flex items-center"
             >
-              <Logo />
+              <Logo className={dark ? "brightness-0 invert" : undefined} />
             </Link>
-            <p className="mt-5 text-[14.5px] text-ink-muted leading-relaxed max-w-[28ch]">
+            <p
+              className={
+                dark
+                  ? "mt-5 text-[14.5px] text-white/60 leading-relaxed max-w-[28ch]"
+                  : "mt-5 text-[14.5px] text-ink-muted leading-relaxed max-w-[28ch]"
+              }
+            >
               Persönliche Video-Akquise per Brief.
               <br />
               Auffallen, in Erinnerung bleiben, Vertrauen aufbauen.
@@ -74,11 +85,13 @@ export function MarketingFooter() {
                 href="https://www.linkedin.com/company/videocomet"
                 label="LinkedIn"
                 Icon={Linkedin}
+                dark={dark}
               />
               <SocialIconLink
                 href="mailto:hello@videocomet.de"
                 label="E-Mail"
                 Icon={Mail}
+                dark={dark}
               />
             </div>
           </div>
@@ -86,7 +99,13 @@ export function MarketingFooter() {
           {/* Link columns */}
           {COLUMNS.map((col) => (
             <div key={col.title}>
-              <div className="text-[11px] font-bold tracking-[0.18em] uppercase text-ink mb-5">
+              <div
+                className={
+                  dark
+                    ? "text-[11px] font-bold tracking-[0.18em] uppercase text-white mb-5"
+                    : "text-[11px] font-bold tracking-[0.18em] uppercase text-ink mb-5"
+                }
+              >
                 {col.title}
               </div>
               <ul className="space-y-3">
@@ -94,7 +113,11 @@ export function MarketingFooter() {
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="group inline-flex items-center gap-1 text-[14.5px] text-ink-muted hover:text-brand-deep transition-colors"
+                      className={
+                        dark
+                          ? "group inline-flex items-center gap-1 text-[14.5px] text-white/60 hover:text-white transition-colors"
+                          : "group inline-flex items-center gap-1 text-[14.5px] text-ink-muted hover:text-brand-deep transition-colors"
+                      }
                     >
                       {link.label}
                       {link.external ? (
@@ -109,32 +132,55 @@ export function MarketingFooter() {
         </div>
 
         {/* Bottom bar */}
-        <div className="py-6 border-t border-line flex flex-col-reverse sm:flex-row items-start sm:items-center justify-between gap-5">
-          <span className="text-xs text-ink-muted">
+        <div
+          className={
+            dark
+              ? "py-6 border-t border-white/10 flex flex-col-reverse sm:flex-row items-start sm:items-center justify-between gap-5"
+              : "py-6 border-t border-line flex flex-col-reverse sm:flex-row items-start sm:items-center justify-between gap-5"
+          }
+        >
+          <span className={dark ? "text-xs text-white/50" : "text-xs text-ink-muted"}>
             © {year} VIDEOCOMET. Alle Rechte vorbehalten.
           </span>
-          <GermanyBadge />
+          <GermanyBadge dark={dark} />
         </div>
       </div>
     </footer>
   );
 }
 
-function GermanyBadge() {
+function GermanyBadge({ dark = false }: { dark?: boolean }) {
   return (
     <div
-      className="inline-flex items-center gap-3.5 pl-2.5 pr-4 py-2.5 rounded-2xl bg-white border border-line"
+      className={
+        dark
+          ? "inline-flex items-center gap-3.5 pl-2.5 pr-4 py-2.5 rounded-2xl bg-white/5 border border-white/10"
+          : "inline-flex items-center gap-3.5 pl-2.5 pr-4 py-2.5 rounded-2xl bg-white border border-line"
+      }
       style={{
-        boxShadow:
-          "0 10px 28px -10px rgba(15,23,42,0.2), 0 2px 6px -2px rgba(15,23,42,0.08)",
+        boxShadow: dark
+          ? "0 10px 28px -10px rgba(0,0,0,0.6), 0 2px 6px -2px rgba(0,0,0,0.35)"
+          : "0 10px 28px -10px rgba(15,23,42,0.2), 0 2px 6px -2px rgba(15,23,42,0.08)",
       }}
     >
       <FlagSeal />
       <div className="text-left">
-        <div className="text-[13.5px] font-extrabold text-ink leading-tight tracking-[-0.005em]">
+        <div
+          className={
+            dark
+              ? "text-[13.5px] font-extrabold text-white leading-tight tracking-[-0.005em]"
+              : "text-[13.5px] font-extrabold text-ink leading-tight tracking-[-0.005em]"
+          }
+        >
           Hosted in Germany
         </div>
-        <div className="text-[11px] text-ink-muted leading-tight mt-0.5">
+        <div
+          className={
+            dark
+              ? "text-[11px] text-white/60 leading-tight mt-0.5"
+              : "text-[11px] text-ink-muted leading-tight mt-0.5"
+          }
+        >
           Server und Datenbank in Deutschland
         </div>
       </div>
@@ -233,10 +279,12 @@ function SocialIconLink({
   href,
   label,
   Icon,
+  dark = false,
 }: {
   href: string;
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
+  dark?: boolean;
 }) {
   return (
     <a
@@ -244,7 +292,11 @@ function SocialIconLink({
       target="_blank"
       rel="noopener noreferrer"
       aria-label={label}
-      className="size-9 rounded-full bg-white border border-line flex items-center justify-center text-ink-muted hover:text-brand-deep hover:border-brand-soft hover:shadow-sm transition-all"
+      className={
+        dark
+          ? "size-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/70 hover:text-white hover:border-white/30 transition-all"
+          : "size-9 rounded-full bg-white border border-line flex items-center justify-center text-ink-muted hover:text-brand-deep hover:border-brand-soft hover:shadow-sm transition-all"
+      }
     >
       <Icon className="size-4" />
     </a>
