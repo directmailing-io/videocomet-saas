@@ -72,7 +72,7 @@ const MARKETING_ONLY_PATHS = new Set<string>([
   "/datenschutz",
 ]);
 function isMarketingOnlyPath(pathname: string): boolean {
-  if (isMarketingOnlyPath(pathname)) return true;
+  if (MARKETING_ONLY_PATHS.has(pathname)) return true;
   if (pathname === "/signup" || pathname.startsWith("/signup/")) return true;
   return false;
 }
