@@ -27,7 +27,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/components/ui/toaster";
 
 interface Props {
   open: boolean;
@@ -54,8 +53,8 @@ declare global {
 }
 
 export function SignupModal({ open, onOpenChange }: Props) {
-  const { toast } = useToast();
   const turnstileRef = React.useRef<HTMLDivElement>(null);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = React.useState<string | null>(null);
 
   const [form, setForm] = React.useState({
@@ -126,15 +125,16 @@ export function SignupModal({ open, onOpenChange }: Props) {
       return;
     }
     if (!form.acceptTerms) {
-      toast({ variant: "danger", title: "AGB müssen akzeptiert werden" });
+      setErrorMessage("AGB müssen akzeptiert werden");
       return;
     }
     if (siteKey && !turnstileToken) {
-      toast({ variant: "danger", title: "Bot-Schutz noch nicht bestätigt" });
+      setErrorMessage("Bot-Schutz noch nicht bestätigt");
       return;
     }
 
     setSubmitting(true);
+    setErrorMessage(null);
     try {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
@@ -157,11 +157,9 @@ export function SignupModal({ open, onOpenChange }: Props) {
       };
       if (!res.ok || !body.url) {
         if (body.errorKind === "existing_active") {
-          toast({
-            variant: "danger",
-            title: "Konto existiert bereits",
-            description: "Bitte einloggen oder Passwort zurücksetzen.",
-          });
+          setErrorMessage(
+            "Konto existiert bereits. Bitte einloggen oder Passwort zurücksetzen.",
+          );
           return;
         }
         throw new Error(body.error ?? `HTTP ${res.status}`);
@@ -169,11 +167,9 @@ export function SignupModal({ open, onOpenChange }: Props) {
       // Redirect zu Stripe-Checkout
       window.location.href = body.url;
     } catch (err) {
-      toast({
-        variant: "danger",
-        title: "Registrierung fehlgeschlagen",
-        description: err instanceof Error ? err.message : undefined,
-      });
+      setErrorMessage(
+        err instanceof Error ? err.message : "Registrierung fehlgeschlagen",
+      );
       setSubmitting(false);
     }
   }
@@ -328,6 +324,12 @@ export function SignupModal({ open, onOpenChange }: Props) {
                 Weiterleitung ins Produkt. Monatlich kündbar.
               </div>
             </div>
+
+            {errorMessage && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-3 text-xs text-red-800">
+                {errorMessage}
+              </div>
+            )}
 
             <Button
               type="submit"
