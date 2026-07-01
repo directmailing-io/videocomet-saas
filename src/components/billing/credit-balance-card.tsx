@@ -16,7 +16,7 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { Loader2, Zap } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopupModal } from "./topup-modal";
 
@@ -85,7 +85,7 @@ export function CreditBalanceCard() {
         )}
       >
         {/* Background image */}
-        <div className="relative w-full aspect-[16/10]">
+        <div className="relative w-full aspect-[4/3]">
           <Image
             src="/billing/credit-card-bg.png"
             alt=""
@@ -117,10 +117,7 @@ export function CreditBalanceCard() {
               buttonClass,
             )}
           >
-            <span className="inline-flex items-center gap-1.5">
-              <Zap className="size-3" />
-              {isZero ? "Jetzt aufladen" : "Aufladen"}
-            </span>
+            {isZero ? "Jetzt aufladen" : "Aufladen"}
           </button>
         </div>
 
