@@ -152,11 +152,33 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
 
 /**
  * customer.subscription.{created,updated,deleted}
+ *
+ * Bei `deleted` setzen wir stripeSubscriptionId zurueck auf NULL — der
+ * User kann dann einen sauberen neuen Checkout auf dem SELBEN
+ * stripeCustomerId starten (Customer bleibt erhalten fuer Historie +
+ * Rechnungen). Ohne das Reset wuerde ein Reaktivierungs-Versuch versuchen,
+ * die geloeschte Subscription-ID zu reaktivieren, was fehlschlaegt.
  */
 async function handleSubscriptionChange(event: Stripe.Event) {
   const sub = event.data.object as Stripe.Subscription;
   const userId = sub.metadata?.userId;
   if (!userId) return;
+
+  if (event.type === "customer.subscription.deleted") {
+    // Cleanup nach endgueltiger Loeschung.
+    await db
+      .update(users)
+      .set({
+        subscriptionStatus: "canceled",
+        stripeSubscriptionId: null, // Reset, damit Reaktivierung sauberen Checkout macht
+        // stripeCustomerId behalten — Rechnungshistorie bleibt zugreifbar
+        subscriptionCurrentPeriodEnd: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+    return;
+  }
+
   await syncSubscriptionToUser(userId, sub);
 }
 

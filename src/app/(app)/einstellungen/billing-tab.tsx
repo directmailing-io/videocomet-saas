@@ -129,8 +129,56 @@ export function BillingTab() {
     status.subscription.status === "active" ||
     status.subscription.status === "trialing";
 
+  const isPastDue = status.subscription.status === "past_due";
+  const isCanceled = status.subscription.status === "canceled";
+  const isUnpaid = status.subscription.status === "unpaid";
+
   return (
     <div className="space-y-6">
+      {/* Payment-Fail-Warnbanner ganz oben (wenn zutreffend) */}
+      {(isPastDue || isUnpaid) && (
+        <div className="rounded-squircle-md border-2 border-red-300 bg-red-50 p-5">
+          <div className="flex items-start gap-3">
+            <XCircle className="size-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="font-semibold text-sm text-red-900 mb-1">
+                {isPastDue
+                  ? "Deine letzte Zahlung konnte nicht eingezogen werden"
+                  : "Deine Zahlung ist mehrfach fehlgeschlagen"}
+              </div>
+              <p className="text-xs text-red-800 mb-3 leading-relaxed">
+                {isPastDue
+                  ? "Stripe versucht die Zahlung automatisch nochmal. Bis dahin hast du weiter Zugang. Wenn du deine Zahlungsmethode aktualisierst, verhinderst du die Sperre."
+                  : "Dein Zugang ist gesperrt. Aktualisiere deine Zahlungsmethode oder starte den Plan neu, um wieder rein zu kommen."}
+              </p>
+              <Button variant="brand" size="sm" onClick={openPortal}>
+                Zahlungsmethode aktualisieren
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {isCanceled && (
+        <div className="rounded-squircle-md border-2 border-amber-300 bg-amber-50 p-5">
+          <div className="flex items-start gap-3">
+            <XCircle className="size-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="font-semibold text-sm text-amber-900 mb-1">
+                Dein Zugang ist gekündigt
+              </div>
+              <p className="text-xs text-amber-800 mb-3 leading-relaxed">
+                Alle deine Daten bleiben erhalten. Reaktiviere den Plan
+                jederzeit, dann bist du sofort wieder produktiv. Unverbrauchte
+                Credits laufen nicht ab und stehen dir wieder zur Verfügung.
+              </p>
+              <Button variant="brand" size="sm" onClick={activateSubscription}>
+                Zugang reaktivieren
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Subscription-Card */}
       <div className="rounded-squircle-md border border-line bg-surface p-5">
         <div className="flex items-start justify-between gap-4 mb-4">

@@ -403,14 +403,19 @@ export function SignupForm() {
               </label>
 
               {/* Deal-Reminder direkt über dem Button */}
-              <div className="rounded-xl bg-brand-soft/60 p-4 text-[13px] sm:text-sm border border-brand/20">
+              <div className="rounded-xl bg-brand-soft/60 p-4 text-[13px] sm:text-sm border border-brand/20 space-y-2">
                 <div className="flex items-start gap-2">
                   <Info className="size-4 text-brand shrink-0 mt-0.5" />
                   <div>
-                    <strong>40 € pro Monat, netto.</strong> 3 Monate
-                    Mindestlaufzeit. Danach immer 3 Monate weiter, außer du
-                    kündigst. Jedes Video zieht 1 Credit, die kaufst du extra
-                    ab 1 € pro Stück.
+                    <div><strong>Du bestellst jetzt:</strong> Plattform-Zugang für 40 € pro Monat, netto.</div>
+                    <div className="text-ink-muted mt-1">3 Monate Mindestlaufzeit. Danach immer 3 Monate weiter, wenn du nicht mit einem Monat Vorlauf kündigst.</div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2 pt-2 border-t border-brand/20">
+                  <Zap className="size-4 text-brand shrink-0 mt-0.5" />
+                  <div>
+                    <div><strong>Zusätzlich brauchst du Credits</strong> für jedes Video.</div>
+                    <div className="text-ink-muted mt-1">Kaufst du bei Bedarf ab 1 € pro Credit. Kein Verfall. Kannst du überspringen bis du das erste Video machst.</div>
                   </div>
                 </div>
               </div>
