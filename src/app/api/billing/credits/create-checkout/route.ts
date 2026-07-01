@@ -24,7 +24,14 @@ import {
  * Credit-Grant aus.
  */
 const BODY = z.object({
-  package: z.enum(["credits_50", "credits_100", "credits_500"]),
+  package: z.enum([
+    "credits_50",
+    "credits_100",
+    "credits_250",
+    "credits_500",
+    "credits_1000",
+    "credits_5000",
+  ]),
 });
 
 export async function POST(req: NextRequest) {
@@ -79,7 +86,10 @@ export async function POST(req: NextRequest) {
   const priceMap: Record<typeof parsed.data.package, string> = {
     credits_50: prices.credits50,
     credits_100: prices.credits100,
+    credits_250: prices.credits250,
     credits_500: prices.credits500,
+    credits_1000: prices.credits1000,
+    credits_5000: prices.credits5000,
   };
   const appOrigin = (process.env.APP_URL ?? "https://app.videocomet.de").replace(
     /\/+$/,

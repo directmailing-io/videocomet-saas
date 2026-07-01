@@ -21,9 +21,16 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toaster";
 
 interface Pkg {
-  id: "credits_50" | "credits_100" | "credits_500";
+  id:
+    | "credits_50"
+    | "credits_100"
+    | "credits_250"
+    | "credits_500"
+    | "credits_1000"
+    | "credits_5000";
   credits: number;
   amountCents: number;
+  discountPct: number;
   label: string;
 }
 
@@ -120,11 +127,9 @@ export function TopupModal({
                   <div className="flex-1">
                     <div className="font-medium text-sm">{p.label}</div>
                     <div className="text-xs text-ink-muted">
-                      {p.credits === 100
-                        ? "5% Rabatt vs Einzelpreis"
-                        : p.credits === 500
-                          ? "15% Rabatt vs Einzelpreis"
-                          : "Standard-Preis"}
+                      {p.discountPct > 0
+                        ? `${p.discountPct}% Rabatt vs Einzelpreis`
+                        : "Standard-Preis"}
                     </div>
                   </div>
                   <div className="text-right shrink-0">

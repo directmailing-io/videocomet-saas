@@ -217,26 +217,26 @@ export function SignupForm() {
               </p>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="rounded-lg bg-white/[0.04] border border-white/10 py-2.5 px-1">
-                  <div className="text-[15px] font-bold text-white">50 €</div>
-                  <div className="text-[10px] text-white/50">50 Videos</div>
+                  <div className="text-[15px] font-bold text-white">100 €</div>
+                  <div className="text-[10px] text-white/50">100 Videos</div>
                 </div>
                 <div className="rounded-lg bg-white/[0.04] border-2 border-brand/60 py-2.5 px-1 relative">
                   <div className="absolute -top-2 left-1/2 -translate-x-1/2 text-[9px] font-bold text-white bg-brand px-1.5 py-0.5 rounded whitespace-nowrap">
-                    5 % gespart
+                    10 % gespart
                   </div>
-                  <div className="text-[15px] font-bold text-white">95 €</div>
-                  <div className="text-[10px] text-white/50">100 Videos</div>
+                  <div className="text-[15px] font-bold text-white">450 €</div>
+                  <div className="text-[10px] text-white/50">500 Videos</div>
                 </div>
                 <div className="rounded-lg bg-white/[0.04] border-2 border-brand/60 py-2.5 px-1 relative">
                   <div className="absolute -top-2 left-1/2 -translate-x-1/2 text-[9px] font-bold text-white bg-brand px-1.5 py-0.5 rounded whitespace-nowrap">
                     15 % gespart
                   </div>
-                  <div className="text-[15px] font-bold text-white">425 €</div>
-                  <div className="text-[10px] text-white/50">500 Videos</div>
+                  <div className="text-[15px] font-bold text-white">850 €</div>
+                  <div className="text-[10px] text-white/50">1000 Videos</div>
                 </div>
               </div>
               <p className="text-[11px] text-white/50 mt-3 text-center">
-                1 Credit = 1 Video. Standardpreis 1 € netto pro Credit.
+                1 Credit = 1 Video. Ab 250 Credits gibt&apos;s Mengenrabatt bis 20 %.
               </p>
             </div>
 
