@@ -28,10 +28,10 @@ export default function AgbPage() {
       <h2>§ 2 Leistungsbeschreibung</h2>
       <p>
         Der Anbieter stellt eine cloudbasierte Software zur Verfügung, mit der
-        Kunden personalisierte Outreach-Videos generieren und ihren Kontakten
-        zusenden können. Der Funktionsumfang ergibt sich aus der Produkt-
-        beschreibung auf der Website des Anbieters zum Zeitpunkt des
-        Vertragsschlusses.
+        Kunden personalisierte Videos für ihre Geschäftskontakte in Serie
+        erzeugen und automatisiert versenden können. Der Funktionsumfang
+        ergibt sich aus der Produktbeschreibung auf der Website des Anbieters
+        zum Zeitpunkt des Vertragsschlusses.
       </p>
 
       <h2>§ 3 Vertragsschluss</h2>
