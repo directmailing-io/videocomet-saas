@@ -42,6 +42,27 @@ const OWN_HOSTS = new Set<string>([
 const SANDBOX_LP_HOST = "lp.videocomet.de";
 
 /**
+ * Host-Split: die Marketing-Homepage lebt auf videocomet.de (+ www),
+ * der Memberbereich auf app.videocomet.de. Die Middleware sorgt dafuer,
+ * dass ein Request auf dem falschen Host auf die richtige Domain
+ * umgeleitet wird — sonst waeren /login, /agb etc. auf beiden Domains
+ * verfuegbar (Duplicate-Content + Cookie-Chaos).
+ *
+ * Localhost ist bewusst nicht dabei — im Dev laeuft alles auf einem Host.
+ */
+const APP_HOST = "app.videocomet.de";
+const MARKETING_HOSTS = new Set<string>([
+  "videocomet.de",
+  "www.videocomet.de",
+]);
+const MARKETING_ONLY_PATHS = new Set<string>([
+  "/",
+  "/agb",
+  "/impressum",
+  "/datenschutz",
+]);
+
+/**
  * Pfade die NIE durch das Custom-Domain-Rewrite gehen — sonst zerlegen wir
  * /api-Calls, Next-Static, das Tracking-Pixel etc.
  *
@@ -146,6 +167,51 @@ export function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = rest ? `/cv/${slug}/${rest}` : `/cv/${slug}`;
     return NextResponse.rewrite(url);
+  }
+
+  // ── Host-Split: videocomet.de = Marketing, app.videocomet.de = App ───
+  // Enforced nur fuer die Produktions-Hosts. Localhost/127.0.0.1 laufen
+  // durch den bestehenden Codepfad (App-Content auf einem Host).
+  if (rawHost === "www.videocomet.de") {
+    // Kanonisierung: www → non-www (SEO + Cookie-Konsistenz).
+    return NextResponse.redirect(
+      new URL(`https://videocomet.de${pathname}${search}`),
+      301,
+    );
+  }
+  if (MARKETING_HOSTS.has(rawHost)) {
+    // Auf der Marketing-Domain sind nur die Marketing-Pfade und die
+    // technisch-neutralen Passthrough-Endpunkte (/api/health etc.)
+    // erlaubt. Alles andere → 302 zur App-Domain.
+    if (!MARKETING_ONLY_PATHS.has(pathname) && !isPassthroughPath(pathname)) {
+      return NextResponse.redirect(
+        new URL(`https://app.videocomet.de${pathname}${search}`),
+        302,
+      );
+    }
+    // Marketing rendern: direkt durchlassen, ohne die spaeteren
+    // isAppPath/isAdminPath-Checks (die kennen die Marketing-Semantik nicht).
+    const marketingHeaders = new Headers(req.headers);
+    marketingHeaders.set("x-pathname", pathname);
+    return NextResponse.next({ request: { headers: marketingHeaders } });
+  }
+  if (rawHost === APP_HOST) {
+    // Marketing-Pfade auf App-Host → auf Marketing-Host umleiten
+    // (Kanonisierung). Root bleibt hier ausgeklammert und wird direkt
+    // in der App-Root-Handling behandelt (Login/Dashboard-Redirect).
+    if (MARKETING_ONLY_PATHS.has(pathname) && pathname !== "/") {
+      return NextResponse.redirect(
+        new URL(`https://videocomet.de${pathname}`),
+        302,
+      );
+    }
+    if (pathname === "/") {
+      // Root im Memberbereich: eingeloggt → Dashboard, sonst → Login.
+      const url = req.nextUrl.clone();
+      url.pathname = session ? "/kampagnen" : "/login";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
   }
 
   // ── Custom-Domain-Routing ────────────────────────────────────────────
