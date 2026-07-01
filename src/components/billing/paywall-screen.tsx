@@ -149,15 +149,15 @@ export function PaywallScreen({ reason, periodEnd }: Props) {
             <ul className="space-y-2 mb-6 text-sm">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Plattform-Zugang für <strong>40 € / Monat</strong> netto</span>
+                <span>Plattform-Zugang für <strong>40 € / Monat</strong> netto zzgl. MwSt.</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Monatlich kündbar — keine Bindung</span>
+                <span><strong>3 Monate Mindestlaufzeit</strong>, danach Verlängerung um jeweils 3 Monate</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Credits werden separat gekauft, verfallen nie</span>
+                <span>Für jedes generierte Video wird <strong>1 Credit</strong> verbraucht — Credits separat, ab 1 € pro Stück</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />

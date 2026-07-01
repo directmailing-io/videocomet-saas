@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
-import { SignupModal } from "@/components/marketing/signup-modal";
 
 /**
  * Marketing-Topnav mit drei Bereichen:
@@ -29,7 +28,6 @@ import { SignupModal } from "@/components/marketing/signup-modal";
 export function MarketingNav() {
   const [overDark, setOverDark] = React.useState(true);
   const [featuresOpen, setFeaturesOpen] = React.useState(false);
-  const [signupOpen, setSignupOpen] = React.useState(false);
   const menuWrapperRef = React.useRef<HTMLDivElement>(null);
 
   // Dark/Light je nach Scroll-Position. Light = ueber #how-it-works ODER
@@ -172,9 +170,8 @@ export function MarketingNav() {
           >
             Login
           </Link>
-          <button
-            type="button"
-            onClick={() => setSignupOpen(true)}
+          <Link
+            href="/signup"
             className={cn(
               "inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition-all",
               overDark
@@ -184,10 +181,9 @@ export function MarketingNav() {
           >
             Zugang erhalten
             <ArrowRight className="size-3.5" aria-hidden />
-          </button>
+          </Link>
         </div>
       </div>
-      <SignupModal open={signupOpen} onOpenChange={setSignupOpen} />
     </header>
   );
 }

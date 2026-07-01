@@ -45,33 +45,51 @@ export default function AgbPage() {
 
       <h2>§ 4 Vergütung und Zahlungsbedingungen</h2>
       <p>
-        Die Vergütung beträgt für den Plattform-Zugang <strong>40,00 € netto pro
-        Monat</strong> zzgl. der gesetzlichen Umsatzsteuer.
+        Die Vergütung für den Plattform-Zugang beträgt{" "}
+        <strong>40,00 € netto pro Monat</strong> zzgl. der gesetzlichen
+        Umsatzsteuer.
       </p>
       <p>
-        Zusätzlich benötigt der Kunde für jede erzeugte Video-Generierung
-        einen Credit. 1 Credit = 1,00 € netto. Credits werden als
-        Vorauszahlungen erworben und verfallen nicht.
+        <strong>
+          Der Plattform-Zugang allein berechtigt nicht zur Video-Generierung.
+        </strong>{" "}
+        Für jede vom System erfolgreich erzeugte Video-Generierung wird
+        zusätzlich <strong>1 Credit</strong> vom Guthaben des Kunden verbraucht.
+        Credits müssen separat erworben werden. Der Standardpreis beträgt 1,00 €
+        netto pro Credit; bei Erwerb größerer Pakete gelten Mengenrabatte
+        gemäß der Preisliste auf der Website. Credits verfallen nicht.
       </p>
       <p>
-        Die monatliche Abrechnung erfolgt jeweils zum Beginn des Nutzungs-
-        monats über Stripe. Credits werden bei Bestellung sofort in Rechnung
-        gestellt.
+        Die monatliche Abrechnung des Plattform-Zugangs erfolgt jeweils zum
+        Beginn des Nutzungsmonats über den Zahlungsdienstleister Stripe.
+        Credit-Käufe werden bei Bestellung sofort in Rechnung gestellt.
       </p>
 
       <h2>§ 5 Vertragslaufzeit und Kündigung</h2>
       <p>
-        Der Vertrag über den Plattform-Zugang läuft <strong>monatlich</strong>
-        und verlängert sich automatisch um jeweils einen Monat, sofern er
-        nicht mit einer Frist von einem Werktag zum Monatsende gekündigt wird.
+        Der Vertrag über den Plattform-Zugang hat eine{" "}
+        <strong>Mindestlaufzeit von 3 (drei) Monaten</strong>, beginnend mit
+        dem Tag der ersten erfolgreichen Zahlung.
       </p>
       <p>
-        Die Kündigung erfolgt einfach über die Kontoeinstellungen oder das
-        von Stripe bereitgestellte Kundenportal. Eine Kündigung per E-Mail ist
-        ebenfalls möglich.
+        Wird der Vertrag nicht mit einer Frist von <strong>einem Monat vor
+        Ende der jeweiligen Vertragslaufzeit</strong> in Textform gekündigt, so
+        verlängert er sich <strong>automatisch um jeweils weitere 3 (drei)
+        Monate</strong>.
       </p>
       <p>
-        Das Recht zur außerordentlichen fristlosen Kündigung bleibt unberührt.
+        Die Kündigung kann über die Kontoeinstellungen, das Stripe-
+        Kundenportal oder per E-Mail an <a href="mailto:support@videocomet.de">
+        support@videocomet.de</a> erklärt werden.
+      </p>
+      <p>
+        Unverbrauchte Credits bleiben auch nach Ende des Plattform-Zugangs
+        erhalten und können bei einer erneuten Aktivierung des Zugangs weiter
+        verwendet werden.
+      </p>
+      <p>
+        Das Recht zur außerordentlichen fristlosen Kündigung aus wichtigem
+        Grund bleibt für beide Vertragsparteien unberührt.
       </p>
 
       <h2>§ 6 Zahlungsverzug und Sperre des Zugangs</h2>
