@@ -24,7 +24,7 @@ export default function ImpressumPage() {
         Telefon: <a href="tel:+4915151005561">+49 151 51005561</a>
         <br />
         E-Mail:{" "}
-        <a href="mailto:support@videocomet.de">support@videocomet.de</a>
+        <a href="mailto:info@videocomet.de">info@videocomet.de</a>
       </p>
 
       <h2>Umsatzsteuer</h2>

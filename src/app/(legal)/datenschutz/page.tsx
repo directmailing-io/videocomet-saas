@@ -78,7 +78,7 @@ export default function DatenschutzPage() {
       </p>
       <p>
         Für Anfragen wenden Sie sich bitte an{" "}
-        <a href="mailto:support@videocomet.de">support@videocomet.de</a>.
+        <a href="mailto:info@videocomet.de">info@videocomet.de</a>.
       </p>
 
       <h2>7. Cookies</h2>

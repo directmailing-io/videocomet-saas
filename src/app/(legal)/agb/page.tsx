@@ -79,8 +79,8 @@ export default function AgbPage() {
       </p>
       <p>
         Die Kündigung kann über die Kontoeinstellungen, das Stripe-
-        Kundenportal oder per E-Mail an <a href="mailto:support@videocomet.de">
-        support@videocomet.de</a> erklärt werden.
+        Kundenportal oder per E-Mail an <a href="mailto:info@videocomet.de">
+        info@videocomet.de</a> erklärt werden.
       </p>
       <p>
         Unverbrauchte Credits bleiben auch nach Ende des Plattform-Zugangs

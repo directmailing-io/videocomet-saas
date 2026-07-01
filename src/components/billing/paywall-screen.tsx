@@ -207,10 +207,10 @@ export function PaywallScreen({ reason, periodEnd }: Props) {
         <p className="text-center text-xs text-ink-muted mt-6">
           Fragen? Schreib an{" "}
           <a
-            href="mailto:support@videocomet.de"
+            href="mailto:info@videocomet.de"
             className="text-brand hover:underline"
           >
-            support@videocomet.de
+            info@videocomet.de
           </a>
         </p>
       </div>
