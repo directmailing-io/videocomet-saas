@@ -28,17 +28,14 @@ export default function LoginPage() {
 
             <div className="mt-8 pt-6 border-t border-line-soft">
               <p className="text-xs text-ink-muted text-center">
-                Noch kein Konto? Konten werden vom Administrator angelegt.
+                Noch kein Konto?{" "}
+                <Link href="/#pricing" className="text-brand font-medium hover:underline">
+                  Jetzt Zugang holen
+                </Link>
               </p>
             </div>
           </div>
         </div>
-
-        <p className="text-xs text-ink-muted text-center mt-6">
-          <Link href="/admin/login" className="hover:text-ink transition-colors">
-            Administrator-Login
-          </Link>
-        </p>
       </div>
     </div>
   );

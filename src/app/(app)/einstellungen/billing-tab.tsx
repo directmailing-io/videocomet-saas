@@ -12,15 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toaster";
 import { TopupModal } from "@/components/billing/topup-modal";
-
-interface Tx {
-  id: string;
-  kind: "topup" | "video_charge" | "admin_adjust" | "promo_grant";
-  delta: number;
-  balanceAfter: number;
-  reason: string | null;
-  createdAt: string;
-}
+import { CreditHistory } from "./credit-history";
+import { InvoicesList } from "./invoices-list";
 
 interface Status {
   creditBalance: number;
@@ -29,7 +22,6 @@ interface Status {
     currentPeriodEnd: string | null;
     hasStripeAccount: boolean;
   };
-  transactions: Tx[];
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -39,13 +31,6 @@ const STATUS_LABEL: Record<string, string> = {
   canceled: "Gekündigt",
   incomplete: "Nicht abgeschlossen",
   unpaid: "Unbezahlt",
-};
-
-const KIND_LABEL: Record<Tx["kind"], string> = {
-  topup: "Credits gekauft",
-  video_charge: "Video generiert",
-  admin_adjust: "Admin-Korrektur",
-  promo_grant: "Bonus-Gutschrift",
 };
 
 export function BillingTab() {
@@ -237,46 +222,11 @@ export function BillingTab() {
         </Button>
       </div>
 
-      {/* Transaktions-Verlauf */}
-      <div className="rounded-squircle-md border border-line bg-surface">
-        <div className="p-5 border-b border-line">
-          <h3 className="text-base font-semibold">Verlauf</h3>
-          <p className="text-xs text-ink-muted mt-1">
-            Die letzten 20 Bewegungen. Für vollständige Rechnungen: Subscription
-            verwalten.
-          </p>
-        </div>
-        {status.transactions.length === 0 ? (
-          <div className="p-8 text-center text-sm text-ink-muted">
-            Noch keine Transaktionen.
-          </div>
-        ) : (
-          <div className="divide-y divide-line">
-            {status.transactions.map((tx) => (
-              <div key={tx.id} className="p-4 flex items-center gap-4">
-                <div className="flex-1">
-                  <div className="text-sm font-medium">{KIND_LABEL[tx.kind]}</div>
-                  <div className="text-xs text-ink-muted">
-                    {new Date(tx.createdAt).toLocaleString("de-DE")}
-                    {tx.reason && ` · ${tx.reason}`}
-                  </div>
-                </div>
-                <div
-                  className={`text-sm font-bold tabular-nums ${
-                    tx.delta > 0 ? "text-emerald-600" : "text-ink"
-                  }`}
-                >
-                  {tx.delta > 0 ? "+" : ""}
-                  {tx.delta}
-                </div>
-                <div className="text-xs text-ink-muted tabular-nums w-16 text-right">
-                  {tx.balanceAfter}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Rechnungen (Stripe) */}
+      <InvoicesList />
+
+      {/* Vollstaendige Credit-History mit Kampagne/Runde-Kontext */}
+      <CreditHistory />
 
       <TopupModal open={topupOpen} onOpenChange={setTopupOpen} />
     </div>
