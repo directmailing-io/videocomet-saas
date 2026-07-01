@@ -90,13 +90,34 @@ export async function POST(req: NextRequest) {
     mode: "payment",
     customer: customerId,
     line_items: [{ price: priceMap[parsed.data.package], quantity: 1 }],
+    // MwSt-Handling: Stripe Tax berechnet automatisch je nach Kundenland
+    // und USt-ID. Muss im Dashboard aktiviert sein — solange nicht,
+    // liefert Stripe 0€ Steuer, was aber trotzdem korrekt ausgewiesen wird.
     automatic_tax: { enabled: true },
     customer_update: { address: "auto", name: "auto" },
     tax_id_collection: { enabled: true },
     payment_method_types: ["card", "sepa_debit"],
     billing_address_collection: "required",
-    // Metadata sind essentiell: der Webhook muss wissen wieviele Credits
-    // gutgeschrieben werden und fuer welchen User.
+    // Rechnungspflicht §14 UStG: fuer Top-Ups (One-Time-Payments) muss
+    // Stripe automatisch eine Rechnung erzeugen — der Business-Name +
+    // USt-IdNr des Betreibers werden im Dashboard hinterlegt und in die
+    // PDF eingebrannt.
+    invoice_creation: {
+      enabled: true,
+      invoice_data: {
+        description: pkg.label,
+        metadata: {
+          userId: auth.user.id,
+          credits: String(pkg.credits),
+        },
+        // "Rechnungshinweis" — der wird im Footer der PDF gedruckt.
+        // Reverse-Charge-Hinweis bei EU-B2B kommt automatisch von
+        // Stripe Tax wenn USt-ID gegeben ist.
+        footer:
+          "Zahlbar sofort nach Erhalt. Fuer Rueckfragen kontaktieren Sie uns bitte.",
+        rendering_options: { amount_tax_display: "include_inclusive_tax" },
+      },
+    },
     metadata: {
       userId: auth.user.id,
       kind: "topup",
