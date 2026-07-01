@@ -2,11 +2,6 @@ export const metadata = { title: "Impressum — VIDEOCOMET" };
 
 /**
  * Impressum gemäß § 5 TMG.
- *
- * Placeholder für Adresse + Kontaktdaten. User (Daniel Kurzeja) muss noch
- * seine echten Angaben liefern. Wir zeigen aktuell nur den Namen. Für
- * einen Live-Launch fehlen noch: postalische Adresse, Telefon, USt-IdNr.
- * (falls vorhanden).
  */
 export default function ImpressumPage() {
   return (
@@ -15,17 +10,39 @@ export default function ImpressumPage() {
 
       <h2>Anbieter</h2>
       <p>
-        <strong>Daniel Kurzeja</strong>
+        Daniel Kurzeja
+        <br />
+        Herrleinstr. 39
+        <br />
+        97437 Haßfurt
+        <br />
+        Deutschland
       </p>
 
       <h2>Kontakt</h2>
       <p>
+        Telefon: <a href="tel:+4915151005561">+49 151 51005561</a>
+        <br />
         E-Mail:{" "}
         <a href="mailto:support@videocomet.de">support@videocomet.de</a>
       </p>
 
+      <h2>Umsatzsteuer</h2>
+      <p>
+        Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG:
+        <br />
+        <strong>DE369220308</strong>
+      </p>
+
+      <h2>Steuernummer</h2>
+      <p>249/141/40389</p>
+
       <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
-      <p>Daniel Kurzeja, Anschrift wie oben.</p>
+      <p>
+        Daniel Kurzeja
+        <br />
+        Herrleinstr. 39, 97437 Haßfurt
+      </p>
 
       <h2>Streitbeilegung</h2>
       <p>
