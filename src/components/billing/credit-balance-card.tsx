@@ -61,8 +61,13 @@ export function CreditBalanceCard() {
   }
 
   const balance = status.creditBalance;
-  const isLow = balance <= 10 && balance > 0;
+  // Grenzwerte:
+  //   Zero (0):    Panic-Bild, roter State
+  //   Low (1-24):  Panic-Bild, amber State
+  //   Normal (25+): CEO-Bild, brand State
   const isZero = balance === 0;
+  const isLow = balance > 0 && balance < 25;
+  const usePanicImage = balance < 25;
 
   const borderClass = isZero
     ? "ring-2 ring-red-500/40"
@@ -76,6 +81,10 @@ export function CreditBalanceCard() {
       ? "bg-amber-500 hover:bg-amber-600"
       : "bg-brand hover:bg-brand/90";
 
+  const bgImageSrc = usePanicImage
+    ? "/billing/credit-card-bg-low.png"
+    : "/billing/credit-card-bg.png";
+
   return (
     <>
       <div
@@ -87,7 +96,7 @@ export function CreditBalanceCard() {
         {/* Background image */}
         <div className="relative w-full aspect-[4/3]">
           <Image
-            src="/billing/credit-card-bg.png"
+            src={bgImageSrc}
             alt=""
             fill
             sizes="240px"
