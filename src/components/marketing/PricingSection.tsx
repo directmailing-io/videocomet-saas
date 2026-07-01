@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { ArrowRight, Check, Plus } from "lucide-react";
 import { RevealOnScroll } from "./RevealOnScroll";
+import { SignupModal } from "@/components/marketing/signup-modal";
 
 const NUTZEN: ReadonlyArray<{ title: string; body: string }> = [
   {
@@ -51,11 +52,13 @@ const EXAMPLES: ReadonlyArray<{ count: number; label: string }> = [
 ];
 
 export function PricingSection() {
+  const [signupOpen, setSignupOpen] = React.useState(false);
   return (
     <section
       id="pricing"
       className="relative z-[2] w-full bg-white py-24 md:py-32 overflow-hidden"
     >
+      <SignupModal open={signupOpen} onOpenChange={setSignupOpen} />
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
@@ -247,15 +250,16 @@ export function PricingSection() {
 
             {/* CTA */}
             <div className="mt-10 text-center">
-              <Link
-                href="/login"
+              <button
+                type="button"
+                onClick={() => setSignupOpen(true)}
                 className="inline-flex items-center justify-center gap-1.5 rounded-full px-7 py-3.5 text-sm font-semibold bg-ink text-white hover:bg-ink/90 transition-all shadow-[0_10px_28px_-8px_rgba(15,23,42,0.45)]"
               >
                 Jetzt starten
                 <ArrowRight className="size-4" />
-              </Link>
+              </button>
               <div className="text-[12px] text-ink-muted mt-4">
-                12 Monate Laufzeit. Danach monatlich kündbar.
+                Monatlich kündbar. Nur für Unternehmen (B2B).
               </div>
             </div>
           </div>

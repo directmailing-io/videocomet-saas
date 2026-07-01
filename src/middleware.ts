@@ -185,10 +185,18 @@ export function middleware(req: NextRequest) {
       url.search = pathname !== "/login" ? `?next=${encodeURIComponent(pathname + search)}` : "";
       return NextResponse.redirect(url);
     }
-    return NextResponse.next();
+    // Pathname als Request-Header propagieren — Server-Components
+    // (Layout, Access-Gate) koennen das per `headers()` lesen. Wir setzen
+    // ihn auf REQUEST-Level via `next({ request: { headers } })`, sonst
+    // sieht `headers()` in RSC den Wert nicht.
+    const passHeaders = new Headers(req.headers);
+    passHeaders.set("x-pathname", pathname);
+    return NextResponse.next({ request: { headers: passHeaders } });
   }
 
-  return NextResponse.next();
+  const finalHeaders = new Headers(req.headers);
+  finalHeaders.set("x-pathname", pathname);
+  return NextResponse.next({ request: { headers: finalHeaders } });
 }
 
 export const config = {
