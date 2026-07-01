@@ -3,12 +3,19 @@
 /**
  * Credit-Balance-Card fuer die Sidebar.
  *
- * Zeigt aktuelles Guthaben + "Aufladen"-Button. Poll'd initial nach Mount
- * und wenn ein Custom-Event `credit-balance-changed` gefeuert wird (nach
- * Checkout-Return oder Admin-Adjust).
+ * Neues Design: Foto-Hintergrund („CEO of Tubbyland") mit Dark-Gradient-Overlay.
+ * Das Bild transportiert den „Bosse-mit-Cash"-Vibe — Text bleibt minimal.
+ * Balance + Aufladen-Button sind unten platziert, oben ist das Bild nur mit
+ * weichem Overlay abgedunkelt.
+ *
+ * State-Farbe wird als Border-Glow + Button-Farbe kommuniziert:
+ *   - Normal: Brand-Purple
+ *   - Low (≤10): Amber
+ *   - Zero: Red
  */
 
 import * as React from "react";
+import Image from "next/image";
 import { Loader2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopupModal } from "./topup-modal";
@@ -46,7 +53,7 @@ export function CreditBalanceCard() {
 
   if (loading || !status) {
     return (
-      <div className="px-3 py-3 mx-2 mb-2 rounded-squircle-md bg-surface-muted border border-line flex items-center gap-2 text-xs text-ink-muted">
+      <div className="mx-2 mb-2 px-3 py-3 rounded-squircle-md bg-surface-muted border border-line flex items-center gap-2 text-xs text-ink-muted">
         <Loader2 className="size-3.5 animate-spin" />
         Guthaben lädt …
       </div>
@@ -54,56 +61,80 @@ export function CreditBalanceCard() {
   }
 
   const balance = status.creditBalance;
-  const isLow = balance <= 10;
+  const isLow = balance <= 10 && balance > 0;
   const isZero = balance === 0;
+
+  const borderClass = isZero
+    ? "ring-2 ring-red-500/40"
+    : isLow
+      ? "ring-2 ring-amber-500/40"
+      : "ring-1 ring-white/10";
+
+  const buttonClass = isZero
+    ? "bg-red-500 hover:bg-red-600"
+    : isLow
+      ? "bg-amber-500 hover:bg-amber-600"
+      : "bg-brand hover:bg-brand/90";
 
   return (
     <>
       <div
         className={cn(
-          "px-3 py-3 mx-2 mb-2 rounded-squircle-md border",
-          isZero
-            ? "bg-red-50 border-red-200"
-            : isLow
-              ? "bg-amber-50 border-amber-200"
-              : "bg-brand-soft border-brand/20",
+          "mx-2 mb-2 relative overflow-hidden rounded-squircle-md",
+          borderClass,
         )}
       >
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
-            <Zap className="size-3.5" />
-            Guthaben
+        {/* Background image */}
+        <div className="relative w-full aspect-[16/10]">
+          <Image
+            src="/billing/credit-card-bg.png"
+            alt=""
+            fill
+            sizes="240px"
+            className="object-cover"
+            priority={false}
+          />
+          {/* Gradient-Overlay: dunkel unten, semi-transparent oben.
+              Zusaetzlich ein Vignette-Effekt fuer premium-Feel. */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/20" />
+        </div>
+
+        {/* Overlay-Content unten */}
+        <div className="absolute inset-x-0 bottom-0 p-3">
+          <div className="flex items-baseline gap-1.5 mb-2">
+            <span className="text-2xl font-bold tabular-nums text-white leading-none drop-shadow">
+              {balance}
+            </span>
+            <span className="text-[11px] uppercase tracking-wider text-white/70 font-medium">
+              {balance === 1 ? "Credit" : "Credits"}
+            </span>
           </div>
+          <button
+            type="button"
+            onClick={() => setTopupOpen(true)}
+            className={cn(
+              "w-full text-xs font-semibold rounded-md py-1.5 text-white transition-colors shadow-lg",
+              buttonClass,
+            )}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <Zap className="size-3" />
+              {isZero ? "Jetzt aufladen" : "Aufladen"}
+            </span>
+          </button>
         </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-xl font-bold tabular-nums">{balance}</span>
-          <span className="text-xs text-ink-muted">
-            {balance === 1 ? "Credit" : "Credits"}
-          </span>
-        </div>
-        {isZero ? (
-          <p className="text-[11px] text-red-700 mt-1.5">
-            Aufladen um Videos zu generieren.
-          </p>
-        ) : isLow ? (
-          <p className="text-[11px] text-amber-700 mt-1.5">
-            Wenig Guthaben — bald aufladen.
-          </p>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => setTopupOpen(true)}
-          className={cn(
-            "mt-2 w-full text-xs font-medium rounded-md py-1.5 transition-colors",
-            isZero
-              ? "bg-red-600 text-white hover:bg-red-700"
-              : isLow
-                ? "bg-amber-600 text-white hover:bg-amber-700"
-                : "bg-brand text-white hover:bg-brand/90",
-          )}
-        >
-          Credits aufladen
-        </button>
+
+        {/* State-Badge oben-links wenn niedrig / null */}
+        {(isZero || isLow) && (
+          <div
+            className={cn(
+              "absolute top-2 left-2 text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded",
+              isZero ? "bg-red-500 text-white" : "bg-amber-500 text-white",
+            )}
+          >
+            {isZero ? "Leer" : "Wenig"}
+          </div>
+        )}
       </div>
       <TopupModal open={topupOpen} onOpenChange={setTopupOpen} />
     </>
