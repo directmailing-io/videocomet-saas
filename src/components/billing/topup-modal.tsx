@@ -1,21 +1,18 @@
 "use client";
 
 /**
- * Top-Up-Modal — Paket-Auswahl mit Streichpreis-Anker + Sweet-Spot-Highlight.
+ * Top-Up-Modal — kompakt, mobile-first, Sweet-Spot auf 500.
  *
- * Verkaufspsychologie:
- * - Bei Paketen mit Rabatt: Streichpreis (credits * 1 €) zeigen, Ersparnis
- *   absolut in €, Rabatt %, und Per-Video-Preis. Anchoring + Loss-Framing.
- * - Default-Selection: credits_500 (Sweet-Spot, 10 % Rabatt).
- *   Nicht der billigste, aber der attraktivste Trade-off.
- * - 500er-Karte bekommt "Beliebteste Wahl"-Badge, groessere visuelle
- *   Betonung (Ring + Brand-Glow), dominiert die Wahrnehmung.
- * - 5000er dient als Decoy: bei diesem Preis wirken 500/1000 vergleichs-
- *   weise "vernuenftig".
+ * Standardansicht: die 4 grossen Pakete (250/500/1000/5000). Die zwei
+ * kleinen (50/100) sind hinter einem Disclosure-Link "Kleinere Pakete
+ * anzeigen" — verfuegbar, aber optisch zurueckhaltend, damit der Blick
+ * bei den umsatzstaerkeren Paketen bleibt.
+ *
+ * Sweet-Spot: 500er hat "★ Beliebt"-Badge + Ring, ist Default-Selektion.
  */
 
 import * as React from "react";
-import { Check, Loader2, Star, Zap } from "lucide-react";
+import { Check, ChevronDown, Loader2, Star } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +39,7 @@ interface Pkg {
 }
 
 const SWEET_SPOT: Pkg["id"] = "credits_500";
+const SMALL_IDS = new Set<Pkg["id"]>(["credits_50", "credits_100"]);
 
 function formatEuro(cents: number): string {
   const euro = cents / 100;
@@ -61,6 +59,7 @@ export function TopupModal({
   const { toast } = useToast();
   const [packages, setPackages] = React.useState<Pkg[] | null>(null);
   const [selected, setSelected] = React.useState<Pkg["id"]>(SWEET_SPOT);
+  const [showSmall, setShowSmall] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
 
   React.useEffect(() => {
@@ -102,126 +101,53 @@ export function TopupModal({
     }
   }
 
-  const selectedPkg = packages?.find((p) => p.id === selected) ?? null;
+  const bigPkgs = React.useMemo(
+    () => packages?.filter((p) => !SMALL_IDS.has(p.id)) ?? [],
+    [packages],
+  );
+  const smallPkgs = React.useMemo(
+    () => packages?.filter((p) => SMALL_IDS.has(p.id)) ?? [],
+    [packages],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Credits aufladen</DialogTitle>
-          <DialogDescription>
-            1 Credit = 1 Video. Credits verfallen nicht. Alle Preise netto,
-            zzgl. MwSt.
+          <DialogDescription className="text-xs">
+            1 Credit = 1 Video. Kein Verfall. Preise netto, zzgl. MwSt.
           </DialogDescription>
         </DialogHeader>
 
         {packages ? (
-          <div className="space-y-2 py-2">
-            {packages.map((p) => {
-              const isSweetSpot = p.id === SWEET_SPOT;
-              const isSelected = selected === p.id;
-              const anchorCents = p.credits * 100; // 1 € pro Credit = Baseline
-              const savingsCents = anchorCents - p.amountCents;
-              const perVideoCents = Math.round(p.amountCents / p.credits);
-              const showAnchor = p.discountPct > 0;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setSelected(p.id)}
-                  className={cn(
-                    "relative w-full text-left rounded-squircle-md border transition-all",
-                    isSweetSpot ? "p-4" : "p-3",
-                    isSelected
-                      ? "border-brand bg-brand-soft shadow-[0_8px_28px_-8px_rgba(124,92,232,0.5)]"
-                      : "border-line hover:border-brand/40 hover:bg-surface-muted",
-                    isSweetSpot &&
-                      !isSelected &&
-                      "border-brand/40 bg-brand-soft/40",
-                  )}
-                >
-                  {isSweetSpot ? (
-                    <div className="absolute -top-2.5 left-4 inline-flex items-center gap-1 rounded-full bg-brand text-white text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider shadow">
-                      <Star className="size-3 fill-white" strokeWidth={0} />
-                      Beliebteste Wahl
-                    </div>
-                  ) : null}
+          <div className="space-y-1.5 -mx-1 px-1 max-h-[52vh] overflow-y-auto">
+            {/* Kleinere Pakete (auf Disclosure hinter Link) */}
+            {showSmall && smallPkgs.length > 0 ? (
+              <div className="space-y-1.5 pb-1">
+                {smallPkgs.map((p) => (
+                  <PackageRow
+                    key={p.id}
+                    pkg={p}
+                    selected={selected === p.id}
+                    isSweetSpot={false}
+                    onClick={() => setSelected(p.id)}
+                    compact
+                  />
+                ))}
+              </div>
+            ) : null}
 
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "size-5 rounded-full border-2 flex items-center justify-center shrink-0",
-                        isSelected ? "border-brand bg-brand" : "border-line",
-                      )}
-                    >
-                      {isSelected && (
-                        <Check className="size-3 text-white" strokeWidth={3} />
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div
-                        className={cn(
-                          "font-semibold leading-tight",
-                          isSweetSpot ? "text-base" : "text-sm",
-                        )}
-                      >
-                        {p.credits.toLocaleString("de-DE")} Credits
-                        <span className="text-ink-muted font-normal">
-                          {" "}
-                          · {p.credits.toLocaleString("de-DE")} Videos
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-ink-muted mt-0.5">
-                        {showAnchor ? (
-                          <>
-                            <span className="font-semibold text-emerald-600">
-                              {formatEuro(savingsCents)} €
-                            </span>{" "}
-                            gespart · nur{" "}
-                            <span className="font-semibold text-ink">
-                              {(perVideoCents / 100).toLocaleString("de-DE", {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}{" "}
-                              €
-                            </span>{" "}
-                            pro Video
-                          </>
-                        ) : (
-                          <>
-                            1 € pro Video · Einstiegspaket
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0">
-                      {showAnchor && (
-                        <div className="text-[11px] text-ink-muted line-through decoration-red-400 tabular-nums leading-none">
-                          {formatEuro(anchorCents)} €
-                        </div>
-                      )}
-                      <div
-                        className={cn(
-                          "font-bold tabular-nums leading-tight",
-                          isSweetSpot ? "text-lg" : "text-base",
-                          showAnchor ? "text-brand-deep" : "text-ink",
-                        )}
-                      >
-                        {formatEuro(p.amountCents)} €
-                      </div>
-                      <div className="text-[10px] text-ink-muted">netto</div>
-                      {showAnchor && (
-                        <div className="text-[9px] font-bold text-red-600 uppercase tracking-wider mt-0.5">
-                          −{p.discountPct} %
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+            {/* Grosse Pakete */}
+            {bigPkgs.map((p) => (
+              <PackageRow
+                key={p.id}
+                pkg={p}
+                selected={selected === p.id}
+                isSweetSpot={p.id === SWEET_SPOT}
+                onClick={() => setSelected(p.id)}
+              />
+            ))}
           </div>
         ) : (
           <div className="py-6 text-center text-sm text-ink-muted">
@@ -230,46 +156,28 @@ export function TopupModal({
           </div>
         )}
 
-        {selectedPkg ? (
-          <div className="rounded-lg bg-brand-soft/50 border border-brand/20 p-3 text-[12px] leading-relaxed">
-            <div className="flex items-start gap-2">
-              <Zap className="size-4 text-brand shrink-0 mt-0.5" />
-              <div>
-                Du kaufst{" "}
-                <strong>
-                  {selectedPkg.credits.toLocaleString("de-DE")} Credits
-                </strong>{" "}
-                für{" "}
-                <strong>{formatEuro(selectedPkg.amountCents)} €</strong> netto.
-                Reicht für{" "}
-                <strong>
-                  {selectedPkg.credits.toLocaleString("de-DE")} personalisierte
-                  Videos
-                </strong>
-                {selectedPkg.discountPct > 0 ? (
-                  <>
-                    {" "}
-                    und du sparst{" "}
-                    <strong>
-                      {formatEuro(
-                        selectedPkg.credits * 100 - selectedPkg.amountCents,
-                      )}{" "}
-                      €
-                    </strong>{" "}
-                    gegenüber dem Standardpreis.
-                  </>
-                ) : (
-                  "."
-                )}
-              </div>
-            </div>
-          </div>
+        {/* Disclosure-Toggle für die zwei kleinen Pakete */}
+        {packages && smallPkgs.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setShowSmall((v) => !v)}
+            className="inline-flex items-center gap-1 self-start text-xs text-ink-muted hover:text-brand-deep transition-colors -mt-1"
+          >
+            <ChevronDown
+              className={cn(
+                "size-3 transition-transform",
+                showSmall && "rotate-180",
+              )}
+            />
+            {showSmall ? "Kleinere Pakete ausblenden" : "Erst mal kleiner starten?"}
+          </button>
         ) : null}
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex justify-end gap-2 pt-1">
           <Button
             type="button"
             variant="ghost"
+            size="sm"
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >
@@ -293,5 +201,120 @@ export function TopupModal({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PackageRow({
+  pkg,
+  selected,
+  isSweetSpot,
+  compact = false,
+  onClick,
+}: {
+  pkg: Pkg;
+  selected: boolean;
+  isSweetSpot: boolean;
+  compact?: boolean;
+  onClick: () => void;
+}) {
+  const anchorCents = pkg.credits * 100;
+  const savingsCents = anchorCents - pkg.amountCents;
+  const perVideoCents = Math.round(pkg.amountCents / pkg.credits);
+  const showAnchor = pkg.discountPct > 0;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "relative w-full text-left rounded-squircle-sm border transition-all",
+        compact ? "px-2.5 py-2" : "px-3 py-2.5",
+        selected
+          ? "border-brand bg-brand-soft shadow-[0_6px_20px_-8px_rgba(124,92,232,0.5)]"
+          : "border-line hover:border-brand/40 hover:bg-surface-muted",
+        isSweetSpot && !selected && "border-brand/40 bg-brand-soft/40",
+      )}
+    >
+      {isSweetSpot ? (
+        <div className="absolute -top-2 left-3 inline-flex items-center gap-0.5 rounded-full bg-brand text-white text-[9px] font-bold px-1.5 py-0.5 uppercase tracking-wider shadow">
+          <Star className="size-2.5 fill-white" strokeWidth={0} />
+          Beliebt
+        </div>
+      ) : null}
+
+      <div className="flex items-center gap-2.5">
+        <div
+          className={cn(
+            "rounded-full border-2 flex items-center justify-center shrink-0",
+            compact ? "size-4" : "size-[18px]",
+            selected ? "border-brand bg-brand" : "border-line",
+          )}
+        >
+          {selected && (
+            <Check
+              className={cn("text-white", compact ? "size-2.5" : "size-3")}
+              strokeWidth={3}
+            />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div
+            className={cn(
+              "font-semibold leading-tight",
+              compact ? "text-[13px]" : "text-sm",
+            )}
+          >
+            {pkg.credits.toLocaleString("de-DE")}{" "}
+            <span className="text-ink-muted font-normal">Credits</span>
+          </div>
+          {!compact && (
+            <div className="text-[11px] text-ink-muted mt-0.5 leading-tight">
+              {showAnchor ? (
+                <>
+                  <span className="font-semibold text-emerald-600">
+                    {formatEuro(savingsCents)} €
+                  </span>{" "}
+                  gespart · nur{" "}
+                  <span className="text-ink">
+                    {(perVideoCents / 100).toLocaleString("de-DE", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{" "}
+                    €
+                  </span>
+                  /Video
+                </>
+              ) : (
+                <>Einstiegspaket · 1 €/Video</>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="text-right shrink-0 leading-none">
+          {showAnchor && !compact && (
+            <div className="text-[10px] text-ink-muted line-through decoration-red-400 tabular-nums">
+              {formatEuro(anchorCents)} €
+            </div>
+          )}
+          <div
+            className={cn(
+              "font-bold tabular-nums",
+              compact ? "text-[13px]" : "text-[15px]",
+              showAnchor ? "text-brand-deep" : "text-ink",
+              !compact && "mt-0.5",
+            )}
+          >
+            {formatEuro(pkg.amountCents)} €
+          </div>
+          {showAnchor && !compact && (
+            <div className="text-[9px] font-bold text-red-600 uppercase tracking-wider mt-0.5">
+              −{pkg.discountPct} %
+            </div>
+          )}
+        </div>
+      </div>
+    </button>
   );
 }
