@@ -107,15 +107,24 @@ export function PricingSection() {
                 <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted mb-3">
                   Grundtarif
                 </div>
+                {/* Anker: Streichpreis 375 € (2023er Preis) */}
+                <div className="flex items-center justify-center md:justify-end gap-2 mb-1">
+                  <span className="text-[13px] font-medium text-ink-muted line-through decoration-[1.5px] decoration-red-400 tabular-nums">
+                    375 €
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider">
+                    −89 %
+                  </span>
+                </div>
                 <div className="flex items-baseline gap-1 justify-center md:justify-end">
                   <span
-                    className="font-light tracking-[-0.04em] leading-none text-ink"
+                    className="font-light tracking-[-0.04em] leading-none text-brand-deep"
                     style={{ fontSize: "clamp(52px, 6.5vw, 88px)" }}
                   >
                     40
                   </span>
                   <span
-                    className="font-light tracking-[-0.04em] leading-none text-ink"
+                    className="font-light tracking-[-0.04em] leading-none text-brand-deep"
                     style={{ fontSize: "clamp(28px, 3.4vw, 44px)" }}
                   >
                     €
@@ -123,6 +132,10 @@ export function PricingSection() {
                 </div>
                 <div className="text-sm text-ink-muted mt-2">
                   netto / Monat
+                </div>
+                <div className="text-[11px] text-ink-muted/80 mt-1 leading-tight max-w-[24ch] mx-auto md:ml-auto md:mr-0">
+                  Was Kunden 2023 pro Monat gezahlt haben — heute:
+                  einmal die 40er, fertig.
                 </div>
               </div>
 

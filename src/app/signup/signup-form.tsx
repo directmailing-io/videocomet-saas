@@ -215,28 +215,56 @@ export function SignupForm() {
                 Was du nicht verbrauchst, bleibt liegen — kein Verfall,
                 kein monatlicher Zwang, Videos zu verschicken.
               </p>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-lg bg-white/[0.04] border border-white/10 py-2.5 px-1">
-                  <div className="text-[15px] font-bold text-white">100 €</div>
-                  <div className="text-[10px] text-white/50">100 Videos</div>
-                </div>
-                <div className="rounded-lg bg-white/[0.04] border-2 border-brand/60 py-2.5 px-1 relative">
-                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 text-[9px] font-bold text-white bg-brand px-1.5 py-0.5 rounded whitespace-nowrap">
-                    10 % gespart
+              <div className="grid grid-cols-3 gap-2 text-center items-end pt-3">
+                {/* 100 — Einstieg (kein Anker) */}
+                <div className="rounded-lg bg-white/[0.04] border border-white/10 py-2.5 px-1.5">
+                  <div className="text-[15px] font-bold text-white leading-tight">
+                    100 €
                   </div>
-                  <div className="text-[15px] font-bold text-white">450 €</div>
-                  <div className="text-[10px] text-white/50">500 Videos</div>
+                  <div className="text-[10px] text-white/50 mt-0.5">100 Videos</div>
+                  <div className="text-[9px] text-white/40 mt-0.5">1,00 €/Video</div>
                 </div>
-                <div className="rounded-lg bg-white/[0.04] border-2 border-brand/60 py-2.5 px-1 relative">
-                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 text-[9px] font-bold text-white bg-brand px-1.5 py-0.5 rounded whitespace-nowrap">
-                    15 % gespart
+
+                {/* 500 — Sweet-Spot: Anker + Beliebt-Badge + Glow */}
+                <div
+                  className="rounded-lg bg-brand/[0.14] border-2 border-brand py-3 px-1.5 relative"
+                  style={{
+                    boxShadow: "0 12px 32px -10px rgba(124,92,232,0.7)",
+                  }}
+                >
+                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-white bg-brand px-2 py-0.5 rounded-full whitespace-nowrap uppercase tracking-wider">
+                    ★ Beliebt
                   </div>
-                  <div className="text-[15px] font-bold text-white">850 €</div>
-                  <div className="text-[10px] text-white/50">1000 Videos</div>
+                  <div className="text-[10px] text-white/45 line-through decoration-red-400 leading-none tabular-nums">
+                    500 €
+                  </div>
+                  <div className="text-[17px] font-bold text-white leading-tight mt-0.5 tabular-nums">
+                    450 €
+                  </div>
+                  <div className="text-[10px] text-white/60 mt-0.5">500 Videos</div>
+                  <div className="text-[9px] font-semibold text-emerald-300 mt-0.5">
+                    −50 € · 0,90 €/Video
+                  </div>
+                </div>
+
+                {/* 1000 — Volume-Play mit Anker */}
+                <div className="rounded-lg bg-white/[0.04] border border-white/10 py-2.5 px-1.5">
+                  <div className="text-[10px] text-white/45 line-through decoration-red-400 leading-none tabular-nums">
+                    1.000 €
+                  </div>
+                  <div className="text-[15px] font-bold text-white leading-tight mt-0.5 tabular-nums">
+                    850 €
+                  </div>
+                  <div className="text-[10px] text-white/50 mt-0.5">1000 Videos</div>
+                  <div className="text-[9px] font-semibold text-emerald-300 mt-0.5">
+                    −150 € · 0,85 €/Video
+                  </div>
                 </div>
               </div>
-              <p className="text-[11px] text-white/50 mt-3 text-center">
-                1 Credit = 1 Video. Ab 250 Credits gibt&apos;s Mengenrabatt bis 20 %.
+              <p className="text-[11px] text-white/55 mt-4 text-center">
+                1 Credit = 1 Video. Bis zu{" "}
+                <strong className="text-white/85">20 % Rabatt</strong> ab 5.000
+                Credits.
               </p>
             </div>
 
