@@ -108,7 +108,9 @@ export async function POST(req: NextRequest) {
     automatic_tax: { enabled: true },
     customer_update: { address: "auto", name: "auto" },
     tax_id_collection: { enabled: true },
-    payment_method_types: ["card", "sepa_debit"],
+    // payment_method_types bewusst nicht gesetzt — Stripe nutzt automatisch
+    // alle im Dashboard aktivierten Methoden. SEPA muss dort aktiviert
+    // werden (Payment methods → SEPA Direct Debit).
     billing_address_collection: "required",
     // Rechnungspflicht §14 UStG: fuer Top-Ups (One-Time-Payments) muss
     // Stripe automatisch eine Rechnung erzeugen — der Business-Name +

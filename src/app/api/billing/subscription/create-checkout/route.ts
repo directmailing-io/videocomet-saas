@@ -82,7 +82,10 @@ export async function POST() {
       automatic_tax: { enabled: true },
       customer_update: { address: "auto", name: "auto" },
       tax_id_collection: { enabled: true },
-      payment_method_types: ["card", "sepa_debit"],
+      // payment_method_types bewusst nicht gesetzt — Stripe nutzt automatisch
+      // alle im Dashboard aktivierten Methoden (mind. Card). SEPA muss dort
+      // explizit aktiviert werden (Payment methods → SEPA Direct Debit),
+      // sobald das passiert ist es hier automatisch verfuegbar.
       billing_address_collection: "required",
       metadata: { userId: auth.user.id, kind: "subscription" },
       subscription_data: {
