@@ -133,9 +133,10 @@ export function PricingSection() {
                 <div className="text-sm text-ink-muted mt-2">
                   netto / Monat
                 </div>
-                <div className="text-[11px] text-ink-muted/80 mt-1 leading-tight max-w-[26ch] mx-auto md:ml-auto md:mr-0">
-                  So viel haben Kunden 2023 pro Monat gezahlt. Heute
-                  reichen 40 € und du bist dabei.
+                <div className="text-[11px] text-ink-muted/80 mt-1 leading-tight max-w-[32ch] mx-auto md:ml-auto md:mr-0">
+                  2024 waren es noch 375 € pro Monat plus 12 Monate
+                  Mindestlaufzeit. Heute reichen 40 € und drei
+                  entspannte Monate.
                 </div>
               </div>
 
