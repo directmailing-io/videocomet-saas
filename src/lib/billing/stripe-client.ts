@@ -90,6 +90,12 @@ export const CREDIT_PACKAGES: ReadonlyArray<{
 /**
  * Findet oder erzeugt einen Stripe-Customer fuer den User. Speichert die
  * ID auf users.stripeCustomerId beim ersten Checkout.
+ *
+ * Wenn eine `existingCustomerId` uebergeben wird, verifizieren wir sie
+ * gegen Stripe. Grund: nach einem Wechsel Test→Live existieren alte Test-
+ * Customer-IDs im Live-Account nicht mehr → `resource_missing`. Der Aufrufer
+ * muss `stripeCustomerId` in der DB updaten, wenn der zurueckgegebene Wert
+ * abweicht.
  */
 export async function findOrCreateCustomer(input: {
   userId: string;
@@ -98,8 +104,23 @@ export async function findOrCreateCustomer(input: {
   vatId?: string | null;
   existingCustomerId?: string | null;
 }): Promise<string> {
-  if (input.existingCustomerId) return input.existingCustomerId;
   const stripe = getStripe();
+  if (input.existingCustomerId) {
+    try {
+      const existing = await stripe.customers.retrieve(input.existingCustomerId);
+      // retrieve() kann ein Deleted-Customer-Objekt zurueckgeben statt zu werfen
+      if (!("deleted" in existing) || !existing.deleted) {
+        return input.existingCustomerId;
+      }
+    } catch (err: unknown) {
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? (err as { code?: unknown }).code
+          : undefined;
+      if (code !== "resource_missing") throw err;
+      // resource_missing → weiterfallen und neuen Customer anlegen
+    }
+  }
   const customer = await stripe.customers.create({
     email: input.email,
     name: input.name ?? undefined,

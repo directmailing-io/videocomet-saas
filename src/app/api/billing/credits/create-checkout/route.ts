@@ -50,6 +50,8 @@ export async function POST(req: NextRequest) {
   const pkg = CREDIT_PACKAGES.find((p) => p.id === parsed.data.package);
   if (!pkg) return NextResponse.json({ error: "Paket nicht gefunden" }, { status: 400 });
 
+  try {
+
   const [row] = await db
     .select({
       email: users.email,
@@ -74,7 +76,7 @@ export async function POST(req: NextRequest) {
     vatId: row.vatId ?? null,
     existingCustomerId: row.stripeCustomerId ?? null,
   });
-  if (!row.stripeCustomerId) {
+  if (customerId !== row.stripeCustomerId) {
     await db
       .update(users)
       .set({ stripeCustomerId: customerId, updatedAt: new Date() })
@@ -144,5 +146,15 @@ export async function POST(req: NextRequest) {
     cancel_url: `${appOrigin}/einstellungen?tab=abrechnung&topup=cancel`,
   });
 
-  return NextResponse.json({ url: session.url }, { status: 200 });
+    return NextResponse.json({ url: session.url }, { status: 200 });
+  } catch (err) {
+    console.error("[billing:credits:create-checkout]", err);
+    return NextResponse.json(
+      {
+        error:
+          "Checkout konnte nicht gestartet werden. Bitte in ein paar Sekunden nochmal versuchen. Wenn es weiterhin nicht klappt, melde dich unter info@videocomet.de.",
+      },
+      { status: 500 },
+    );
+  }
 }
