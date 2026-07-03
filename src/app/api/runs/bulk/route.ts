@@ -205,8 +205,8 @@ export async function POST(req: NextRequest) {
     const baseline = new Set(parsedTabs[0].headers.map((h) => h.trim()));
     for (const tab of parsedTabs.slice(1)) {
       const cols = new Set(tab.headers.map((h) => h.trim()));
-      const missing = [...baseline].filter((c) => !cols.has(c));
-      const extra = [...cols].filter((c) => !baseline.has(c));
+      const missing = Array.from(baseline).filter((c) => !cols.has(c));
+      const extra = Array.from(cols).filter((c) => !baseline.has(c));
       if (missing.length > 0 || extra.length > 0) {
         return NextResponse.json(
           {
