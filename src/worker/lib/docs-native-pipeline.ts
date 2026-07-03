@@ -9,21 +9,30 @@
  *
  * Pipeline (pro Lead):
  *   1. drive.files.copy(fileId, { parents: [SHARED_DRIVE_ID] })
- *      → Kopie im Shared Drive (dessen Storage der Organisation gehört, nicht dem SA).
- *   2. documents.batchUpdate(replaceAllText) für alle Merge-Tags.
- *   3. drive.files.export(mimeType=application/pdf) → PDF-Buffer.
- *   4. drive.files.delete(copyId) — auch bei Errors (try/finally).
+ *   2. documents.get → finde QR/Thumbnail-Marker per Aspect-Ratio
+ *   3. Upload QR/Thumbnail nach Bunny → CDN-URL
+ *   4. documents.batchUpdate(replaceAllText + replaceImage)
+ *   5. drive.files.export(mimeType=application/pdf)
+ *   6. drive.files.delete(copyId) + Bunny-Cleanup — try/finally.
  *
  * Voraussetzungen:
- *   - GOOGLE_DRIVE_SA_KEY (Service-Account-JSON) im Env
- *   - GOOGLE_SHARED_DRIVE_ID im Env — Shared Drive wo der SA Manager ist
- *   - Kunden-Doc auf "Jeder mit Link → Betrachter" (oder mehr) freigegeben
+ *   - GOOGLE_DRIVE_SA_KEY (Service-Account-JSON)
+ *   - GOOGLE_SHARED_DRIVE_ID (Shared Drive wo SA Manager ist)
+ *   - BUNNY_STORAGE_ACCESS_KEY + Zone-Config für temp-QR-Hosting
+ *   - Kunden-Doc auf "Jeder mit Link → Betrachter"
  *
- * Bilder-Replacement (QR + Thumbnail) folgt in einem späteren Schritt.
- * Für v1 belassen wir die Marker-Bilder im Doc (unpersonalisiert).
+ * Bild-Identifikation:
+ *   Wir traversieren body.content → alle inlineObjectElements, holen ihre
+ *   angezeigte Groesse aus inlineObjects[id]. Klassifikation nach Aspect-Ratio:
+ *     - 0.95..1.05 (quadratisch) → QR-Kandidat
+ *     - 1.70..1.83 (~16:9)       → Thumbnail-Kandidat
+ *   Bei mehreren Kandidaten: den ERSTEN nehmen (Doc-Reihenfolge).
  */
 
+import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { getDriveClient, getDocsClient, extractDocId } from "@/lib/google-docs/sa-auth";
+import { uploadFile, deleteFile } from "@/lib/bunny/storage";
 import type { docs_v1 } from "googleapis";
 
 export interface DocsNativePipelineInput {
@@ -31,12 +40,17 @@ export interface DocsNativePipelineInput {
   textVars: Record<string, string>;
   /** Optional: eindeutiger Suffix für die Copy (Debugging). */
   copyNameHint?: string;
+  /** Optional: Pfad zum personalisierten QR-Code (PNG). */
+  qrPngPath?: string | null;
+  /** Optional: Pfad zum personalisierten Thumbnail (PNG/JPG). */
+  thumbnailFilePath?: string | null;
 }
 
 export interface DocsNativePipelineOutput {
   pdfBuffer: Buffer;
   textReplacements: number;
-  /** ID der (mittlerweile gelöschten) temporären Doc-Kopie — für Logs. */
+  qrReplaced: boolean;
+  thumbReplaced: boolean;
   copyDocId: string;
 }
 
@@ -44,10 +58,6 @@ export function isDocsNativeConfigured(): boolean {
   return Boolean(process.env.GOOGLE_SHARED_DRIVE_ID && process.env.GOOGLE_DRIVE_SA_KEY);
 }
 
-/**
- * Erwartete Env: GOOGLE_SHARED_DRIVE_ID = Shared-Drive-Root-ID (startet
- * typischerweise mit "0A"). Wirft wenn nicht gesetzt.
- */
 function getSharedDriveId(): string {
   const id = process.env.GOOGLE_SHARED_DRIVE_ID;
   if (!id) {
@@ -56,6 +66,67 @@ function getSharedDriveId(): string {
     );
   }
   return id;
+}
+
+/**
+ * Findet Kandidaten fuer QR und Thumbnail im Doc anhand ihrer Aspect-Ratio.
+ * Wir nutzen die ANGEZEIGTE Groesse (was im Doc drin steht), weil die
+ * Original-Pixel-Groesse via Docs-API nicht direkt zugaenglich ist —
+ * Aspect-Ratio ist aber stabil (100x100 → 1:1 bleibt 1:1, egal wie skaliert).
+ */
+interface ImageCandidates {
+  qrObjectId: string | null;
+  thumbObjectId: string | null;
+}
+
+function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
+  const inlineObjects = doc.inlineObjects ?? {};
+  // Reihenfolge im Body sammeln → Priorisierung "erstes Vorkommen".
+  const orderedIds: string[] = [];
+  function walk(content: docs_v1.Schema$StructuralElement[] | undefined) {
+    if (!content) return;
+    for (const el of content) {
+      const p = el.paragraph;
+      if (p?.elements) {
+        for (const pe of p.elements) {
+          const io = pe.inlineObjectElement;
+          if (io?.inlineObjectId) orderedIds.push(io.inlineObjectId);
+        }
+      }
+      const table = el.table;
+      if (table?.tableRows) {
+        for (const row of table.tableRows) {
+          for (const cell of row.tableCells ?? []) {
+            walk(cell.content);
+          }
+        }
+      }
+    }
+  }
+  walk(doc.body?.content);
+
+  let qrObjectId: string | null = null;
+  let thumbObjectId: string | null = null;
+  for (const id of orderedIds) {
+    const obj = inlineObjects[id];
+    const embedded = obj?.inlineObjectProperties?.embeddedObject;
+    const size = embedded?.size;
+    const w = size?.width?.magnitude;
+    const h = size?.height?.magnitude;
+    if (!w || !h) continue;
+    const aspect = w / h;
+    // Quadratisch → QR
+    if (!qrObjectId && aspect >= 0.95 && aspect <= 1.05) {
+      qrObjectId = id;
+      continue;
+    }
+    // 16:9 → Thumbnail
+    if (!thumbObjectId && aspect >= 1.7 && aspect <= 1.83) {
+      thumbObjectId = id;
+      continue;
+    }
+  }
+  return { qrObjectId, thumbObjectId };
 }
 
 export async function renderViaDocsApi(
@@ -72,6 +143,7 @@ export async function renderViaDocsApi(
 
   const copyName = `VC-render-${input.copyNameHint ?? "lead"}-${Date.now()}`;
   let copyDocId: string | null = null;
+  const bunnyCleanupPaths: string[] = [];
 
   try {
     // 1. Doc in Shared Drive kopieren.
@@ -85,12 +157,46 @@ export async function renderViaDocsApi(
     }
     copyDocId = copy.data.id;
 
-    // 2. Merge-Tags via batchUpdate replaceAllText ersetzen.
-    // Wir bauen eine Request pro Merge-Tag. Unbekannte Tags im Template
-    // (die nicht in textVars sind) werden von Google einfach ignoriert.
-    // Zusätzlich räumen wir am Ende alle noch verbliebenen `{{...}}`
-    // Patterns per weiterer Requests weg — sonst blieben unbekannte Tags
-    // als roher Text im PDF stehen.
+    // 2. Doc-Struktur holen für Bild-Identifikation.
+    let qrObjectId: string | null = null;
+    let thumbObjectId: string | null = null;
+    if (input.qrPngPath || input.thumbnailFilePath) {
+      const structure = await docs.documents.get({ documentId: copyDocId });
+      const candidates = findImageCandidates(structure.data);
+      qrObjectId = candidates.qrObjectId;
+      thumbObjectId = candidates.thumbObjectId;
+    }
+
+    // 3. QR und Thumbnail nach Bunny hochladen, damit Docs-API sie via URL
+    // referenzieren kann. Bunny-CDN-URL ist public HTTPS — passt fuer replaceImage.
+    let qrBunnyUrl: string | null = null;
+    if (input.qrPngPath && qrObjectId) {
+      const buf = await readFile(input.qrPngPath);
+      const remotePath = `docs-native-tmp/qr-${randomUUID()}.png`;
+      const uploaded = await uploadFile({
+        buffer: buf,
+        remotePath,
+        contentType: "image/png",
+      });
+      qrBunnyUrl = uploaded.url;
+      bunnyCleanupPaths.push(uploaded.remotePath);
+    }
+    let thumbBunnyUrl: string | null = null;
+    if (input.thumbnailFilePath && thumbObjectId) {
+      const buf = await readFile(input.thumbnailFilePath);
+      // Content-Type raten anhand Endung — JPG oder PNG.
+      const isJpg = /\.jpe?g$/i.test(input.thumbnailFilePath);
+      const remotePath = `docs-native-tmp/thumb-${randomUUID()}.${isJpg ? "jpg" : "png"}`;
+      const uploaded = await uploadFile({
+        buffer: buf,
+        remotePath,
+        contentType: isJpg ? "image/jpeg" : "image/png",
+      });
+      thumbBunnyUrl = uploaded.url;
+      bunnyCleanupPaths.push(uploaded.remotePath);
+    }
+
+    // 4. Requests fuer batchUpdate zusammenbauen: replaceAllText + replaceImage.
     const requests: docs_v1.Schema$Request[] = [];
     for (const [key, value] of Object.entries(input.textVars)) {
       requests.push({
@@ -100,6 +206,25 @@ export async function renderViaDocsApi(
         },
       });
     }
+    if (qrObjectId && qrBunnyUrl) {
+      requests.push({
+        replaceImage: {
+          imageObjectId: qrObjectId,
+          uri: qrBunnyUrl,
+          imageReplaceMethod: "CENTER_CROP",
+        },
+      });
+    }
+    if (thumbObjectId && thumbBunnyUrl) {
+      requests.push({
+        replaceImage: {
+          imageObjectId: thumbObjectId,
+          uri: thumbBunnyUrl,
+          imageReplaceMethod: "CENTER_CROP",
+        },
+      });
+    }
+
     let textReplacements = 0;
     if (requests.length > 0) {
       const res = await docs.documents.batchUpdate({
@@ -112,7 +237,7 @@ export async function renderViaDocsApi(
       );
     }
 
-    // 3. PDF-Export via Google's eigenen Renderer.
+    // 5. PDF-Export via Google's eigenen Renderer.
     const pdfRes = await drive.files.export(
       { fileId: copyDocId, mimeType: "application/pdf" },
       { responseType: "arraybuffer" },
@@ -122,10 +247,12 @@ export async function renderViaDocsApi(
     return {
       pdfBuffer,
       textReplacements,
+      qrReplaced: qrObjectId !== null && qrBunnyUrl !== null,
+      thumbReplaced: thumbObjectId !== null && thumbBunnyUrl !== null,
       copyDocId,
     };
   } finally {
-    // 4. Cleanup — auch bei Fehlern.
+    // 6. Cleanup — auch bei Fehlern.
     if (copyDocId) {
       try {
         await drive.files.delete({
@@ -134,7 +261,16 @@ export async function renderViaDocsApi(
         });
       } catch (err) {
         console.warn(
-          `[docs-native] cleanup failed for ${copyDocId}: ${err instanceof Error ? err.message : "?"}`,
+          `[docs-native] doc-cleanup failed for ${copyDocId}: ${err instanceof Error ? err.message : "?"}`,
+        );
+      }
+    }
+    for (const path of bunnyCleanupPaths) {
+      try {
+        await deleteFile(path);
+      } catch (err) {
+        console.warn(
+          `[docs-native] bunny-cleanup failed for ${path}: ${err instanceof Error ? err.message : "?"}`,
         );
       }
     }

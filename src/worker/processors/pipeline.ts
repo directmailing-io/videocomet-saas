@@ -1175,6 +1175,32 @@ export async function pipelineProcessor(
             const { renderViaDocsApi } = await import(
               "../lib/docs-native-pipeline"
             );
+            // Thumbnail: bevorzugter lokaler Pfad. Falls nur Bunny-URL da
+            // ist, laden wir ihn hier einmalig runter — dieselbe Logik wie
+            // Renderer 3.0 unten.
+            let nativeThumbnailLocalPath: string | null = thumbFilePath;
+            const remoteThumbForNative =
+              leadCustomThumbnailUrl ??
+              runSharedThumbnailUrlForCustom ??
+              run.sharedThumbnailUrl ??
+              null;
+            if (!nativeThumbnailLocalPath && remoteThumbForNative) {
+              try {
+                const { writeFile } = await import("node:fs/promises");
+                const { join } = await import("node:path");
+                const downloadPath = join(workDir, "thumb-native.bin");
+                const rr = await fetch(remoteThumbForNative);
+                if (rr.ok) {
+                  const ab = await rr.arrayBuffer();
+                  await writeFile(downloadPath, Buffer.from(ab));
+                  nativeThumbnailLocalPath = downloadPath;
+                }
+              } catch (err) {
+                console.warn(
+                  `[pipeline] native-thumb download failed: ${(err as Error)?.message}`,
+                );
+              }
+            }
             const nativeResult = await withStageTimeout(
               () =>
                 renderViaDocsApi({
@@ -1186,6 +1212,8 @@ export async function pipelineProcessor(
                     pageUrlShort,
                   ),
                   copyNameHint: data.leadId.substring(0, 8),
+                  qrPngPath,
+                  thumbnailFilePath: nativeThumbnailLocalPath,
                 }),
               STAGE_TIMEOUTS_MS.docxModify + STAGE_TIMEOUTS_MS.docxToPdf,
               "docsNativeRender",
@@ -1197,7 +1225,7 @@ export async function pipelineProcessor(
               leadId: data.leadId,
               level: "info",
               stage: "docx",
-              message: `${leadLabel}: docs-native rendered in ${((Date.now() - nativeStart) / 1000).toFixed(1)}s (vars=${nativeResult.textReplacements})`,
+              message: `${leadLabel}: docs-native rendered in ${((Date.now() - nativeStart) / 1000).toFixed(1)}s (vars=${nativeResult.textReplacements}, qr=${nativeResult.qrReplaced}, thumb=${nativeResult.thumbReplaced})`,
               durationMs: Date.now() - nativeStart,
             });
           }
