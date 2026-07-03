@@ -112,6 +112,39 @@ export interface ActivityCenterProps {
 }
 
 const PAGE_LIMIT = 50;
+
+/**
+ * Backend-Funnel-Response auf FunnelCard-Erwartung mappen.
+ * Akzeptiert sowohl das aktuelle Backend-Shape (`steps`/`kind`/`pct`) als auch
+ * ein potenziell aelteres/neueres (`stages`/`key`/`percent`). Wenn nix passt,
+ * liefern wir `{ stages: [] }` — FunnelCard rendert dann seinen leeren State.
+ */
+function normalizeFunnelResponse(raw: unknown): FunnelResult {
+  if (!raw || typeof raw !== "object") return { stages: [] };
+  const obj = raw as Record<string, unknown>;
+  const source =
+    (Array.isArray(obj.stages) ? obj.stages : null) ??
+    (Array.isArray(obj.steps) ? obj.steps : null);
+  if (!source) return { stages: [] };
+  const stages = source
+    .map((item: unknown) => {
+      if (!item || typeof item !== "object") return null;
+      const s = item as Record<string, unknown>;
+      const key = String(s.key ?? s.kind ?? "");
+      const label = String(s.label ?? "");
+      const count = typeof s.count === "number" ? s.count : 0;
+      // Backend liefert pct als 0..100. FunnelCard's `percent` ist 0..1.
+      let percent: number | undefined;
+      if (typeof s.percent === "number") {
+        percent = s.percent;
+      } else if (typeof s.pct === "number") {
+        percent = s.pct / 100;
+      }
+      return { key, label, count, percent };
+    })
+    .filter((s): s is NonNullable<typeof s> => s !== null);
+  return { stages };
+}
 const SAVED_VIEWS_KEY = "videocomet.activity.savedViews.v1";
 
 // ─────────────────────────────────────────────────────────────────────
@@ -279,8 +312,13 @@ export function ActivityCenter({
           cache: "no-store",
         });
         if (!res.ok) return;
-        const data = (await res.json()) as FunnelResult;
-        if (!cancelled) setFunnel(data);
+        const raw = (await res.json()) as unknown;
+        // Backend liefert { scope, totalLeads, steps: [{kind,label,count,pct}] }
+        // FunnelCard erwartet { stages: [{key,label,count,percent}] }.
+        // Wir normalisieren beim Fetch damit die UI sich nicht mit dem
+        // Backend-Shape rumschlagen muss.
+        const normalized = normalizeFunnelResponse(raw);
+        if (!cancelled) setFunnel(normalized);
       } catch {
         /* funnel ist Bonus — error ist kein Show-Stopper */
       }

@@ -31,7 +31,7 @@ const DEFAULT_LABELS: Record<string, string> = {
 };
 
 export function FunnelCard({ data }: { data: FunnelResult | null }) {
-  if (!data || data.stages.length === 0) {
+  if (!data || !Array.isArray(data.stages) || data.stages.length === 0) {
     return (
       <Card>
         <CardContent className="p-4">
