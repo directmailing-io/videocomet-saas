@@ -37,6 +37,7 @@ import { cn, getInitials } from "@/lib/utils";
 export type AppNavKey =
   | "dashboard"
   | "campaigns"
+  | "contacts"
   | "analytics"
   | "media"
   | "landingpages"
