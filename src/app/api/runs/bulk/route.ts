@@ -10,7 +10,6 @@ import { campaigns, runs } from "@/lib/db/schema";
 import { parseCSV } from "@/lib/csv-parse";
 import { parseXLSX } from "@/lib/excel-parse";
 import { fetchGoogleSheetCsv } from "@/lib/google-sheets";
-import type { DedupeConfig } from "@/lib/dedupe/types";
 
 const MAX_ROWS_PER_TAB = 5000;
 
@@ -253,7 +252,10 @@ export async function POST(req: NextRequest) {
           name: tab.runName,
           status: "draft",
           columnMapping: columnMapping as unknown as Record<string, string>,
-          dedupeConfig: (payload.dedupeConfig ?? null) as unknown as DedupeConfig | null,
+          // Drizzle-Typ ist der schema-DedupeConfig mit index signature.
+          // payload.dedupeConfig kommt aus zod-parse (Record<string,unknown>),
+          // wir vertrauen dem Wizard's shape und casten via unknown.
+          dedupeConfig: (payload.dedupeConfig ?? null) as unknown as never,
           sourceType,
           sourceUrl,
           sourceTabGid: tab.gid ?? null,
