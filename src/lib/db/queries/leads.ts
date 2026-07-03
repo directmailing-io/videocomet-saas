@@ -207,6 +207,9 @@ export async function getLeadBySlugForDefaultDomain(
   if (rows[0]) return projectPublicLead(rows[0]);
 
   // Fallback: Alias-Table durchsuchen (alter Slug aus gedrucktem QR).
+  // Bei mehreren Aliases fuer denselben (slug, domain) — passiert wenn
+  // zwei Leads einer Kollision beide gebackfillt wurden — nehmen wir den
+  // NEUEREN. Das matcht die Intuition "letzte Kampagne gewinnt".
   // Wenn Match: aktuellen Lead holen und servieren. Der Aufrufer koennte
   // optional 301-redirecten auf leads.slug (siehe route.ts:/v/[slug]).
   const [alias] = await db
@@ -222,6 +225,7 @@ export async function getLeadBySlugForDefaultDomain(
         ),
       ),
     )
+    .orderBy(desc(leadSlugAliases.createdAt))
     .limit(1);
   if (!alias) return null;
   const [aliasLead] = await db
@@ -272,6 +276,9 @@ export async function getLeadBySlugAndDomain(
   if (rows[0]) return projectPublicLead(rows[0]);
 
   // Fallback: Alias-Table durchsuchen (alter Slug aus gedrucktem QR).
+  // Bei mehreren Aliases fuer denselben (slug, domain) — passiert wenn
+  // zwei Leads einer Kollision beide gebackfillt wurden — nehmen wir den
+  // NEUEREN. Das matcht die Intuition "letzte Kampagne gewinnt".
   const [alias] = await db
     .select({ leadId: leadSlugAliases.leadId })
     .from(leadSlugAliases)
@@ -285,6 +292,7 @@ export async function getLeadBySlugAndDomain(
         ),
       ),
     )
+    .orderBy(desc(leadSlugAliases.createdAt))
     .limit(1);
   if (!alias) return null;
   const [aliasLead] = await db
