@@ -1157,8 +1157,63 @@ export async function pipelineProcessor(
       }
 
       let drivePdfBuffer: Buffer | null = null;
-      let driveThumbSource: "drive-html" | null = null;
-      if (driveRendererAvailable) {
+      let driveThumbSource: "drive-html" | "drive-native" | null = null;
+
+      // ── Renderer 4.0 — Docs-API native (1:1 wie Google Docs) ───────────
+      // Erstwahl wenn GOOGLE_SHARED_DRIVE_ID + GOOGLE_DRIVE_SA_KEY gesetzt.
+      // Kopiert das Doc in den Shared Drive, ersetzt Merge-Tags via
+      // documents.batchUpdate, exportiert PDF via drive.files.export,
+      // loescht die Kopie. Ergebnis: exakt Google's eigenes PDF-Layout.
+      if (!drivePdfBuffer) {
+        try {
+          const { isDocsNativeConfigured } = await import(
+            "../lib/docs-native-pipeline"
+          );
+          if (isDocsNativeConfigured()) {
+            await setCurrentStage(data.leadId, "docxModify");
+            const nativeStart = Date.now();
+            const { renderViaDocsApi } = await import(
+              "../lib/docs-native-pipeline"
+            );
+            const nativeResult = await withStageTimeout(
+              () =>
+                renderViaDocsApi({
+                  googleDocsUrl: campaign.pdfGoogleDocsUrl!,
+                  textVars: buildDocxVars(
+                    lead.data ?? {},
+                    pageUrl!,
+                    placeholderMapping,
+                    pageUrlShort,
+                  ),
+                  copyNameHint: data.leadId.substring(0, 8),
+                }),
+              STAGE_TIMEOUTS_MS.docxModify + STAGE_TIMEOUTS_MS.docxToPdf,
+              "docsNativeRender",
+            );
+            drivePdfBuffer = nativeResult.pdfBuffer;
+            driveThumbSource = "drive-native";
+            await insertPipelineEvent({
+              runId: data.runId,
+              leadId: data.leadId,
+              level: "info",
+              stage: "docx",
+              message: `${leadLabel}: docs-native rendered in ${((Date.now() - nativeStart) / 1000).toFixed(1)}s (vars=${nativeResult.textReplacements})`,
+              durationMs: Date.now() - nativeStart,
+            });
+          }
+        } catch (err) {
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "warn",
+            stage: "docx",
+            message: `${leadLabel}: docs-native failed (${(err as Error)?.message}); falling back to HTML-Renderer`,
+          });
+          drivePdfBuffer = null;
+        }
+      }
+
+      if (!drivePdfBuffer && driveRendererAvailable) {
         try {
           await setCurrentStage(data.leadId, "docxModify");
           const driveStart = Date.now();
