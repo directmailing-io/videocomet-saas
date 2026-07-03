@@ -19,9 +19,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { leads, runs } from "@/lib/db/schema";
+import { leads, leadSlugAliases, runs } from "@/lib/db/schema";
 import { buildCustomLpCspHeader } from "@/lib/custom-lp/csp";
 import { resolveCustomDomainHost } from "@/lib/custom-domain-host";
 import { renderCustomLp } from "@/lib/custom-lp/renderer";
@@ -69,7 +69,30 @@ async function hasCustomLpPin(
     // Public-LP-Lookup-Logik in queries/custom-lp-public.ts.
     .orderBy(desc(leads.createdAt))
     .limit(1);
-  return Boolean(row?.pinnedVersionId);
+  if (row) return Boolean(row.pinnedVersionId);
+
+  // Alias-Fallback (Migration 0029): alter Slug aus gedrucktem QR/Brief.
+  // Wir schauen ob's einen Alias gibt der auf einen Lead mit gepinnten
+  // Custom-LP zeigt.
+  const aliasCondition = domainId
+    ? and(eq(leadSlugAliases.slug, slug), eq(leadSlugAliases.domainId, domainId))
+    : and(eq(leadSlugAliases.slug, slug), isNull(leadSlugAliases.domainId));
+  const [aliasRow] = await db
+    .select({ pinnedVersionId: runs.customLpVersionId })
+    .from(leadSlugAliases)
+    .innerJoin(leads, eq(leads.id, leadSlugAliases.leadId))
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        aliasCondition,
+        or(
+          isNull(leadSlugAliases.expiresAt),
+          gt(leadSlugAliases.expiresAt, new Date()),
+        ),
+      ),
+    )
+    .limit(1);
+  return Boolean(aliasRow?.pinnedVersionId);
 }
 
 /**

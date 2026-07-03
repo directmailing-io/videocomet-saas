@@ -237,10 +237,13 @@ export interface GenerateSlugOptions {
   campaignSlugSuffix?: string | null;
   /**
    * Wie Kollisions-Suffixe aussehen sollen:
-   *   - `numeric` (Default): `base`, `base-2`, `base-3`, … (lesbar, neuer Modus)
-   *   - `hex`: `base-a4f2` (alter Modus, Bestandsschutz für Migrationsweg)
+   *   - `numeric`: `base`, `base-2`, `base-3`, … (Bestandsschutz für alte Codepfade)
+   *   - `hex`:     `base-a4f2` (Bestandsschutz für Migrationsweg)
+   *   - `always-hex` (Default seit 0029): `base-a4f2` — IMMER, auch beim ersten
+   *     Versuch. Verhindert Cross-Campaign-Slug-Collision auf Custom-Domains
+   *     PER KONSTRUKTION und erhöht die Guessability (~65k Kombos pro Name).
    */
-  collisionStrategy?: "numeric" | "hex";
+  collisionStrategy?: "numeric" | "hex" | "always-hex";
 }
 
 /**
@@ -265,7 +268,7 @@ export interface GenerateSlugOptions {
  */
 export async function generateSlug(opts: GenerateSlugOptions): Promise<string> {
   const maxAttempts = opts.maxAttempts ?? 8;
-  const collisionStrategy = opts.collisionStrategy ?? "numeric";
+  const collisionStrategy = opts.collisionStrategy ?? "always-hex";
 
   let base = renderSlugTemplate(
     opts.template ?? DEFAULT_SLUG_TEMPLATE,
@@ -293,7 +296,20 @@ export async function generateSlug(opts: GenerateSlugOptions): Promise<string> {
     base = `${base}-${slugHexSuffix()}`;
   }
 
-  // Erst-Versuch ohne Kollisions-Suffix.
+  // ── Neue Default-Strategie: IMMER HEX ────────────────────────────────
+  // Jeder Lead bekommt einen HEX-Suffix — auch beim ersten Vorkommen.
+  // Verhindert Cross-Campaign-Slug-Collision (Bug 2026-07-03) per
+  // Konstruktion und erhoeht die Anti-Enumeration-Barriere.
+  if (collisionStrategy === "always-hex") {
+    for (let i = 0; i < maxAttempts; i += 1) {
+      const candidate = `${base}-${slugHexSuffix()}`;
+      if (await opts.isAvailable(candidate)) return candidate;
+    }
+    // Letzter Ausweg: Epoch-basiert (nahezu kollisionsfrei).
+    return `${base}-${Date.now().toString(36)}`;
+  }
+
+  // Erst-Versuch ohne Kollisions-Suffix (Legacy-Strategien).
   if (await opts.isAvailable(base)) return base;
 
   if (collisionStrategy === "numeric") {

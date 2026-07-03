@@ -489,6 +489,46 @@ export const leads = pgTable("leads", {
     .where(sql`${t.domainId} IS NOT NULL AND ${t.slug} IS NOT NULL`),
 }));
 
+/**
+ * Alte Slugs die auf einen aktuellen Lead zeigen — Backward-Compat fuer
+ * gedruckte QR-Codes und Briefe wenn wir einen Slug ueberschreiben.
+ *
+ * Wird gefuellt bei:
+ *   - Migration 0029 (HEX-Suffix-Backfill fuer alle bestehenden Leads)
+ *   - Rename eines Leads (wenn wir es je erlauben)
+ *   - Delete + Re-Add (der alte Slug faellt ins Alias, der neue Lead
+ *     bekommt einen neuen HEX-Suffix)
+ *
+ * Lookup-Reihenfolge in `/v/[slug]`:
+ *   1. leads.slug direkt
+ *   2. lead_slug_aliases.slug (mit expires_at check) → 301-Redirect
+ *      auf canonical URL
+ */
+export const leadSlugAliases = pgTable("lead_slug_aliases", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leadId: uuid("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull(),
+  /**
+   * Optional — NULL fuer Default-Domain-Leads (app.videocomet.de/v/<slug>),
+   * gesetzt fuer Custom-Domain-Leads. Analog zu leads.domain_id.
+   */
+  domainId: uuid("domain_id").references(() => userDomains.id, { onDelete: "cascade" }),
+  /**
+   * NULL = permanenter Alias (z.B. fuer aktive gedruckte Briefe).
+   * Sonst: nach diesem Datum 410 Gone.
+   */
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // Zwei partial-Indices analog zur leads-Table.
+  lookupCustomIdx: index("lead_slug_aliases_lookup_custom_idx")
+    .on(t.domainId, t.slug)
+    .where(sql`${t.domainId} IS NOT NULL`),
+  lookupDefaultIdx: index("lead_slug_aliases_lookup_default_idx")
+    .on(t.slug)
+    .where(sql`${t.domainId} IS NULL`),
+}));
+
 // ── Analytics-Events ────────────────────────────────────────────────────────
 export const analyticsEvents = pgTable("analytics_events", {
   id: uuid("id").primaryKey().defaultRandom(),

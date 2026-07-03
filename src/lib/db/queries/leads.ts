@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, gt } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { leads, runs } from "@/lib/db/schema";
+import { leads, leadSlugAliases, runs } from "@/lib/db/schema";
 import type { RemovedDetail, RemovedReason } from "@/lib/db/schema";
 import type {
   PreflightCounts,
@@ -204,7 +204,32 @@ export async function getLeadBySlugForDefaultDomain(
       },
     );
   }
-  return projectPublicLead(rows[0] ?? null);
+  if (rows[0]) return projectPublicLead(rows[0]);
+
+  // Fallback: Alias-Table durchsuchen (alter Slug aus gedrucktem QR).
+  // Wenn Match: aktuellen Lead holen und servieren. Der Aufrufer koennte
+  // optional 301-redirecten auf leads.slug (siehe route.ts:/v/[slug]).
+  const [alias] = await db
+    .select({ leadId: leadSlugAliases.leadId })
+    .from(leadSlugAliases)
+    .where(
+      and(
+        eq(leadSlugAliases.slug, slug),
+        isNull(leadSlugAliases.domainId),
+        or(
+          isNull(leadSlugAliases.expiresAt),
+          gt(leadSlugAliases.expiresAt, new Date()),
+        ),
+      ),
+    )
+    .limit(1);
+  if (!alias) return null;
+  const [aliasLead] = await db
+    .select()
+    .from(leads)
+    .where(eq(leads.id, alias.leadId))
+    .limit(1);
+  return projectPublicLead(aliasLead ?? null);
 }
 
 /**
@@ -244,7 +269,30 @@ export async function getLeadBySlugAndDomain(
       },
     );
   }
-  return projectPublicLead(rows[0] ?? null);
+  if (rows[0]) return projectPublicLead(rows[0]);
+
+  // Fallback: Alias-Table durchsuchen (alter Slug aus gedrucktem QR).
+  const [alias] = await db
+    .select({ leadId: leadSlugAliases.leadId })
+    .from(leadSlugAliases)
+    .where(
+      and(
+        eq(leadSlugAliases.slug, slug),
+        eq(leadSlugAliases.domainId, domainId),
+        or(
+          isNull(leadSlugAliases.expiresAt),
+          gt(leadSlugAliases.expiresAt, new Date()),
+        ),
+      ),
+    )
+    .limit(1);
+  if (!alias) return null;
+  const [aliasLead] = await db
+    .select()
+    .from(leads)
+    .where(eq(leads.id, alias.leadId))
+    .limit(1);
+  return projectPublicLead(aliasLead ?? null);
 }
 
 export async function listLeadsByRun(runId: string, userId: string): Promise<Lead[]> {

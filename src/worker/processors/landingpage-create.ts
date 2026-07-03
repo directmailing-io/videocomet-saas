@@ -195,10 +195,12 @@ export async function runLandingPageCreate(
     effectiveDomainId,
   );
 
-  // 3) Slug aus Template + Daten generieren. `numeric` als Kollisions-Strategie
-  //    — lesbarer als Hex (`simon-krempel-2` statt `simon-krempel-a3f7`).
-  //    Der optionale `campaignSlugSuffix` wird vom Generator auf jeden Slug
-  //    angehängt (Tenant-Marker).
+  // 3) Slug aus Template + Daten generieren. Seit 2026-07-03 `always-hex` —
+  //    jeder Slug bekommt IMMER einen 4-char HEX-Suffix, auch beim ersten
+  //    Vorkommen. Verhindert Cross-Campaign-Slug-Collision auf Custom-Domains
+  //    (Bug: video.digispace.at/markus-oberdacher lieferte falsches Video
+  //    wenn zwei Kampagnen desselben Users denselben Lead-Namen enthielten).
+  //    Der optionale `campaignSlugSuffix` bleibt zusaetzlich moeglich.
   let slug = await generateSlug({
     template: input.slugTemplate,
     leadData: input.leadData,
@@ -206,7 +208,7 @@ export async function runLandingPageCreate(
     isAvailable,
     fallbackId: input.rowIndex,
     campaignSlugSuffix: input.campaignSlugSuffix,
-    collisionStrategy: "numeric",
+    collisionStrategy: "always-hex",
   });
 
   // 4) Atomarer Update mit Retry-Safety-Net gegen Race-Conditions (zwei
