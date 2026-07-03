@@ -19,6 +19,48 @@ function clean(value: unknown): string {
   return String(value).trim();
 }
 
+/**
+ * Zaehlt die Zeilen jedes Tabs OHNE alle Zellen zu formatieren — nutzt das
+ * `!ref`-Range statt sheet_to_json, damit die Antwort auch bei grossen
+ * Files unter 1s bleibt. Fuer den Multi-Tab-Picker im Wizard.
+ */
+export interface XlsxTabInfo {
+  index: number;
+  name: string;
+  rowCount: number;
+  columnCount: number;
+  isEmpty: boolean;
+}
+
+export function getXlsxTabs(buffer: Buffer): XlsxTabInfo[] {
+  const workbook = XLSX.read(buffer, {
+    type: "buffer",
+    cellDates: false,
+    // Nur Bookkeeping — WIR wollen keine cell values, die Range reicht.
+    sheetRows: 0,
+    bookSheets: true,
+  });
+  const names = workbook.SheetNames ?? [];
+  return names.map((name, index) => {
+    const sheet = workbook.Sheets[name];
+    const ref = sheet?.["!ref"];
+    if (!ref) {
+      return { index, name, rowCount: 0, columnCount: 0, isEmpty: true };
+    }
+    const decoded = XLSX.utils.decode_range(ref);
+    // decoded ist 0-basiert und exklusiv → +1 fuer Anzeige, −1 fuer Header-Zeile.
+    const rowCount = Math.max(0, decoded.e.r - decoded.s.r);
+    const columnCount = decoded.e.c - decoded.s.c + 1;
+    return {
+      index,
+      name,
+      rowCount,
+      columnCount,
+      isEmpty: rowCount === 0,
+    };
+  });
+}
+
 export function parseXLSX(buffer: Buffer, sheetName?: string): ParseXlsxResult {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: false });
   const sheetNames = workbook.SheetNames ?? [];

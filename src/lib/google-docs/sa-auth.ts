@@ -21,15 +21,17 @@
  *   - Google-Workspace-Lizenz (SA-Drive-Quota reicht fuer ~12k req/min)
  */
 
-import { google, type drive_v3, type docs_v1 } from "googleapis";
+import { google, type drive_v3, type docs_v1, type sheets_v4 } from "googleapis";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/drive",
   "https://www.googleapis.com/auth/documents",
+  "https://www.googleapis.com/auth/spreadsheets.readonly",
 ];
 
 let cachedDrive: drive_v3.Drive | null = null;
 let cachedDocs: docs_v1.Docs | null = null;
+let cachedSheets: sheets_v4.Sheets | null = null;
 let cachedSaEmail: string | null = null;
 
 interface SaKey {
@@ -83,6 +85,13 @@ export function getDocsClient(): docs_v1.Docs {
   return cachedDocs;
 }
 
+export function getSheetsClient(): sheets_v4.Sheets {
+  if (cachedSheets) return cachedSheets;
+  const auth = buildAuth();
+  cachedSheets = google.sheets({ version: "v4", auth });
+  return cachedSheets;
+}
+
 /** Email der konfigurierten SA — fuer Setup-UI / Diagnose-Endpoint. */
 export function getServiceAccountEmail(): string | null {
   if (cachedSaEmail) return cachedSaEmail;
@@ -99,6 +108,7 @@ export function getServiceAccountEmail(): string | null {
 export function _resetClientsForTesting(): void {
   cachedDrive = null;
   cachedDocs = null;
+  cachedSheets = null;
   cachedSaEmail = null;
 }
 
@@ -114,4 +124,21 @@ export function isDriveRendererConfigured(): boolean {
 export function extractDocId(url: string): string | null {
   const m = url.match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
   return m?.[1] ?? null;
+}
+
+/**
+ * Spreadsheet-ID + optional gid aus einer Google-Sheets-URL extrahieren.
+ * Akzeptierte Formen: `.../spreadsheets/d/<ID>/edit#gid=<N>`, `.../edit?gid=<N>`,
+ * oder ohne gid.
+ */
+export function extractSheetsId(url: string): {
+  spreadsheetId: string | null;
+  gid: number | null;
+} {
+  const idMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  const gidMatch = url.match(/[?#&]gid=(\d+)/);
+  return {
+    spreadsheetId: idMatch?.[1] ?? null,
+    gid: gidMatch ? Number(gidMatch[1]) : null,
+  };
 }

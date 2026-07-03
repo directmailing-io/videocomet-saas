@@ -35,6 +35,7 @@ import {
 } from "./run-wizard-dedupe-card";
 import { detectDuplicates } from "@/lib/dedupe/engine";
 import type { DedupeConfig } from "@/lib/dedupe/types";
+import { MultiTabPicker, type SelectedTab, type SheetTabInfo } from "./tab-picker";
 
 export interface RunWizardProps {
   campaignId: string;
@@ -80,6 +81,16 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
   const [file, setFile] = React.useState<File | null>(null);
   const [sheetUrl, setSheetUrl] = React.useState("");
   const [preview, setPreview] = React.useState<ParsedPreview | null>(null);
+
+  // ── Multi-Tab-State (nur für Google Sheets mit mehreren Untertabellen) ──
+  // Wenn der User eine URL zu einem Multi-Tab-Sheet paste, zeigen wir einen
+  // Tab-Picker VOR Step 1. Er wählt welche Tabs verarbeitet werden — für
+  // jede Auswahl wird beim Submit eine eigene Runde gespawned.
+  const [tabPickerVisible, setTabPickerVisible] = React.useState(false);
+  const [sheetTabs, setSheetTabs] = React.useState<SheetTabInfo[]>([]);
+  const [spreadsheetTitle, setSpreadsheetTitle] = React.useState<string>("");
+  const [selectedTabs, setSelectedTabs] = React.useState<SelectedTab[]>([]);
+  const bulkMode = selectedTabs.length > 1;
 
   const [mapping, setMapping] = React.useState<Record<string, string>>({});
 
@@ -128,6 +139,47 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
     }
   }
 
+  /**
+   * Ruft /api/google-sheets/tabs auf, um alle Untertabellen der URL zu holen.
+   * Wenn ≥2 sichtbare Tabs mit Zeilen: Tab-Picker sichtbar machen.
+   * Wenn nur 1: direkt zum normalen Upload weiter.
+   */
+  async function discoverSheetTabsOrProceed(): Promise<boolean> {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const url = new URL("/api/google-sheets/tabs", window.location.origin);
+      url.searchParams.set("url", sheetUrl.trim());
+      const res = await fetch(url.toString());
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.error ?? "Tabs konnten nicht geladen werden.");
+        return false;
+      }
+      const tabs = (json.tabs ?? []) as SheetTabInfo[];
+      const eligible = tabs.filter((t) => t.rowCount > 0);
+      if (eligible.length >= 2) {
+        setSheetTabs(tabs);
+        setSpreadsheetTitle(json.spreadsheetTitle ?? "");
+        setTabPickerVisible(true);
+        return true;
+      }
+      // Nur 1 relevanter Tab — direkt weiter, kein Picker nötig.
+      setSelectedTabs(
+        eligible.length === 1
+          ? [{ gid: eligible[0].gid, title: eligible[0].title }]
+          : [],
+      );
+      const ok = await uploadAndPreview();
+      return ok;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Tabs-Fetch fehlgeschlagen.");
+      return false;
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function uploadAndPreview(): Promise<boolean> {
     setError(null);
     const id = await ensureRunCreated();
@@ -138,7 +190,15 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
       const form = new FormData();
       if (uploadKind === "google") {
         form.set("kind", "google-sheets-url");
-        form.set("url", sheetUrl.trim());
+        // Wenn Tabs ausgewählt: Preview vom ersten Tab (Repräsentant).
+        // Sonst: Original-URL, Backend nimmt Default-Tab.
+        const previewGid =
+          selectedTabs.length > 0 ? selectedTabs[0].gid : null;
+        const previewUrl =
+          previewGid !== null
+            ? buildUrlWithGid(sheetUrl.trim(), previewGid)
+            : sheetUrl.trim();
+        form.set("url", previewUrl);
       } else {
         if (!file) {
           setError("Bitte eine Datei auswählen.");
@@ -210,6 +270,63 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
           return;
         }
       }
+
+      // ── Multi-Tab-Bulk-Weg ──────────────────────────────────────────────
+      // Wenn 2+ Tabs ausgewaehlt: erste (bereits geladene) Runde starten +
+      // fuer tabs[1..N] ueber /api/runs/bulk zusaetzliche Runden erstellen +
+      // dann jede sequentiell starten.
+      if (bulkMode) {
+        // 1) Erste Runde (Master) starten wie im Standard-Fall
+        const sr = await fetch(`/api/runs/${runId}/start`, { method: "POST" });
+        const sj = await sr.json();
+        if (!sr.ok) {
+          setError(sj?.error ?? "Erste Runde konnte nicht gestartet werden.");
+          return;
+        }
+
+        // 2) Zusaetzliche Runden fuer tabs[1..N] anlegen
+        const extraTabs = selectedTabs.slice(1);
+        const bulkRes = await fetch("/api/runs/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            campaignId,
+            source: { type: "google-sheets", url: sheetUrl.trim() },
+            tabs: extraTabs.map((t) => ({
+              runName: t.title,
+              gid: t.gid,
+              tabTitle: t.title,
+            })),
+            mapping,
+            dedupeConfig,
+          }),
+        });
+        const bulkJson = await bulkRes.json();
+        if (!bulkRes.ok) {
+          setError(
+            bulkJson?.error ??
+              "Weitere Runden konnten nicht angelegt werden. Erste laeuft bereits.",
+          );
+          return;
+        }
+
+        // 3) Alle zusaetzlichen Runden sequentiell starten
+        const extraIds = (bulkJson.runs ?? []).map((r: { id: string }) => r.id);
+        for (const id of extraIds) {
+          const r = await fetch(`/api/runs/${id}/start`, { method: "POST" });
+          if (!r.ok) {
+            // Best-effort: continue, User sieht die Runde als draft und kann
+            // manuell starten. Nicht abbrechen.
+            console.warn(`[bulk] start ${id} failed`);
+          }
+        }
+
+        // Redirect zur Kampagnen-Ansicht — dort sind alle N Runden sichtbar.
+        router.push(`/kampagnen/${campaignId}`);
+        return;
+      }
+
+      // ── Standard-Weg (1 Runde) ──────────────────────────────────────────
       const sr = await fetch(`/api/runs/${runId}/start`, { method: "POST" });
       const sj = await sr.json();
       if (!sr.ok) {
@@ -262,6 +379,16 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
 
   async function handleNext() {
     if (step === 0) {
+      // Bei Google-Sheets-URL: erst Tab-Enumeration, dann evtl. Picker.
+      if (uploadKind === "google") {
+        const ok = await discoverSheetTabsOrProceed();
+        if (ok && !tabPickerVisible) {
+          // discover hat den Preview schon geladen (nur 1 Tab-Fall)
+          setStep(1);
+        }
+        return;
+      }
+      // File-Upload-Weg: Multi-Tab-Excel spaeter, aktuell einfach normal.
       const ok = await uploadAndPreview();
       if (ok) setStep(1);
       return;
@@ -275,6 +402,35 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
     if (step === 2) {
       await saveMappingAndStart();
     }
+  }
+
+  /**
+   * Baut die Google-Sheets-URL mit spezifischem gid neu. Wenn die Ursprungs-URL
+   * bereits einen gid enthaelt, wird er ersetzt.
+   */
+  function buildUrlWithGid(rawUrl: string, gid: number): string {
+    try {
+      const u = new URL(rawUrl);
+      // gid kann in query oder in hash liegen. Wir setzen ihn im query.
+      u.searchParams.set("gid", String(gid));
+      // Alten gid in hash entfernen, sonst nimmt das Backend den ggf.
+      u.hash = "";
+      return u.toString();
+    } catch {
+      return rawUrl;
+    }
+  }
+
+  /**
+   * Nachdem der User Tabs im Multi-Tab-Picker gewaehlt hat: Preview vom
+   * ersten Tab laden + step vorwaerts.
+   */
+  async function handleTabsSelected(chosen: SelectedTab[]) {
+    if (chosen.length === 0) return;
+    setSelectedTabs(chosen);
+    setTabPickerVisible(false);
+    const ok = await uploadAndPreview();
+    if (ok) setStep(1);
   }
 
   return (
@@ -315,7 +471,21 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
         </div>
       )}
 
-      {step === 0 && (
+      {step === 0 && tabPickerVisible && (
+        <MultiTabPicker
+          spreadsheetTitle={spreadsheetTitle}
+          tabs={sheetTabs}
+          loading={submitting}
+          onCancel={() => {
+            setTabPickerVisible(false);
+            setSheetTabs([]);
+            setSelectedTabs([]);
+          }}
+          onContinue={handleTabsSelected}
+        />
+      )}
+
+      {step === 0 && !tabPickerVisible && (
         <Card>
           <CardHeader>
             <CardTitle>Adressliste hochladen</CardTitle>
@@ -545,12 +715,44 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
               <CardTitle>Zusammenfassung</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-ink-muted">
-                Du startest{" "}
-                <strong className="text-ink">{preview.totalRows}</strong>{" "}
-                Lead{preview.totalRows === 1 ? "" : "s"} für die Kampagne{" "}
-                <strong className="text-ink">{campaignName}</strong>.
-              </p>
+              {bulkMode ? (
+                <div className="rounded-squircle-sm bg-brand-soft/40 border border-brand-soft px-3 py-3 space-y-2">
+                  <p className="text-sm text-ink">
+                    Du startest{" "}
+                    <strong>{selectedTabs.length} Runden</strong> für die
+                    Kampagne{" "}
+                    <strong className="text-ink">{campaignName}</strong> —
+                    eine pro Tab.
+                  </p>
+                  <ul className="text-xs text-ink-muted space-y-1">
+                    {selectedTabs.map((t, i) => (
+                      <li key={t.gid} className="flex items-center gap-2">
+                        <span className="inline-flex size-4 items-center justify-center rounded bg-brand text-white text-[10px] font-bold">
+                          {i + 1}
+                        </span>
+                        <span className="font-medium">{t.title}</span>
+                        {i === 0 && (
+                          <span className="text-[10px] uppercase tracking-wider text-brand-deep">
+                            Vorschau oben
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[11px] text-ink-muted pt-1 border-t border-brand-soft">
+                    Mapping und Duplikat-Regeln gelten identisch für alle
+                    Runden. Für Tab 1 zeigen wir dir eine Vorschau — die
+                    anderen Tabs müssen dieselben Spalten haben.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-ink-muted">
+                  Du startest{" "}
+                  <strong className="text-ink">{preview.totalRows}</strong>{" "}
+                  Lead{preview.totalRows === 1 ? "" : "s"} für die Kampagne{" "}
+                  <strong className="text-ink">{campaignName}</strong>.
+                </p>
+              )}
               {dedupeStats && dedupeStats.excluded > 0 && (
                 <p className="text-sm text-warn">
                   <strong>{dedupeStats.excluded}</strong> Duplikat
@@ -571,10 +773,18 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
               </div>
               <RunCostEstimate
                 leadCount={
-                  Math.max(
-                    0,
-                    preview.totalRows - (dedupeStats?.excluded ?? 0),
-                  )
+                  // Bei Multi-Tab: Summe ueber alle Tabs (Estimate aus der
+                  // Tab-Metadata). Dedup gilt pro Tab und wird nur fuer
+                  // den ersten (Preview-)Tab exakt berechnet — fuer die
+                  // anderen nutzen wir totalRows als konservativen Estimate.
+                  bulkMode
+                    ? sheetTabs
+                        .filter((t) => selectedTabs.some((s) => s.gid === t.gid))
+                        .reduce((sum, t) => sum + t.rowCount, 0)
+                    : Math.max(
+                        0,
+                        preview.totalRows - (dedupeStats?.excluded ?? 0),
+                      )
                 }
                 onSufficient={setBillingReady}
               />
@@ -583,6 +793,8 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
         );
       })()}
 
+      {/* Footer-Nav ausblenden solange Tab-Picker sichtbar — er hat eigene Buttons. */}
+      {tabPickerVisible ? null : (
       <div className="flex items-center justify-between mt-8 pt-6 border-t border-line">
         <Button
           variant="ghost"
@@ -621,10 +833,15 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
             disabled={!billingReady}
             iconLeft={<Play className="size-4" />}
           >
-            {preview ? `${preview.totalRows} Leads starten` : "Starten"}
+            {bulkMode
+              ? `${selectedTabs.length} Runden starten`
+              : preview
+                ? `${preview.totalRows} Leads starten`
+                : "Starten"}
           </Button>
         )}
       </div>
+      )}
 
       {/* Hidden upload icon to ensure tree-shaking keeps the lucide-react peer */}
       <span aria-hidden className="hidden">

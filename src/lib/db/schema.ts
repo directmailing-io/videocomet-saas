@@ -345,6 +345,16 @@ export const runs = pgTable("runs", {
   /** Soft-Delete-Marker (Migration 0015). NULL = aktiv. */
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 
+  // ── Source-Tracking (Migration 0028) ──────────────────────────────────
+  // Aus welcher Quelle stammt die Leadliste dieser Runde?
+  // Motivation: Multi-Tab-Google-Sheets-Import — bei 5 gewaehlten Tabs
+  // werden 5 Runden erzeugt, jede mit ihrem eigenen sourceTabGid/-Title.
+  // Alle nullable — bestehende Runden behalten NULL.
+  sourceType: text("source_type").$type<"csv" | "xlsx" | "google-sheets" | null>(),
+  sourceUrl: text("source_url"),
+  sourceTabGid: integer("source_tab_gid"),
+  sourceTabTitle: text("source_tab_title"),
+
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
