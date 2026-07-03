@@ -143,6 +143,12 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
    * Ruft /api/google-sheets/tabs auf, um alle Untertabellen der URL zu holen.
    * Wenn ≥2 sichtbare Tabs mit Zeilen: Tab-Picker sichtbar machen.
    * Wenn nur 1: direkt zum normalen Upload weiter.
+   *
+   * Fallback: wenn der Tab-Endpoint fehlschlaegt (z.B. Sheets-API nicht
+   * aktiviert oder Sheet nicht mit SA teilbar), gehen wir zum ALTEN
+   * Verhalten zurueck: kein Tab-Picker, direkt upload-leads mit der
+   * URL wie eingegeben. Das erlaubt Bestandskunden weiterhin zu arbeiten,
+   * auch wenn Multi-Tab nicht verfuegbar ist.
    */
   async function discoverSheetTabsOrProceed(): Promise<boolean> {
     setError(null);
@@ -151,11 +157,15 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
       const url = new URL("/api/google-sheets/tabs", window.location.origin);
       url.searchParams.set("url", sheetUrl.trim());
       const res = await fetch(url.toString());
-      const json = await res.json();
       if (!res.ok) {
-        setError(json?.error ?? "Tabs konnten nicht geladen werden.");
-        return false;
+        // Silent-Fallback: alter Weg (Single-Tab) — kein Error setzen, damit
+        // der User weiterarbeiten kann. Multi-Tab-Feature ist optional.
+        console.warn("[wizard] tabs-endpoint failed, falling back to single-tab flow");
+        setSelectedTabs([]);
+        const ok = await uploadAndPreview();
+        return ok;
       }
+      const json = await res.json();
       const tabs = (json.tabs ?? []) as SheetTabInfo[];
       const eligible = tabs.filter((t) => t.rowCount > 0);
       if (eligible.length >= 2) {
@@ -173,8 +183,11 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
       const ok = await uploadAndPreview();
       return ok;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Tabs-Fetch fehlgeschlagen.");
-      return false;
+      // Netzwerk-Error → auch Fallback auf alten Weg statt zu blockieren.
+      console.warn("[wizard] tabs-endpoint threw, falling back:", err);
+      setSelectedTabs([]);
+      const ok = await uploadAndPreview();
+      return ok;
     } finally {
       setSubmitting(false);
     }
