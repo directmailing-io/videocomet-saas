@@ -11,6 +11,10 @@ import * as React from "react";
 import { Loader2, Zap, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  formatCreditBalance,
+  isUnlimitedCredits,
+} from "@/lib/billing/format-credits";
 import { TopupModal } from "./topup-modal";
 
 interface Props {
@@ -122,7 +126,9 @@ export function RunCostEstimate({ leadCount, onSufficient }: Props) {
           </div>
           <div>
             <div className="text-xs text-ink-muted">Aktuelles Guthaben</div>
-            <div className="text-lg font-bold tabular-nums">{balance}</div>
+            <div className="text-lg font-bold tabular-nums">
+              {formatCreditBalance(balance)}
+            </div>
           </div>
           <div>
             <div className="text-xs text-ink-muted">Restguthaben</div>
@@ -132,7 +138,9 @@ export function RunCostEstimate({ leadCount, onSufficient }: Props) {
                 remaining < 0 ? "text-red-600" : "text-emerald-600",
               )}
             >
-              {remaining >= 0 ? remaining : `${remaining}`}
+              {isUnlimitedCredits(balance)
+                ? "∞"
+                : remaining.toLocaleString("de-DE")}
             </div>
           </div>
         </div>

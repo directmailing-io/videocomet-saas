@@ -18,6 +18,11 @@ import * as React from "react";
 import Image from "next/image";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  creditsLabel,
+  formatCreditBalance,
+  isUnlimitedCredits,
+} from "@/lib/billing/format-credits";
 import { TopupModal } from "./topup-modal";
 
 interface Status {
@@ -61,12 +66,14 @@ export function CreditBalanceCard() {
   }
 
   const balance = status.creditBalance;
+  const unlimited = isUnlimitedCredits(balance);
   // Grenzwerte:
-  //   Zero (0):    Zero-Bild (Tubby knockout), roter State
-  //   Low (1-24):  Panic-Bild (Tubby panisch), amber State
+  //   Zero (0):     Zero-Bild (Tubby knockout), roter State
+  //   Low (1-24):   Panic-Bild (Tubby panisch), amber State
   //   Normal (25+): CEO-Bild (Tubby als Boss), brand State
-  const isZero = balance === 0;
-  const isLow = balance > 0 && balance < 25;
+  // Unlimited (≥1M): faellt in "Normal" — kein Aufladen-Zwang, brand-Look.
+  const isZero = !unlimited && balance === 0;
+  const isLow = !unlimited && balance > 0 && balance < 25;
 
   const borderClass = isZero
     ? "ring-2 ring-red-500/40"
@@ -113,23 +120,34 @@ export function CreditBalanceCard() {
         {/* Overlay-Content unten */}
         <div className="absolute inset-x-0 bottom-0 p-3">
           <div className="flex items-baseline gap-1.5 mb-2">
-            <span className="text-2xl font-bold tabular-nums text-white leading-none drop-shadow">
-              {balance}
+            <span
+              className={cn(
+                "font-bold tabular-nums text-white leading-none drop-shadow",
+                unlimited ? "text-3xl" : "text-2xl",
+              )}
+            >
+              {formatCreditBalance(balance)}
             </span>
             <span className="text-[11px] uppercase tracking-wider text-white/70 font-medium">
-              {balance === 1 ? "Credit" : "Credits"}
+              {creditsLabel(balance)}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setTopupOpen(true)}
-            className={cn(
-              "w-full text-xs font-semibold rounded-md py-1.5 text-white transition-colors shadow-lg",
-              buttonClass,
-            )}
-          >
-            {isZero ? "Jetzt aufladen" : "Aufladen"}
-          </button>
+          {unlimited ? (
+            <div className="w-full text-[11px] font-semibold text-center text-white/85 bg-white/10 border border-white/15 rounded-md py-1.5">
+              Unbegrenzter Account
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setTopupOpen(true)}
+              className={cn(
+                "w-full text-xs font-semibold rounded-md py-1.5 text-white transition-colors shadow-lg",
+                buttonClass,
+              )}
+            >
+              {isZero ? "Jetzt aufladen" : "Aufladen"}
+            </button>
+          )}
         </div>
 
         {/* State-Badge oben-links wenn niedrig / null */}

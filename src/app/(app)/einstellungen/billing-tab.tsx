@@ -12,6 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toaster";
 import { TopupModal } from "@/components/billing/topup-modal";
+import {
+  creditsLabel,
+  formatCreditBalance,
+  isUnlimitedCredits,
+} from "@/lib/billing/format-credits";
 import { CreditHistory } from "./credit-history";
 import { InvoicesList } from "./invoices-list";
 
@@ -255,19 +260,26 @@ export function BillingTab() {
         </div>
         <div className="flex items-baseline gap-2 mb-4">
           <span className="text-4xl font-bold tabular-nums">
-            {status.creditBalance}
+            {formatCreditBalance(status.creditBalance)}
           </span>
           <span className="text-sm text-ink-muted">
-            {status.creditBalance === 1 ? "Credit" : "Credits"}
+            {creditsLabel(status.creditBalance)}
           </span>
         </div>
-        <Button
-          variant="brand"
-          onClick={() => setTopupOpen(true)}
-          iconLeft={<Zap className="size-4" />}
-        >
-          Credits kaufen
-        </Button>
+        {isUnlimitedCredits(status.creditBalance) ? (
+          <div className="inline-flex items-center gap-2 rounded-full bg-brand-soft border border-brand/20 px-4 py-2 text-sm font-medium text-brand-deep">
+            <Zap className="size-4" />
+            Unbegrenzter Account — keine Nachladung nötig.
+          </div>
+        ) : (
+          <Button
+            variant="brand"
+            onClick={() => setTopupOpen(true)}
+            iconLeft={<Zap className="size-4" />}
+          >
+            Credits kaufen
+          </Button>
+        )}
       </div>
 
       {/* Rechnungen (Stripe) */}
