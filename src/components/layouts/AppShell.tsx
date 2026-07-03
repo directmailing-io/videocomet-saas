@@ -13,6 +13,7 @@ import {
   Menu,
   User as UserIcon,
   BarChart3,
+  Users2,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -70,6 +71,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { key: "campaigns", label: "Kampagnen", href: "/kampagnen", icon: Megaphone },
+  { key: "contacts", label: "Alle Kontakte", href: "/kontakte", icon: Users2 },
   {
     key: "analytics",
     label: "Analytics",

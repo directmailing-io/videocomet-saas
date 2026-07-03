@@ -473,6 +473,13 @@ export const leads = pgTable("leads", {
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+
+  // ── Generated Columns fuer Kontakt-Match (Migration 0030) ─────────────
+  // Postgres-generated: bei jedem Insert/Update aus data JSONB extrahiert
+  // und normalisiert. Nur lesbar von der App — nicht direkt setzen.
+  normalizedEmail: text("normalized_email"),
+  normalizedName: text("normalized_name"),
+  normalizedCompany: text("normalized_company"),
 }, (t) => ({
   runIdx: index("leads_run_idx").on(t.runId),
   campaignIdx: index("leads_campaign_idx").on(t.campaignId),
@@ -527,6 +534,37 @@ export const leadSlugAliases = pgTable("lead_slug_aliases", {
   lookupDefaultIdx: index("lead_slug_aliases_lookup_default_idx")
     .on(t.slug)
     .where(sql`${t.domainId} IS NULL`),
+}));
+
+// ── User-scoped Kontakt-Match-Regeln (Migration 0030) ───────────────────
+// Konfiguration WELCHE Spalten pruefen wir um zwei Leads als "dieselbe
+// Person" zu identifizieren. Analog zu runs.dedupeConfig, aber User-Scope
+// statt Run-Scope — weil das Kontakt-CRM ueber alle Kampagnen des Users geht.
+export const userLeadMatchConfig = pgTable("user_lead_match_config", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  config: jsonb("config").$type<{
+    autoMergeOnEmail: boolean;
+    suggestMergeOnNameCompany: boolean;
+    levenshteinThreshold: number;
+  }>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ── DSGVO-Deletion-Audit (Migration 0030) ───────────────────────────────
+// Art. 30 DSGVO: Verzeichnis der Verarbeitungstaetigkeiten. Wer hat wann
+// welchen Lead geloescht — der Lead selbst ist danach weg, deshalb keine FK.
+export const leadDeletionAudit = pgTable("lead_deletion_audit", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  leadId: uuid("lead_id").notNull(),
+  campaignId: uuid("campaign_id"),
+  runId: uuid("run_id"),
+  reason: text("reason").notNull(),
+  meta: jsonb("meta").$type<Record<string, unknown>>(),
+  requestedBy: uuid("requested_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("lead_deletion_audit_user_idx").on(t.userId, t.createdAt),
 }));
 
 // ── Analytics-Events ────────────────────────────────────────────────────────
