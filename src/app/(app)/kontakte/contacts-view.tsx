@@ -14,6 +14,10 @@ import {
   AlertTriangle,
   ArrowUpDown,
   Filter,
+  Eye,
+  Play,
+  MousePointerClick,
+  Clock,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
@@ -58,6 +62,13 @@ interface Occurrence extends OccurrenceSummary {
   status: string;
   createdAt: string;
   rawData: Record<string, unknown>;
+  viewCount: number;
+  firstViewedAt: string | null;
+  lastViewedAt: string | null;
+  playCount: number;
+  watchTimeSec: number;
+  ctaClickCount: number;
+  lastCtaAt: string | null;
 }
 
 interface ContactDetail extends ContactSummary {
@@ -349,6 +360,197 @@ function ContactRow({
   );
 }
 
+/**
+ * Zeigt ein einzelnes Vorkommen: Kampagne + Runde als Links, Status,
+ * URLs (Landingpage/Video/PDF) UND das Tracking der Aktivität.
+ *
+ * Tracking-Anzeige richtet sich nach dem was passiert ist:
+ *   - Keine Aktivität → "Noch nicht geöffnet"
+ *   - Views > 0       → Anzahl + letzter Öffnung
+ *   - Video-Plays     → Anzahl + gesamte Watch-Time
+ *   - CTA-Clicks      → Anzahl + letzter Klick
+ */
+function OccurrenceCard({ occ }: { occ: Occurrence }) {
+  const hasActivity =
+    occ.viewCount > 0 || occ.playCount > 0 || occ.ctaClickCount > 0;
+
+  const formatWatchTime = (sec: number): string => {
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, "0")} min`;
+  };
+
+  const formatRelative = (iso: string): string => {
+    const d = new Date(iso);
+    const diffMs = Date.now() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return "gerade eben";
+    if (diffMin < 60) return `vor ${diffMin} Min.`;
+    const diffH = Math.floor(diffMin / 60);
+    if (diffH < 24) return `vor ${diffH} Std.`;
+    const diffD = Math.floor(diffH / 24);
+    if (diffD < 30) return `vor ${diffD} Tag${diffD === 1 ? "" : "en"}`;
+    return d.toLocaleDateString("de-DE");
+  };
+
+  return (
+    <div className="rounded-squircle-md border border-line p-3 text-sm">
+      {/* Kopf: Kampagne + Runde + Status */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <Link
+            href={`/kampagnen/${occ.campaignId}`}
+            className="font-semibold text-ink truncate hover:text-brand-deep"
+          >
+            {occ.campaignName}
+          </Link>
+          <div className="text-xs text-ink-muted">
+            <Link
+              href={`/kampagnen/${occ.campaignId}/runs/${occ.runId}`}
+              className="hover:text-brand-deep"
+            >
+              Runde: {occ.runName}
+            </Link>
+            {" · "}
+            {new Date(occ.createdAt).toLocaleDateString("de-DE")}
+          </div>
+        </div>
+        <Badge
+          variant={occ.status === "completed" ? "success" : "neutral"}
+          className="text-[10px] shrink-0"
+        >
+          {occ.status}
+        </Badge>
+      </div>
+
+      {/* URLs */}
+      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+        {occ.pageUrl && (
+          <a
+            href={occ.pageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-brand-soft/60 text-brand-deep hover:bg-brand-soft"
+          >
+            <ExternalLink className="size-3" />
+            Landingpage
+          </a>
+        )}
+        {occ.videoUrl && (
+          <a
+            href={occ.videoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-line text-ink-muted hover:text-ink"
+          >
+            <ExternalLink className="size-3" />
+            Video
+          </a>
+        )}
+        {occ.pdfUrl && (
+          <a
+            href={occ.pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-line text-ink-muted hover:text-ink"
+          >
+            <ExternalLink className="size-3" />
+            PDF
+          </a>
+        )}
+      </div>
+
+      {/* Tracking / Aktivität */}
+      <div className="mt-3 pt-3 border-t border-line-soft">
+        <div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+          Aktivität
+        </div>
+        {!hasActivity ? (
+          <div className="text-xs text-ink-muted italic">
+            Noch keine Aktivität — der Kontakt hat die Landingpage noch nicht
+            geöffnet.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <ActivityStat
+              icon={<Eye className="size-3.5" />}
+              label="Aufrufe"
+              value={occ.viewCount.toString()}
+              detail={
+                occ.lastViewedAt
+                  ? `Zuletzt ${formatRelative(occ.lastViewedAt)}`
+                  : undefined
+              }
+              active={occ.viewCount > 0}
+            />
+            <ActivityStat
+              icon={<Play className="size-3.5" />}
+              label="Video gestartet"
+              value={occ.playCount.toString()}
+              detail={
+                occ.watchTimeSec > 0
+                  ? `${formatWatchTime(occ.watchTimeSec)} gesehen`
+                  : undefined
+              }
+              active={occ.playCount > 0}
+            />
+            <ActivityStat
+              icon={<MousePointerClick className="size-3.5" />}
+              label="CTA geklickt"
+              value={occ.ctaClickCount.toString()}
+              detail={
+                occ.lastCtaAt
+                  ? `Zuletzt ${formatRelative(occ.lastCtaAt)}`
+                  : undefined
+              }
+              active={occ.ctaClickCount > 0}
+            />
+            <ActivityStat
+              icon={<Clock className="size-3.5" />}
+              label="Erst-Öffnung"
+              value={occ.firstViewedAt ? formatRelative(occ.firstViewedAt) : "—"}
+              detail={undefined}
+              active={Boolean(occ.firstViewedAt)}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ActivityStat({
+  icon,
+  label,
+  value,
+  detail,
+  active,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  detail: string | undefined;
+  active: boolean;
+}) {
+  return (
+    <div className={cn("min-w-0", !active && "opacity-40")}>
+      <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-ink-muted mb-0.5">
+        {icon}
+        <span className="truncate">{label}</span>
+      </div>
+      <div className="text-sm font-semibold text-ink tabular-nums">
+        {value}
+      </div>
+      {detail && (
+        <div className="text-[10px] text-ink-muted truncate mt-0.5">
+          {detail}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ContactDetailDrawer({
   detail,
   loading,
@@ -448,72 +650,7 @@ function ContactDetailDrawer({
                 </h3>
                 <div className="space-y-2">
                   {detail.occurrences.map((occ) => (
-                    <div
-                      key={occ.leadId}
-                      className="rounded-squircle-md border border-line p-3 text-sm"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <Link
-                            href={`/kampagnen/${occ.campaignId}`}
-                            className="font-semibold text-ink truncate hover:text-brand-deep"
-                          >
-                            {occ.campaignName}
-                          </Link>
-                          <div className="text-xs text-ink-muted">
-                            <Link
-                              href={`/kampagnen/${occ.campaignId}/runs/${occ.runId}`}
-                              className="hover:text-brand-deep"
-                            >
-                              Runde: {occ.runName}
-                            </Link>
-                            {" · "}
-                            {new Date(occ.createdAt).toLocaleDateString("de-DE")}
-                          </div>
-                        </div>
-                        <Badge
-                          variant={occ.status === "completed" ? "success" : "neutral"}
-                          className="text-[10px] shrink-0"
-                        >
-                          {occ.status}
-                        </Badge>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                        {occ.pageUrl && (
-                          <a
-                            href={occ.pageUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-brand-soft/60 text-brand-deep hover:bg-brand-soft"
-                          >
-                            <ExternalLink className="size-3" />
-                            Landingpage
-                          </a>
-                        )}
-                        {occ.videoUrl && (
-                          <a
-                            href={occ.videoUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-line text-ink-muted hover:text-ink"
-                          >
-                            <ExternalLink className="size-3" />
-                            Video
-                          </a>
-                        )}
-                        {occ.pdfUrl && (
-                          <a
-                            href={occ.pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-line text-ink-muted hover:text-ink"
-                          >
-                            <ExternalLink className="size-3" />
-                            PDF
-                          </a>
-                        )}
-                      </div>
-                    </div>
+                    <OccurrenceCard key={occ.leadId} occ={occ} />
                   ))}
                 </div>
               </div>

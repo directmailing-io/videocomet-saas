@@ -305,6 +305,14 @@ export interface ContactDetail extends ContactSummary {
       status: string;
       createdAt: Date;
       rawData: Record<string, unknown>;
+      /** Tracking-Aggregate aus leads (denormalisiert bei jedem lead_event insert). */
+      viewCount: number;
+      firstViewedAt: Date | null;
+      lastViewedAt: Date | null;
+      playCount: number;
+      watchTimeSec: number;
+      ctaClickCount: number;
+      lastCtaAt: Date | null;
     }
   >;
   occurrenceIds: string[];
@@ -347,6 +355,14 @@ export async function getContactDetail(
       status: leads.status,
       createdAt: leads.createdAt,
       data: leads.data,
+      // Tracking-Aggregate (Migration 0018+, denormalisiert bei lead_event insert)
+      viewCount: leads.viewCount,
+      firstViewedAt: leads.firstViewedAt,
+      lastViewedAt: leads.lastViewedAt,
+      playCount: leads.playCount,
+      watchTimeSec: leads.watchTimeSec,
+      ctaClickCount: leads.ctaClickCount,
+      lastCtaAt: leads.lastCtaAt,
     })
     .from(leads)
     .innerJoin(campaigns, eq(campaigns.id, leads.campaignId))
@@ -374,6 +390,13 @@ export async function getContactDetail(
     status: r.status,
     createdAt: r.createdAt,
     rawData: (r.data as Record<string, unknown>) ?? {},
+    viewCount: r.viewCount,
+    firstViewedAt: r.firstViewedAt,
+    lastViewedAt: r.lastViewedAt,
+    playCount: r.playCount,
+    watchTimeSec: r.watchTimeSec,
+    ctaClickCount: r.ctaClickCount,
+    lastCtaAt: r.lastCtaAt,
   }));
 
   const campaignIds = new Set(occurrences.map((o) => o.campaignId));
