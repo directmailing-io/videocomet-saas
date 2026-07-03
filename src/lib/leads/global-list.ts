@@ -151,7 +151,7 @@ export async function listContacts(input: ListContactsInput): Promise<ListContac
       AND l.removed_at IS NULL
   `);
 
-  const contacts: ContactSummary[] = rows.rows.map((r) => ({
+  const contacts: ContactSummary[] = rows.map((r) => ({
     masterLeadId: r.master_lead_id,
     occurrenceIds: [], // wird beim Detail-Load nachgeladen (v1 spart Query-Cost)
     displayName: r.display_name ?? "(kein Name)",
