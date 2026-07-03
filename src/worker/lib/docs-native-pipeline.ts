@@ -80,49 +80,39 @@ interface ImageCandidates {
 }
 
 function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
-  const inlineObjects = doc.inlineObjects ?? {};
-  // Reihenfolge im Body sammeln → Priorisierung "erstes Vorkommen".
-  const orderedIds: string[] = [];
-  function walk(content: docs_v1.Schema$StructuralElement[] | undefined) {
-    if (!content) return;
-    for (const el of content) {
-      const p = el.paragraph;
-      if (p?.elements) {
-        for (const pe of p.elements) {
-          const io = pe.inlineObjectElement;
-          if (io?.inlineObjectId) orderedIds.push(io.inlineObjectId);
-        }
-      }
-      const table = el.table;
-      if (table?.tableRows) {
-        for (const row of table.tableRows) {
-          for (const cell of row.tableCells ?? []) {
-            walk(cell.content);
-          }
-        }
-      }
-    }
-  }
-  walk(doc.body?.content);
+  // Kandidaten aus BEIDEN Maps sammeln — inlineObjects UND positionedObjects.
+  // Google Docs unterscheidet: "In line with text" landet in `inlineObjects`,
+  // "Wrap text / Behind / In front" (floating) in `positionedObjects`.
+  // Beide Object-IDs teilen sich den Namespace (`kix.<hash>`) und beide
+  // sind gültige `imageObjectId`-Werte für replaceImage.
+  const candidates: Array<{ id: string; aspect: number }> = [];
 
-  let qrObjectId: string | null = null;
-  let thumbObjectId: string | null = null;
-  for (const id of orderedIds) {
-    const obj = inlineObjects[id];
-    const embedded = obj?.inlineObjectProperties?.embeddedObject;
-    const size = embedded?.size;
+  for (const [id, obj] of Object.entries(doc.inlineObjects ?? {})) {
+    const size = obj.inlineObjectProperties?.embeddedObject?.size;
     const w = size?.width?.magnitude;
     const h = size?.height?.magnitude;
     if (!w || !h) continue;
-    const aspect = w / h;
+    candidates.push({ id, aspect: w / h });
+  }
+  for (const [id, obj] of Object.entries(doc.positionedObjects ?? {})) {
+    const size = obj.positionedObjectProperties?.embeddedObject?.size;
+    const w = size?.width?.magnitude;
+    const h = size?.height?.magnitude;
+    if (!w || !h) continue;
+    candidates.push({ id, aspect: w / h });
+  }
+
+  let qrObjectId: string | null = null;
+  let thumbObjectId: string | null = null;
+  for (const c of candidates) {
     // Quadratisch → QR
-    if (!qrObjectId && aspect >= 0.95 && aspect <= 1.05) {
-      qrObjectId = id;
+    if (!qrObjectId && c.aspect >= 0.95 && c.aspect <= 1.05) {
+      qrObjectId = c.id;
       continue;
     }
     // 16:9 → Thumbnail
-    if (!thumbObjectId && aspect >= 1.7 && aspect <= 1.83) {
-      thumbObjectId = id;
+    if (!thumbObjectId && c.aspect >= 1.7 && c.aspect <= 1.83) {
+      thumbObjectId = c.id;
       continue;
     }
   }
