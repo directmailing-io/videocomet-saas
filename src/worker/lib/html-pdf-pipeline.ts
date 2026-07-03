@@ -43,7 +43,6 @@ import AdmZip from "adm-zip";
 import sharp from "sharp";
 import { getDriveClient, extractDocId } from "@/lib/google-docs/sa-auth";
 import { getContext } from "./browser-pool";
-import { repairFloatingOverlaps } from "./html-pdf-repair";
 
 export interface HtmlPdfPipelineInput {
   googleDocsUrl: string;
@@ -140,14 +139,6 @@ export async function renderViaHtml(
     let html = await readFile(htmlPath, "utf-8");
     const { html: subHtml, replaced } = substituteHtml(html, input.textVars);
     html = subHtml;
-
-    // Renderer-3.5-Repair: Google's HTML-Export flacht Floating-Overlaps
-    // aus (Bild landet in eigenem <p> vor der Container-Box, Box-Zelle
-    // bleibt leer). Wir setzen das strukturell wieder zusammen bevor
-    // Chromium rendert.
-    const { html: repairedHtml, report: repairReport } = repairFloatingOverlaps(html);
-    html = repairedHtml;
-
     await writeFile(htmlPath, html);
 
     // 4. Marker-Image-Swap im images/ Ordner
