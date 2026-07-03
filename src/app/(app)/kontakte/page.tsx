@@ -4,6 +4,6 @@ import { ContactsView } from "./contacts-view";
 export const dynamic = "force-dynamic";
 
 export default async function KontaktePage() {
-  const user = await requireUser();
-  return <ContactsView userId={user.id} />;
+  const auth = await requireUser();
+  return <ContactsView userId={auth.user.id} />;
 }
