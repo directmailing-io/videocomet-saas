@@ -2,25 +2,30 @@
  * Globale Kontakt-Liste über alle Kampagnen eines Users.
  *
  * Konsolidiert Duplikate: mehrere `leads`-Rows die zur selben Person
- * gehoeren (via user-scoped Match-Config bzw. Default: gleiche E-Mail)
- * werden zu einem "Kontakt" gruppiert. Der "Master-Lead" ist der
- * neueste, die anderen sind "Occurrences" (Vorkommen in weiteren
- * Kampagnen/Runden).
+ * gehoeren (via normalized_email) werden zu einem "Kontakt" gruppiert.
+ * Der "Master-Lead" ist das neueste Vorkommen, die anderen sind
+ * Occurrences.
  *
- * v1-Implementation: gruppiert nur nach `normalized_email`. Name+Firma-
- * Match kommt in v2 (braucht Levenshtein). Wenn `normalized_email` NULL
- * ist, ist jeder Lead sein eigener Master (kein Merge).
+ * Leads OHNE E-Mail: jeder ist sein eigener Kontakt (kein Merge — sonst
+ * kollabieren 300 Nameless-Leads in einen Meta-Bucket).
  */
 
-import { and, desc, eq, ilike, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { campaigns, leads, runs } from "@/lib/db/schema";
+import { campaigns, leads, runs, userDomains } from "@/lib/db/schema";
+
+export interface ContactOccurrenceSummary {
+  campaignId: string;
+  campaignName: string;
+  runId: string;
+  runName: string;
+  leadId: string;
+  slug: string | null;
+  pageUrl: string | null;
+}
 
 export interface ContactSummary {
-  /** Stabile ID = die ID des neuesten Lead-Vorkommens. */
   masterLeadId: string;
-  /** Alle DB-IDs die zu dieser Person gehoeren. */
-  occurrenceIds: string[];
   displayName: string;
   email: string | null;
   company: string | null;
@@ -28,11 +33,22 @@ export interface ContactSummary {
   campaignCount: number;
   runCount: number;
   lastSeenAt: Date;
+  /** Vorkommen inline für schnellen UI-Zugriff (bis zu 6, sonst gekürzt). */
+  occurrences: ContactOccurrenceSummary[];
 }
+
+export type ContactSort =
+  | "recent"
+  | "name-asc"
+  | "occurrences-desc";
 
 export interface ListContactsInput {
   userId: string;
   search?: string;
+  sort?: ContactSort;
+  /** Nur Kontakte mit ≥2 Vorkommen. */
+  duplicatesOnly?: boolean;
+  campaignId?: string;
   limit?: number;
   offset?: number;
 }
@@ -42,159 +58,249 @@ export interface ListContactsResult {
   total: number;
 }
 
+const APP_URL_FALLBACK = "https://app.videocomet.de";
+
 /**
- * Listet alle Kontakte des Users, gruppiert nach normalisierter E-Mail.
- * Leads ohne E-Mail bleiben als eigene Kontakte stehen.
+ * Baut die public Landingpage-URL für einen Lead. Custom-Domain hat Vorrang,
+ * sonst Default-Domain (app.videocomet.de/v/<slug>).
  */
+function buildPageUrl(
+  slug: string | null,
+  domainHostname: string | null,
+): string | null {
+  if (!slug) return null;
+  if (domainHostname) return `https://${domainHostname}/${slug}`;
+  const appUrl = (process.env.APP_URL ?? APP_URL_FALLBACK).replace(/\/+$/, "");
+  return `${appUrl}/v/${slug}`;
+}
+
 export async function listContacts(input: ListContactsInput): Promise<ListContactsResult> {
   const limit = Math.min(input.limit ?? 50, 200);
   const offset = input.offset ?? 0;
+  const sort: ContactSort = input.sort ?? "recent";
 
-  // Suchfilter: greift auf die generated columns UND einige Rohfelder.
-  const searchClause = input.search && input.search.trim().length >= 2
-    ? or(
-        ilike(leads.normalizedEmail, `%${input.search.trim().toLowerCase()}%`),
-        ilike(leads.normalizedName, `%${input.search.trim().toLowerCase()}%`),
-        ilike(leads.normalizedCompany, `%${input.search.trim().toLowerCase()}%`),
-      )
-    : undefined;
+  const searchTrim = input.search?.trim().toLowerCase() ?? "";
+  const hasSearch = searchTrim.length >= 2;
 
-  // Aggregations-Query. Wir wollen fuer jede eindeutige (userId,
-  // normalized_email) genau einen Kontakt-Row bekommen. Leads OHNE
-  // normalized_email werden als eigene Kontakte (per lead.id gruppiert)
-  // gezaehlt — sonst kollabieren alle Nameless-Leads in einen Meta-Bucket.
+  // Wir bauen die ganze Aggregation als raw SQL — Drizzle kann DISTINCT
+  // ON + Window functions nicht besonders gut. Vorteil: eine einzige
+  // Query fuer Contacts + Occurrences (JSON-aggregated).
 
-  // Wir bauen einen SUB-Query der pro Contact-Group den neuesten Lead
-  // als Master waehlt, dann joinen wir zurueck für Anzeige-Felder.
+  // Gruppierungs-Key:
+  //   - Wenn normalized_email vorhanden: die E-Mail (mehrere Leads = ein Kontakt).
+  //   - Sonst: lead.id::text (jeder Lead ist sein eigener Kontakt).
+  const groupKeyExpr = sql`COALESCE(l.normalized_email, l.id::text)`;
 
-  const contactGroupKey = sql<string>`
-    COALESCE(${leads.normalizedEmail}, ${leads.id}::text)
-  `.as("contact_key");
+  const searchClause = hasSearch
+    ? sql`AND (
+        LOWER(COALESCE(l.normalized_email, '')) LIKE ${'%' + searchTrim + '%'}
+        OR LOWER(COALESCE(l.normalized_name, '')) LIKE ${'%' + searchTrim + '%'}
+        OR LOWER(COALESCE(l.normalized_company, '')) LIKE ${'%' + searchTrim + '%'}
+      )`
+    : sql``;
 
-  const groupedSub = db
-    .select({
-      contactKey: contactGroupKey,
-      masterLeadId: sql<string>`(
-        SELECT id FROM leads l2
-        WHERE l2.campaign_id IN (SELECT id FROM campaigns WHERE user_id = ${input.userId})
-          AND l2.removed_at IS NULL
-          AND (
-            (${leads.normalizedEmail} IS NULL AND l2.id = ${leads.id})
-            OR (${leads.normalizedEmail} IS NOT NULL AND l2.normalized_email = ${leads.normalizedEmail})
-          )
-        ORDER BY l2.created_at DESC LIMIT 1
-      )`.as("master_lead_id"),
-      occurrenceCount: sql<number>`COUNT(*)::int`.as("occurrence_count"),
-      campaignCount: sql<number>`COUNT(DISTINCT ${leads.campaignId})::int`.as("campaign_count"),
-      runCount: sql<number>`COUNT(DISTINCT ${leads.runId})::int`.as("run_count"),
-      lastSeenAt: sql<Date>`MAX(${leads.createdAt})`.as("last_seen_at"),
-    })
-    .from(leads)
-    .innerJoin(campaigns, eq(campaigns.id, leads.campaignId))
-    .where(
-      and(
-        eq(campaigns.userId, input.userId),
-        isNull(leads.removedAt),
-        searchClause,
-      ),
-    )
-    .groupBy(contactGroupKey, leads.id, leads.normalizedEmail)
-    .as("g");
+  const campaignClause = input.campaignId
+    ? sql`AND l.campaign_id = ${input.campaignId}`
+    : sql``;
 
-  // Distinct + sort — wir wollen nur pro contact_key einen Row.
-  // Postgres-Trick: DISTINCT ON (contact_key) ORDER BY last_seen DESC.
+  const duplicatesClause = input.duplicatesOnly
+    ? sql`HAVING COUNT(DISTINCT l.campaign_id) >= 2 OR COUNT(DISTINCT l.run_id) >= 2`
+    : sql``;
+
+  const orderByClause =
+    sort === "name-asc"
+      ? sql`ORDER BY display_name ASC NULLS LAST, last_seen_at DESC`
+      : sort === "occurrences-desc"
+        ? sql`ORDER BY (campaign_count + run_count) DESC, last_seen_at DESC`
+        : sql`ORDER BY last_seen_at DESC NULLS LAST`;
+
   const rows = await db.execute<{
     master_lead_id: string;
-    occurrence_count: number;
-    campaign_count: number;
-    run_count: number;
-    last_seen_at: Date;
     display_name: string | null;
     email: string | null;
     company: string | null;
     city: string | null;
+    campaign_count: number;
+    run_count: number;
+    last_seen_at: Date;
+    occurrences_json: string;
   }>(sql`
-    WITH master_leads AS (
-      SELECT DISTINCT ON (contact_key)
-        contact_key,
-        master_lead_id,
-        SUM(occurrence_count)::int   AS occurrence_count,
-        SUM(campaign_count)::int     AS campaign_count,
-        SUM(run_count)::int          AS run_count,
-        MAX(last_seen_at)            AS last_seen_at
-      FROM ${groupedSub}
-      GROUP BY contact_key, master_lead_id
-      ORDER BY contact_key, master_lead_id
+    WITH filtered_leads AS (
+      SELECT
+        l.id,
+        l.campaign_id,
+        l.run_id,
+        l.slug,
+        l.domain_id,
+        l.normalized_email,
+        l.normalized_name,
+        l.normalized_company,
+        l.data,
+        l.created_at,
+        ${groupKeyExpr} AS group_key
+      FROM leads l
+      INNER JOIN campaigns c ON c.id = l.campaign_id
+      WHERE c.user_id = ${input.userId}
+        AND l.removed_at IS NULL
+        ${searchClause}
+        ${campaignClause}
+    ),
+    grouped AS (
+      SELECT
+        group_key,
+        COUNT(DISTINCT campaign_id)::int AS campaign_count,
+        COUNT(DISTINCT run_id)::int      AS run_count,
+        MAX(created_at)                  AS last_seen_at,
+        (SELECT id FROM filtered_leads fl2
+           WHERE fl2.group_key = filtered_leads.group_key
+           ORDER BY created_at DESC LIMIT 1
+        ) AS master_lead_id
+      FROM filtered_leads
+      GROUP BY group_key
+      ${duplicatesClause}
+    ),
+    detailed AS (
+      SELECT
+        g.group_key,
+        g.campaign_count,
+        g.run_count,
+        g.last_seen_at,
+        g.master_lead_id,
+        ml.normalized_name  AS display_name,
+        ml.normalized_email AS email,
+        ml.normalized_company AS company,
+        ml.data->>'city'    AS city,
+        (
+          SELECT json_agg(
+            json_build_object(
+              'campaignId', fl.campaign_id,
+              'campaignName', c.name,
+              'runId', fl.run_id,
+              'runName', COALESCE(r.name, '(unbenannt)'),
+              'leadId', fl.id,
+              'slug', fl.slug,
+              'domainHostname', ud.hostname
+            )
+            ORDER BY fl.created_at DESC
+          )
+          FROM filtered_leads fl
+          INNER JOIN campaigns c ON c.id = fl.campaign_id
+          INNER JOIN runs r      ON r.id = fl.run_id
+          LEFT JOIN user_domains ud ON ud.id = fl.domain_id
+          WHERE fl.group_key = g.group_key
+        ) AS occurrences_json
+      FROM grouped g
+      INNER JOIN leads ml ON ml.id = g.master_lead_id
     )
     SELECT
-      ml.master_lead_id,
-      ml.occurrence_count,
-      ml.campaign_count,
-      ml.run_count,
-      ml.last_seen_at,
-      l.normalized_name  AS display_name,
-      l.normalized_email AS email,
-      l.normalized_company AS company,
-      l.data->>'city'    AS city
-    FROM master_leads ml
-    LEFT JOIN leads l ON l.id = ml.master_lead_id
-    ORDER BY ml.last_seen_at DESC NULLS LAST
+      master_lead_id,
+      display_name,
+      email,
+      company,
+      city,
+      campaign_count,
+      run_count,
+      last_seen_at,
+      COALESCE(occurrences_json::text, '[]') AS occurrences_json
+    FROM detailed
+    ${orderByClause}
     LIMIT ${limit} OFFSET ${offset}
   `);
 
-  // Fuer den Total-Count einen einfacheren Zaehler.
-  const [totalRow] = await db.execute<{ total: number }>(sql`
-    SELECT COUNT(DISTINCT COALESCE(l.normalized_email, l.id::text))::int AS total
-    FROM leads l
-    INNER JOIN campaigns c ON c.id = l.campaign_id
-    WHERE c.user_id = ${input.userId}
-      AND l.removed_at IS NULL
+  // Total-Count separat (auch mit dedup-Filter).
+  const totalRows = await db.execute<{ total: number }>(sql`
+    WITH filtered_leads AS (
+      SELECT
+        l.campaign_id,
+        l.run_id,
+        ${groupKeyExpr} AS group_key
+      FROM leads l
+      INNER JOIN campaigns c ON c.id = l.campaign_id
+      WHERE c.user_id = ${input.userId}
+        AND l.removed_at IS NULL
+        ${searchClause}
+        ${campaignClause}
+    ),
+    grouped AS (
+      SELECT group_key,
+             COUNT(DISTINCT campaign_id) AS ccount,
+             COUNT(DISTINCT run_id)      AS rcount
+      FROM filtered_leads
+      GROUP BY group_key
+      ${duplicatesClause}
+    )
+    SELECT COUNT(*)::int AS total FROM grouped
   `);
 
-  const contacts: ContactSummary[] = rows.map((r) => ({
-    masterLeadId: r.master_lead_id,
-    occurrenceIds: [], // wird beim Detail-Load nachgeladen (v1 spart Query-Cost)
-    displayName: r.display_name ?? "(kein Name)",
-    email: r.email,
-    company: r.company,
-    city: r.city,
-    campaignCount: r.campaign_count,
-    runCount: r.run_count,
-    lastSeenAt: r.last_seen_at,
-  }));
+  const contacts: ContactSummary[] = rows.map((r) => {
+    const raw = JSON.parse(r.occurrences_json ?? "[]") as Array<{
+      campaignId: string;
+      campaignName: string;
+      runId: string;
+      runName: string;
+      leadId: string;
+      slug: string | null;
+      domainHostname: string | null;
+    }>;
+    const occurrences: ContactOccurrenceSummary[] = raw.map((o) => ({
+      campaignId: o.campaignId,
+      campaignName: o.campaignName,
+      runId: o.runId,
+      runName: o.runName,
+      leadId: o.leadId,
+      slug: o.slug,
+      pageUrl: buildPageUrl(o.slug, o.domainHostname),
+    }));
+    return {
+      masterLeadId: r.master_lead_id,
+      displayName: r.display_name ?? "(kein Name)",
+      email: r.email,
+      company: r.company,
+      city: r.city,
+      campaignCount: r.campaign_count,
+      runCount: r.run_count,
+      lastSeenAt: r.last_seen_at,
+      occurrences,
+    };
+  });
 
-  return {
-    contacts,
-    total: totalRow?.total ?? 0,
-  };
+  return { contacts, total: totalRows[0]?.total ?? 0 };
 }
 
+// ── Kampagnen-Filter-Options ───────────────────────────────────────────
+export interface ContactFilterOptions {
+  campaigns: Array<{ id: string; name: string }>;
+}
+
+export async function getContactFilterOptions(
+  userId: string,
+): Promise<ContactFilterOptions> {
+  const rows = await db
+    .select({ id: campaigns.id, name: campaigns.name })
+    .from(campaigns)
+    .where(and(eq(campaigns.userId, userId), isNull(campaigns.deletedAt)))
+    .orderBy(campaigns.name);
+  return { campaigns: rows };
+}
+
+// ── Detail (fuer Drawer) ───────────────────────────────────────────────
 export interface ContactDetail extends ContactSummary {
-  occurrences: Array<{
-    leadId: string;
-    campaignId: string;
-    campaignName: string;
-    runId: string;
-    runName: string;
-    slug: string | null;
-    pageUrl: string | null;
-    videoUrl: string | null;
-    pdfUrl: string | null;
-    status: string;
-    createdAt: Date;
-    rawData: Record<string, unknown>;
-  }>;
+  occurrences: Array<
+    ContactOccurrenceSummary & {
+      videoUrl: string | null;
+      pdfUrl: string | null;
+      status: string;
+      createdAt: Date;
+      rawData: Record<string, unknown>;
+    }
+  >;
+  occurrenceIds: string[];
 }
 
-/**
- * Detail-Ansicht eines Kontakts: master-Lead + alle Occurrences (Kampagnen
- * + Runden wo er vorkommt) + rohe importierte Daten.
- */
 export async function getContactDetail(
   userId: string,
   masterLeadId: string,
 ): Promise<ContactDetail | null> {
-  // Master-Lead laden (ownership check via campaign.userId join).
   const [master] = await db
     .select({
       id: leads.id,
@@ -210,9 +316,6 @@ export async function getContactDetail(
     .limit(1);
   if (!master) return null;
 
-  // Alle Occurrences die zu diesem Master gehoeren.
-  // - Wenn Master hat E-Mail: match auf normalized_email.
-  // - Wenn nicht: nur der Master selbst.
   const matchCondition = master.email
     ? eq(leads.normalizedEmail, master.email)
     : eq(leads.id, master.id);
@@ -225,7 +328,7 @@ export async function getContactDetail(
       runId: leads.runId,
       runName: runs.name,
       slug: leads.slug,
-      pageUrl: sql<string | null>`NULL`, // v2: berechnen aus slug + campaign.domain
+      domainHostname: userDomains.hostname,
       videoUrl: leads.videoUrl,
       pdfUrl: leads.pdfUrl,
       status: leads.status,
@@ -235,6 +338,7 @@ export async function getContactDetail(
     .from(leads)
     .innerJoin(campaigns, eq(campaigns.id, leads.campaignId))
     .innerJoin(runs, eq(runs.id, leads.runId))
+    .leftJoin(userDomains, eq(userDomains.id, leads.domainId))
     .where(
       and(
         eq(campaigns.userId, userId),
@@ -245,13 +349,13 @@ export async function getContactDetail(
     .orderBy(desc(leads.createdAt));
 
   const occurrences = occurrenceRows.map((r) => ({
-    leadId: r.leadId,
     campaignId: r.campaignId,
     campaignName: r.campaignName,
     runId: r.runId,
     runName: r.runName ?? "(unbenannt)",
+    leadId: r.leadId,
     slug: r.slug,
-    pageUrl: r.pageUrl,
+    pageUrl: buildPageUrl(r.slug, r.domainHostname),
     videoUrl: r.videoUrl,
     pdfUrl: r.pdfUrl,
     status: r.status,
