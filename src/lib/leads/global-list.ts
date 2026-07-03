@@ -86,10 +86,23 @@ export async function listContacts(input: ListContactsInput): Promise<ListContac
   // ON + Window functions nicht besonders gut. Vorteil: eine einzige
   // Query fuer Contacts + Occurrences (JSON-aggregated).
 
-  // Gruppierungs-Key:
-  //   - Wenn normalized_email vorhanden: die E-Mail (mehrere Leads = ein Kontakt).
-  //   - Sonst: lead.id::text (jeder Lead ist sein eigener Kontakt).
-  const groupKeyExpr = sql`COALESCE(l.normalized_email, l.id::text)`;
+  // Gruppierungs-Key: E-Mail ALLEIN ist unsicher (Firmen-Postfächer wie
+  // kontakt@firma.at werden von mehreren Personen genutzt → 4 Leads mit
+  // gleicher E-Mail aber unterschiedlichen Namen sind 4 Personen, nicht 1).
+  // Deshalb: MATCH = normalized_email UND normalized_name identisch.
+  //   - Beide gesetzt & gleich → derselbe Kontakt
+  //   - Nur E-Mail identisch, Name anders → separate Kontakte
+  //   - Nur Name gleich, E-Mail leer/anders → separate Kontakte
+  //   - Kein Feld gesetzt: jeder Lead eigener Kontakt (lead.id als Key)
+  //
+  // v2: user-konfigurierbare Regeln (auch nur E-Mail, auch Firma dazu).
+  const groupKeyExpr = sql`
+    CASE
+      WHEN l.normalized_email IS NOT NULL AND l.normalized_name IS NOT NULL
+        THEN l.normalized_email || '|' || l.normalized_name
+      ELSE l.id::text
+    END
+  `;
 
   const searchClause = hasSearch
     ? sql`AND (
