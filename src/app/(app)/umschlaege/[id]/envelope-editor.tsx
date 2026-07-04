@@ -28,11 +28,7 @@ import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 
 // ─── Typen (analog zu DB-Schema) ─────────────────────────────────────────
-type FontName =
-  | "Helvetica"
-  | "BiroScript"
-  | "LiebeHeideFineliner"
-  | "LiebeHeide";
+type FontName = "Helvetica" | "BiroScript" | "LiebeHeideFineliner";
 type FormatKey = "DIN_LANG" | "C4" | "C5" | "C6";
 
 interface EnvelopeField {
@@ -73,16 +69,6 @@ const FORMAT_MM: Record<FormatKey, { w: number; h: number; label: string }> = {
   C6: { w: 162, h: 114, label: "C6 (162 × 114 mm)" },
 };
 
-const RECIPIENT_TAGS = [
-  { key: "salutation", label: "Anrede" },
-  { key: "title", label: "Titel" },
-  { key: "firstName", label: "Vorname" },
-  { key: "lastName", label: "Nachname" },
-  { key: "street", label: "Straße" },
-  { key: "zip", label: "PLZ" },
-  { key: "city", label: "Ort" },
-];
-
 const SENDER_TAGS = [
   { key: "__sender.name", label: "Absender: Name" },
   { key: "__sender.street", label: "Absender: Straße" },
@@ -97,18 +83,13 @@ const FONTS: Array<{ value: FontName; label: string; css: string }> = [
     css: "'Helvetica Neue', Arial, sans-serif",
   },
   {
-    value: "LiebeHeide",
-    label: "Liebe Heide",
-    css: "'LiebeHeide', cursive",
-  },
-  {
     value: "LiebeHeideFineliner",
-    label: "Liebe Heide Fineliner",
+    label: "Handschrift fein (Liebe Heide)",
     css: "'LiebeHeideFineliner', cursive",
   },
   {
     value: "BiroScript",
-    label: "Biro Script",
+    label: "Handschrift kräftig (Biro Script)",
     css: "'BiroScript', cursive",
   },
 ];
@@ -126,14 +107,13 @@ const COLOR_PRESETS = [
   { hex: "#374151", label: "Anthrazit" },
 ];
 
-const SAMPLE_DATA: Record<string, string> = {
-  salutation: "Herr",
-  title: "Dr.",
-  firstName: "Max",
-  lastName: "Mustermann",
-  street: "Musterstraße 42",
-  zip: "10115",
-  city: "Berlin",
+// Bekannte Absender-Tag-Labels — bei diesen zeigen wir den freundlichen Namen
+// (z. B. "Absender: Name") statt des rohen Keys.
+const KNOWN_TAG_LABEL: Record<string, string> = {
+  "__sender.name": "Absender: Name",
+  "__sender.street": "Absender: Straße",
+  "__sender.zip": "Absender: PLZ",
+  "__sender.city": "Absender: Ort",
 };
 
 // ─── Helper ───────────────────────────────────────────────────────────────
@@ -166,12 +146,17 @@ function resolvePreview(
     if (m.index > last)
       parts.push({ text: content.slice(last, m.index), isTag: false });
     const key = m[1].trim();
-    let value = "";
+    let value: string;
     if (key.startsWith("__sender.")) {
+      // Absender kommt aus der Vorlage selbst → wenn gesetzt: zeigen,
+      // sonst freundliches Label als Platzhalter.
       const field = key.slice("__sender.".length) as keyof EnvelopeSender;
-      value = sender[field] ?? "";
+      const stored = sender[field];
+      value = stored && stored.trim() !== "" ? stored : KNOWN_TAG_LABEL[key] ?? key;
     } else {
-      value = SAMPLE_DATA[key] ?? key;
+      // Freier Platzhalter → als Chip mit dem Namen anzeigen (in eckigen
+      // Klammern), so sieht der User genau welche Spalte gemappt wird.
+      value = `[${key}]`;
     }
     parts.push({ text: value, isTag: true });
     last = m.index + m[0].length;
@@ -186,7 +171,9 @@ function newRecipientBlock(): EnvelopeField {
   return {
     id: uid(),
     label: "Empfänger",
-    content: "{{firstName}} {{lastName}}\n{{street}}\n{{zip}} {{city}}",
+    // Beispiel-Platzhalter — der User kann/soll die frei umbenennen und
+    // beim Runden-Wizard seinen Excel-Spalten zuordnen.
+    content: "{{vorname}} {{nachname}}\n{{strasse}}\n{{plz}} {{ort}}",
     x: 38,
     y: 45,
     width: 55,
@@ -837,30 +824,24 @@ function FieldInspector({
             className="mt-1 w-full rounded-squircle-sm border border-line bg-white px-3 py-2 text-sm font-mono focus:outline-none focus:border-brand"
             placeholder="Text hier eingeben oder einen Baustein anklicken →"
           />
-          <div className="mt-2 space-y-2">
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-ink-muted mb-1">
-                Empfänger-Daten einfügen
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {RECIPIENT_TAGS.map((t) => (
-                  <TagChip key={t.key} onClick={() => onInsertTag(t.key)}>
-                    + {t.label}
-                  </TagChip>
-                ))}
-              </div>
+          <p className="mt-2 text-[11px] text-ink-muted leading-snug">
+            Platzhalter schreibst du in doppelten geschweiften Klammern, z. B.{" "}
+            <code className="bg-line-soft px-1 rounded">{"{{vorname}}"}</code>,{" "}
+            <code className="bg-line-soft px-1 rounded">{"{{titel}}"}</code>,{" "}
+            <code className="bg-line-soft px-1 rounded">{"{{strasse}}"}</code>.
+            Bei der Runden-Erstellung ordnest du diese Namen dann deinen
+            Excel-Spalten zu.
+          </p>
+          <div className="mt-2">
+            <div className="text-[11px] uppercase tracking-wide text-ink-muted mb-1">
+              Absender-Daten einfügen (aus dieser Vorlage)
             </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-ink-muted mb-1">
-                Absender-Daten einfügen
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {SENDER_TAGS.map((t) => (
-                  <TagChip key={t.key} onClick={() => onInsertTag(t.key)}>
-                    + {t.label}
-                  </TagChip>
-                ))}
-              </div>
+            <div className="flex flex-wrap gap-1.5">
+              {SENDER_TAGS.map((t) => (
+                <TagChip key={t.key} onClick={() => onInsertTag(t.key)}>
+                  + {t.label}
+                </TagChip>
+              ))}
             </div>
           </div>
         </div>

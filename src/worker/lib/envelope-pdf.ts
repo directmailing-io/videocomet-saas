@@ -26,10 +26,19 @@ const SIZES: Record<string, { width: number; height: number }> = {
   C6: { width: 162, height: 114 },
 };
 
+// FONT_FILES: welche vom User waehlbaren Fonts embedden wir vom Filesystem.
+// LiebeHeide-Color.otf ist ein Color-Font (COLR/CPAL) — pdf-lib kann daraus
+// keine Glyph-Widths berechnen (widthOfTextAtSize crashed mit null.pos), also
+// nicht in dieser Map. Wenn ein Template den alten Wert "LiebeHeide" tragen
+// sollte, faellt es unten auf LiebeHeideFineliner zurueck.
 const FONT_FILES: Record<string, string> = {
-  LiebeHeide: "LiebeHeide-Color.otf",
   LiebeHeideFineliner: "LiebeHeideVector-FinelinerRegular.otf",
   BiroScript: "biro_script_plus.ttf",
+};
+
+// Font-Aliase fuer alte Templates in DB, die noch den entfernten Wert tragen.
+const FONT_ALIASES: Record<string, string> = {
+  LiebeHeide: "LiebeHeideFineliner",
 };
 
 // Fonts liegen im standalone-Output unter dem worker-lib-Dir.
@@ -150,19 +159,25 @@ export async function generateEnvelopePdf(
   // Pre-embed alle Fonts die im Template vorkommen (einmal pro Doc).
   const embeddedFonts = new Map<string, PDFFont>();
   const standardFontKeys = new Set<string>();
+  const resolveFontKey = (name: string): string => FONT_ALIASES[name] ?? name;
   for (const field of input.fields) {
-    const name = field.font || "Helvetica";
-    if (embeddedFonts.has(name)) continue;
-    const filename = FONT_FILES[name];
+    const key = resolveFontKey(field.font || "Helvetica");
+    if (embeddedFonts.has(key)) continue;
+    const filename = FONT_FILES[key];
     if (filename) {
       const bytes = await getFontBytes(filename);
       if (bytes) {
-        embeddedFonts.set(name, await pdfDoc.embedFont(bytes));
-        continue;
+        try {
+          embeddedFonts.set(key, await pdfDoc.embedFont(bytes));
+          continue;
+        } catch {
+          // Font-File konnte nicht embedded werden (z. B. Color-Font ohne
+          // Glyph-Widths) — fallback auf Helvetica statt Crash.
+        }
       }
     }
-    embeddedFonts.set(name, await pdfDoc.embedFont(StandardFonts.Helvetica));
-    standardFontKeys.add(name);
+    embeddedFonts.set(key, await pdfDoc.embedFont(StandardFonts.Helvetica));
+    standardFontKeys.add(key);
   }
 
   const page = pdfDoc.addPage([W_pt, H_pt]);
@@ -175,7 +190,8 @@ export async function generateEnvelopePdf(
     ).trim();
     if (!text) continue;
 
-    const font = embeddedFonts.get(field.font || "Helvetica");
+    const fontKey = resolveFontKey(field.font || "Helvetica");
+    const font = embeddedFonts.get(fontKey);
     if (!font) continue;
     const fontSizePt = field.fontSize || 22;
     const lineHtPt = fontSizePt * (field.lineHeight || 1.3);
@@ -184,7 +200,7 @@ export async function generateEnvelopePdf(
     const maxWidthPt = (field.width / 100) * W_pt;
     const yTopPt = (field.y / 100) * H_pt;
 
-    const safeText = standardFontKeys.has(field.font || "Helvetica")
+    const safeText = standardFontKeys.has(fontKey)
       ? sanitizeWinAnsi(text)
       : text;
     const lines = wrapText(font, safeText, fontSizePt, maxWidthPt);
@@ -229,7 +245,7 @@ export function getDefaultFieldsForFormat(
     {
       id: nowId(),
       label: "Empfänger",
-      content: "{{firstName}} {{lastName}}\n{{street}}\n{{zip}} {{city}}",
+      content: "{{vorname}} {{nachname}}\n{{strasse}}\n{{plz}} {{ort}}",
       x: 38,
       y: 45,
       width: 55,
