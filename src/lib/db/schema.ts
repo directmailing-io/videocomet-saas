@@ -338,6 +338,16 @@ export const runs = pgTable("runs", {
    */
   customLpVersionId: uuid("custom_lp_version_id"),
 
+  /**
+   * Optional: Umschlag-Vorlage fuer diese Runde. Wenn gesetzt, generiert
+   * die Pipeline pro Lead einen Umschlag (siehe pipeline.ts Stage 9b).
+   * Ueberschreibt campaign.envelopeTemplateId fuer diese Runde.
+   */
+  envelopeTemplateId: uuid("envelope_template_id").references(
+    () => envelopeTemplates.id,
+    { onDelete: "set null" },
+  ),
+
   // ── Preflight (Phase 1) ──────────────────────────────────────────────
   // Lifecycle-Marker für die Lead-Quality-Check-Phase. NULL solange der
   // Run noch nicht durch die Preflight-Pipeline gelaufen ist.

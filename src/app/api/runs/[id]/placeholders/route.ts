@@ -90,6 +90,7 @@ export async function GET(
   const placeholders = await collectCampaignPlaceholders(
     run.campaignId,
     auth.user.id,
+    { envelopeTemplateId: run.envelopeTemplateId ?? null },
   );
 
   // 1. Reuse aus voriger Runde

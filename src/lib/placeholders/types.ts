@@ -21,6 +21,7 @@ export type PlaceholderSourceKind =
   | "pdf" // PDF-Brief der Kampagne (= campaigns.pdfGoogleDocsUrl)
   | "lp-block" // Block-Landingpage-Template
   | "lp-custom" // Custom-HTML-LP (ZIP-Upload)
+  | "envelope" // Umschlag-Vorlage (envelope_templates)
   | "slug"; // Slug-Template `{key}`
 
 /** Quellen-Eintrag pro Detected-Placeholder (mehrere möglich). */

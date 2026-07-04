@@ -21,6 +21,8 @@ const patchSchema = z.object({
   status: z
     .enum(["draft", "mapping", "generating", "completed", "failed", "cancelled"])
     .optional(),
+  /** Umschlag-Vorlage fuer diese Runde (null = keine Umschlaege). */
+  envelopeTemplateId: z.string().uuid().nullable().optional(),
 });
 
 /**

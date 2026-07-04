@@ -27,6 +27,7 @@ import { db } from "@/lib/db";
 import {
   campaigns,
   customLpVersions,
+  envelopeTemplates,
   landingPageTemplates,
 } from "@/lib/db/schema";
 import type { Segment, Layer } from "@/lib/segments/types";
@@ -350,6 +351,10 @@ async function scanBlockLpTemplate(
 export async function collectCampaignPlaceholders(
   campaignId: string,
   userId: string,
+  options?: {
+    /** Von der Runde ausgewaehlte Umschlag-Vorlage (ueberschreibt campaign). */
+    envelopeTemplateId?: string | null;
+  },
 ): Promise<DetectedPlaceholder[]> {
   const [campaign] = await db
     .select()
@@ -452,6 +457,27 @@ export async function collectCampaignPlaceholders(
           `[placeholders/collector] custom-lp scan failed:`,
           err instanceof Error ? err.message : err,
         );
+      }
+    }
+  }
+
+  // 6. Umschlag-Vorlage (envelope_templates.fields[].content).
+  //    Priorisiert: run-scope-Auswahl vor Campaign-Level-Default.
+  const envTemplateId =
+    options?.envelopeTemplateId ?? campaign.envelopeTemplateId ?? null;
+  if (envTemplateId) {
+    const [envTpl] = await db
+      .select()
+      .from(envelopeTemplates)
+      .where(eq(envelopeTemplates.id, envTemplateId))
+      .limit(1);
+    if (envTpl) {
+      const label = `Umschlag: ${envTpl.name}`;
+      for (const field of envTpl.fields ?? []) {
+        scanDoubleBrace(field.content ?? "", acc, {
+          kind: "envelope",
+          label,
+        });
       }
     }
   }

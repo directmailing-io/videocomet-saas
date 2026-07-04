@@ -1435,7 +1435,9 @@ export async function pipelineProcessor(
     // pro Lead ein zusaetzliches PDF (personalisierter Umschlag) und laden
     // es unter leads.envelope_pdf_url hoch. Wird im Bundle-Export separat
     // im Unterordner "umschlaege/" ausgeliefert.
-    if (campaign.envelopeTemplateId && !lead.envelopePdfUrl) {
+    const effectiveEnvelopeTemplateId =
+      run.envelopeTemplateId ?? campaign.envelopeTemplateId ?? null;
+    if (effectiveEnvelopeTemplateId && !lead.envelopePdfUrl) {
       const envStart = Date.now();
       try {
         const { generateEnvelopePdf } = await import("../lib/envelope-pdf");
@@ -1447,7 +1449,7 @@ export async function pipelineProcessor(
         const [tpl] = await db
           .select()
           .from(envelopeTemplates)
-          .where(eq(envelopeTemplates.id, campaign.envelopeTemplateId))
+          .where(eq(envelopeTemplates.id, effectiveEnvelopeTemplateId))
           .limit(1);
         if (tpl) {
           const useHtml = requiresHtmlRenderer(tpl.fields);

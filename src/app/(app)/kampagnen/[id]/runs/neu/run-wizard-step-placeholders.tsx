@@ -7,10 +7,12 @@ import {
   Check,
   History,
   Loader2,
+  Mail,
   Sparkles,
   Wand2,
   X,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -125,6 +127,8 @@ function sourceKindLabel(kind: PlaceholderSource["kind"]): string {
       return "Block-LP";
     case "lp-custom":
       return "Custom-LP";
+    case "envelope":
+      return "Umschlag";
     case "slug":
       return "Subdomain";
     default:
@@ -178,6 +182,78 @@ export function RunWizardStepPlaceholders({
   // Refs zum Scroll-Sprung beim Validation-Banner.
   const rowRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
 
+  // ── Envelope-Auswahl ──────────────────────────────────────────────────
+  interface EnvOption { id: string; name: string; format: string }
+  const [envelopeOptions, setEnvelopeOptions] = React.useState<EnvOption[]>([]);
+  const [envelopeEnabled, setEnvelopeEnabled] = React.useState(false);
+  const [envelopeTemplateId, setEnvelopeTemplateId] = React.useState<string | null>(null);
+  const [envelopeSaving, setEnvelopeSaving] = React.useState(false);
+  // Reload-Trigger fuer den Placeholder-Load-Effect. Wird erhoeht wenn
+  // envelope-Auswahl aendert, damit die neuen Umschlag-Platzhalter erscheinen.
+  const [reloadTick, setReloadTick] = React.useState(0);
+
+  // Umschlag-Vorlagen des Users laden.
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/envelopes", { cache: "no-store" });
+        if (!res.ok) return;
+        const j = await res.json();
+        if (cancelled) return;
+        setEnvelopeOptions(j.templates ?? []);
+      } catch {
+        // still, keine Envelope-Card ist ok
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Aktuellen Wert vom Run lesen (initial).
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const j = await res.json();
+        if (cancelled) return;
+        const id = (j.run?.envelopeTemplateId ?? null) as string | null;
+        setEnvelopeTemplateId(id);
+        setEnvelopeEnabled(!!id);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [runId]);
+
+  async function saveEnvelopeSelection(id: string | null) {
+    setEnvelopeSaving(true);
+    try {
+      const res = await fetch(`/api/runs/${runId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ envelopeTemplateId: id }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error ?? "Fehler");
+      }
+      setEnvelopeTemplateId(id);
+      // Trigger reload der Placeholder-Detektion.
+      setReloadTick((t) => t + 1);
+    } catch (err) {
+      toast({
+        variant: "danger",
+        title: "Umschlag-Auswahl konnte nicht gespeichert werden",
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setEnvelopeSaving(false);
+    }
+  }
+
   // ── Initial-Load ──────────────────────────────────────────────────────
   React.useEffect(() => {
     let cancelled = false;
@@ -229,7 +305,7 @@ export function RunWizardStepPlaceholders({
     return () => {
       cancelled = true;
     };
-  }, [runId, onFallbackRequested]);
+  }, [runId, onFallbackRequested, reloadTick]);
 
   // ── Auto-Save (debounced) ─────────────────────────────────────────────
   const mappingRef = React.useRef(mapping);
@@ -429,6 +505,76 @@ export function RunWizardStepPlaceholders({
 
   return (
     <div className="space-y-6">
+      {/* ── Umschlaege-Card (optional) ─────────────────────────────── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="size-9 rounded-full bg-brand-soft text-brand-deep flex items-center justify-center">
+                <Mail className="size-4" />
+              </div>
+              <div>
+                <CardTitle className="text-base">
+                  Umschläge generieren?
+                </CardTitle>
+                <p className="text-xs text-ink-muted mt-0.5">
+                  Für diese Runde einen personalisierten Umschlag pro Lead
+                  drucken lassen — zusätzlich zu den Video-/Brief-Assets.
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={envelopeEnabled}
+              disabled={envelopeSaving || envelopeOptions.length === 0}
+              onCheckedChange={(v) => {
+                setEnvelopeEnabled(v);
+                if (!v) {
+                  void saveEnvelopeSelection(null);
+                }
+              }}
+            />
+          </div>
+        </CardHeader>
+        {envelopeEnabled && (
+          <CardContent className="pt-0">
+            {envelopeOptions.length === 0 ? (
+              <p className="text-xs text-ink-muted">
+                Du hast noch keine Umschlag-Vorlage angelegt. Erstelle eine
+                unter <span className="font-mono">/umschlaege</span> und wähle
+                sie hier aus.
+              </p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Label
+                  htmlFor="env-select"
+                  className="text-xs whitespace-nowrap"
+                >
+                  Vorlage
+                </Label>
+                <Select
+                  value={envelopeTemplateId ?? undefined}
+                  onValueChange={(v) => void saveEnvelopeSelection(v)}
+                >
+                  <SelectTrigger id="env-select" className="max-w-[420px]">
+                    <SelectValue placeholder="Umschlag-Vorlage auswählen …" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {envelopeOptions.map((o) => (
+                      <SelectItem key={o.id} value={o.id}>
+                        {o.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {envelopeSaving && (
+                  <Loader2 className="size-3.5 animate-spin text-ink-muted" />
+                )}
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
       {/* ── Header-Card mit Progress + Actions ─────────────────────── */}
       <Card>
         <CardHeader>
