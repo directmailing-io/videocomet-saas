@@ -17,7 +17,7 @@ const FIELD = z.object({
   width: z.number().min(1).max(100),
   fontSize: z.number().min(4).max(96),
   lineHeight: z.number().min(0.8).max(4.0),
-  font: z.enum(["LiebeHeideFineliner", "BiroScript", "Helvetica"]),
+  font: z.enum(["LiebeHeide", "LiebeHeideFineliner", "BiroScript", "Helvetica"]),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
 });
 

@@ -28,7 +28,11 @@ import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 
 // ─── Typen (analog zu DB-Schema) ─────────────────────────────────────────
-type FontName = "Helvetica" | "BiroScript" | "LiebeHeideFineliner";
+type FontName =
+  | "Helvetica"
+  | "BiroScript"
+  | "LiebeHeideFineliner"
+  | "LiebeHeide";
 type FormatKey = "DIN_LANG" | "C4" | "C5" | "C6";
 
 interface EnvelopeField {
@@ -93,14 +97,19 @@ const FONTS: Array<{ value: FontName; label: string; css: string }> = [
     css: "'Helvetica Neue', Arial, sans-serif",
   },
   {
-    value: "BiroScript",
-    label: "Handschrift kräftig",
-    css: "'Kalam', 'Caveat', cursive",
+    value: "LiebeHeide",
+    label: "Liebe Heide",
+    css: "'LiebeHeide', cursive",
   },
   {
     value: "LiebeHeideFineliner",
-    label: "Handschrift fein",
-    css: "'Caveat', 'Kalam', cursive",
+    label: "Liebe Heide Fineliner",
+    css: "'LiebeHeideFineliner', cursive",
+  },
+  {
+    value: "BiroScript",
+    label: "Biro Script",
+    css: "'BiroScript', cursive",
   },
 ];
 

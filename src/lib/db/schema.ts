@@ -264,7 +264,11 @@ export const campaigns = pgTable("campaigns", {
 }));
 
 // ── Envelope-Templates (Migration 0031) ─────────────────────────────────
-export type EnvelopeFieldFont = "LiebeHeideFineliner" | "BiroScript" | "Helvetica";
+export type EnvelopeFieldFont =
+  | "LiebeHeide"
+  | "LiebeHeideFineliner"
+  | "BiroScript"
+  | "Helvetica";
 
 export interface EnvelopeField {
   id: string;

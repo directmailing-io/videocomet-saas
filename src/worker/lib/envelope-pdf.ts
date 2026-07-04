@@ -27,6 +27,7 @@ const SIZES: Record<string, { width: number; height: number }> = {
 };
 
 const FONT_FILES: Record<string, string> = {
+  LiebeHeide: "LiebeHeide-Color.otf",
   LiebeHeideFineliner: "LiebeHeideVector-FinelinerRegular.otf",
   BiroScript: "biro_script_plus.ttf",
 };

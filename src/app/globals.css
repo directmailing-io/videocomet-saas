@@ -2,6 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Umschlag-Fonts (WYSIWYG-Preview im Editor) ─────────────────
+   Diese Fonts werden 1:1 aus dem PDF verwendet, damit die Vorschau
+   im Editor exakt so aussieht wie das gedruckte Ergebnis. */
+@font-face {
+  font-family: 'LiebeHeide';
+  src: url('/fonts/LiebeHeide-Color.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'LiebeHeideFineliner';
+  src: url('/fonts/LiebeHeideVector-FinelinerRegular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'BiroScript';
+  src: url('/fonts/biro_script_plus.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   html, body {
     @apply bg-surface-soft text-ink antialiased;
