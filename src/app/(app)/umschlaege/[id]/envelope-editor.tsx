@@ -635,7 +635,6 @@ function PresetButton({
 // ─── Feld auf Canvas ──────────────────────────────────────────────────────
 function FieldOnCanvas({
   field,
-  sender,
   selected,
   canvasWidthMm,
   onMouseDown,
