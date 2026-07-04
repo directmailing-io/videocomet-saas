@@ -237,12 +237,24 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
   const [dirty, setDirty] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const canvasRef = React.useRef<HTMLDivElement>(null);
-  const dragRef = React.useRef<{
-    id: string;
-    offsetX: number;
-    offsetY: number;
-    canvasRect: DOMRect;
-  } | null>(null);
+  const dragRef = React.useRef<
+    | {
+        mode: "move";
+        id: string;
+        offsetX: number;
+        offsetY: number;
+        canvasRect: DOMRect;
+      }
+    | {
+        mode: "resize";
+        id: string;
+        startWidth: number; // %
+        startX: number; // %
+        startMouseX: number; // px
+        canvasRect: DOMRect;
+      }
+    | null
+  >(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -344,19 +356,37 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
     const drag = dragRef.current;
     if (!drag) return;
     const rect = drag.canvasRect;
-    let newX = ((e.clientX - rect.left - drag.offsetX) / rect.width) * 100;
-    let newY = ((e.clientY - rect.top - drag.offsetY) / rect.height) * 100;
-    newX = Math.max(0, Math.min(100, newX));
-    newY = Math.max(0, Math.min(100, newY));
-    setTpl((t) => {
-      if (!t) return t;
-      return {
-        ...t,
-        fields: t.fields.map((f) =>
-          f.id === drag.id ? { ...f, x: newX, y: newY } : f,
-        ),
-      };
-    });
+    if (drag.mode === "move") {
+      let newX = ((e.clientX - rect.left - drag.offsetX) / rect.width) * 100;
+      let newY = ((e.clientY - rect.top - drag.offsetY) / rect.height) * 100;
+      newX = Math.max(0, Math.min(100, newX));
+      newY = Math.max(0, Math.min(100, newY));
+      setTpl((t) => {
+        if (!t) return t;
+        return {
+          ...t,
+          fields: t.fields.map((f) =>
+            f.id === drag.id ? { ...f, x: newX, y: newY } : f,
+          ),
+        };
+      });
+    } else {
+      // resize: neue Breite = startWidth + delta in %
+      const deltaPx = e.clientX - drag.startMouseX;
+      const deltaPct = (deltaPx / rect.width) * 100;
+      const maxWidth = 100 - drag.startX; // nicht ueber rechten Rand
+      let newWidth = drag.startWidth + deltaPct;
+      newWidth = Math.max(5, Math.min(maxWidth, newWidth));
+      setTpl((t) => {
+        if (!t) return t;
+        return {
+          ...t,
+          fields: t.fields.map((f) =>
+            f.id === drag.id ? { ...f, width: newWidth } : f,
+          ),
+        };
+      });
+    }
     setDirty(true);
   }, []);
 
@@ -378,10 +408,31 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
     const fieldPxX = (field.x / 100) * rect.width;
     const fieldPxY = (field.y / 100) * rect.height;
     dragRef.current = {
+      mode: "move",
       id: fieldId,
       offsetX: e.clientX - rect.left - fieldPxX,
       offsetY: e.clientY - rect.top - fieldPxY,
       canvasRect: rect,
+    };
+    document.addEventListener("mousemove", onGlobalMouseMove);
+    document.addEventListener("mouseup", onGlobalMouseUp);
+  };
+
+  const onResizeHandleMouseDown = (e: React.MouseEvent, fieldId: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setSelectedId(fieldId);
+    const canvas = canvasRef.current;
+    if (!canvas || !tpl) return;
+    const field = tpl.fields.find((f) => f.id === fieldId);
+    if (!field) return;
+    dragRef.current = {
+      mode: "resize",
+      id: fieldId,
+      startWidth: field.width,
+      startX: field.x,
+      startMouseX: e.clientX,
+      canvasRect: canvas.getBoundingClientRect(),
     };
     document.addEventListener("mousemove", onGlobalMouseMove);
     document.addEventListener("mouseup", onGlobalMouseUp);
@@ -601,6 +652,7 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
                   selected={f.id === selectedId}
                   canvasWidthMm={dims.w}
                   onMouseDown={(e) => onFieldMouseDown(e, f.id)}
+                  onResizeMouseDown={(e) => onResizeHandleMouseDown(e, f.id)}
                 />
               ))}
               {tpl.fields.length === 0 && (
@@ -666,16 +718,17 @@ function FieldOnCanvas({
   selected,
   canvasWidthMm,
   onMouseDown,
+  onResizeMouseDown,
 }: {
   field: EnvelopeField;
   sender: EnvelopeSender;
   selected: boolean;
   canvasWidthMm: number;
   onMouseDown: (e: React.MouseEvent) => void;
+  onResizeMouseDown: (e: React.MouseEvent) => void;
 }) {
   const parts = resolvePreview(field.content, sender);
   const fontDef = FONTS.find((f) => f.value === field.font) ?? FONTS[0];
-  // fontSize pt → mm → % der Canvas-Breite → cqw (container query width)
   const fontCqw = (field.fontSize / PT_PER_MM / canvasWidthMm) * 100;
 
   return (
@@ -694,7 +747,12 @@ function FieldOnCanvas({
         fontFamily: fontDef.css,
         color: field.color,
         lineHeight: field.lineHeight,
+        // Word-Wrap wie im PDF: bricht an Wortgrenzen, sehr lange Woerter
+        // werden nur im Notfall umgebrochen (kein mittendrin-splitten von
+        // normalen Woertern).
         whiteSpace: "pre-wrap",
+        wordBreak: "normal",
+        overflowWrap: "break-word",
         fontSize: `${fontCqw}cqw`,
       }}
     >
@@ -712,6 +770,14 @@ function FieldOnCanvas({
         ) : (
           <span key={i}>{p.text}</span>
         ),
+      )}
+
+      {selected && (
+        <div
+          onMouseDown={onResizeMouseDown}
+          className="absolute -right-1.5 top-1/2 -translate-y-1/2 size-3 bg-brand border-2 border-white rounded-full shadow cursor-ew-resize"
+          title="Breite ändern"
+        />
       )}
     </div>
   );
@@ -799,27 +865,8 @@ function FieldInspector({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3">
-          <div>
-            <Label className="text-xs">Textgröße</Label>
-            <div className="flex gap-1 mt-1">
-              {SIZE_PRESETS.map((s) => (
-                <button
-                  key={s.key}
-                  type="button"
-                  onClick={() => onChange({ fontSize: s.pt })}
-                  className={cn(
-                    "flex-1 h-8 rounded-squircle-sm border text-xs font-medium",
-                    currentSize === s.key
-                      ? "bg-brand text-white border-brand"
-                      : "border-line text-ink hover:bg-line-soft",
-                  )}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
+        {/* Schrift + Farbe */}
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
           <div>
             <Label htmlFor={`f-font-${field.id}`} className="text-xs">
               Schrift
@@ -863,14 +910,106 @@ function FieldInspector({
           </div>
         </div>
 
+        {/* Textgroesse: Presets + Slider + Zahl */}
         <div>
-          <Label className="text-xs">
-            Breite des Feldes: {Math.round(field.width)}%
-          </Label>
+          <div className="flex items-baseline justify-between mb-1">
+            <Label className="text-xs">Textgröße</Label>
+            <div className="text-xs text-ink-muted">exakt in Punkt</div>
+          </div>
+          <div className="flex gap-1 mb-2">
+            {SIZE_PRESETS.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => onChange({ fontSize: s.pt })}
+                className={cn(
+                  "flex-1 h-8 rounded-squircle-sm border text-xs font-medium",
+                  currentSize === s.key
+                    ? "bg-brand text-white border-brand"
+                    : "border-line text-ink hover:bg-line-soft",
+                )}
+              >
+                {s.label} · {s.pt} pt
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={4}
+              max={72}
+              step={1}
+              value={field.fontSize}
+              onChange={(e) =>
+                onChange({ fontSize: Number(e.target.value) })
+              }
+              className="flex-1 accent-brand"
+            />
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={4}
+                max={96}
+                step={1}
+                value={field.fontSize}
+                onChange={(e) =>
+                  onChange({
+                    fontSize: Math.max(4, Math.min(96, Number(e.target.value) || 4)),
+                  })
+                }
+                className="w-16 h-8 rounded-squircle-sm border border-line px-2 text-sm text-center"
+              />
+              <span className="text-xs text-ink-muted">pt</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Zeilenabstand */}
+        <div>
+          <div className="flex items-baseline justify-between mb-1">
+            <Label className="text-xs">Zeilenabstand</Label>
+            <div className="text-xs text-ink-muted">{field.lineHeight.toFixed(2)}×</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={0.8}
+              max={3}
+              step={0.05}
+              value={field.lineHeight}
+              onChange={(e) =>
+                onChange({ lineHeight: Number(e.target.value) })
+              }
+              className="flex-1 accent-brand"
+            />
+            <input
+              type="number"
+              min={0.8}
+              max={4}
+              step={0.05}
+              value={field.lineHeight}
+              onChange={(e) =>
+                onChange({
+                  lineHeight: Math.max(0.8, Math.min(4, Number(e.target.value) || 1)),
+                })
+              }
+              className="w-20 h-8 rounded-squircle-sm border border-line px-2 text-sm text-center"
+            />
+          </div>
+        </div>
+
+        {/* Feldbreite */}
+        <div>
+          <div className="flex items-baseline justify-between mb-1">
+            <Label className="text-xs">Feldbreite</Label>
+            <div className="text-xs text-ink-muted">
+              {Math.round(field.width)} % · Tipp: am blauen Punkt rechts am Element ziehen
+            </div>
+          </div>
           <input
             type="range"
-            min={10}
-            max={95}
+            min={5}
+            max={100}
             step={1}
             value={field.width}
             onChange={(e) => onChange({ width: Number(e.target.value) })}
