@@ -168,7 +168,14 @@ export async function generateEnvelopePdf(
       const bytes = await getFontBytes(filename);
       if (bytes) {
         try {
-          embeddedFonts.set(key, await pdfDoc.embedFont(bytes));
+          // subset: true → nur die im Doc verwendeten Glyphs embedden,
+          // reduziert die PDF-Groesse. Ausserdem umgeht das einen bug in
+          // pdf-lib der bei CFF/OTF-Fonts sonst zu falscher Glyph-Advance-
+          // Berechnung fuehrt (extreme Character-Spacings).
+          embeddedFonts.set(
+            key,
+            await pdfDoc.embedFont(bytes, { subset: true }),
+          );
           continue;
         } catch {
           // Font-File konnte nicht embedded werden (z. B. Color-Font ohne
@@ -204,10 +211,18 @@ export async function generateEnvelopePdf(
       ? sanitizeWinAnsi(text)
       : text;
     const lines = wrapText(font, safeText, fontSizePt, maxWidthPt);
+    const align = field.align ?? "left";
     for (let li = 0; li < lines.length; li += 1) {
       const yPt = H_pt - yTopPt - fontSizePt - li * lineHtPt;
       if (yPt < 0) break;
-      page.drawText(lines[li], { x: xPt, y: yPt, size: fontSizePt, font, color });
+      // Ausrichtung durch x-Offset innerhalb der maxWidthPt-Box.
+      let lineX = xPt;
+      if (align !== "left") {
+        const w = font.widthOfTextAtSize(lines[li], fontSizePt);
+        if (align === "center") lineX = xPt + (maxWidthPt - w) / 2;
+        else lineX = xPt + (maxWidthPt - w);
+      }
+      page.drawText(lines[li], { x: lineX, y: yPt, size: fontSizePt, font, color });
     }
   }
 

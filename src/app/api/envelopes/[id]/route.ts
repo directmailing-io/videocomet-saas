@@ -19,6 +19,7 @@ const FIELD = z.object({
   lineHeight: z.number().min(0.8).max(4.0),
   font: z.enum(["LiebeHeide", "LiebeHeideFineliner", "BiroScript", "Helvetica"]),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  align: z.enum(["left", "center", "right"]).optional(),
 });
 
 const UpdateBody = z.object({

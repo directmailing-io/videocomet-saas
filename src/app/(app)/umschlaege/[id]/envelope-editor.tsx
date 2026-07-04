@@ -8,10 +8,7 @@ import {
   Save,
   Trash2,
   Loader2,
-  MapPin,
   Type,
-  UserSquare2,
-  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +28,8 @@ import { cn } from "@/lib/utils";
 type FontName = "Helvetica" | "BiroScript" | "LiebeHeideFineliner";
 type FormatKey = "DIN_LANG" | "C4" | "C5" | "C6";
 
+type TextAlign = "left" | "center" | "right";
+
 interface EnvelopeField {
   id: string;
   label: string;
@@ -42,6 +41,7 @@ interface EnvelopeField {
   lineHeight: number;
   font: FontName;
   color: string;
+  align?: TextAlign;
 }
 
 interface EnvelopeSender {
@@ -141,50 +141,19 @@ function resolvePreview(
 }
 
 // ─── Preset-Felder ────────────────────────────────────────────────────────
-function newRecipientBlock(): EnvelopeField {
+function newTextField(): EnvelopeField {
   return {
     id: uid(),
-    label: "Empfänger",
-    // Beispiel-Platzhalter — der User kann/soll die frei umbenennen und
-    // beim Runden-Wizard seinen Excel-Spalten zuordnen.
-    content: "{{vorname}} {{nachname}}\n{{strasse}}\n{{plz}} {{ort}}",
-    x: 38,
-    y: 45,
-    width: 55,
-    fontSize: 13,
-    lineHeight: 1.35,
-    font: "Helvetica",
-    color: "#000000",
-  };
-}
-
-function newSenderLine(): EnvelopeField {
-  return {
-    id: uid(),
-    label: "Absender-Zeile",
-    content: "Mein Firmenname · Musterstraße 1 · 12345 Berlin",
-    x: 5,
-    y: 5,
-    width: 60,
-    fontSize: 8,
-    lineHeight: 1.2,
-    font: "Helvetica",
-    color: "#374151",
-  };
-}
-
-function newCustomText(): EnvelopeField {
-  return {
-    id: uid(),
-    label: "Freies Textfeld",
+    label: "Textfeld",
     content: "Neuer Text",
     x: 20,
     y: 25,
-    width: 40,
+    width: 55,
     fontSize: 13,
     lineHeight: 1.3,
     font: "Helvetica",
     color: "#000000",
+    align: "left",
   };
 }
 
@@ -270,11 +239,6 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
     if (selectedId === id) setSelectedId(null);
     setDirty(true);
   };
-  const patchSender = (patch: Partial<EnvelopeSender>) => {
-    setTpl((t) => (t ? { ...t, sender: { ...t.sender, ...patch } } : t));
-    setDirty(true);
-  };
-
   async function handleSave() {
     if (!tpl) return;
     setSaving(true);
@@ -405,30 +369,6 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
     };
   }, [onGlobalMouseMove, onGlobalMouseUp]);
 
-  const insertTagIntoSelected = (tagKey: string) => {
-    if (!selectedId || !tpl) return;
-    const field = tpl.fields.find((f) => f.id === selectedId);
-    if (!field) return;
-    const el = document.getElementById(
-      `field-content-${selectedId}`,
-    ) as HTMLTextAreaElement | null;
-    if (!el) {
-      patchField(selectedId, { content: field.content + `{{${tagKey}}}` });
-      return;
-    }
-    const start = el.selectionStart ?? field.content.length;
-    const end = el.selectionEnd ?? field.content.length;
-    const newContent =
-      field.content.slice(0, start) +
-      `{{${tagKey}}}` +
-      field.content.slice(end);
-    patchField(selectedId, { content: newContent });
-    requestAnimationFrame(() => {
-      el.focus();
-      const cursor = start + `{{${tagKey}}}`.length;
-      el.setSelectionRange(cursor, cursor);
-    });
-  };
 
   if (loading) {
     return (
@@ -507,27 +447,23 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
         <aside>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Baustein hinzufügen</CardTitle>
+              <CardTitle className="text-sm">Elemente</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 pt-0">
-              <PresetButton
-                icon={<MapPin className="size-4" />}
-                title="Empfänger-Block"
-                subtitle="Name, Straße, PLZ Ort"
-                onClick={() => addField(newRecipientBlock())}
-              />
-              <PresetButton
-                icon={<UserSquare2 className="size-4" />}
-                title="Absender-Zeile"
-                subtitle="Absender oben klein"
-                onClick={() => addField(newSenderLine())}
-              />
-              <PresetButton
-                icon={<Type className="size-4" />}
-                title="Freies Textfeld"
-                subtitle="Beliebiger Text"
-                onClick={() => addField(newCustomText())}
-              />
+            <CardContent className="space-y-3 pt-0">
+              <button
+                type="button"
+                onClick={() => addField(newTextField())}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-squircle-md bg-brand text-white h-11 font-semibold shadow-sm hover:bg-brand-deep transition-colors"
+              >
+                <Type className="size-4" />
+                Textfeld hinzufügen
+              </button>
+              <p className="text-[11px] text-ink-muted leading-snug">
+                Ein Textfeld nutzt du für alles: Empfänger, Absender oder
+                sonstigen Text. Für Empfänger nutzt du Platzhalter wie{" "}
+                <code className="bg-line-soft px-1 rounded">{"{{vorname}}"}</code>,
+                für Absender tippst du deine Daten einfach direkt ein.
+              </p>
             </CardContent>
           </Card>
         </aside>
@@ -572,7 +508,6 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
                 field={selectedField}
                 onChange={(patch) => patchField(selectedField.id, patch)}
                 onDelete={() => removeField(selectedField.id)}
-                onInsertTag={insertTagIntoSelected}
               />
             )}
           </div>
@@ -586,7 +521,6 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
                 field={selectedField}
                 onChange={(patch) => patchField(selectedField.id, patch)}
                 onDelete={() => removeField(selectedField.id)}
-                onInsertTag={insertTagIntoSelected}
               />
             ) : (
               <Card>
@@ -599,36 +533,6 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
         </aside>
       </div>
     </div>
-  );
-}
-
-// ─── Preset-Button ────────────────────────────────────────────────────────
-function PresetButton({
-  icon,
-  title,
-  subtitle,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full text-left flex items-center gap-3 rounded-squircle-sm border border-line p-3 hover:border-brand/40 hover:bg-brand-soft/30 transition-colors group"
-    >
-      <div className="size-8 rounded-full bg-brand-soft text-brand-deep flex items-center justify-center shrink-0">
-        {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-ink">{title}</div>
-        <div className="text-xs text-ink-muted truncate">{subtitle}</div>
-      </div>
-      <ChevronRight className="size-4 text-ink-muted group-hover:text-brand-deep shrink-0" />
-    </button>
   );
 }
 
@@ -666,9 +570,7 @@ function FieldOnCanvas({
         fontFamily: fontDef.css,
         color: field.color,
         lineHeight: field.lineHeight,
-        // Word-Wrap wie im PDF: bricht an Wortgrenzen, sehr lange Woerter
-        // werden nur im Notfall umgebrochen (kein mittendrin-splitten von
-        // normalen Woertern).
+        textAlign: field.align ?? "left",
         whiteSpace: "pre-wrap",
         wordBreak: "normal",
         overflowWrap: "break-word",
@@ -680,9 +582,12 @@ function FieldOnCanvas({
       )}
       {parts.map((p, i) =>
         p.isTag ? (
+          // Chip nur subtil markieren, ohne die Textfarbe zu ueberschreiben —
+          // damit man in der Vorschau die tatsaechliche Font-Farbe sieht.
           <span
             key={i}
-            className="inline-block bg-brand-soft/50 text-brand-deep rounded-sm px-0.5"
+            className="rounded-sm border border-dashed border-current/40 px-0.5"
+            style={{ backgroundColor: "rgba(0,0,0,0.03)" }}
           >
             {p.text}
           </span>
@@ -723,12 +628,10 @@ function FieldInspector({
   field,
   onChange,
   onDelete,
-  onInsertTag,
 }: {
   field: EnvelopeField;
   onChange: (patch: Partial<EnvelopeField>) => void;
   onDelete: () => void;
-  onInsertTag: (tagKey: string) => void;
 }) {
   const currentSize = nearestSizeKey(field.fontSize);
   return (
@@ -824,6 +727,38 @@ function FieldInspector({
                 />
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* Ausrichtung */}
+        <div>
+          <Label className="text-xs">Ausrichtung</Label>
+          <div className="flex gap-1 mt-1">
+            {(
+              [
+                { key: "left" as const, label: "Links", icon: "⇤" },
+                { key: "center" as const, label: "Mitte", icon: "⇔" },
+                { key: "right" as const, label: "Rechts", icon: "⇥" },
+              ]
+            ).map((a) => {
+              const current = field.align ?? "left";
+              return (
+                <button
+                  key={a.key}
+                  type="button"
+                  onClick={() => onChange({ align: a.key })}
+                  className={cn(
+                    "flex-1 h-9 rounded-squircle-sm border text-xs font-medium inline-flex items-center justify-center gap-1",
+                    current === a.key
+                      ? "bg-brand text-white border-brand"
+                      : "border-line text-ink hover:bg-line-soft",
+                  )}
+                >
+                  <span className="text-base leading-none">{a.icon}</span>
+                  {a.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -938,20 +873,3 @@ function FieldInspector({
   );
 }
 
-function TagChip({
-  onClick,
-  children,
-}: {
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center rounded-full bg-brand-soft/60 text-brand-deep hover:bg-brand-soft border border-brand/20 px-2 py-0.5 text-[11px] font-medium"
-    >
-      {children}
-    </button>
-  );
-}

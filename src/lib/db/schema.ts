@@ -282,6 +282,8 @@ export interface EnvelopeField {
   lineHeight: number; // Multiplikator (1.0-4.0)
   font: EnvelopeFieldFont;
   color: string; // Hex #RRGGBB
+  /** Textausrichtung innerhalb der Feldbreite. Default "left". */
+  align?: "left" | "center" | "right";
 }
 
 export interface EnvelopeSender {
