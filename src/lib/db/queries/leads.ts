@@ -353,7 +353,10 @@ export async function getCompletedLeadsForBundle(
         eq(leads.runId, runId),
         eq(runs.userId, userId),
         eq(leads.status, "completed"),
-        isNotNull(leads.pdfUrl),
+        // Ein Lead kommt ins Bundle wenn er ENTWEDER ein Brief-PDF ODER ein
+        // Umschlag-PDF hat (Migration 0031). Bundle-Zip enthaelt beide
+        // Kategorien in Sub-Ordnern.
+        or(isNotNull(leads.pdfUrl), isNotNull(leads.envelopePdfUrl)),
         isNull(leads.removedAt),
       ),
     )

@@ -14,6 +14,7 @@ import {
   User as UserIcon,
   BarChart3,
   Users2,
+  Mail as MailIcon,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -41,6 +42,7 @@ export type AppNavKey =
   | "analytics"
   | "media"
   | "landingpages"
+  | "envelopes"
   | "settings";
 
 export interface AppShellUser {
@@ -82,6 +84,7 @@ const NAV: NavItem[] = [
   },
   { key: "media", label: "Mediathek", href: "/mediathek", icon: Library },
   { key: "landingpages", label: "Landingpages", href: "/landingpages", icon: LayoutTemplate },
+  { key: "envelopes", label: "Umschläge", href: "/umschlaege", icon: MailIcon },
   { key: "settings", label: "Einstellungen", href: "/einstellungen", icon: Settings },
 ];
 

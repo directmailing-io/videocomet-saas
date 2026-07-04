@@ -180,6 +180,46 @@ async function buildBundle(
       zip.file(pdfName, mergedBytes);
     }
 
+    // ── Umschlaege (Migration 0031) ─────────────────────────────────────
+    // Wenn mindestens ein Lead ein envelope_pdf_url hat, bauen wir einen
+    // zweiten Merge-Loop und legen alle Umschlaege in umschlaege/*.pdf ab.
+    // Analoges Batching wie bei Briefen: N pro Multi-Page-PDF.
+    const withEnvelope = completed.filter((l) => !!l.envelopePdfUrl);
+    if (withEnvelope.length > 0) {
+      for (
+        let batchStart = 0;
+        batchStart < withEnvelope.length;
+        batchStart += pdfsPerFile
+      ) {
+        const batch = withEnvelope.slice(batchStart, batchStart + pdfsPerFile);
+        const firstIdx = batchStart + 1;
+        const lastIdx = batchStart + batch.length;
+        const merged = await PDFDocument.create();
+        for (const lead of batch) {
+          if (!lead.envelopePdfUrl) continue;
+          try {
+            const res = await fetch(lead.envelopePdfUrl);
+            if (!res.ok) continue;
+            const buf = Buffer.from(await res.arrayBuffer());
+            const src = await PDFDocument.load(buf, { ignoreEncryption: true });
+            const pages = await merged.copyPages(src, src.getPageIndices());
+            for (const p of pages) merged.addPage(p);
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[pdf-bundle] envelope merge fail lead=${lead.id}:`,
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
+        const mergedBytes = await merged.save();
+        zip.file(
+          `umschlaege/${baseName}_umschlaege_${firstIdx}-${lastIdx}.pdf`,
+          mergedBytes,
+        );
+      }
+    }
+
     // JSZip generateAsync streamed nicht — wir bauen das gesamte ZIP
     // im Memory. Bei 1000 Leads × 100KB pro Lead-PDF = ~100MB. Bei
     // 10 Multi-Page PDFs liegt das im Range, sollte für die meisten

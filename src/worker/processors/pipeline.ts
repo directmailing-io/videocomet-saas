@@ -1430,6 +1430,67 @@ export async function pipelineProcessor(
       });
     }
 
+    // ── Stage 9b: Umschlag-PDF (Migration 0031) ──────────────────────────
+    // Wenn die Kampagne ein envelope_template_id gesetzt hat, erzeugen wir
+    // pro Lead ein zusaetzliches PDF (personalisierter Umschlag) und laden
+    // es unter leads.envelope_pdf_url hoch. Wird im Bundle-Export separat
+    // im Unterordner "umschlaege/" ausgeliefert.
+    if (campaign.envelopeTemplateId && !lead.envelopePdfUrl) {
+      const envStart = Date.now();
+      try {
+        const { generateEnvelopePdf } = await import("../lib/envelope-pdf");
+        const { db } = await import("@/lib/db");
+        const { envelopeTemplates } = await import("@/lib/db/schema");
+        const { eq } = await import("drizzle-orm");
+        const [tpl] = await db
+          .select()
+          .from(envelopeTemplates)
+          .where(eq(envelopeTemplates.id, campaign.envelopeTemplateId))
+          .limit(1);
+        if (tpl) {
+          const pdfBuf = await generateEnvelopePdf({
+            format: tpl.format,
+            fields: tpl.fields,
+            sender: tpl.sender,
+            recipientData: lead.data ?? {},
+          });
+          const { uploadFile } = await import("@/lib/bunny/storage");
+          const remotePath = `runs/${data.runId}/envelopes/${data.leadId}.pdf`;
+          const uploaded = await uploadFile({
+            buffer: pdfBuf,
+            remotePath,
+            contentType: "application/pdf",
+          });
+          const { leads } = await import("@/lib/db/schema");
+          await db
+            .update(leads)
+            .set({
+              envelopePdfUrl: uploaded.url,
+              envelopePdfExpiresAt: new Date(
+                Date.now() + 1000 * 60 * 60 * 24 * 30,
+              ), // 30 Tage TTL
+            })
+            .where(eq(leads.id, data.leadId));
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "info",
+            stage: "pdf",
+            message: `${leadLabel}: envelope rendered (${((Date.now() - envStart) / 1000).toFixed(1)}s, ${pdfBuf.length} bytes)`,
+            durationMs: Date.now() - envStart,
+          });
+        }
+      } catch (err) {
+        await insertPipelineEvent({
+          runId: data.runId,
+          leadId: data.leadId,
+          level: "warn",
+          stage: "pdf",
+          message: `${leadLabel}: envelope-render failed (${err instanceof Error ? err.message : "?"}) — Lead completes without envelope`,
+        });
+      }
+    }
+
     // ── Stage 10: mark complete ──────────────────────────────────────
     await setCurrentStage(data.leadId, null);
     await updateLeadStatus(data.leadId, {

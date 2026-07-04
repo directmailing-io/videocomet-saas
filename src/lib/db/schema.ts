@@ -245,6 +245,13 @@ export const campaigns = pgTable("campaigns", {
    */
   pageUrlAliases: text("page_url_aliases"),
 
+  /**
+   * Optional: Umschlag-Vorlage die pro Lead als personalisiertes PDF
+   * generiert wird (Migration 0031). NULL = kein Umschlag.
+   * Bei Bundle-Export erscheinen die Umschlaege im Unter-Ordner "umschlaege/".
+   */
+  envelopeTemplateId: uuid("envelope_template_id"),
+
   /** Soft-Delete-Marker (Migration 0015). NULL = aktiv. Queries werden
    * in Paket G angepasst — bis dahin keine Verhaltensänderung. */
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -254,6 +261,44 @@ export const campaigns = pgTable("campaigns", {
 }, (t) => ({
   userIdx: index("campaigns_user_idx").on(t.userId),
   domainIdx: index("campaigns_domain_idx").on(t.domainId),
+}));
+
+// ── Envelope-Templates (Migration 0031) ─────────────────────────────────
+export type EnvelopeFieldFont = "LiebeHeideFineliner" | "BiroScript" | "Helvetica";
+
+export interface EnvelopeField {
+  id: string;
+  label: string;
+  content: string; // mit {{Placeholder}}-Tags
+  /** Position in Prozent des Umschlag-Formats (0-100). */
+  x: number;
+  y: number;
+  width: number;
+  fontSize: number; // pt
+  lineHeight: number; // Multiplikator (1.0-4.0)
+  font: EnvelopeFieldFont;
+  color: string; // Hex #RRGGBB
+}
+
+export interface EnvelopeSender {
+  name?: string;
+  street?: string;
+  zip?: string;
+  city?: string;
+}
+
+export const envelopeTemplates = pgTable("envelope_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  format: text("format").$type<"DIN_LANG" | "C4" | "C5" | "C6">().notNull().default("DIN_LANG"),
+  fields: jsonb("fields").$type<EnvelopeField[]>().notNull().default(sql`'[]'::jsonb`),
+  sender: jsonb("sender").$type<EnvelopeSender>().notNull().default(sql`'{}'::jsonb`),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("envelope_templates_user_idx").on(t.userId).where(sql`${t.deletedAt} IS NULL`),
 }));
 
 // ── Runs (Runden) ───────────────────────────────────────────────────────────
@@ -401,6 +446,9 @@ export const leads = pgTable("leads", {
   customThumbnailUrl: text("custom_thumbnail_url"),
   pdfUrl: text("pdf_url"),
   pdfExpiresAt: timestamp("pdf_expires_at", { withTimezone: true }),
+  /** Umschlag-PDF pro Lead (Migration 0031). */
+  envelopePdfUrl: text("envelope_pdf_url"),
+  envelopePdfExpiresAt: timestamp("envelope_pdf_expires_at", { withTimezone: true }),
 
   // ── Video-Dimensionen (Migration 0015) ─────────────────────────────────
   // Vom Bunny-Resolver berechnet & gecached, damit Player + PDF-Thumbnail-
