@@ -26,6 +26,10 @@ import { cn } from "@/lib/utils";
 
 // ─── Typen (analog zu DB-Schema) ─────────────────────────────────────────
 type FontName = "Helvetica" | "BiroScript" | "LiebeHeideFineliner";
+// Anmerkung: LiebeHeideFineliner bleibt im Type-Union fuer bestehende
+// DB-Zeilen; die Auswahl im Editor bietet sie aber nicht mehr an (der
+// Font wird von pdf-lib fehlerhaft gerendert, siehe FONT_ALIASES im
+// Worker).
 type FormatKey = "DIN_LANG" | "C4" | "C5" | "C6";
 
 type TextAlign = "left" | "center" | "right";
@@ -76,13 +80,8 @@ const FONTS: Array<{ value: FontName; label: string; css: string }> = [
     css: "Arial, 'Helvetica Neue', Helvetica, sans-serif",
   },
   {
-    value: "LiebeHeideFineliner",
-    label: "Handschrift fein (Liebe Heide)",
-    css: "'LiebeHeideFineliner', cursive",
-  },
-  {
     value: "BiroScript",
-    label: "Handschrift kräftig (Biro Script)",
+    label: "Handschrift (Biro Script)",
     css: "'BiroScript', cursive",
   },
 ];

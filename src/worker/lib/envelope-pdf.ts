@@ -27,18 +27,20 @@ const SIZES: Record<string, { width: number; height: number }> = {
 };
 
 // FONT_FILES: welche vom User waehlbaren Fonts embedden wir vom Filesystem.
-// LiebeHeide-Color.otf ist ein Color-Font (COLR/CPAL) — pdf-lib kann daraus
-// keine Glyph-Widths berechnen (widthOfTextAtSize crashed mit null.pos), also
-// nicht in dieser Map. Wenn ein Template den alten Wert "LiebeHeide" tragen
-// sollte, faellt es unten auf LiebeHeideFineliner zurueck.
+// - LiebeHeide-Color.otf: Color-Font → pdf-lib kann's nicht.
+// - LiebeHeideVector-FinelinerRegular.otf: pdf-lib rendert Glyphs mit
+//   defekten Advances (grosse Char-Spacings), obwohl widthOfTextAtSize
+//   korrekt ist. Bug in pdf-libs CFF/TTF-Encoding, kein subset/keine
+//   fontkit-Version behob es. BiroScript rendert dagegen sauber.
 const FONT_FILES: Record<string, string> = {
-  LiebeHeideFineliner: "LiebeHeideVector-FinelinerRegular.otf",
   BiroScript: "biro_script_plus.ttf",
 };
 
 // Font-Aliase fuer alte Templates in DB, die noch den entfernten Wert tragen.
+// Beide LiebeHeide-Varianten → BiroScript (einzige zuverlaessige Handschrift).
 const FONT_ALIASES: Record<string, string> = {
-  LiebeHeide: "LiebeHeideFineliner",
+  LiebeHeide: "BiroScript",
+  LiebeHeideFineliner: "BiroScript",
 };
 
 // Fonts liegen im standalone-Output unter dem worker-lib-Dir.
@@ -259,7 +261,7 @@ export function getDefaultFieldsForFormat(
       width: 55,
       fontSize: 13,
       lineHeight: 1.35,
-      font: format === "DIN_LANG" ? "BiroScript" : "Helvetica",
+      font: "BiroScript",
       color: "#000000",
     },
   ];
