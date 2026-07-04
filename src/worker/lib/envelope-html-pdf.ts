@@ -229,7 +229,7 @@ export async function generateEnvelopePdfViaHtml(
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.setContent(html, { waitUntil: "load" });
     // Sicherstellen dass die Fonts geladen sind bevor gedruckt wird.
     await page.evaluateHandle("document.fonts.ready");
     const pdf = await page.pdf({
