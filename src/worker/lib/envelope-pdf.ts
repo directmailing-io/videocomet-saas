@@ -168,14 +168,7 @@ export async function generateEnvelopePdf(
       const bytes = await getFontBytes(filename);
       if (bytes) {
         try {
-          // subset: true → nur die im Doc verwendeten Glyphs embedden,
-          // reduziert die PDF-Groesse. Ausserdem umgeht das einen bug in
-          // pdf-lib der bei CFF/OTF-Fonts sonst zu falscher Glyph-Advance-
-          // Berechnung fuehrt (extreme Character-Spacings).
-          embeddedFonts.set(
-            key,
-            await pdfDoc.embedFont(bytes, { subset: true }),
-          );
+          embeddedFonts.set(key, await pdfDoc.embedFont(bytes));
           continue;
         } catch {
           // Font-File konnte nicht embedded werden (z. B. Color-Font ohne

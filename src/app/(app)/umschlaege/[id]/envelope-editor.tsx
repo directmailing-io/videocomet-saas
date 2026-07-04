@@ -87,13 +87,6 @@ const FONTS: Array<{ value: FontName; label: string; css: string }> = [
   },
 ];
 
-const SIZE_PRESETS = [
-  { key: "S", label: "Klein", pt: 10 },
-  { key: "M", label: "Mittel", pt: 13 },
-  { key: "L", label: "Groß", pt: 18 },
-  { key: "XL", label: "Sehr groß", pt: 26 },
-];
-
 const COLOR_PRESETS = [
   { hex: "#000000", label: "Schwarz" },
   { hex: "#1f3a8a", label: "Marineblau" },
@@ -104,19 +97,6 @@ const COLOR_PRESETS = [
 // ─── Helper ───────────────────────────────────────────────────────────────
 function uid() {
   return Math.random().toString(36).slice(2, 10);
-}
-
-function nearestSizeKey(pt: number): string {
-  let best = SIZE_PRESETS[0];
-  let bestDiff = Math.abs(SIZE_PRESETS[0].pt - pt);
-  for (const p of SIZE_PRESETS) {
-    const d = Math.abs(p.pt - pt);
-    if (d < bestDiff) {
-      best = p;
-      bestDiff = d;
-    }
-  }
-  return best.key;
 }
 
 function resolvePreview(
@@ -446,23 +426,21 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
         {/* Linke Sidebar: nur Bausteine */}
         <aside>
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Elemente</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-0">
-              <button
+            <CardContent className="p-4 space-y-3">
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => addField(newTextField())}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-squircle-md bg-brand text-white h-11 font-semibold shadow-sm hover:bg-brand-deep transition-colors"
+                iconLeft={<Type className="size-4" />}
+                className="w-full"
               >
-                <Type className="size-4" />
                 Textfeld hinzufügen
-              </button>
+              </Button>
               <p className="text-[11px] text-ink-muted leading-snug">
-                Ein Textfeld nutzt du für alles: Empfänger, Absender oder
-                sonstigen Text. Für Empfänger nutzt du Platzhalter wie{" "}
-                <code className="bg-line-soft px-1 rounded">{"{{vorname}}"}</code>,
-                für Absender tippst du deine Daten einfach direkt ein.
+                Ein Textfeld nutzt du für alles — Empfänger, Absender oder
+                sonstigen Text. Für dynamische Felder Platzhalter wie{" "}
+                <code className="bg-line-soft px-1 rounded">{"{{vorname}}"}</code>{" "}
+                verwenden, für Absender einfach direkt tippen.
               </p>
             </CardContent>
           </Card>
@@ -633,7 +611,6 @@ function FieldInspector({
   onChange: (patch: Partial<EnvelopeField>) => void;
   onDelete: () => void;
 }) {
-  const currentSize = nearestSizeKey(field.fontSize);
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -762,28 +739,10 @@ function FieldInspector({
           </div>
         </div>
 
-        {/* Textgroesse: Presets + Slider + Zahl */}
+        {/* Textgroesse: Slider + Zahleneingabe */}
         <div>
           <div className="flex items-baseline justify-between mb-1">
             <Label className="text-xs">Textgröße</Label>
-            <div className="text-xs text-ink-muted">exakt in Punkt</div>
-          </div>
-          <div className="flex gap-1 mb-2">
-            {SIZE_PRESETS.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => onChange({ fontSize: s.pt })}
-                className={cn(
-                  "flex-1 h-8 rounded-squircle-sm border text-xs font-medium",
-                  currentSize === s.key
-                    ? "bg-brand text-white border-brand"
-                    : "border-line text-ink hover:bg-line-soft",
-                )}
-              >
-                {s.label} · {s.pt} pt
-              </button>
-            ))}
           </div>
           <div className="flex items-center gap-3">
             <input
