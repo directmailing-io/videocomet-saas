@@ -428,7 +428,7 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
             <CardContent className="p-4 space-y-3">
               <Button
                 type="button"
-                variant="outline"
+                variant="subtle"
                 onClick={() => addField(newTextField())}
                 iconLeft={<Type className="size-4" />}
                 className="w-full"
