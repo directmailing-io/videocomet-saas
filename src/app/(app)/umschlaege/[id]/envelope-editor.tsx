@@ -69,18 +69,11 @@ const FORMAT_MM: Record<FormatKey, { w: number; h: number; label: string }> = {
   C6: { w: 162, h: 114, label: "C6 (162 × 114 mm)" },
 };
 
-const SENDER_TAGS = [
-  { key: "__sender.name", label: "Absender: Name" },
-  { key: "__sender.street", label: "Absender: Straße" },
-  { key: "__sender.zip", label: "Absender: PLZ" },
-  { key: "__sender.city", label: "Absender: Ort" },
-];
-
 const FONTS: Array<{ value: FontName; label: string; css: string }> = [
   {
     value: "Helvetica",
-    label: "Sauber (Helvetica)",
-    css: "'Helvetica Neue', Arial, sans-serif",
+    label: "Arial",
+    css: "Arial, 'Helvetica Neue', Helvetica, sans-serif",
   },
   {
     value: "LiebeHeideFineliner",
@@ -107,14 +100,6 @@ const COLOR_PRESETS = [
   { hex: "#374151", label: "Anthrazit" },
 ];
 
-// Bekannte Absender-Tag-Labels — bei diesen zeigen wir den freundlichen Namen
-// (z. B. "Absender: Name") statt des rohen Keys.
-const KNOWN_TAG_LABEL: Record<string, string> = {
-  "__sender.name": "Absender: Name",
-  "__sender.street": "Absender: Straße",
-  "__sender.zip": "Absender: PLZ",
-  "__sender.city": "Absender: Ort",
-};
 
 // ─── Helper ───────────────────────────────────────────────────────────────
 function uid() {
@@ -136,7 +121,6 @@ function nearestSizeKey(pt: number): string {
 
 function resolvePreview(
   content: string,
-  sender: EnvelopeSender,
 ): { text: string; isTag: boolean }[] {
   const parts: { text: string; isTag: boolean }[] = [];
   const rex = /\{\{([^}]+)\}\}/g;
@@ -146,19 +130,9 @@ function resolvePreview(
     if (m.index > last)
       parts.push({ text: content.slice(last, m.index), isTag: false });
     const key = m[1].trim();
-    let value: string;
-    if (key.startsWith("__sender.")) {
-      // Absender kommt aus der Vorlage selbst → wenn gesetzt: zeigen,
-      // sonst freundliches Label als Platzhalter.
-      const field = key.slice("__sender.".length) as keyof EnvelopeSender;
-      const stored = sender[field];
-      value = stored && stored.trim() !== "" ? stored : KNOWN_TAG_LABEL[key] ?? key;
-    } else {
-      // Freier Platzhalter → als Chip mit dem Namen anzeigen (in eckigen
-      // Klammern), so sieht der User genau welche Spalte gemappt wird.
-      value = `[${key}]`;
-    }
-    parts.push({ text: value, isTag: true });
+    // Platzhalter als Chip mit dem Namen anzeigen — so sieht der User
+    // genau welche Spalte spaeter beim Runden-Wizard gemappt wird.
+    parts.push({ text: `[${key}]`, isTag: true });
     last = m.index + m[0].length;
   }
   if (last < content.length)
@@ -188,8 +162,7 @@ function newSenderLine(): EnvelopeField {
   return {
     id: uid(),
     label: "Absender-Zeile",
-    content:
-      "{{__sender.name}} · {{__sender.street}} · {{__sender.zip}} {{__sender.city}}",
+    content: "Mein Firmenname · Musterstraße 1 · 12345 Berlin",
     x: 5,
     y: 5,
     width: 60,
@@ -529,9 +502,9 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-5">
-        {/* Sidebar */}
-        <aside className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_360px] gap-5">
+        {/* Linke Sidebar: nur Bausteine */}
+        <aside>
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Baustein hinzufügen</CardTitle>
@@ -546,7 +519,7 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
               <PresetButton
                 icon={<UserSquare2 className="size-4" />}
                 title="Absender-Zeile"
-                subtitle="Kleine Zeile oben"
+                subtitle="Absender oben klein"
                 onClick={() => addField(newSenderLine())}
               />
               <PresetButton
@@ -557,75 +530,14 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
               />
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Meine Absender­adresse</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-0">
-              <div>
-                <Label htmlFor="s-name" className="text-xs">
-                  Name / Firma
-                </Label>
-                <Input
-                  id="s-name"
-                  value={tpl.sender.name ?? ""}
-                  onChange={(e) => patchSender({ name: e.target.value })}
-                  placeholder="Max Mustermann"
-                />
-              </div>
-              <div>
-                <Label htmlFor="s-street" className="text-xs">
-                  Straße
-                </Label>
-                <Input
-                  id="s-street"
-                  value={tpl.sender.street ?? ""}
-                  onChange={(e) => patchSender({ street: e.target.value })}
-                  placeholder="Musterstraße 1"
-                />
-              </div>
-              <div className="grid grid-cols-[100px_1fr] gap-2">
-                <div>
-                  <Label htmlFor="s-zip" className="text-xs">
-                    PLZ
-                  </Label>
-                  <Input
-                    id="s-zip"
-                    value={tpl.sender.zip ?? ""}
-                    onChange={(e) => patchSender({ zip: e.target.value })}
-                    placeholder="12345"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="s-city" className="text-xs">
-                    Ort
-                  </Label>
-                  <Input
-                    id="s-city"
-                    value={tpl.sender.city ?? ""}
-                    onChange={(e) => patchSender({ city: e.target.value })}
-                    placeholder="Berlin"
-                  />
-                </div>
-              </div>
-              <p className="text-[11px] text-ink-muted leading-snug">
-                Diese Absender-Daten erscheinen dort, wo im Text der Baustein
-                „Absender: …" verwendet wird.
-              </p>
-            </CardContent>
-          </Card>
         </aside>
 
-        {/* Canvas */}
-        <div className="space-y-4">
+        {/* Mitte: Canvas */}
+        <div className="space-y-3">
           <div className="rounded-squircle-md bg-line-soft p-6 flex items-center justify-center">
             <div
               ref={canvasRef}
               onMouseDown={(e) => {
-                // Nur deselektieren, wenn Klick auf den Canvas-Hintergrund
-                // (nicht auf ein Feld) — sonst verschwindet der Inspector
-                // sobald man auf ein Feld klickt.
                 if (e.target === e.currentTarget) setSelectedId(null);
               }}
               className="relative w-full max-w-[720px] bg-white shadow-lg rounded-sm border border-line select-none"
@@ -635,7 +547,6 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
                 <FieldOnCanvas
                   key={f.id}
                   field={f}
-                  sender={tpl.sender}
                   selected={f.id === selectedId}
                   canvasWidthMm={dims.w}
                   onMouseDown={(e) => onFieldMouseDown(e, f.id)}
@@ -650,19 +561,42 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
             </div>
           </div>
           <p className="text-xs text-ink-muted text-center">
-            Klick auf ein Element = auswählen. Ziehen = verschieben. Die
-            Vorschau zeigt Beispieldaten (Max Mustermann).
+            Klick auf ein Element = auswählen · Ziehen = verschieben · Blauer
+            Griff rechts = Breite ändern
           </p>
 
-          {selectedField && (
-            <FieldInspector
-              field={selectedField}
-              onChange={(patch) => patchField(selectedField.id, patch)}
-              onDelete={() => removeField(selectedField.id)}
-              onInsertTag={insertTagIntoSelected}
-            />
-          )}
+          {/* Mobile: Inspector unter Canvas */}
+          <div className="lg:hidden">
+            {selectedField && (
+              <FieldInspector
+                field={selectedField}
+                onChange={(patch) => patchField(selectedField.id, patch)}
+                onDelete={() => removeField(selectedField.id)}
+                onInsertTag={insertTagIntoSelected}
+              />
+            )}
+          </div>
         </div>
+
+        {/* Rechte Sidebar (Desktop): Inspector, sticky damit Vorschau sichtbar bleibt */}
+        <aside className="hidden lg:block">
+          <div className="sticky top-6 space-y-3">
+            {selectedField ? (
+              <FieldInspector
+                field={selectedField}
+                onChange={(patch) => patchField(selectedField.id, patch)}
+                onDelete={() => removeField(selectedField.id)}
+                onInsertTag={insertTagIntoSelected}
+              />
+            ) : (
+              <Card>
+                <CardContent className="py-10 text-center text-ink-muted text-sm">
+                  Wähle links ein Element aus, um es zu bearbeiten.
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </aside>
       </div>
     </div>
   );
@@ -708,13 +642,12 @@ function FieldOnCanvas({
   onResizeMouseDown,
 }: {
   field: EnvelopeField;
-  sender: EnvelopeSender;
   selected: boolean;
   canvasWidthMm: number;
   onMouseDown: (e: React.MouseEvent) => void;
   onResizeMouseDown: (e: React.MouseEvent) => void;
 }) {
-  const parts = resolvePreview(field.content, sender);
+  const parts = resolvePreview(field.content);
   const fontDef = FONTS.find((f) => f.value === field.font) ?? FONTS[0];
   const fontCqw = (field.fontSize / PT_PER_MM / canvasWidthMm) * 100;
 
@@ -762,9 +695,25 @@ function FieldOnCanvas({
       {selected && (
         <div
           onMouseDown={onResizeMouseDown}
-          className="absolute -right-1.5 top-1/2 -translate-y-1/2 size-3 bg-brand border-2 border-white rounded-full shadow cursor-ew-resize"
-          title="Breite ändern"
-        />
+          className="absolute -right-2 top-0 h-full w-4 flex items-center justify-center cursor-ew-resize group/handle"
+          title="Breite ändern — hier ziehen"
+        >
+          <div className="h-full w-1 bg-brand rounded-full opacity-70 group-hover/handle:opacity-100 transition-opacity" />
+          <div className="absolute size-5 bg-brand text-white rounded-full shadow-lg flex items-center justify-center border-2 border-white">
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            >
+              <path d="M4 2 L2 5 L4 8" />
+              <path d="M6 2 L8 5 L6 8" />
+            </svg>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -832,18 +781,6 @@ function FieldInspector({
             Bei der Runden-Erstellung ordnest du diese Namen dann deinen
             Excel-Spalten zu.
           </p>
-          <div className="mt-2">
-            <div className="text-[11px] uppercase tracking-wide text-ink-muted mb-1">
-              Absender-Daten einfügen (aus dieser Vorlage)
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {SENDER_TAGS.map((t) => (
-                <TagChip key={t.key} onClick={() => onInsertTag(t.key)}>
-                  + {t.label}
-                </TagChip>
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* Schrift + Farbe */}
