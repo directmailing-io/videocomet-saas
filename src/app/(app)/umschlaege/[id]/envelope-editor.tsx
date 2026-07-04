@@ -584,7 +584,12 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
           <div className="rounded-squircle-md bg-line-soft p-6 flex items-center justify-center">
             <div
               ref={canvasRef}
-              onClick={() => setSelectedId(null)}
+              onMouseDown={(e) => {
+                // Nur deselektieren, wenn Klick auf den Canvas-Hintergrund
+                // (nicht auf ein Feld) — sonst verschwindet der Inspector
+                // sobald man auf ein Feld klickt.
+                if (e.target === e.currentTarget) setSelectedId(null);
+              }}
               className="relative w-full max-w-[720px] bg-white shadow-lg rounded-sm border border-line select-none"
               style={canvasStyle}
             >
