@@ -7,6 +7,10 @@ import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { envelopeTemplates } from "@/lib/db/schema";
 import { generateEnvelopePdf } from "@/worker/lib/envelope-pdf";
+import {
+  generateEnvelopePdfViaHtml,
+  requiresHtmlRenderer,
+} from "@/worker/lib/envelope-html-pdf";
 
 /**
  * GET /api/envelopes/[id]/preview
@@ -48,12 +52,20 @@ export async function GET(
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
 
-  const pdf = await generateEnvelopePdf({
-    format: tpl.format,
-    fields: tpl.fields,
-    sender: tpl.sender,
-    recipientData: SAMPLE_DATA,
-  });
+  const useHtml = requiresHtmlRenderer(tpl.fields);
+  const pdf = useHtml
+    ? await generateEnvelopePdfViaHtml({
+        format: tpl.format,
+        fields: tpl.fields,
+        sender: tpl.sender,
+        recipientData: SAMPLE_DATA,
+      })
+    : await generateEnvelopePdf({
+        format: tpl.format,
+        fields: tpl.fields,
+        sender: tpl.sender,
+        recipientData: SAMPLE_DATA,
+      });
 
   return new NextResponse(new Uint8Array(pdf), {
     status: 200,

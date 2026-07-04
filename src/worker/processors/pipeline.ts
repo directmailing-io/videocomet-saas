@@ -1439,6 +1439,8 @@ export async function pipelineProcessor(
       const envStart = Date.now();
       try {
         const { generateEnvelopePdf } = await import("../lib/envelope-pdf");
+        const { generateEnvelopePdfViaHtml, requiresHtmlRenderer } =
+          await import("../lib/envelope-html-pdf");
         const { db } = await import("@/lib/db");
         const { envelopeTemplates } = await import("@/lib/db/schema");
         const { eq } = await import("drizzle-orm");
@@ -1448,12 +1450,20 @@ export async function pipelineProcessor(
           .where(eq(envelopeTemplates.id, campaign.envelopeTemplateId))
           .limit(1);
         if (tpl) {
-          const pdfBuf = await generateEnvelopePdf({
-            format: tpl.format,
-            fields: tpl.fields,
-            sender: tpl.sender,
-            recipientData: lead.data ?? {},
-          });
+          const useHtml = requiresHtmlRenderer(tpl.fields);
+          const pdfBuf = useHtml
+            ? await generateEnvelopePdfViaHtml({
+                format: tpl.format,
+                fields: tpl.fields,
+                sender: tpl.sender,
+                recipientData: (lead.data ?? {}) as Record<string, unknown>,
+              })
+            : await generateEnvelopePdf({
+                format: tpl.format,
+                fields: tpl.fields,
+                sender: tpl.sender,
+                recipientData: (lead.data ?? {}) as Record<string, unknown>,
+              });
           const { uploadFile } = await import("@/lib/bunny/storage");
           const remotePath = `runs/${data.runId}/envelopes/${data.leadId}.pdf`;
           const uploaded = await uploadFile({

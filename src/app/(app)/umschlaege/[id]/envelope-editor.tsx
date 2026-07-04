@@ -80,8 +80,13 @@ const FONTS: Array<{ value: FontName; label: string; css: string }> = [
     css: "Arial, 'Helvetica Neue', Helvetica, sans-serif",
   },
   {
+    value: "LiebeHeideFineliner",
+    label: "Handschrift fein (Liebe Heide)",
+    css: "'LiebeHeideFineliner', cursive",
+  },
+  {
     value: "BiroScript",
-    label: "Handschrift (Biro Script)",
+    label: "Handschrift kräftig (Biro Script)",
     css: "'BiroScript', cursive",
   },
 ];

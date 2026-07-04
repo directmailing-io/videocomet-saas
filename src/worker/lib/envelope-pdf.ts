@@ -36,8 +36,10 @@ const FONT_FILES: Record<string, string> = {
   BiroScript: "biro_script_plus.ttf",
 };
 
-// Font-Aliase fuer alte Templates in DB, die noch den entfernten Wert tragen.
-// Beide LiebeHeide-Varianten → BiroScript (einzige zuverlaessige Handschrift).
+// Font-Aliase fuer den pdf-lib-Renderer. LiebeHeide-Templates werden
+// stattdessen ueber den HTML/Puppeteer-Renderer bedient (envelope-html-pdf.ts).
+// Sollte diese Datei dennoch einen LiebeHeide-Wert sehen (Fallback-Pfad),
+// mappen wir auf BiroScript um zumindest handschriftlich zu bleiben.
 const FONT_ALIASES: Record<string, string> = {
   LiebeHeide: "BiroScript",
   LiebeHeideFineliner: "BiroScript",
