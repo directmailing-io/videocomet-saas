@@ -55,7 +55,7 @@ export async function GET(
     recipientData: SAMPLE_DATA,
   });
 
-  return new NextResponse(pdf, {
+  return new NextResponse(new Uint8Array(pdf), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
