@@ -116,6 +116,7 @@ export async function PUT(
       const detected = await collectCampaignPlaceholders(
         run.campaignId,
         auth.user.id,
+        { envelopeTemplateId: run.envelopeTemplateId ?? null },
       );
       const allowed = new Set(detected.map((p) => p.key));
       const unknown = Object.keys(effective).filter((k) => !allowed.has(k));
