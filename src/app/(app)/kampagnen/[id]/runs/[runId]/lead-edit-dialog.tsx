@@ -51,7 +51,23 @@ export function LeadEditDialog({
 
   if (!lead) return null;
 
-  const keys = Object.keys(values).sort((a, b) => a.localeCompare(b));
+  // Case-insensitive Sortierung, damit "Anrede" / "ANREDE" oder "city" / "City"
+  // in der Tabelle direkt nebeneinander stehen — der User erkennt Duplikate
+  // aus der CSV sofort und weiss welche Zeile er editieren soll.
+  const keys = Object.keys(values).sort((a, b) =>
+    a.toLowerCase().localeCompare(b.toLowerCase()),
+  );
+
+  // Markiere Keys, die einen case-insensitive Twin haben — dann bekommt die
+  // Zeile ein dezentes "aus CSV doppelt" Hinweis.
+  const lowerCounts = new Map<string, number>();
+  for (const k of keys) {
+    const kk = k.toLowerCase();
+    lowerCounts.set(kk, (lowerCounts.get(kk) ?? 0) + 1);
+  }
+  const dupSet = new Set(
+    keys.filter((k) => (lowerCounts.get(k.toLowerCase()) ?? 0) > 1),
+  );
 
   async function handleSave() {
     if (!lead) return;
@@ -103,27 +119,53 @@ export function LeadEditDialog({
         <DialogHeader>
           <DialogTitle>Lead-Daten bearbeiten</DialogTitle>
           <DialogDescription>
-            Korrigiere einzelne Felder und wähle optional aus, was direkt
-            danach neu generiert werden soll.
+            Alle Felder aus deiner CSV — korrigiere einzelne Werte und wähle
+            optional aus, was direkt danach neu generiert werden soll.
+            {dupSet.size > 0 && (
+              <span className="block mt-1 text-amber-700">
+                Hinweis: {dupSet.size / 2} Feld
+                {dupSet.size / 2 === 1 ? "" : "er"} kommen in deiner CSV
+                mehrfach mit verschiedener Schreibweise vor (mit „dup"
+                markiert). Bearbeite ggf. beide, damit alle Platzhalter
+                aktualisiert werden.
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto pr-2 space-y-3 py-1">
+        <div className="flex-1 overflow-y-auto rounded-squircle-md border border-line divide-y divide-line">
           {keys.length === 0 ? (
-            <p className="text-sm text-ink-muted">Keine Daten vorhanden.</p>
+            <p className="text-sm text-ink-muted p-4">Keine Daten vorhanden.</p>
           ) : (
             keys.map((k) => (
-              <div key={k} className="grid grid-cols-[180px_1fr] items-center gap-3">
-                <Label htmlFor={`lead-${k}`} className="text-xs text-ink-muted truncate">
-                  {k}
-                </Label>
+              <div
+                key={k}
+                className="grid grid-cols-[220px_1fr] items-center gap-3 px-3 py-2 hover:bg-line-soft/40"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Label
+                    htmlFor={`lead-${k}`}
+                    className="text-xs font-medium text-ink-muted truncate"
+                    title={k}
+                  >
+                    {k}
+                  </Label>
+                  {dupSet.has(k) && (
+                    <span
+                      className="inline-flex items-center rounded-full bg-amber-100 text-amber-900 text-[9px] uppercase tracking-wide px-1.5 py-0.5 shrink-0"
+                      title="Diese Spalte kommt in deiner CSV mehrfach mit unterschiedlicher Schreibweise vor."
+                    >
+                      dup
+                    </span>
+                  )}
+                </div>
                 <Input
                   id={`lead-${k}`}
                   value={values[k] ?? ""}
                   onChange={(e) =>
                     setValues((prev) => ({ ...prev, [k]: e.target.value }))
                   }
-                  className="text-sm"
+                  className="h-8 text-sm"
                 />
               </div>
             ))
