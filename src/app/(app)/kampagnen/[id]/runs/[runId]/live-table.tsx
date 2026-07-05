@@ -1010,7 +1010,10 @@ function LeadRowActions({
         throw new Error(json?.error ?? "Fehler");
       }
       // Lokale Row auf "pending" flippen, damit die UI sofort reagiert.
-      const patch: Partial<LeadRow> = { id: lead.id, status: "pending" };
+      const patch: Partial<LeadRow> & { id: string } = {
+        id: lead.id,
+        status: "pending",
+      };
       if (scope === "all" || scope === "pdf") patch.pdfUrl = null;
       if (scope === "all" || scope === "envelope") patch.envelopePdfUrl = null;
       if (scope === "all" || scope === "video") patch.videoUrl = null;
