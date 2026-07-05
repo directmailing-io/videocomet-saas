@@ -11,6 +11,9 @@ import {
   FileText,
   RotateCcw,
   Loader2,
+  Mail as MailIcon,
+  MoreHorizontal,
+  Pencil,
 } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useToast } from "@/components/ui/toaster";
@@ -36,6 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { BundleDialog } from "./bundle-dialog";
+import { LeadEditDialog } from "./lead-edit-dialog";
 
 interface LeadRow {
   id: string;
@@ -44,6 +48,7 @@ interface LeadRow {
   slug: string | null;
   videoUrl: string | null;
   pdfUrl: string | null;
+  envelopePdfUrl: string | null;
   thumbnailUrl: string | null;
   errorMessage: string | null;
   completedAt: string | null;
@@ -229,6 +234,7 @@ export function LiveTable({
 
   // Drawer state for per-lead analytics.
   const [drawerLead, setDrawerLead] = React.useState<LeadRow | null>(null);
+  const [editLead, setEditLead] = React.useState<LeadRow | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const openLeadDrawer = React.useCallback((lead: LeadRow) => {
     setDrawerLead(lead);
@@ -783,12 +789,14 @@ export function LiveTable({
               <TableHead>Landingpage</TableHead>
               <TableHead>Video</TableHead>
               <TableHead>PDF</TableHead>
+              <TableHead>Umschlag</TableHead>
+              <TableHead className="w-14 text-right">Aktion</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center text-ink-muted py-8">
+                <TableCell colSpan={12} className="text-center text-ink-muted py-8">
                   {leads.length === 0
                     ? "Noch keine Leads."
                     : "Keine Leads im aktiven Filter."}
@@ -919,6 +927,30 @@ export function LiveTable({
                       <span className="text-ink-muted text-xs">aus</span>
                     )}
                   </TableCell>
+                  <TableCell onClick={stopRowClick}>
+                    {l.envelopePdfUrl ? (
+                      <a
+                        href={`/api/leads/${l.id}/envelope-pdf`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-brand-deep hover:underline text-xs"
+                      >
+                        <MailIcon className="size-3.5" />
+                        Download
+                      </a>
+                    ) : (
+                      <span className="text-ink-muted text-xs">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell onClick={stopRowClick} className="text-right">
+                    <LeadRowActions
+                      lead={l}
+                      onEdit={() => setEditLead(l)}
+                      onLeadUpdated={(nl) => setLeads((prev) =>
+                        prev.map((x) => (x.id === nl.id ? { ...x, ...nl } : x)),
+                      )}
+                    />
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -932,11 +964,117 @@ export function LiveTable({
         onOpenChange={setDrawerOpen}
       />
 
+      <LeadEditDialog
+        lead={editLead}
+        onOpenChange={(open) => {
+          if (!open) setEditLead(null);
+        }}
+        onSaved={(updated) => {
+          setLeads((prev) =>
+            prev.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)),
+          );
+        }}
+      />
+
       {/* Tree-shake guard for icons not always used above */}
       <span aria-hidden className="hidden">
         <FileText className="size-0" />
       </span>
     </div>
+  );
+}
+
+/** Overflow-Menue pro Lead-Zeile: Bearbeiten + Neu-Generieren. */
+function LeadRowActions({
+  lead,
+  onEdit,
+  onLeadUpdated,
+}: {
+  lead: LeadRow;
+  onEdit: () => void;
+  onLeadUpdated: (patch: Partial<LeadRow> & { id: string }) => void;
+}): React.JSX.Element {
+  const { toast } = useToast();
+  const [busy, setBusy] = React.useState<null | "all" | "pdf" | "envelope" | "video">(null);
+
+  async function regenerate(scope: "all" | "pdf" | "envelope" | "video") {
+    setBusy(scope);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.error ?? "Fehler");
+      }
+      // Lokale Row auf "pending" flippen, damit die UI sofort reagiert.
+      const patch: Partial<LeadRow> = { id: lead.id, status: "pending" };
+      if (scope === "all" || scope === "pdf") patch.pdfUrl = null;
+      if (scope === "all" || scope === "envelope") patch.envelopePdfUrl = null;
+      if (scope === "all" || scope === "video") patch.videoUrl = null;
+      onLeadUpdated(patch);
+      toast({
+        variant: "success",
+        title:
+          scope === "all"
+            ? "Lead wird neu generiert …"
+            : scope === "pdf"
+              ? "PDF wird neu generiert …"
+              : scope === "envelope"
+                ? "Umschlag wird neu generiert …"
+                : "Video wird neu generiert …",
+      });
+    } catch (err) {
+      toast({
+        variant: "danger",
+        title: "Regenerieren fehlgeschlagen",
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex size-8 items-center justify-center rounded-full hover:bg-line-soft"
+          aria-label="Aktionen"
+        >
+          {busy ? (
+            <Loader2 className="size-4 animate-spin text-ink-muted" />
+          ) : (
+            <MoreHorizontal className="size-4 text-ink-muted" />
+          )}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuItem onClick={onEdit}>
+          <Pencil className="size-3.5 text-ink-muted" />
+          Lead-Daten bearbeiten
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => void regenerate("all")}>
+          <RotateCcw className="size-3.5 text-ink-muted" />
+          Alles neu erstellen
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => void regenerate("video")}>
+          <Play className="size-3.5 text-ink-muted" />
+          Nur Video neu
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => void regenerate("pdf")}>
+          <FileDown className="size-3.5 text-ink-muted" />
+          Nur PDF-Brief neu
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => void regenerate("envelope")}>
+          <MailIcon className="size-3.5 text-ink-muted" />
+          Nur Umschlag neu
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

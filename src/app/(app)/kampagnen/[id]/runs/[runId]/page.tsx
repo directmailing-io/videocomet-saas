@@ -59,6 +59,7 @@ export default async function RunDetailPage({
     slug: l.slug,
     videoUrl: l.videoUrl,
     pdfUrl: l.pdfUrl,
+    envelopePdfUrl: l.envelopePdfUrl,
     thumbnailUrl: l.thumbnailUrl,
     errorMessage: l.errorMessage,
     completedAt: l.completedAt ? l.completedAt.toISOString() : null,
