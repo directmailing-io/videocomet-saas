@@ -37,13 +37,10 @@ const dataSchema = z.record(z.string(), z.string()).refine(
 const patchSchema = z
   .object({
     data: dataSchema.optional(),
-    name: z.string().trim().min(1).max(200).optional(),
-    email: z.string().trim().max(200).optional(),
   })
-  .refine(
-    (v) => v.data !== undefined || v.name !== undefined || v.email !== undefined,
-    { message: "Nichts zu aktualisieren." },
-  );
+  .refine((v) => v.data !== undefined, {
+    message: "Nichts zu aktualisieren.",
+  });
 
 export async function PATCH(
   req: NextRequest,
@@ -96,10 +93,14 @@ export async function PATCH(
     );
   }
 
-  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  // `leads` hat KEIN updated_at column — nur pdf_expires_at etc. Wir
+  // duerfen nur die Felder setzen die tatsaechlich existieren, sonst
+  // scheitert die SQL-Query komplett.
+  const patch: Record<string, unknown> = {};
   if (body.data !== undefined) patch.data = body.data;
-  if (body.name !== undefined) patch.name = body.name;
-  if (body.email !== undefined) patch.email = body.email;
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ lead: null, noChange: true });
+  }
 
   const [updated] = await db
     .update(leads)
