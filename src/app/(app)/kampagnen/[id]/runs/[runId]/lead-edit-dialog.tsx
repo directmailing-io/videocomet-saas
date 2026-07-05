@@ -133,12 +133,12 @@ export function LeadEditDialog({
         <div className="border-t border-line pt-4 space-y-2">
           <Label className="text-xs">Nach dem Speichern automatisch neu generieren</Label>
           <div className="grid grid-cols-4 gap-1">
-            {[
-              { key: null as const, label: "Nur speichern" },
-              { key: "pdf" as const, label: "+ PDF neu" },
-              { key: "envelope" as const, label: "+ Umschlag" },
-              { key: "all" as const, label: "+ Alles neu" },
-            ].map((o) => (
+            {([
+              { key: null, label: "Nur speichern" },
+              { key: "pdf", label: "+ PDF neu" },
+              { key: "envelope", label: "+ Umschlag" },
+              { key: "all", label: "+ Alles neu" },
+            ] as Array<{ key: null | "pdf" | "envelope" | "all"; label: string }>).map((o) => (
               <button
                 key={String(o.key)}
                 type="button"
