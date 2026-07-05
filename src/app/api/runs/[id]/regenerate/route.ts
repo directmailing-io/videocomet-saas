@@ -225,6 +225,11 @@ export async function POST(
   const skipPdf = mode === "video";
   try {
     const queue = pipelineQueue();
+    // BullMQ dedupliziert per jobId — alte Job-Records (completed) blockieren
+    // add() sonst stumm. Vor dem re-enqueue explizit entfernen.
+    await Promise.all(
+      leadRows.map((lr) => queue.remove(lr.id).catch(() => {})),
+    );
     await queue.addBulk(
       leadRows.map((lr) => ({
         name: "lead-pipeline",

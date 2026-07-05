@@ -114,6 +114,10 @@ export async function POST(
   // ausfuehrt.
   try {
     const queue = pipelineQueue();
+    // BullMQ dedupliziert per jobId — der alte Job-Record (completed) liegt
+    // noch in Redis wegen removeOnComplete: 100. Ohne remove() wird der neue
+    // add() stumm ignoriert und der Lead haengt auf "pending"/"Wartet".
+    await queue.remove(row.leadId).catch(() => {});
     await queue.add(
       "lead-pipeline",
       {
