@@ -114,10 +114,11 @@ export async function POST(
   // ausfuehrt.
   try {
     const queue = pipelineQueue();
-    // BullMQ dedupliziert per jobId — der alte Job-Record (completed) liegt
-    // noch in Redis wegen removeOnComplete: 100. Ohne remove() wird der neue
-    // add() stumm ignoriert und der Lead haengt auf "pending"/"Wartet".
-    await queue.remove(row.leadId).catch(() => {});
+    // BullMQ dedupliziert per jobId — alte completed Job-Records blockieren
+    // sonst stumm den neuen add(). Wir verwenden einen eindeutigen jobId
+    // pro Regenerate (leadId + Timestamp), sodass BullMQ ihn immer annimmt.
+    // Concurrency-Schutz kommt vom lead.status="pending" Reset weiter oben.
+    const jobId = `${row.leadId}:regen-${Date.now()}`;
     await queue.add(
       "lead-pipeline",
       {
@@ -128,7 +129,7 @@ export async function POST(
         ...(skipVideo ? { skipVideo: true } : {}),
         ...(skipPdf ? { skipPdf: true } : {}),
       },
-      { jobId: row.leadId },
+      { jobId },
     );
   } catch (err) {
     return NextResponse.json(

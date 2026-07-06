@@ -225,11 +225,13 @@ export async function POST(
   const skipPdf = mode === "video";
   try {
     const queue = pipelineQueue();
-    // BullMQ dedupliziert per jobId — alte Job-Records (completed) blockieren
-    // add() sonst stumm. Vor dem re-enqueue explizit entfernen.
-    await Promise.all(
-      leadRows.map((lr) => queue.remove(lr.id).catch(() => {})),
-    );
+    // BullMQ dedupliziert per jobId. Um sicher zu re-enqueuen verwenden wir
+    // einen eindeutigen jobId pro Regenerate (leadId + Timestamp). Der
+    // Concurrency-Schutz kommt vom Lead-Status "pending" der weiter oben
+    // gesetzt wird — ein zweiter Regen-Klick auf denselben Lead ist harmlos,
+    // die Pipeline-Guards springen bei bereits gesetztem PDF/Video/Envelope
+    // in idempotenten Skip.
+    const nowStamp = Date.now();
     await queue.addBulk(
       leadRows.map((lr) => ({
         name: "lead-pipeline",
@@ -241,7 +243,7 @@ export async function POST(
           ...(skipVideo ? { skipVideo: true } : {}),
           ...(skipPdf ? { skipPdf: true } : {}),
         },
-        opts: { jobId: lr.id },
+        opts: { jobId: `${lr.id}:regen-${nowStamp}` },
       })),
     );
   } catch (err) {
