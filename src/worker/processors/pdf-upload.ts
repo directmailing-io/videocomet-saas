@@ -36,14 +36,18 @@ export async function runPdfUpload(
   });
 
   const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
+  // Cache-Buster: Bunny CDN cached statische Assets 30 Tage. Beim Regenerate
+  // ueberschreibt der Worker die Storage-Datei, aber der CDN-Edge liefert
+  // weiter die alte Version. Query-String macht den URL fuer den CDN eindeutig.
+  const cacheBustedUrl = `${upload.url}?v=${Date.now()}`;
 
   await updateLeadStatus(input.leadId, {
-    pdfUrl: upload.url,
+    pdfUrl: cacheBustedUrl,
     pdfExpiresAt: expiresAt,
   });
 
   return {
-    pdfUrl: upload.url,
+    pdfUrl: cacheBustedUrl,
     pdfRemotePath: upload.remotePath,
     pdfExpiresAt: expiresAt,
   };
