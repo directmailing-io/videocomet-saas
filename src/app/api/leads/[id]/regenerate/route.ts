@@ -118,7 +118,8 @@ export async function POST(
     // sonst stumm den neuen add(). Wir verwenden einen eindeutigen jobId
     // pro Regenerate (leadId + Timestamp), sodass BullMQ ihn immer annimmt.
     // Concurrency-Schutz kommt vom lead.status="pending" Reset weiter oben.
-    const jobId = `${row.leadId}:regen-${Date.now()}`;
+    // WICHTIG: BullMQ verbietet ":" in Custom-jobIds — deshalb "-" statt ":"
+    const jobId = `${row.leadId}-regen-${Date.now()}`;
     await queue.add(
       "lead-pipeline",
       {

@@ -243,7 +243,8 @@ export async function POST(
           ...(skipVideo ? { skipVideo: true } : {}),
           ...(skipPdf ? { skipPdf: true } : {}),
         },
-        opts: { jobId: `${lr.id}:regen-${nowStamp}` },
+        // WICHTIG: BullMQ verbietet ":" in Custom-jobIds — deshalb "-" statt ":"
+        opts: { jobId: `${lr.id}-regen-${nowStamp}` },
       })),
     );
   } catch (err) {
