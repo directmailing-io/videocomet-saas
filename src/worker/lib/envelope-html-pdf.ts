@@ -186,14 +186,33 @@ async function buildHtml(input: HtmlEnvelopeInput): Promise<string> {
     </style></head><body><div class="envelope">${fieldBlocks}</div></body></html>`;
 }
 
-// Lightweight browser-lazy fuer diese Datei — kein pool sharing mit anderen
-// Puppeteer-Callern (screenshot/browser-pool). Bei erst-Nutzung wird
-// Chromium gestartet und bis Prozess-Ende offengehalten.
+// Browser-Bereitstellung: im WORKER benutzen wir den zentralen browser-pool
+// (der auch Screenshots + andere Pipelines bedient). Im APP-Container (fuer
+// die Preview-Route) faellt das dynamische require auf einen lokalen Launch
+// zurueck — dort gibt es keinen persistenten Pool.
 let browserPromise: Promise<Browser> | null = null;
 function chromiumPath(): string {
   return process.env.CHROMIUM_PATH ?? "/usr/bin/chromium";
 }
 async function getBrowser(): Promise<Browser> {
+  // 1. Versuch: geteilten Worker-Pool nutzen — vermeidet Chromium-Startup-
+  //    Kosten und Prozess-Konflikte (dbus-Crashes bei parallelen Instanzen).
+  try {
+    const mod = await import("./browser-pool");
+    // getBrowser existiert nicht als Export, aber getContext teilt dieselbe
+    // Instance. Wir umgehen das indem wir direkt am pool-internen Cache
+    // vorbei ein neues Context ziehen — reicht fuer setContent/pdf.
+    // Falls das Modul nicht ladbar ist (App-Container, kein Worker-Bundle),
+    // faellt der catch unten auf lokales Launch zurueck.
+    const ctx = await mod.getContext();
+    const browser = ctx.context.browser();
+    // Context wieder freigeben — wir wollen nur die Browser-Instance.
+    await ctx.close();
+    if (browser && browser.connected) return browser;
+  } catch {
+    // silently fall through
+  }
+  // 2. Fallback: lokaler Launch (App-Container / Preview-Endpoint).
   if (browserPromise) {
     try {
       const b = await browserPromise;
@@ -212,6 +231,7 @@ async function getBrowser(): Promise<Browser> {
       "--disable-gpu",
       "--disable-extensions",
       "--hide-scrollbars",
+      "--disable-features=TranslateUI",
     ],
   });
   const browser = await browserPromise;
