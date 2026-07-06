@@ -27,7 +27,13 @@ export async function runPdfUpload(
   input: PdfUploadInput,
 ): Promise<PdfUploadOutput> {
   const ttlDays = input.ttlDays ?? Number(process.env.PDF_TTL_DAYS ?? 7);
-  const remotePath = `runs/${input.runId}/leads/${input.leadId}.pdf`;
+  // Path-Version-Suffix: Bunny CDN ignoriert Query-Strings beim Cache-Key
+  // (getestet: HIT trotz frischem ?v=). Deshalb baut jeder Upload einen
+  // NEUEN Storage-Path — CDN kennt ihn nicht → cache miss → fresh Fetch.
+  // Die alte Datei bleibt im Storage bis der Sweeper sie mit dem
+  // Lead-Delete aufraeumt (bunny_asset_refs-basiert).
+  const version = Date.now().toString(36);
+  const remotePath = `runs/${input.runId}/leads/${input.leadId}-v${version}.pdf`;
   const buffer = await readFile(input.pdfPath);
   const upload = await uploadFile({
     buffer,
@@ -36,18 +42,14 @@ export async function runPdfUpload(
   });
 
   const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
-  // Cache-Buster: Bunny CDN cached statische Assets 30 Tage. Beim Regenerate
-  // ueberschreibt der Worker die Storage-Datei, aber der CDN-Edge liefert
-  // weiter die alte Version. Query-String macht den URL fuer den CDN eindeutig.
-  const cacheBustedUrl = `${upload.url}?v=${Date.now()}`;
 
   await updateLeadStatus(input.leadId, {
-    pdfUrl: cacheBustedUrl,
+    pdfUrl: upload.url,
     pdfExpiresAt: expiresAt,
   });
 
   return {
-    pdfUrl: cacheBustedUrl,
+    pdfUrl: upload.url,
     pdfRemotePath: upload.remotePath,
     pdfExpiresAt: expiresAt,
   };

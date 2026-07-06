@@ -1467,19 +1467,20 @@ export async function pipelineProcessor(
                 recipientData: (lead.data ?? {}) as Record<string, unknown>,
               });
           const { uploadFile } = await import("@/lib/bunny/storage");
-          const remotePath = `runs/${data.runId}/envelopes/${data.leadId}.pdf`;
+          // Path-Version-Suffix (siehe Kommentar in pdf-upload.ts): Bunny CDN
+          // ignoriert Query-Strings — Query-Cache-Buster taugt nicht.
+          const envVersion = Date.now().toString(36);
+          const remotePath = `runs/${data.runId}/envelopes/${data.leadId}-v${envVersion}.pdf`;
           const uploaded = await uploadFile({
             buffer: pdfBuf,
             remotePath,
             contentType: "application/pdf",
           });
           const { leads } = await import("@/lib/db/schema");
-          // Cache-Buster gegen Bunny CDN (siehe Kommentar in pdf-upload.ts).
-          const envCacheBusted = `${uploaded.url}?v=${Date.now()}`;
           await db
             .update(leads)
             .set({
-              envelopePdfUrl: envCacheBusted,
+              envelopePdfUrl: uploaded.url,
               envelopePdfExpiresAt: new Date(
                 Date.now() + 1000 * 60 * 60 * 24 * 30,
               ), // 30 Tage TTL
