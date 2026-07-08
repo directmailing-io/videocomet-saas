@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anleitung: Eigene Webseite hochladen</title>
+<style>
+  :root {
+    --ink: #1a1d24;
+    --muted: #5b6472;
+    --brand: #4f46e5;
+    --brand-soft: #eef2ff;
+    --ok: #047857;
+    --ok-soft: #ecfdf5;
+    --warn: #b45309;
+    --warn-soft: #fffbeb;
+    --line: #e5e8ee;
+    --code-bg: #f4f5f8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background: #fafbfc;
+    line-height: 1.65;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; }
+  .sub { color: var(--muted); font-size: 1.05rem; margin: 0 0 40px; }
+  h2 {
+    font-size: 1.35rem;
+    margin: 56px 0 12px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+  }
+  h2 .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    background: var(--brand-soft);
+    color: var(--brand);
+    font-size: 1rem;
+    margin-right: 10px;
+    vertical-align: -4px;
+  }
+  h3 { font-size: 1.05rem; margin: 28px 0 8px; }
+  p { margin: 0 0 14px; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.88em;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+  pre {
+    background: #1e222a;
+    color: #e8eaf0;
+    border-radius: 10px;
+    padding: 18px 20px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin: 14px 0 22px;
+  }
+  pre code {
+    background: none; border: none; padding: 0; color: inherit;
+    white-space: pre;
+  }
+  .box {
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 18px 0;
+    font-size: 0.95rem;
+  }
+  .box strong { display: block; margin-bottom: 4px; }
+  .box.ok { background: var(--ok-soft); border: 1px solid #a7f3d0; }
+  .box.ok strong { color: var(--ok); }
+  .box.warn { background: var(--warn-soft); border: 1px solid #fde68a; }
+  .box.warn strong { color: var(--warn); }
+  .box.info { background: var(--brand-soft); border: 1px solid #c7d2fe; }
+  .box.info strong { color: var(--brand); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    margin: 14px 0 22px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th { background: var(--code-bg); font-weight: 600; }
+  ul { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  .toc {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 8px;
+  }
+  .toc p { font-weight: 600; margin-bottom: 8px; }
+  .toc ol { margin: 0; padding-left: 22px; }
+  .toc a { color: var(--brand); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Eigene Webseite hochladen</h1>
+  <p class="sub">So bauen Sie Ihre Webseite, damit Video, Name und Klick-Messung automatisch funktionieren. Keine Programmier-Kenntnisse noetig. Sie kopieren nur ein paar kleine Bausteine in Ihre Seite.</p>
+
+  <div class="toc">
+    <p>Inhalt</p>
+    <ol>
+      <li><a href="#schritt0">Was Sie hochladen</a></li>
+      <li><a href="#schritt1">Namen und Texte automatisch einsetzen</a></li>
+      <li><a href="#schritt2">Das persoenliche Video einbauen</a></li>
+      <li><a href="#schritt3">Klicks auf Buttons messen</a></li>
+      <li><a href="#beispiel">Fertiges Beispiel zum Kopieren</a></li>
+      <li><a href="#checkliste">Checkliste vor dem Hochladen</a></li>
+    </ol>
+  </div>
+
+  <h2 id="schritt0"><span class="num">1</span>Was Sie hochladen</h2>
+  <p>Sie laden eine ZIP-Datei hoch. Darin liegt Ihre komplette Webseite: HTML, Bilder, Schriften, CSS.</p>
+  <ul>
+    <li>Die Startseite muss <code>index.html</code> heissen.</li>
+    <li>Die ZIP-Datei darf bis zu 50 MB gross sein.</li>
+    <li>Erlaubt sind: HTML, CSS, JS, JSON, SVG, Bilder, Schriften, MP4 und WebM.</li>
+  </ul>
+  <div class="box info">
+    <strong>Gut zu wissen</strong>
+    Sie muessen kein Mess-Skript und kein Video-Skript einbauen. Das System fuegt beides beim Ausliefern automatisch hinzu. Sie setzen nur die Markierungen aus dieser Anleitung.
+  </div>
+
+  <h2 id="schritt1"><span class="num">2</span>Namen und Texte automatisch einsetzen</h2>
+  <p>Jeder Empfaenger bekommt eine eigene Seite mit seinem Namen. Damit das klappt, schreiben Sie an die Stelle, wo der Name stehen soll, einen Platzhalter in doppelten geschweiften Klammern:</p>
+  <pre><code>&lt;h1&gt;Hallo {{vorname}} {{nachname}}!&lt;/h1&gt;</code></pre>
+  <p>Beim Aufruf der Seite wird <code>{{vorname}}</code> automatisch durch den echten Vornamen ersetzt. Zum Beispiel: "Hallo Peter Mueller!"</p>
+
+  <h3>Woher kommen die Namen der Platzhalter?</h3>
+  <p>Aus Ihrer Kontaktliste (CSV-Datei). Jede Spalte kann ein Platzhalter sein. Heisst Ihre Spalte <code>firma</code>, schreiben Sie <code>{{firma}}</code>. Sie legen die Namen also selbst fest. Beim Erstellen einer Runde ordnen Sie die Spalten den Platzhaltern zu.</p>
+
+  <h3>Ersatztext, falls ein Wert fehlt</h3>
+  <p>Manchmal fehlt ein Wert in der Liste. Dafuer gibt es einen Ersatztext. Den schreiben Sie mit einem senkrechten Strich dahinter:</p>
+  <pre><code>&lt;p&gt;Ihre Firma {{firma|Ihr Unternehmen}} verdient mehr Kunden.&lt;/p&gt;</code></pre>
+  <p>Fehlt die Firma, steht dort automatisch "Ihr Unternehmen".</p>
+
+  <h3>Regeln fuer Platzhalter</h3>
+  <ul>
+    <li>Nur Buchstaben, Zahlen, Unterstrich, Minus und Punkt. Keine Leerzeichen und keine Umlaute im Namen. Also <code>{{strasse}}</code> statt <code>{{straße}}</code>.</li>
+    <li>Platzhalter funktionieren in normalem Text und in Links. Zum Beispiel: <code>href="https://ihre-seite.de/danke?name={{vorname}}"</code></li>
+    <li>Der Platzhalter <code>{{pageUrl}}</code> ist immer verfuegbar. Er enthaelt die kurze Adresse der persoenlichen Seite.</li>
+  </ul>
+  <div class="box warn">
+    <strong>Wichtig</strong>
+    Platzhalter funktionieren nicht innerhalb von <code>&lt;script&gt;</code> und <code>&lt;style&gt;</code> Bloecken. Schreiben Sie sie nur in den sichtbaren Teil der Seite.
+  </div>
+
+  <h2 id="schritt2"><span class="num">3</span>Das persoenliche Video einbauen</h2>
+  <p>Jeder Empfaenger bekommt ein eigenes Video. Sie bauen dafuer einen leeren Video-Rahmen ein. Das System fuellt ihn automatisch mit dem richtigen Video und einem Vorschaubild.</p>
+  <p>Kopieren Sie diesen Baustein an die Stelle, wo das Video erscheinen soll:</p>
+  <pre><code>&lt;div data-vc-video&gt;
+  &lt;video data-vc-track controls playsinline&gt;&lt;/video&gt;
+&lt;/div&gt;</code></pre>
+  <p>Das war es schon. Die drei Teile bedeuten:</p>
+  <table>
+    <tr><th>Teil</th><th>Was er macht</th></tr>
+    <tr><td><code>data-vc-video</code></td><td>Sagt dem System: Hier kommt das persoenliche Video rein. Der Rahmen passt sich automatisch an das Format des Videos an (quer, hochkant oder quadratisch).</td></tr>
+    <tr><td><code>data-vc-track</code></td><td>Misst automatisch, ob und wie lange das Video angesehen wurde.</td></tr>
+    <tr><td><code>controls playsinline</code></td><td>Zeigt die Abspiel-Knoepfe und laesst das Video auf dem Handy direkt in der Seite laufen.</td></tr>
+  </table>
+  <div class="box warn">
+    <strong>Wichtig</strong>
+    Das <code>&lt;video&gt;</code> Element muss leer bleiben. Kein <code>src</code> eintragen und keine eigene Videodatei angeben. Sonst denkt das System, Sie wollen Ihr eigenes Video zeigen, und laesst es unveraendert.
+  </div>
+  <div class="box info">
+    <strong>Groesse anpassen</strong>
+    Die Breite steuern Sie mit Ihrem eigenen CSS am aeusseren <code>&lt;div&gt;</code>. Zum Beispiel: <code>style="max-width:720px;margin:0 auto"</code>. Das Seitenverhaeltnis regelt das System selbst.
+  </div>
+
+  <h2 id="schritt3"><span class="num">4</span>Klicks auf Buttons messen</h2>
+  <p>Sie wollen wissen, wer auf "Termin buchen" geklickt hat. Dafuer markieren Sie Ihre wichtigen Buttons und Links mit <code>data-vc-cta</code>:</p>
+  <pre><code>&lt;a href="https://ihre-seite.de/termin" data-vc-cta="oben"&gt;
+  Jetzt Termin buchen
+&lt;/a&gt;
+
+&lt;button data-vc-cta="unten"&gt;Kontakt aufnehmen&lt;/button&gt;</code></pre>
+  <p>Der Wert in den Anfuehrungszeichen ist ein frei waehlbarer Name fuer die Stelle. So sehen Sie spaeter in der Auswertung, ob eher der Button oben oder der Button unten geklickt wurde.</p>
+  <ul>
+    <li>Sie koennen beliebig viele Elemente markieren.</li>
+    <li>Funktioniert bei Links, Buttons und auch bei Bildern.</li>
+    <li>Klicks auf normale Links ohne Markierung werden trotzdem grob mitgezaehlt. Die Markierung macht die Auswertung aber viel genauer.</li>
+  </ul>
+
+  <h2 id="beispiel"><span class="num">5</span>Fertiges Beispiel zum Kopieren</h2>
+  <p>Eine komplette kleine Seite mit allem, was Sie brauchen. Sie koennen sie als Startpunkt nehmen und Ihr eigenes Design darum herum bauen:</p>
+  <pre><code>&lt;!doctype html&gt;
+&lt;html lang="de"&gt;
+&lt;head&gt;
+  &lt;meta charset="utf-8"&gt;
+  &lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;
+  &lt;title&gt;Ein Video fuer {{firma|Sie}}&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+  &lt;h1&gt;Hallo {{vorname}}, dieses Video ist fuer Sie!&lt;/h1&gt;
+  &lt;p&gt;Wir haben uns {{firma|Ihre Webseite}} genauer angesehen.&lt;/p&gt;
+
+  &lt;div data-vc-video style="max-width:720px;margin:0 auto"&gt;
+    &lt;video data-vc-track controls playsinline style="width:100%"&gt;&lt;/video&gt;
+  &lt;/div&gt;
+
+  &lt;a href="https://ihre-seite.de/termin" data-vc-cta="haupt"&gt;
+    Jetzt kostenloses Gespraech buchen
+  &lt;/a&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+  <h2 id="checkliste"><span class="num">6</span>Checkliste vor dem Hochladen</h2>
+  <ul>
+    <li>Die Startseite heisst <code>index.html</code> und liegt in der ZIP-Datei.</li>
+    <li>Alle Platzhalter sind geschrieben wie die Spalten in Ihrer Kontaktliste. Ohne Umlaute, ohne Leerzeichen.</li>
+    <li>Der Video-Baustein ist drin: <code>&lt;div data-vc-video&gt;</code> mit leerem <code>&lt;video data-vc-track&gt;</code> darin.</li>
+    <li>Die wichtigen Buttons haben <code>data-vc-cta="name"</code>.</li>
+    <li>Die ZIP-Datei ist kleiner als 50 MB.</li>
+  </ul>
+  <div class="box ok">
+    <strong>Fertig</strong>
+    Laden Sie die ZIP-Datei hoch. Nach dem Upload sehen Sie eine Vorschau und koennen pruefen, ob alles an der richtigen Stelle sitzt.
+  </div>
+
+</div>
+</body>
+</html>

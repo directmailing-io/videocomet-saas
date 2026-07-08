@@ -221,6 +221,16 @@ export function UploadZone({
           &amp; WebM. <code className="font-mono">index.html</code> muss
           enthalten sein.
         </p>
+        <a
+          href="/anleitung-eigene-webseite.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="mt-3 text-xs font-medium text-brand hover:underline"
+        >
+          Anleitung: So bereiten Sie Ihre Webseite vor (Platzhalter, Video,
+          Klick-Messung)
+        </a>
 
         <input
           ref={inputRef}
