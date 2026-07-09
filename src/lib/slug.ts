@@ -187,16 +187,19 @@ export function renderSlugTemplate(
   for (const [k, v] of Object.entries(data)) {
     if (typeof v === "string" && v.trim() !== "") stringData[k] = v.trim();
   }
-  // 1. Zentrale Substitution gibt uns das Mapping-bewusste Resultat.
-  //    `single-brace` matched `{key}` ohne `{{ … }}` Konflikte.
-  let replaced = substitute(tpl, stringData, mapping, "single-brace");
-  // 2. Falls der zentrale Lookup für einen Key NICHTS findet, fallen wir
-  //    auf das alte Alias-Verhalten zurück (firstName ↔ Vorname). Das ist
-  //    wichtig für Bestands-Kampagnen, deren Slug-Template gegen ein CSV
-  //    läuft, das nicht durch den Mapping-Step gegangen ist.
-  replaced = replaced.replace(
+  // Pro Token: erst die zentrale, Mapping-bewusste Substitution — liefert
+  // sie NICHTS, greift das Alias-Verhalten (firstName ↔ Vorname). WICHTIG:
+  // token-weise, denn `substitute()` ersetzt unauflösbare Keys durch "",
+  // das Token wäre danach weg und ein nachgelagerter Alias-Pass würde nie
+  // feuern (Bug: alle Leads bekamen `lead-<n>-<hex>`-Fallback-Slugs, obwohl
+  // das CSV `Vorname`/`Nachname` enthielt).
+  const replaced = tpl.replace(
     /\{\s*([a-zA-Z0-9_]+)\s*\}/g,
-    (_, key: string) => lookupField(key, data),
+    (token, key: string) => {
+      const v = substitute(token, stringData, mapping, "single-brace");
+      if (v && v.trim() !== "") return v;
+      return lookupField(key, data);
+    },
   );
   return slugifyBasic(replaced);
 }
