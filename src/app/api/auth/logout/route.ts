@@ -23,7 +23,8 @@ export async function POST() {
 // Navigationen (GET). Ohne GET-Handler antwortet Next mit 405.
 export async function GET(req: NextRequest) {
   await destroySession();
-  return NextResponse.redirect(new URL("/login", req.nextUrl.origin), {
-    status: 302,
-  });
+  // Hinter Traefik ist req.nextUrl.origin die Container-Adresse
+  // (0.0.0.0:3000) — deshalb APP_URL als Basis.
+  const base = process.env.APP_URL ?? req.nextUrl.origin;
+  return NextResponse.redirect(new URL("/login", base), { status: 302 });
 }
