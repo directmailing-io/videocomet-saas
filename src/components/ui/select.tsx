@@ -80,7 +80,9 @@ export const SelectContent = React.forwardRef<
       ref={ref}
       position={position}
       className={cn(
-        "relative z-50 min-w-[8rem] overflow-hidden rounded-squircle-md border border-line bg-surface text-ink shadow-card-hover",
+        // max-h an den verfügbaren Platz koppeln — sonst wächst die Liste
+        // bei vielen Items über den Viewport hinaus und ist nicht scrollbar.
+        "relative z-50 max-h-[min(24rem,var(--radix-select-content-available-height))] min-w-[8rem] overflow-hidden rounded-squircle-md border border-line bg-surface text-ink shadow-card-hover",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         position === "popper" &&
           "data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1",

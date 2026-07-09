@@ -29,7 +29,12 @@ import {
 import { getDomainByHostname } from "@/lib/db/queries/user-domains";
 import { resolveCustomDomainHost } from "@/lib/custom-domain-host";
 import { getCustomLpStorageEnv } from "@/lib/custom-lp/storage";
-import { bunnyFetch, BunnyApiError } from "@/lib/bunny/_fetch";
+import {
+  fetchCustomLpObject,
+  joinStoragePath,
+  renderCustomLpHtmlResponse,
+} from "@/lib/custom-lp/serve-page";
+import { BunnyApiError } from "@/lib/bunny/_fetch";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -107,6 +112,38 @@ export async function GET(
     context = await getCustomLpContextBySlugForDefaultDomain(slug);
   }
   if (!context) return errorResponse(404);
+
+  // HTML-Unterseiten (z.B. beratung.html) durch die gleiche Render-
+  // Pipeline wie index.html schicken — sonst sieht der Besucher rohe
+  // `{{platzhalter}}` und es gibt kein Tracking. Alles andere wird als
+  // Asset durchgereicht.
+  if (/\.html?$/i.test(relativePath)) {
+    let htmlBuffer: Buffer;
+    try {
+      htmlBuffer = await fetchCustomLpObject(
+        joinStoragePath(context.storagePath, relativePath),
+      );
+    } catch (err) {
+      if (err instanceof BunnyApiError && err.status === 404) {
+        return errorResponse(404);
+      }
+      // eslint-disable-next-line no-console
+      console.error("[cv/asset] failed to fetch HTML sub-page:", err);
+      return errorResponse(502);
+    }
+    try {
+      return renderCustomLpHtmlResponse({
+        context,
+        slug,
+        hostParam,
+        html: htmlBuffer.toString("utf-8"),
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[cv/asset] failed to render HTML sub-page:", err);
+      return errorResponse(502);
+    }
+  }
 
   // Proxy fetch + stream.
   try {

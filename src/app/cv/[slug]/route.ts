@@ -29,9 +29,6 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { buildCustomLpCspHeader } from "@/lib/custom-lp/csp";
-import { renderCustomLp } from "@/lib/custom-lp/renderer";
-import { sanitizeIndexHtml } from "@/lib/custom-lp/sanitizer";
 import {
   getCustomLpContextBySlugForDefaultDomain,
   getCustomLpContextBySlugAndDomain,
@@ -39,23 +36,15 @@ import {
 } from "@/lib/db/queries/custom-lp-public";
 import { getDomainByHostname } from "@/lib/db/queries/user-domains";
 import { resolveCustomDomainHost } from "@/lib/custom-domain-host";
-import { getCustomLpStorageEnv } from "@/lib/custom-lp/storage";
-import { bunnyFetch, BunnyApiError } from "@/lib/bunny/_fetch";
-import { buildPageUrlShort } from "@/lib/placeholders/page-url";
+import {
+  fetchCustomLpObject,
+  joinStoragePath,
+  renderCustomLpHtmlResponse,
+} from "@/lib/custom-lp/serve-page";
+import { BunnyApiError } from "@/lib/bunny/_fetch";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-// Absolute URL — damit der Browser die Bridge IMMER von der App-Origin
-// holt, egal auf welchem Host die Landingpage liegt (lp.videocomet.de oder
-// einer Custom-Domain). Eine root-relative URL würde sonst auf
-// `lp.videocomet.de/__videocomet-bridge.js` zeigen — wird von der
-// Middleware aber zu `/cv/__videocomet-bridge.js` rewritet → 404 → kein
-// Tracking. Ein absolute URL umgeht das Rewrite sauber.
-const TRACKING_BRIDGE_URL =
-  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ??
-  "https://app.videocomet.de";
-const TRACKING_BRIDGE_SCRIPT = `${TRACKING_BRIDGE_URL}/__videocomet-bridge.js`;
 
 interface RouteContext {
   params: Promise<{ slug: string }>;
@@ -95,7 +84,7 @@ export async function GET(
   // 2. Fetch the entry HTML from Bunny Storage.
   let htmlBuffer: Buffer;
   try {
-    htmlBuffer = await fetchFromBunnyStorage(
+    htmlBuffer = await fetchCustomLpObject(
       joinStoragePath(context.storagePath, context.entryHtml),
     );
   } catch (err) {
@@ -107,95 +96,20 @@ export async function GET(
     return renderErrorPage(502, "Vorübergehend nicht erreichbar");
   }
 
-  // 3. Sanitise + render + inject tracking-bridge bootstrap.
-  // pageUrl-Short für den globalen `{{pageUrl}}`-Placeholder (Paket A/E).
-  // `hostParam` wird vom Middleware nur bei Custom-Domain-Requests gesetzt;
-  // sonst läuft die Custom-LP auf `lp.videocomet.de` (Default-Sandbox).
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.APP_URL ??
-    "https://app.videocomet.de";
-  const pageUrl = buildPageUrlShort(hostParam, slug, appUrl);
-
-  let rewritten: string;
+  // 3. Sanitise + render + respond (shared with the asset route so
+  //    HTML sub-pages get the same treatment).
   try {
-    const html = htmlBuffer.toString("utf-8");
-    const sanitised = sanitizeIndexHtml(html);
-    rewritten = renderCustomLp({
-      html: sanitised,
-      leadData: context.leadData,
+    return renderCustomLpHtmlResponse({
+      context,
       slug,
-      trackingBridgeUrl: TRACKING_BRIDGE_SCRIPT,
-      annotations: context.annotations,
-      videoUrl: context.videoUrl,
-      videoMp4Url: context.videoMp4Url,
-      thumbnailUrl: context.thumbnailUrl,
-      videoOrientation: context.videoOrientation,
-      pageUrl,
+      hostParam,
+      html: htmlBuffer.toString("utf-8"),
     });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[cv] failed to render Custom-LP:", err);
     return renderErrorPage(500, "Interner Fehler");
   }
-
-  // 4. Respond. CSP is loose-but-shielded (see csp.ts).
-  return new NextResponse(rewritten, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Content-Security-Policy": buildCustomLpCspHeader(),
-      // Lead data is baked into the response → cannot be shared between
-      // visitors. Also keeps stale versions out of intermediary caches.
-      "Cache-Control": "private, no-store, max-age=0",
-      // Defence in depth — even with CSP frame-ancestors none.
-      "X-Frame-Options": "DENY",
-      "Referrer-Policy": "strict-origin-when-cross-origin",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
-}
-
-// ─── Bunny fetch helper ──────────────────────────────────────────────────
-/**
- * GETs a single object from Bunny Edge Storage using the readonly key.
- * Returns the raw buffer; the caller decides what to do with it.
- *
- * Intentionally NOT moved into `src/lib/custom-lp/storage.ts` — that
- * file is Agent A's territory. Once Agent A publishes a generic
- * `readObject(path)` we'll replace this inline helper.
- */
-async function fetchFromBunnyStorage(remotePath: string): Promise<Buffer> {
-  // WICHTIG: Custom-LPs liegen in der videocomet-custom-lp Zone, NICHT in
-  // der PDF-Zone. Vorher wurde versehentlich getBunnyStorageEnv (=PDF-Zone)
-  // benutzt -> 404 für jeden Lead.
-  const env = getCustomLpStorageEnv();
-  const cleanedPath = remotePath.replace(/^\/+/, "");
-  const url = `https://storage.bunnycdn.com/${env.zone}/${cleanedPath}`;
-  const response = await bunnyFetch(
-    url,
-    {
-      method: "GET",
-      headers: {
-        AccessKey: env.readonlyKey || env.accessKey,
-      },
-    },
-    { retries: 1 }, // fast-fail; the visitor is waiting on this
-  );
-  const arr = await response.arrayBuffer();
-  return Buffer.from(arr);
-}
-
-/**
- * Joins a storagePath prefix with an entry path, producing a single
- * forward-slash-separated string. `storagePath` is documented to end
- * with `/` per the schema but we defend against rogue trailing slashes
- * either way.
- */
-function joinStoragePath(prefix: string, entry: string): string {
-  const p = prefix.replace(/\/+$/, "");
-  const e = entry.replace(/^\/+/, "");
-  return `${p}/${e}`;
 }
 
 // ─── German error pages ────────────────────────────────────────────────
