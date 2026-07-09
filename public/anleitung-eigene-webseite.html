@@ -3,92 +3,197 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Anleitung: Eigene Webseite hochladen</title>
+<title>So machst du deine Webseite fertig für den Upload</title>
 <style>
   :root {
-    --ink: #1a1d24;
-    --muted: #5b6472;
+    --ink: #16181d;
+    --muted: #646b78;
     --brand: #4f46e5;
+    --brand-deep: #3730a3;
     --brand-soft: #eef2ff;
     --ok: #047857;
     --ok-soft: #ecfdf5;
+    --ok-line: #a7f3d0;
     --warn: #b45309;
     --warn-soft: #fffbeb;
-    --line: #e5e8ee;
-    --code-bg: #f4f5f8;
+    --warn-line: #fde68a;
+    --line: #e6e8ef;
+    --card: #ffffff;
+    --code-bg: #f4f5f9;
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     color: var(--ink);
-    background: #fafbfc;
-    line-height: 1.65;
+    background: #f6f7fa;
+    line-height: 1.7;
+    font-size: 17px;
   }
-  .wrap { max-width: 780px; margin: 0 auto; padding: 48px 24px 96px; }
-  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; }
-  .sub { color: var(--muted); font-size: 1.05rem; margin: 0 0 40px; }
-  h2 {
-    font-size: 1.35rem;
-    margin: 56px 0 12px;
-    padding-top: 24px;
-    border-top: 1px solid var(--line);
+  .hero {
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+    color: #fff;
+    padding: 56px 24px 48px;
+    text-align: center;
   }
-  h2 .num {
-    display: inline-flex;
+  .hero h1 {
+    font-size: clamp(1.6rem, 4vw, 2.4rem);
+    line-height: 1.2;
+    margin: 0 auto 14px;
+    max-width: 640px;
+  }
+  .hero p {
+    margin: 0 auto;
+    max-width: 560px;
+    font-size: 1.08rem;
+    opacity: 0.92;
+  }
+  .hero .pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 26px;
+  }
+  .hero .pills a {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.35);
+    color: #fff;
+    text-decoration: none;
+    border-radius: 999px;
+    padding: 7px 18px;
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+  .hero .pills a:hover { background: rgba(255,255,255,0.28); }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 40px 20px 100px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 28px 28px 24px;
+    margin: 0 0 28px;
+    box-shadow: 0 1px 3px rgba(20,24,40,0.05);
+  }
+  .step-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 6px;
+  }
+  .step-num {
+    flex: none;
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    background: var(--brand-soft);
+    color: var(--brand-deep);
+    font-weight: 800;
+    font-size: 1.15rem;
+    display: flex;
     align-items: center;
     justify-content: center;
-    width: 30px; height: 30px;
-    border-radius: 8px;
-    background: var(--brand-soft);
-    color: var(--brand);
-    font-size: 1rem;
-    margin-right: 10px;
-    vertical-align: -4px;
   }
-  h3 { font-size: 1.05rem; margin: 28px 0 8px; }
+  .step-head h2 { font-size: 1.3rem; margin: 0; line-height: 1.3; }
+  .step-goal {
+    color: var(--muted);
+    font-size: 0.98rem;
+    margin: 0 0 18px 54px;
+  }
+  @media (max-width: 560px) { .step-goal { margin-left: 0; } }
+
+  h3 { font-size: 1.02rem; margin: 24px 0 8px; }
   p { margin: 0 0 14px; }
+  ul { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 8px; }
+
   code {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.88em;
+    font-size: 0.86em;
     background: var(--code-bg);
     border: 1px solid var(--line);
-    border-radius: 5px;
-    padding: 1px 6px;
+    border-radius: 6px;
+    padding: 1px 7px;
     white-space: nowrap;
   }
+  .codewrap { position: relative; margin: 14px 0 20px; }
   pre {
-    background: #1e222a;
-    color: #e8eaf0;
-    border-radius: 10px;
+    background: #1c1f27;
+    color: #e9ebf2;
+    border-radius: 12px;
     padding: 18px 20px;
     overflow-x: auto;
-    font-size: 0.85rem;
-    line-height: 1.6;
-    margin: 14px 0 22px;
+    font-size: 0.86rem;
+    line-height: 1.65;
+    margin: 0;
   }
   pre code {
     background: none; border: none; padding: 0; color: inherit;
-    white-space: pre;
+    white-space: pre; font-size: 1em;
   }
-  .box {
-    border-radius: 10px;
+  .copybtn {
+    position: absolute;
+    top: 10px; right: 10px;
+    background: rgba(255,255,255,0.12);
+    color: #dfe3ee;
+    border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+  .copybtn:hover { background: rgba(255,255,255,0.22); }
+
+  .hl { color: #7dd3fc; }
+
+  .note {
+    border-radius: 12px;
     padding: 14px 18px;
-    margin: 18px 0;
+    margin: 16px 0;
     font-size: 0.95rem;
   }
-  .box strong { display: block; margin-bottom: 4px; }
-  .box.ok { background: var(--ok-soft); border: 1px solid #a7f3d0; }
-  .box.ok strong { color: var(--ok); }
-  .box.warn { background: var(--warn-soft); border: 1px solid #fde68a; }
-  .box.warn strong { color: var(--warn); }
-  .box.info { background: var(--brand-soft); border: 1px solid #c7d2fe; }
-  .box.info strong { color: var(--brand); }
+  .note strong { display: block; margin-bottom: 3px; }
+  .note.good { background: var(--ok-soft); border: 1px solid var(--ok-line); }
+  .note.good strong { color: var(--ok); }
+  .note.stop { background: var(--warn-soft); border: 1px solid var(--warn-line); }
+  .note.stop strong { color: var(--warn); }
+  .note.tip { background: var(--brand-soft); border: 1px solid #c7d2fe; }
+  .note.tip strong { color: var(--brand-deep); }
+
+  .example {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 14px 0 20px;
+  }
+  @media (max-width: 560px) { .example { grid-template-columns: 1fr; } }
+  .example > div {
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 0.92rem;
+    border: 1px solid var(--line);
+    background: var(--code-bg);
+  }
+  .example .label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .example .becomes { background: var(--ok-soft); border-color: var(--ok-line); }
+  .example .becomes .label { color: var(--ok); }
+
   table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.92rem;
-    margin: 14px 0 22px;
+    margin: 14px 0 20px;
   }
   th, td {
     text-align: left;
@@ -96,150 +201,271 @@
     border-bottom: 1px solid var(--line);
     vertical-align: top;
   }
-  th { background: var(--code-bg); font-weight: 600; }
-  ul { margin: 0 0 14px; padding-left: 22px; }
-  li { margin-bottom: 6px; }
-  .toc {
-    background: #fff;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 18px 22px;
-    margin-bottom: 8px;
+  th { background: var(--code-bg); font-weight: 700; }
+
+  .check { list-style: none; padding: 0; }
+  .check li {
+    padding-left: 34px;
+    position: relative;
+    margin-bottom: 12px;
   }
-  .toc p { font-weight: 600; margin-bottom: 8px; }
-  .toc ol { margin: 0; padding-left: 22px; }
-  .toc a { color: var(--brand); text-decoration: none; }
-  .toc a:hover { text-decoration: underline; }
+  .check li::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 3px;
+    width: 22px; height: 22px;
+    border-radius: 7px;
+    background: var(--ok-soft);
+    border: 1px solid var(--ok-line);
+  }
+  .check li::after {
+    content: "";
+    position: absolute;
+    left: 6px; top: 8px;
+    width: 8px; height: 5px;
+    border-left: 2.5px solid var(--ok);
+    border-bottom: 2.5px solid var(--ok);
+    transform: rotate(-45deg);
+  }
 </style>
 </head>
 <body>
+
+<div class="hero">
+  <h1>So machst du deine Webseite fertig für den Upload</h1>
+  <p>Drei kleine Bausteine, fertig. Du brauchst keine Programmier&shy;kenntnisse. Kopiere einfach die Beispiele von dieser Seite in deine Webseite.</p>
+  <div class="pills">
+    <a href="#zip">1 · Die ZIP-Datei</a>
+    <a href="#namen">2 · Namen einsetzen</a>
+    <a href="#video">3 · Video einbauen</a>
+    <a href="#klicks">4 · Klicks messen</a>
+    <a href="#beispiel">Fertiges Beispiel</a>
+  </div>
+</div>
+
 <div class="wrap">
 
-  <h1>Eigene Webseite hochladen</h1>
-  <p class="sub">So bauen Sie Ihre Webseite, damit Video, Name und Klick-Messung automatisch funktionieren. Keine Programmier-Kenntnisse noetig. Sie kopieren nur ein paar kleine Bausteine in Ihre Seite.</p>
+  <!-- ── Schritt 1 ─────────────────────────────────────────────────── -->
+  <div class="card" id="zip">
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <h2>Die ZIP-Datei</h2>
+    </div>
+    <p class="step-goal">Was du hochlädst und was drin sein muss.</p>
 
-  <div class="toc">
-    <p>Inhalt</p>
-    <ol>
-      <li><a href="#schritt0">Was Sie hochladen</a></li>
-      <li><a href="#schritt1">Namen und Texte automatisch einsetzen</a></li>
-      <li><a href="#schritt2">Das persoenliche Video einbauen</a></li>
-      <li><a href="#schritt3">Klicks auf Buttons messen</a></li>
-      <li><a href="#beispiel">Fertiges Beispiel zum Kopieren</a></li>
-      <li><a href="#checkliste">Checkliste vor dem Hochladen</a></li>
-    </ol>
+    <p>Pack deine komplette Webseite in eine ZIP-Datei. Also alle Dateien: HTML, Bilder, Schriften, CSS.</p>
+    <ul class="check">
+      <li>Die Startseite heißt <code>index.html</code></li>
+      <li>Die ZIP ist kleiner als 50 MB</li>
+      <li>Nur diese Dateitypen: HTML, CSS, JS, JSON, SVG, Bilder, Schriften, MP4, WebM</li>
+    </ul>
+    <div class="note tip">
+      <strong>Das Beste daran</strong>
+      Du musst kein Tracking und keinen Video-Player einbauen. Das macht unser System automatisch. Du setzt nur die kleinen Markierungen aus dieser Anleitung.
+    </div>
   </div>
 
-  <h2 id="schritt0"><span class="num">1</span>Was Sie hochladen</h2>
-  <p>Sie laden eine ZIP-Datei hoch. Darin liegt Ihre komplette Webseite: HTML, Bilder, Schriften, CSS.</p>
-  <ul>
-    <li>Die Startseite muss <code>index.html</code> heissen.</li>
-    <li>Die ZIP-Datei darf bis zu 50 MB gross sein.</li>
-    <li>Erlaubt sind: HTML, CSS, JS, JSON, SVG, Bilder, Schriften, MP4 und WebM.</li>
-  </ul>
-  <div class="box info">
-    <strong>Gut zu wissen</strong>
-    Sie muessen kein Mess-Skript und kein Video-Skript einbauen. Das System fuegt beides beim Ausliefern automatisch hinzu. Sie setzen nur die Markierungen aus dieser Anleitung.
+  <!-- ── Schritt 2 ─────────────────────────────────────────────────── -->
+  <div class="card" id="namen">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <h2>Namen und Texte einsetzen</h2>
+    </div>
+    <p class="step-goal">Jeder Empfänger sieht seinen eigenen Namen auf der Seite.</p>
+
+    <p>Schreib an die Stelle, wo der Name stehen soll, einen Platzhalter in doppelten geschweiften Klammern:</p>
+
+    <div class="codewrap">
+      <pre><code>&lt;h1&gt;Hallo <span class="hl">{{vorname}}</span>!&lt;/h1&gt;</code></pre>
+      <button class="copybtn" data-copy="&lt;h1&gt;Hallo {{vorname}}!&lt;/h1&gt;">Kopieren</button>
+    </div>
+
+    <div class="example">
+      <div>
+        <span class="label">Du schreibst</span>
+        Hallo {{vorname}}!
+      </div>
+      <div class="becomes">
+        <span class="label">Der Empfänger sieht</span>
+        Hallo Peter!
+      </div>
+    </div>
+
+    <h3>Woher kommen die Namen?</h3>
+    <p>Aus deiner Kontaktliste (CSV-Datei). Jede Spalte kann ein Platzhalter sein. Hast du eine Spalte <code>firma</code>, schreibst du <code>{{firma}}</code>. Du bestimmst die Namen also selbst. Beim Erstellen einer Runde verbindest du dann Spalten und Platzhalter.</p>
+
+    <h3>Ersatztext, falls ein Wert fehlt</h3>
+    <p>Manchmal fehlt ein Wert in deiner Liste. Dann kannst du einen Ersatztext angeben. Einfach mit einem senkrechten Strich dahinter:</p>
+    <div class="codewrap">
+      <pre><code>Ihre Firma <span class="hl">{{firma|Ihr Unternehmen}}</span> verdient mehr Kunden.</code></pre>
+      <button class="copybtn" data-copy="{{firma|Ihr Unternehmen}}">Kopieren</button>
+    </div>
+    <p>Fehlt die Firma in der Liste, steht dort automatisch: "Ihr Unternehmen".</p>
+
+    <div class="note stop">
+      <strong>Drei Regeln</strong>
+      <ul style="margin:6px 0 0">
+        <li>Keine Umlaute und keine Leerzeichen im Platzhalter-Namen. Also <code>{{strasse}}</code>, nicht <code>{{straße}}</code>.</li>
+        <li>Platzhalter funktionieren im sichtbaren Text und in Links. Nicht in <code>&lt;script&gt;</code> oder <code>&lt;style&gt;</code> Blöcken.</li>
+        <li>Der Platzhalter-Name muss genau so heißen wie die Spalte in deiner Liste.</li>
+      </ul>
+    </div>
   </div>
 
-  <h2 id="schritt1"><span class="num">2</span>Namen und Texte automatisch einsetzen</h2>
-  <p>Jeder Empfaenger bekommt eine eigene Seite mit seinem Namen. Damit das klappt, schreiben Sie an die Stelle, wo der Name stehen soll, einen Platzhalter in doppelten geschweiften Klammern:</p>
-  <pre><code>&lt;h1&gt;Hallo {{vorname}} {{nachname}}!&lt;/h1&gt;</code></pre>
-  <p>Beim Aufruf der Seite wird <code>{{vorname}}</code> automatisch durch den echten Vornamen ersetzt. Zum Beispiel: "Hallo Peter Mueller!"</p>
+  <!-- ── Schritt 3 ─────────────────────────────────────────────────── -->
+  <div class="card" id="video">
+    <div class="step-head">
+      <div class="step-num">3</div>
+      <h2>Das persönliche Video einbauen</h2>
+    </div>
+    <p class="step-goal">Jeder Empfänger bekommt automatisch sein eigenes Video.</p>
 
-  <h3>Woher kommen die Namen der Platzhalter?</h3>
-  <p>Aus Ihrer Kontaktliste (CSV-Datei). Jede Spalte kann ein Platzhalter sein. Heisst Ihre Spalte <code>firma</code>, schreiben Sie <code>{{firma}}</code>. Sie legen die Namen also selbst fest. Beim Erstellen einer Runde ordnen Sie die Spalten den Platzhaltern zu.</p>
+    <p>Bau einen leeren Video-Rahmen ein. Unser System füllt ihn beim Aufruf der Seite mit dem richtigen Video und dem Vorschaubild. Kopiere diesen Baustein dorthin, wo das Video erscheinen soll:</p>
 
-  <h3>Ersatztext, falls ein Wert fehlt</h3>
-  <p>Manchmal fehlt ein Wert in der Liste. Dafuer gibt es einen Ersatztext. Den schreiben Sie mit einem senkrechten Strich dahinter:</p>
-  <pre><code>&lt;p&gt;Ihre Firma {{firma|Ihr Unternehmen}} verdient mehr Kunden.&lt;/p&gt;</code></pre>
-  <p>Fehlt die Firma, steht dort automatisch "Ihr Unternehmen".</p>
-
-  <h3>Regeln fuer Platzhalter</h3>
-  <ul>
-    <li>Nur Buchstaben, Zahlen, Unterstrich, Minus und Punkt. Keine Leerzeichen und keine Umlaute im Namen. Also <code>{{strasse}}</code> statt <code>{{straße}}</code>.</li>
-    <li>Platzhalter funktionieren in normalem Text und in Links. Zum Beispiel: <code>href="https://ihre-seite.de/danke?name={{vorname}}"</code></li>
-    <li>Der Platzhalter <code>{{pageUrl}}</code> ist immer verfuegbar. Er enthaelt die kurze Adresse der persoenlichen Seite.</li>
-  </ul>
-  <div class="box warn">
-    <strong>Wichtig</strong>
-    Platzhalter funktionieren nicht innerhalb von <code>&lt;script&gt;</code> und <code>&lt;style&gt;</code> Bloecken. Schreiben Sie sie nur in den sichtbaren Teil der Seite.
-  </div>
-
-  <h2 id="schritt2"><span class="num">3</span>Das persoenliche Video einbauen</h2>
-  <p>Jeder Empfaenger bekommt ein eigenes Video. Sie bauen dafuer einen leeren Video-Rahmen ein. Das System fuellt ihn automatisch mit dem richtigen Video und einem Vorschaubild.</p>
-  <p>Kopieren Sie diesen Baustein an die Stelle, wo das Video erscheinen soll:</p>
-  <pre><code>&lt;div data-vc-video&gt;
-  &lt;video data-vc-track controls playsinline&gt;&lt;/video&gt;
+    <div class="codewrap">
+      <pre><code>&lt;div <span class="hl">data-vc-video</span>&gt;
+  &lt;video <span class="hl">data-vc-track</span> controls playsinline&gt;&lt;/video&gt;
 &lt;/div&gt;</code></pre>
-  <p>Das war es schon. Die drei Teile bedeuten:</p>
-  <table>
-    <tr><th>Teil</th><th>Was er macht</th></tr>
-    <tr><td><code>data-vc-video</code></td><td>Sagt dem System: Hier kommt das persoenliche Video rein. Der Rahmen passt sich automatisch an das Format des Videos an (quer, hochkant oder quadratisch).</td></tr>
-    <tr><td><code>data-vc-track</code></td><td>Misst automatisch, ob und wie lange das Video angesehen wurde.</td></tr>
-    <tr><td><code>controls playsinline</code></td><td>Zeigt die Abspiel-Knoepfe und laesst das Video auf dem Handy direkt in der Seite laufen.</td></tr>
-  </table>
-  <div class="box warn">
-    <strong>Wichtig</strong>
-    Das <code>&lt;video&gt;</code> Element muss leer bleiben. Kein <code>src</code> eintragen und keine eigene Videodatei angeben. Sonst denkt das System, Sie wollen Ihr eigenes Video zeigen, und laesst es unveraendert.
-  </div>
-  <div class="box info">
-    <strong>Groesse anpassen</strong>
-    Die Breite steuern Sie mit Ihrem eigenen CSS am aeusseren <code>&lt;div&gt;</code>. Zum Beispiel: <code>style="max-width:720px;margin:0 auto"</code>. Das Seitenverhaeltnis regelt das System selbst.
+      <button class="copybtn" data-copy='&lt;div data-vc-video&gt;
+  &lt;video data-vc-track controls playsinline&gt;&lt;/video&gt;
+&lt;/div&gt;'>Kopieren</button>
+    </div>
+
+    <p>Das war schon alles. Die Teile bedeuten:</p>
+    <table>
+      <tr><th>Teil</th><th>Was er macht</th></tr>
+      <tr><td><code>data-vc-video</code></td><td>Sagt dem System: Hier kommt das Video rein. Der Rahmen passt sich automatisch an das Videoformat an (quer, hochkant, quadratisch).</td></tr>
+      <tr><td><code>data-vc-track</code></td><td>Misst automatisch, ob und wie lange das Video angeschaut wurde.</td></tr>
+      <tr><td><code>controls playsinline</code></td><td>Zeigt Play-Knopf und Lautstärke. Auf dem Handy läuft das Video direkt in der Seite.</td></tr>
+    </table>
+
+    <div class="note stop">
+      <strong>Wichtig: Das Video-Element bleibt leer</strong>
+      Trag kein <code>src</code> ein und keine eigene Videodatei. Sonst denkt das System, du willst dein eigenes Video zeigen, und lässt alles unverändert.
+    </div>
+    <div class="note tip">
+      <strong>Größe anpassen</strong>
+      Die Breite steuerst du selbst am äußeren <code>&lt;div&gt;</code>, zum Beispiel mit <code>style="max-width:720px;margin:0 auto"</code>. Das Seitenverhältnis regelt das System.
+    </div>
   </div>
 
-  <h2 id="schritt3"><span class="num">4</span>Klicks auf Buttons messen</h2>
-  <p>Sie wollen wissen, wer auf "Termin buchen" geklickt hat. Dafuer markieren Sie Ihre wichtigen Buttons und Links mit <code>data-vc-cta</code>:</p>
-  <pre><code>&lt;a href="https://ihre-seite.de/termin" data-vc-cta="oben"&gt;
+  <!-- ── Schritt 4 ─────────────────────────────────────────────────── -->
+  <div class="card" id="klicks">
+    <div class="step-head">
+      <div class="step-num">4</div>
+      <h2>Klicks auf Buttons messen</h2>
+    </div>
+    <p class="step-goal">Du siehst später, wer geklickt hat und wo.</p>
+
+    <p>Markiere deine wichtigen Buttons und Links mit <code>data-vc-cta</code>:</p>
+
+    <div class="codewrap">
+      <pre><code>&lt;a href="https://deine-seite.de/termin" <span class="hl">data-vc-cta="oben"</span>&gt;
   Jetzt Termin buchen
-&lt;/a&gt;
+&lt;/a&gt;</code></pre>
+      <button class="copybtn" data-copy='&lt;a href="https://deine-seite.de/termin" data-vc-cta="oben"&gt;Jetzt Termin buchen&lt;/a&gt;'>Kopieren</button>
+    </div>
 
-&lt;button data-vc-cta="unten"&gt;Kontakt aufnehmen&lt;/button&gt;</code></pre>
-  <p>Der Wert in den Anfuehrungszeichen ist ein frei waehlbarer Name fuer die Stelle. So sehen Sie spaeter in der Auswertung, ob eher der Button oben oder der Button unten geklickt wurde.</p>
-  <ul>
-    <li>Sie koennen beliebig viele Elemente markieren.</li>
-    <li>Funktioniert bei Links, Buttons und auch bei Bildern.</li>
-    <li>Klicks auf normale Links ohne Markierung werden trotzdem grob mitgezaehlt. Die Markierung macht die Auswertung aber viel genauer.</li>
-  </ul>
+    <p>Der Wert in den Anführungszeichen ist ein frei wählbarer Name für die Stelle, zum Beispiel <code>"oben"</code> oder <code>"unten"</code>. So siehst du in der Auswertung, welcher Button am besten funktioniert.</p>
+    <ul>
+      <li>Du kannst beliebig viele Buttons und Links markieren.</li>
+      <li>Funktioniert bei Links, Buttons und Bildern.</li>
+      <li>Klicks auf normale Links werden auch ohne Markierung grob mitgezählt. Mit Markierung wird die Auswertung aber viel genauer.</li>
+    </ul>
+  </div>
 
-  <h2 id="beispiel"><span class="num">5</span>Fertiges Beispiel zum Kopieren</h2>
-  <p>Eine komplette kleine Seite mit allem, was Sie brauchen. Sie koennen sie als Startpunkt nehmen und Ihr eigenes Design darum herum bauen:</p>
-  <pre><code>&lt;!doctype html&gt;
+  <!-- ── Beispiel ──────────────────────────────────────────────────── -->
+  <div class="card" id="beispiel">
+    <div class="step-head">
+      <div class="step-num">✓</div>
+      <h2>Fertiges Beispiel zum Kopieren</h2>
+    </div>
+    <p class="step-goal">Eine komplette kleine Seite mit allen drei Bausteinen. Nimm sie als Startpunkt.</p>
+
+    <div class="codewrap">
+      <pre><code>&lt;!doctype html&gt;
 &lt;html lang="de"&gt;
 &lt;head&gt;
   &lt;meta charset="utf-8"&gt;
   &lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;
-  &lt;title&gt;Ein Video fuer {{firma|Sie}}&lt;/title&gt;
+  &lt;title&gt;Ein Video für <span class="hl">{{firma|dich}}</span>&lt;/title&gt;
 &lt;/head&gt;
 &lt;body&gt;
 
-  &lt;h1&gt;Hallo {{vorname}}, dieses Video ist fuer Sie!&lt;/h1&gt;
-  &lt;p&gt;Wir haben uns {{firma|Ihre Webseite}} genauer angesehen.&lt;/p&gt;
+  &lt;h1&gt;Hallo <span class="hl">{{vorname}}</span>, dieses Video ist für dich!&lt;/h1&gt;
+  &lt;p&gt;Wir haben uns <span class="hl">{{firma|deine Webseite}}</span> genauer angesehen.&lt;/p&gt;
+
+  &lt;div <span class="hl">data-vc-video</span> style="max-width:720px;margin:0 auto"&gt;
+    &lt;video <span class="hl">data-vc-track</span> controls playsinline style="width:100%"&gt;&lt;/video&gt;
+  &lt;/div&gt;
+
+  &lt;a href="https://deine-seite.de/termin" <span class="hl">data-vc-cta="haupt"</span>&gt;
+    Jetzt kostenloses Gespräch buchen
+  &lt;/a&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+      <button class="copybtn" data-copy='&lt;!doctype html&gt;
+&lt;html lang="de"&gt;
+&lt;head&gt;
+  &lt;meta charset="utf-8"&gt;
+  &lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;
+  &lt;title&gt;Ein Video für {{firma|dich}}&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+  &lt;h1&gt;Hallo {{vorname}}, dieses Video ist für dich!&lt;/h1&gt;
+  &lt;p&gt;Wir haben uns {{firma|deine Webseite}} genauer angesehen.&lt;/p&gt;
 
   &lt;div data-vc-video style="max-width:720px;margin:0 auto"&gt;
     &lt;video data-vc-track controls playsinline style="width:100%"&gt;&lt;/video&gt;
   &lt;/div&gt;
 
-  &lt;a href="https://ihre-seite.de/termin" data-vc-cta="haupt"&gt;
-    Jetzt kostenloses Gespraech buchen
+  &lt;a href="https://deine-seite.de/termin" data-vc-cta="haupt"&gt;
+    Jetzt kostenloses Gespräch buchen
   &lt;/a&gt;
 
 &lt;/body&gt;
-&lt;/html&gt;</code></pre>
+&lt;/html&gt;'>Kopieren</button>
+    </div>
+  </div>
 
-  <h2 id="checkliste"><span class="num">6</span>Checkliste vor dem Hochladen</h2>
-  <ul>
-    <li>Die Startseite heisst <code>index.html</code> und liegt in der ZIP-Datei.</li>
-    <li>Alle Platzhalter sind geschrieben wie die Spalten in Ihrer Kontaktliste. Ohne Umlaute, ohne Leerzeichen.</li>
-    <li>Der Video-Baustein ist drin: <code>&lt;div data-vc-video&gt;</code> mit leerem <code>&lt;video data-vc-track&gt;</code> darin.</li>
-    <li>Die wichtigen Buttons haben <code>data-vc-cta="name"</code>.</li>
-    <li>Die ZIP-Datei ist kleiner als 50 MB.</li>
-  </ul>
-  <div class="box ok">
-    <strong>Fertig</strong>
-    Laden Sie die ZIP-Datei hoch. Nach dem Upload sehen Sie eine Vorschau und koennen pruefen, ob alles an der richtigen Stelle sitzt.
+  <!-- ── Checkliste ────────────────────────────────────────────────── -->
+  <div class="card" id="checkliste">
+    <div class="step-head">
+      <div class="step-num">✓</div>
+      <h2>Kurz-Check vor dem Upload</h2>
+    </div>
+    <p class="step-goal">Fünf Punkte, dann kann nichts schiefgehen.</p>
+
+    <ul class="check">
+      <li>Die Startseite heißt <code>index.html</code> und liegt in der ZIP.</li>
+      <li>Alle Platzhalter heißen genau wie die Spalten in deiner Kontaktliste. Ohne Umlaute, ohne Leerzeichen.</li>
+      <li>Der Video-Baustein ist drin und das <code>&lt;video&gt;</code> ist leer.</li>
+      <li>Die wichtigen Buttons haben <code>data-vc-cta="name"</code>.</li>
+      <li>Die ZIP ist kleiner als 50 MB.</li>
+    </ul>
+    <div class="note good">
+      <strong>Fertig!</strong>
+      Lade die ZIP hoch. Danach siehst du sofort eine Vorschau und kannst prüfen, ob alles passt.
+    </div>
   </div>
 
 </div>
+
+<script>
+  document.querySelectorAll(".copybtn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var tmp = document.createElement("textarea");
+      tmp.innerHTML = btn.getAttribute("data-copy");
+      var text = tmp.value;
+      navigator.clipboard.writeText(text).then(function () {
+        var old = btn.textContent;
+        btn.textContent = "Kopiert!";
+        setTimeout(function () { btn.textContent = old; }, 1600);
+      });
+    });
+  });
+</script>
 </body>
 </html>
