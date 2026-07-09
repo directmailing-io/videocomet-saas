@@ -50,7 +50,10 @@ import { runVideoCompress } from "./video-compress";
 import { runVideoUpload } from "./video-upload";
 import { runThumbnailExtract } from "./thumbnail-extract";
 import { runQrGenerate } from "./qr-generate";
-import { runLandingPageCreate } from "./landingpage-create";
+import {
+  runLandingPageCreate,
+  rehomeLeadDomain,
+} from "./landingpage-create";
 import { runDocxModify } from "./docx-modify";
 import { substitute as substitutePlaceholder } from "@/lib/placeholders/substitute";
 import { buildPageUrlShort } from "@/lib/placeholders/page-url";
@@ -417,6 +420,9 @@ export async function pipelineProcessor(
     let videoUrl: string | null = lead.videoUrl ?? null;
     let pageUrl: string | null = null;
     let slug: string | null = lead.slug ?? null;
+    // Kann sich im Reuse-Branch durch rehomeLeadDomain ändern — `lead` ist
+    // danach stale, deshalb eigene Variable statt lead.domainId weiterlesen.
+    let leadDomainId: string | null = lead.domainId ?? null;
     let qrPngPath: string | null = null;
     let thumbFilePath: string | null = null;
     // Local MP4 path produced by videoRender. null when we skipped render
@@ -676,24 +682,49 @@ export async function pipelineProcessor(
         durationMs: Date.now() - lpStart,
       });
     } else {
-      // Reuse existing slug; reconstruct the public URL respecting the
-      // lead's resolved domain (set during the original landingPageCreate)
-      // AND any Custom-LP pin on the run.
+      // Reuse existing slug — but the campaign's domain may have CHANGED
+      // since the slug was first created (user switched the landingpage
+      // domain and regenerated). rehomeLeadDomain moves the lead into the
+      // campaign's current domain namespace when they diverge; otherwise
+      // we just reconstruct the URL from the lead's stored domain.
       // slugAlreadyDone guarantees `slug` is non-null at this point.
-      pageUrl = await rebuildPageUrl(
-        lead.domainId ?? null,
-        slug!,
+      const rehomed = await rehomeLeadDomain({
+        leadId: data.leadId,
+        campaignId: campaign.id,
+        currentSlug: slug!,
+        currentDomainId: lead.domainId ?? null,
+        campaignDomainId: campaign.domainId ?? null,
         appUrl,
         customLpVersionId,
         customLpHost,
-      );
-      await insertPipelineEvent({
-        runId: data.runId,
-        leadId: data.leadId,
-        level: "info",
-        stage: "run",
-        message: `${leadLabel}: skipped landingPageCreate: already done (slug=${slug})`,
       });
+      if (rehomed) {
+        slug = rehomed.slug;
+        pageUrl = rehomed.pageUrl;
+        leadDomainId = rehomed.domainId;
+        await insertPipelineEvent({
+          runId: data.runId,
+          leadId: data.leadId,
+          level: "info",
+          stage: "landingpage",
+          message: `${leadLabel}: landing page moved to campaign domain (${pageUrl})`,
+        });
+      } else {
+        pageUrl = await rebuildPageUrl(
+          lead.domainId ?? null,
+          slug!,
+          appUrl,
+          customLpVersionId,
+          customLpHost,
+        );
+        await insertPipelineEvent({
+          runId: data.runId,
+          leadId: data.leadId,
+          level: "info",
+          stage: "run",
+          message: `${leadLabel}: skipped landingPageCreate: already done (slug=${slug})`,
+        });
+      }
     }
 
     // ── pageUrl-Short für System-Platzhalter (Paket A/E) ───────────────
@@ -703,7 +734,7 @@ export async function pipelineProcessor(
     // lp.videocomet.de UND Custom-Domains werden separat behandelt — die
     // Kurzform soll abtippbar sein, nicht der mit `https://`-präfixierte
     // CDN-Link.
-    const effectiveDomainId = lead.domainId ?? campaign.domainId ?? null;
+    const effectiveDomainId = leadDomainId ?? campaign.domainId ?? null;
     let pageUrlDomainHostname: string | null = null;
     if (effectiveDomainId) {
       const [d] = await db

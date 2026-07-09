@@ -243,6 +243,87 @@ export async function runLandingPageCreate(
   throw new Error("[landingpage-create] unreachable retry exit");
 }
 
+export interface RehomeLeadDomainInput {
+  leadId: string;
+  campaignId: string;
+  /** Bereits persistierter Slug des Leads. */
+  currentSlug: string;
+  /** Aktuell auf dem Lead gespeicherte `domain_id` (kann null sein). */
+  currentDomainId: string | null;
+  /** `campaigns.domain_id` — die JETZT gewünschte Domain der Kampagne. */
+  campaignDomainId: string | null;
+  appUrl: string;
+  customLpVersionId: string | null;
+  customLpHost: string;
+}
+
+export interface RehomeLeadDomainOutput {
+  slug: string;
+  pageUrl: string;
+  domainId: string | null;
+}
+
+/**
+ * Zieht einen Lead mit BESTEHENDEM Slug in den Domain-Namespace der Kampagne
+ * um, wenn die Kampagnen-Domain nachträglich geändert wurde (z.B. Custom-
+ * Domain erst nach dem ersten Run verifiziert). Ohne diesen Umzug behält der
+ * Reuse-Branch der Pipeline (`slugAlreadyDone`) für immer die alte
+ * `lead.domain_id` — und damit die alte Landingpage-URL.
+ *
+ * Rückgabe `null` = kein Umzug nötig (effektive Kampagnen-Domain entspricht
+ * bereits der Lead-Domain).
+ *
+ * ACHTUNG: Nach dem Umzug ist der Slug im ALTEN Namespace nicht mehr
+ * auffindbar — bereits verschickte alte URLs brechen. Das ist gewollt
+ * (der User hat die Domain bewusst gewechselt und regeneriert).
+ */
+export async function rehomeLeadDomain(
+  input: RehomeLeadDomainInput,
+): Promise<RehomeLeadDomainOutput | null> {
+  const effectiveDomainId = await resolveEffectiveDomainId(
+    input.campaignDomainId,
+  );
+  if (effectiveDomainId === (input.currentDomainId ?? null)) return null;
+
+  // Slug im ZIEL-Namespace auf Kollision prüfen (eigenen Lead ausschließen).
+  let slug = input.currentSlug;
+  const isAvailable = buildAvailabilityCheck(
+    input.leadId,
+    input.campaignId,
+    effectiveDomainId,
+  );
+  if (!(await isAvailable(slug))) {
+    slug = `${slug}-${slugHexSuffix()}`;
+  }
+
+  const MAX_RETRIES = 4;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    try {
+      await updateLeadStatus(input.leadId, {
+        slug,
+        domainId: effectiveDomainId,
+      });
+      const pageUrl = buildPageUrl({
+        effectiveDomainId,
+        appUrl: input.appUrl,
+        slug,
+        customLpVersionId: input.customLpVersionId,
+        customLpHost: input.customLpHost,
+        domainHostname: await resolveActiveDomainHostname(effectiveDomainId),
+      });
+      return { slug, pageUrl, domainId: effectiveDomainId };
+    } catch (err) {
+      if (!isSlugUniqueViolation(err) || attempt === MAX_RETRIES) throw err;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[landingpage-create] rehome slug "${slug}" conflict (attempt ${attempt + 1}/${MAX_RETRIES}), retrying with hex suffix`,
+      );
+      slug = `${slug}-${slugHexSuffix()}`;
+    }
+  }
+  throw new Error("[landingpage-create] unreachable rehome retry exit");
+}
+
 /** Liefert den Hostnamen einer aktiven Custom-Domain, sonst null. */
 async function resolveActiveDomainHostname(
   effectiveDomainId: string | null,
