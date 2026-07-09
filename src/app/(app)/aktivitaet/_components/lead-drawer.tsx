@@ -104,13 +104,16 @@ export function LeadDrawer({
                   <div className="flex items-center gap-2 mb-1">
                     <TemperatureBadge temperature={lead.temperature} />
                     {lead.slug && (
-                      <Link
-                        href={`/leads/${lead.slug}`}
+                      <a
+                        href={`/api/leads/${lead.id}/open?preview=1`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="text-xs text-brand-deep hover:underline inline-flex items-center gap-1"
+                        title="Landingpage im Vorschau-Modus öffnen (kein Tracking)"
                       >
-                        Lead-Detail
+                        Landingpage
                         <ExternalLink className="size-3" />
-                      </Link>
+                      </a>
                     )}
                   </div>
                   <h2 className="text-lg font-bold text-ink truncate">

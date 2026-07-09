@@ -311,7 +311,6 @@ export default async function CampaignDetailPage({
             <CampaignLeadsTable
               campaignId={campaign.id}
               initial={initialLeadRows}
-              appUrl={appUrl}
             />
           )}
         </TabsContent>

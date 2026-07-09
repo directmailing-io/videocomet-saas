@@ -83,11 +83,9 @@ const PAGE_SIZE = 25;
 export function CampaignLeadsTable({
   campaignId,
   initial,
-  appUrl,
 }: {
   campaignId: string;
   initial: CampaignLeadRowSerialized[];
-  appUrl: string;
 }) {
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
@@ -275,7 +273,7 @@ export function CampaignLeadsTable({
                     <TableCell>
                       {l.slug ? (
                         <a
-                          href={`${appUrl}/v/${l.slug}?preview=1`}
+                          href={`/api/leads/${l.id}/open?preview=1`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-brand-deep hover:underline text-xs"
