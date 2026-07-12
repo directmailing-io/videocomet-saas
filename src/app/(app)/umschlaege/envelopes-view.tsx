@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Plus, Loader2, Trash2 } from "lucide-react";
+import { Mail, Plus, Loader2, Trash2, Copy, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,6 +50,7 @@ export function EnvelopesView({ userId: _userId }: { userId: string }) {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [newName, setNewName] = React.useState("");
   const [newFormat, setNewFormat] = React.useState<Template["format"]>("DIN_LANG");
+  const [duplicatingId, setDuplicatingId] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -95,6 +96,26 @@ export function EnvelopesView({ userId: _userId }: { userId: string }) {
       setCreating(false);
       setCreateOpen(false);
       setNewName("");
+    }
+  }
+
+  async function handleDuplicate(id: string) {
+    setDuplicatingId(id);
+    try {
+      const res = await fetch(`/api/envelopes/${id}/duplicate`, {
+        method: "POST",
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error ?? "Fehler");
+      toast({ variant: "success", title: "Vorlage dupliziert" });
+      router.push(`/umschlaege/${json.template.id}`);
+    } catch (err) {
+      toast({
+        variant: "danger",
+        title: "Fehler beim Duplizieren",
+        description: err instanceof Error ? err.message : undefined,
+      });
+      setDuplicatingId(null);
     }
   }
 
@@ -164,14 +185,39 @@ export function EnvelopesView({ userId: _userId }: { userId: string }) {
                       {FORMAT_LABEL[t.format]}
                     </Badge>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(t.id)}
-                    className="text-ink-muted hover:text-red-600 shrink-0"
-                    aria-label="Löschen"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Link
+                      href={`/umschlaege/${t.id}`}
+                      className="text-ink-muted hover:text-brand-deep"
+                      aria-label="Bearbeiten"
+                      title="Bearbeiten"
+                    >
+                      <Pencil className="size-4" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleDuplicate(t.id)}
+                      disabled={duplicatingId !== null}
+                      className="text-ink-muted hover:text-brand-deep disabled:opacity-50"
+                      aria-label="Duplizieren"
+                      title="Duplizieren"
+                    >
+                      {duplicatingId === t.id ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Copy className="size-4" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(t.id)}
+                      className="text-ink-muted hover:text-red-600"
+                      aria-label="Löschen"
+                      title="Löschen"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
                 </div>
                 <div className="text-xs text-ink-muted">
                   Zuletzt geändert:{" "}
