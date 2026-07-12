@@ -53,12 +53,36 @@ export interface DetectedPlaceholder {
   occurrences: number;
 }
 
+/** Operator einer Wenn-Dann-Regel. */
+export type PlaceholderRuleOp = "equals" | "is_empty";
+
+/**
+ * Wenn-Dann-Regel pro Mapping-Eintrag. Transformiert den aus der CSV-
+ * Spalte gelesenen Rohwert BEVOR Fallbacks greifen:
+ *
+ *   - `equals`:   matcht tolerant (trim, case-insensitive, Whitespace-
+ *                 Collapse, Unicode-NFC) gegen `match`.
+ *   - `is_empty`: greift, wenn die Zelle leer/nur Whitespace ist.
+ *
+ * Semantik: erste zutreffende Regel gewinnt; der Output triggert KEINE
+ * weitere Regel (keine Ketten). Trifft keine Regel, bleibt der Rohwert.
+ */
+export interface PlaceholderRule {
+  op: PlaceholderRuleOp;
+  /** Vergleichswert — nur bei `equals` relevant. */
+  match?: string;
+  /** Ersatzwert bei Treffer. Leerer String ⇒ Wert wird geleert (Fallback greift danach). */
+  output: string;
+}
+
 /** Ein Mapping-Eintrag pro Platzhalter (Spalte + optionaler Fallback). */
 export interface PlaceholderMappingEntry {
   /** CSV-Spaltenname; `undefined` ⇒ keine Spalte zugewiesen. */
   column?: string;
   /** Wert, der eingesetzt wird, wenn die CSV-Zelle leer ist. */
   fallback?: string;
+  /** Wenn-Dann-Regeln, angewandt auf den Spaltenwert (siehe PlaceholderRule). */
+  rules?: PlaceholderRule[];
 }
 
 /**

@@ -323,7 +323,23 @@ export function RunWizard({
           return;
         }
 
-        // 2) Zusaetzliche Runden fuer tabs[1..N] anlegen
+        // 2) Zusaetzliche Runden fuer tabs[1..N] anlegen — inkl. des
+        //    placeholderMapping des Master-Runs (Fallbacks + Wenn-Dann-Regeln),
+        //    damit alle Bulk-Runden identisch generieren.
+        let masterPlaceholderMapping: unknown = undefined;
+        try {
+          const runRes = await fetch(`/api/runs/${runId}`, {
+            cache: "no-store",
+          });
+          if (runRes.ok) {
+            const runJson = await runRes.json();
+            masterPlaceholderMapping =
+              runJson?.run?.columnMapping?.placeholderMapping ?? undefined;
+          }
+        } catch {
+          // Best-effort — ohne placeholderMapping greift das legacy mapping.
+        }
+
         const extraTabs = selectedTabs.slice(1);
         const bulkRes = await fetch("/api/runs/bulk", {
           method: "POST",
@@ -337,6 +353,9 @@ export function RunWizard({
               tabTitle: t.title,
             })),
             mapping,
+            ...(masterPlaceholderMapping
+              ? { placeholderMapping: masterPlaceholderMapping }
+              : {}),
             dedupeConfig,
           }),
         });

@@ -26,6 +26,7 @@ import type {
   PlaceholderFormat,
   PlaceholderMapping,
 } from "./types";
+import { applyPlaceholderRules } from "./rules";
 
 /**
  * System-Platzhalter sind reservierte Keys, die NICHT aus Lead-Daten
@@ -242,14 +243,20 @@ function resolveValue(
   const sysVal = resolveSystemValue(key, system);
   if (sysVal != null) return sysVal;
 
-  // Mapping in der neuen Form: { column?, fallback? }
+  // Mapping in der neuen Form: { column?, fallback?, rules? }
   if (mapping && !isLegacyMapping(mapping)) {
     const entry = (mapping as PlaceholderMapping)[key];
     if (entry) {
-      if (entry.column) {
-        const v = lookupLeadValueCI(leadData, entry.column);
-        if (v != null && v.length > 0) return v;
-      }
+      // Rohwert aus der Spalte lesen (leer, wenn keine Spalte / Zelle leer),
+      // dann Wenn-Dann-Regeln anwenden. Ergebnis leer → Fallback-Kette.
+      const raw = entry.column
+        ? (lookupLeadValueCI(leadData, entry.column) ?? "")
+        : "";
+      const v =
+        Array.isArray(entry.rules) && entry.rules.length > 0
+          ? applyPlaceholderRules(raw, entry.rules)
+          : raw;
+      if (v.length > 0) return v;
       if (typeof entry.fallback === "string" && entry.fallback.length > 0) {
         return entry.fallback;
       }

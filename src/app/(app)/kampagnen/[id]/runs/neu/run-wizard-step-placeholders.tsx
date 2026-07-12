@@ -26,6 +26,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
+import { applyPlaceholderRules } from "@/lib/placeholders/rules";
+import { ValueRulesDialog } from "./value-rules-dialog";
+import type { PlaceholderRule } from "@/lib/placeholders/types";
 // TODO: Sobald Agent A's `src/lib/placeholders/types.ts` final ist, hier den
 //       Shim entfernen und auf den finalen Pfad zeigen.
 import type {
@@ -103,10 +106,14 @@ function substituteForPreview(
     const entry = mapping[key];
     if (!entry) return inlineFallback ?? "";
     const col = entry.column;
-    if (col) {
-      const val = lead[col];
-      if (val && val.trim() !== "") return val;
-    }
+    // Gleiche Semantik wie resolveValue() im Worker: Regeln transformieren
+    // den Rohwert VOR der Fallback-Kette (gemeinsame Engine aus rules.ts).
+    const raw = col ? (lead[col] ?? "") : "";
+    const v =
+      Array.isArray(entry.rules) && entry.rules.length > 0
+        ? applyPlaceholderRules(raw, entry.rules)
+        : raw;
+    if (v.trim() !== "") return v;
     if (entry.fallback && entry.fallback !== "") return entry.fallback;
     return inlineFallback ?? "";
   });
@@ -413,6 +420,7 @@ export function RunWizardStepPlaceholders({
       // konsistent serialisiert wird.
       if (next.column === "") delete next.column;
       if (next.fallback === "") delete next.fallback;
+      if (next.rules && next.rules.length === 0) delete next.rules;
       return { ...m, [key]: next };
     });
   }
@@ -689,12 +697,18 @@ export function RunWizardStepPlaceholders({
             placeholders.map((p) => (
               <PlaceholderRow
                 key={p.key}
+                runId={runId}
                 placeholder={p}
                 entry={mapping[p.key]}
                 csvColumns={csvColumns}
                 similarUnmapped={similarKeys(p.key)}
                 onChangeColumn={(col) => patchEntry(p.key, { column: col })}
                 onChangeFallback={(fb) => patchEntry(p.key, { fallback: fb })}
+                onChangeRules={(rules) =>
+                  patchEntry(p.key, {
+                    rules: rules.length > 0 ? rules : undefined,
+                  })
+                }
                 onApplyToSimilar={(col) => applyToSimilar(p.key, col)}
                 rowRef={(el) => {
                   rowRefs.current[p.key] = el;
@@ -766,29 +780,38 @@ export function RunWizardStepPlaceholders({
 // ─────────────────────────────────────────────────────────────────────────
 
 interface PlaceholderRowProps {
+  runId: string;
   placeholder: DetectedPlaceholder;
   entry: PlaceholderMappingEntry | undefined;
   csvColumns: string[];
   similarUnmapped: string[];
   onChangeColumn: (column: string | undefined) => void;
   onChangeFallback: (fallback: string) => void;
+  onChangeRules: (rules: PlaceholderRule[]) => void;
   onApplyToSimilar: (column: string) => void;
   rowRef: (el: HTMLDivElement | null) => void;
 }
 
 function PlaceholderRow({
+  runId,
   placeholder,
   entry,
   csvColumns,
   similarUnmapped,
   onChangeColumn,
   onChangeFallback,
+  onChangeRules,
   onApplyToSimilar,
   rowRef,
 }: PlaceholderRowProps) {
   const hasInaccessibleSource = placeholder.sources.some((s) => s.inaccessible);
   const column = entry?.column;
   const fallback = entry?.fallback ?? "";
+  const rules = entry?.rules ?? [];
+  const [rulesOpen, setRulesOpen] = React.useState(false);
+  // Regeln nur für echte CSV-Spalten — System-Werte (@system:…) werden
+  // vor dem Mapping aufgelöst, dort greifen Regeln nie.
+  const canHaveRules = !!column && !column.startsWith("@system:");
 
   // Aktueller Select-Wert (mit Sentinel-Mapping).
   // System-Werte (@system:…) werden 1:1 gezeigt — der Select-Eintrag
@@ -904,6 +927,23 @@ function PlaceholderRow({
               ))}
             </SelectContent>
           </Select>
+          {canHaveRules && (
+            <button
+              type="button"
+              onClick={() => setRulesOpen(true)}
+              className={cn(
+                "mt-2 inline-flex items-center gap-1 text-[11px] font-medium transition-colors",
+                rules.length > 0
+                  ? "text-brand-deep hover:text-brand-deep/80"
+                  : "text-ink-muted hover:text-brand-deep",
+              )}
+            >
+              <Wand2 className="size-3" />
+              {rules.length > 0
+                ? `Wenn-Dann-Regeln (${rules.length} aktiv)`
+                : "Werte anpassen (Wenn-Dann)"}
+            </button>
+          )}
         </div>
 
         {/* Spalte 3: Fallback-Input */}
@@ -934,6 +974,19 @@ function PlaceholderRow({
           </div>
         </div>
       </div>
+
+      {canHaveRules && column && (
+        <ValueRulesDialog
+          open={rulesOpen}
+          onOpenChange={setRulesOpen}
+          runId={runId}
+          placeholderKey={placeholder.key}
+          column={column}
+          fallback={fallback}
+          initialRules={rules}
+          onSave={onChangeRules}
+        />
+      )}
     </div>
   );
 }

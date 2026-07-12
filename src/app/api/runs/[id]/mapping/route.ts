@@ -24,9 +24,16 @@ import type {
  *     gewinnt, das alte `columnMapping` wird (sofern vorhanden) in den
  *     gespeicherten `mapping`-Slot übernommen.
  */
+const ruleSchema = z.object({
+  op: z.enum(["equals", "is_empty"]),
+  match: z.string().max(500).optional(),
+  output: z.string().max(500),
+});
+
 const entrySchema = z.object({
   column: z.string().min(1).max(200).optional(),
   fallback: z.string().max(500).optional(),
+  rules: z.array(ruleSchema).max(100).optional(),
 });
 
 const putSchema = z
