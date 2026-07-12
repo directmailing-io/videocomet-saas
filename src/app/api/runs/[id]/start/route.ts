@@ -53,6 +53,7 @@ async function resolveActiveCustomLpVersionId(
 
 interface StoredColumnMapping {
   mapping?: Record<string, string>;
+  placeholderMapping?: Record<string, unknown>;
   parsed?: {
     headers: string[];
     rows: Record<string, string>[];
@@ -429,7 +430,15 @@ export async function POST(
     await db
       .update(runs)
       .set({
-        columnMapping: { mapping } as unknown as Record<string, string>,
+        // `parsed` wird bewusst verworfen (Leads sind jetzt in der leads-
+        // Tabelle), aber `placeholderMapping` MUSS überleben — die Pipeline
+        // liest daraus die Wenn-Dann-Regeln + Fallbacks.
+        columnMapping: {
+          mapping,
+          ...(cm.placeholderMapping
+            ? { placeholderMapping: cm.placeholderMapping }
+            : {}),
+        } as unknown as Record<string, string>,
       })
       .where(and(eq(runs.id, params.id), eq(runs.userId, auth.user.id)));
 
@@ -470,7 +479,14 @@ export async function POST(
   await db
     .update(runs)
     .set({
-      columnMapping: { mapping } as unknown as Record<string, string>,
+      // Wie oben: placeholderMapping (Regeln/Fallbacks) muss den Start
+      // überleben, nur `parsed` wird verworfen.
+      columnMapping: {
+        mapping,
+        ...(cm.placeholderMapping
+          ? { placeholderMapping: cm.placeholderMapping }
+          : {}),
+      } as unknown as Record<string, string>,
     })
     .where(and(eq(runs.id, params.id), eq(runs.userId, auth.user.id)));
 
