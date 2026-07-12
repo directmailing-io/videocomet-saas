@@ -114,10 +114,14 @@ export async function PUT(
     }
   }
 
-  // Unknown-Key-Validation: nur wenn das neue Format gepostet wurde —
+  // Unknown-Key-Bereinigung: nur wenn das neue Format gepostet wurde —
   // das alte Format kommt vom alten Wizard und darf nicht plötzlich
-  // strenger werden. Wir validieren best-effort: bei Collector-Failure
-  // (z. B. DB-Hickup) lassen wir das Mapping trotzdem durch.
+  // strenger werden. Unbekannte Keys (z. B. aus einem älteren Umschlag-/
+  // Asset-Kontext übernommen) werden STILL verworfen statt mit 400
+  // abgelehnt — die UI kann Keys, die sie gar nicht anzeigt, nicht
+  // reparieren, und ein harter Fehler blockiert sonst den Auto-Save.
+  // Best-effort: bei Collector-Failure (z. B. DB-Hickup) lassen wir das
+  // Mapping unverändert durch.
   if (body.placeholderMapping) {
     try {
       const detected = await collectCampaignPlaceholders(
@@ -128,13 +132,12 @@ export async function PUT(
       const allowed = new Set(detected.map((p) => p.key));
       const unknown = Object.keys(effective).filter((k) => !allowed.has(k));
       if (unknown.length > 0) {
-        return NextResponse.json(
-          {
-            error: "Mapping enthält unbekannte Platzhalter.",
-            unknownKeys: unknown,
-          },
-          { status: 400 },
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[runs:mapping] dropping ${unknown.length} unknown key(s):`,
+          unknown.join(", "),
         );
+        for (const k of unknown) delete effective[k];
       }
     } catch (err) {
       // eslint-disable-next-line no-console

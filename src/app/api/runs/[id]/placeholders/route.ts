@@ -116,6 +116,15 @@ export async function GET(
     finalSuggested[k] = { ...finalSuggested[k], ...v };
   }
 
+  // Nur Keys ausliefern, die aktuell auch detektiert sind. Gespeicherte
+  // Mappings können Keys aus einem älteren Kontext enthalten (z. B. anderer
+  // Umschlag, geändertes Google Doc) — die würde die UI mit-PUTten und der
+  // Mapping-Endpoint einst mit „unbekannte Platzhalter" ablehnen.
+  const detectedKeys = new Set(placeholders.map((p) => p.key));
+  for (const k of Object.keys(finalSuggested)) {
+    if (!detectedKeys.has(k)) delete finalSuggested[k];
+  }
+
   const response: RunPlaceholdersResponse = {
     placeholders,
     csvColumns,
