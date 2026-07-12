@@ -225,8 +225,12 @@ function isLegacyMapping(
  * @param mapping   PlaceholderMapping (neues Format) ODER Legacy-Map
  * @param spanFallback  Optionaler Fallback aus dem Tiptap-Span-Attribut
  * @param inlineFallback Optionaler Fallback aus `{{key|fallback}}`-Token
+ *
+ * Exportiert, damit Renderer mit eigener Token-Syntax (z. B. Umschlag-PDFs
+ * mit Umlaut-Keys und `__sender.`-Präfix) dieselbe Auflösungs-Kette
+ * (Mapping → Regeln → Fallback → Direkt-Lookup) verwenden können.
  */
-function resolveValue(
+export function resolveValue(
   key: string,
   leadData: Record<string, string>,
   mapping: PlaceholderMapping | LegacyMapping | undefined,

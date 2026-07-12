@@ -236,6 +236,7 @@ function projectLead(
     thumbnailUrl: l.thumbnailUrl,
     errorMessage: l.errorMessage,
     completedAt: l.completedAt,
+    envelopePdfUrl: l.envelopePdfUrl,
     data: l.data,
     viewCount: l.viewCount,
     firstViewedAt: l.firstViewedAt,

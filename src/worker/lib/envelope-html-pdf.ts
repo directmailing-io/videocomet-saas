@@ -11,6 +11,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import puppeteer, { type Browser } from "puppeteer-core";
 import type { EnvelopeField, EnvelopeSender } from "@/lib/db/schema";
+import { resolveValue } from "@/lib/placeholders/substitute";
+import type { PlaceholderMapping } from "@/lib/placeholders/types";
 
 const PT_PER_MM = 72 / 25.4;
 
@@ -73,27 +75,26 @@ export function requiresHtmlRenderer(fields: EnvelopeField[]): boolean {
   return false;
 }
 
+// Tolerante Regex (Umlaut-Keys wie {{Straße}}), Wert-Auflösung via
+// resolveValue, damit Mapping + Wenn-Dann-Regeln auch hier greifen.
 function resolveContent(
   content: string,
   data: Record<string, unknown>,
   sender: EnvelopeSender,
+  mapping?: PlaceholderMapping | Record<string, string>,
 ): string {
   if (!content) return "";
+  const leadData: Record<string, string> = {};
+  for (const [k, v] of Object.entries(data)) {
+    leadData[k] = v == null ? "" : String(v);
+  }
   return content.replace(/\{\{([^}]+)\}\}/g, (_, keyRaw: string) => {
     const key = keyRaw.trim();
     if (key.startsWith("__sender.")) {
       const field = key.slice("__sender.".length) as keyof EnvelopeSender;
       return String(sender[field] ?? "");
     }
-    const direct = data[key];
-    if (direct != null && String(direct).trim() !== "") return String(direct);
-    const lowerKey = key.toLowerCase();
-    for (const [k, v] of Object.entries(data)) {
-      if (k.toLowerCase() === lowerKey && v != null && String(v).trim() !== "") {
-        return String(v);
-      }
-    }
-    return "";
+    return resolveValue(key, leadData, mapping);
   });
 }
 
@@ -139,6 +140,8 @@ export interface HtmlEnvelopeInput {
   fields: EnvelopeField[];
   sender: EnvelopeSender;
   recipientData: Record<string, unknown>;
+  /** Placeholder-Mapping des Runs (neu ODER legacy) — für Wenn-Dann-Regeln. */
+  mapping?: PlaceholderMapping | Record<string, string>;
 }
 
 async function buildHtml(input: HtmlEnvelopeInput): Promise<string> {
@@ -150,6 +153,7 @@ async function buildHtml(input: HtmlEnvelopeInput): Promise<string> {
         f.content ?? "",
         input.recipientData,
         input.sender,
+        input.mapping,
       );
       if (!text) return "";
       const align = f.align ?? "left";

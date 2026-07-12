@@ -1490,12 +1490,14 @@ export async function pipelineProcessor(
                 fields: tpl.fields,
                 sender: tpl.sender,
                 recipientData: (lead.data ?? {}) as Record<string, unknown>,
+                mapping: placeholderMapping,
               })
             : await generateEnvelopePdf({
                 format: tpl.format,
                 fields: tpl.fields,
                 sender: tpl.sender,
                 recipientData: (lead.data ?? {}) as Record<string, unknown>,
+                mapping: placeholderMapping,
               });
           const { uploadFile } = await import("@/lib/bunny/storage");
           // Path-Version-Suffix (siehe Kommentar in pdf-upload.ts): Bunny CDN
