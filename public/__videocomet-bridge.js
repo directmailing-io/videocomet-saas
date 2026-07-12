@@ -42,6 +42,19 @@
       ? STATE.annotations
       : {};
 
+  // ─── Preview-Modus ─────────────────────────────────────────────────────
+  // `?preview=1` = interner Test-Aufruf (gleiche Semantik wie bei den
+  // Block-LPs): ALLE Events werden zu No-ops, damit Vorschau-Klicks die
+  // Statistik nicht verfälschen. Bewusst nur der URL-Param, kein Cookie —
+  // ein persistenter Cookie hat früher versehentlich echte Tests eine
+  // Stunde lang mit-gemutet (siehe lp-block/page.tsx).
+  var PREVIEW = false;
+  try {
+    PREVIEW = /[?&]preview=1(?:&|$)/.test(window.location.search);
+  } catch (e) {
+    /* swallow */
+  }
+
   // ─── Public API ────────────────────────────────────────────────────────
   // Mounted on window so customer JS can call track("custom_thing", {...}).
   try {
@@ -64,6 +77,7 @@
    */
   function sendEvent(kind, payload) {
     try {
+      if (PREVIEW) return;
       if (!SLUG) return;
       if (typeof kind !== "string" || !kind) return;
       var body = JSON.stringify({
@@ -611,7 +625,27 @@
   //   - bindCtaHover / cta_hover
   //   - video_mute / video_unmute (innerhalb bindVideos — siehe weiter oben)
   // Die zugehörigen Funktionen bleiben im Source als optional reaktivierbar.
+  // Sichtbare Badge, damit intern klar ist: dieser Aufruf zählt nicht.
+  function mountPreviewBadge() {
+    try {
+      var el = document.createElement("div");
+      el.textContent = "Vorschau — kein Tracking";
+      el.setAttribute("aria-hidden", "true");
+      el.style.cssText =
+        "position:fixed;bottom:12px;left:12px;z-index:2147483647;" +
+        "background:rgba(17,17,17,.85);color:#fff;font:12px/1 system-ui,sans-serif;" +
+        "padding:6px 10px;border-radius:999px;pointer-events:none;";
+      document.body.appendChild(el);
+    } catch (e) {
+      /* swallow */
+    }
+  }
+
   ready(function () {
+    if (PREVIEW) {
+      mountPreviewBadge();
+      return;
+    }
     try {
       sendEvent("page_view", {
         referrer:
