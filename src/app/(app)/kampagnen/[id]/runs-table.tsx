@@ -433,7 +433,12 @@ export function RunsTable({
               r.totalLeads > 0
                 ? Math.round((r.completedLeads / r.totalLeads) * 100)
                 : 0;
-            const detailHref = `/kampagnen/${campaignId}/runs/${r.id}`;
+            // Unfertige Runden (draft/mapping) führen zurück in den Wizard,
+            // der den gespeicherten Stand (Upload/Mapping) wieder aufnimmt.
+            const detailHref =
+              r.status === "draft" || r.status === "mapping"
+                ? `/kampagnen/${campaignId}/runs/neu?resume=${r.id}`
+                : `/kampagnen/${campaignId}/runs/${r.id}`;
             const final = isFinal(r.status);
             const eligible = canBulkExport(r);
             const checked = selectedIds.has(r.id);

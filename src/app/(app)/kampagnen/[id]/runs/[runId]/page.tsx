@@ -37,6 +37,12 @@ export default async function RunDetailPage({
     redirect(`/kampagnen/${id}/runs/${runId}/preflight`);
   }
 
+  // Unfertige Runden: zurück in den Wizard, der über ?resume= den
+  // gespeicherten Stand (Upload-Preview + Mapping) wieder aufnimmt.
+  if (run.status === "draft" || run.status === "mapping") {
+    redirect(`/kampagnen/${id}/runs/neu?resume=${runId}`);
+  }
+
   const [leads, counts] = await Promise.all([
     listLeadsByRun(runId, user.id),
     countByStatus(runId, user.id),

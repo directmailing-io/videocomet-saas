@@ -41,9 +41,24 @@ export interface RunWizardProps {
   campaignId: string;
   campaignName: string;
   pdfEnabled: boolean;
+  /**
+   * Fortsetzen einer unfertigen Runde (Status draft/mapping): der Server
+   * rekonstruiert Preview + Legacy-Mapping aus `runs.column_mapping` und
+   * der Wizard startet direkt in Step 1. Der Platzhalter-Mapping-Step lädt
+   * sein gespeichertes Mapping selbst über GET /api/runs/[id]/placeholders.
+   */
+  resume?: RunWizardResume;
 }
 
-interface ParsedPreview {
+export interface RunWizardResume {
+  runId: string;
+  runName: string;
+  preview: ParsedPreview | null;
+  mapping: Record<string, string>;
+  dedupeConfig: DedupeConfig | null;
+}
+
+export interface ParsedPreview {
   headers: string[];
   rows: Record<string, string>[];
   totalRows: number;
@@ -62,14 +77,21 @@ const STANDARD_PLACEHOLDERS = [
   { key: "email", label: "E-Mail" },
 ];
 
-export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardProps) {
+export function RunWizard({
+  campaignId,
+  campaignName,
+  pdfEnabled,
+  resume,
+}: RunWizardProps) {
   const router = useRouter();
 
-  const [step, setStep] = React.useState(0);
+  const [step, setStep] = React.useState(resume?.preview ? 1 : 0);
   const [runName, setRunName] = React.useState(
-    `Runde ${new Date().toLocaleDateString("de-DE")}`,
+    resume?.runName ?? `Runde ${new Date().toLocaleDateString("de-DE")}`,
   );
-  const [runId, setRunId] = React.useState<string | null>(null);
+  const [runId, setRunId] = React.useState<string | null>(
+    resume?.runId ?? null,
+  );
   const [creating, setCreating] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -80,7 +102,9 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
   const [uploadKind, setUploadKind] = React.useState<"file" | "google">("file");
   const [file, setFile] = React.useState<File | null>(null);
   const [sheetUrl, setSheetUrl] = React.useState("");
-  const [preview, setPreview] = React.useState<ParsedPreview | null>(null);
+  const [preview, setPreview] = React.useState<ParsedPreview | null>(
+    resume?.preview ?? null,
+  );
 
   // ── Multi-Tab-State (nur für Google Sheets mit mehreren Untertabellen) ──
   // Wenn der User eine URL zu einem Multi-Tab-Sheet paste, zeigen wir einen
@@ -92,7 +116,9 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
   const [selectedTabs, setSelectedTabs] = React.useState<SelectedTab[]>([]);
   const bulkMode = selectedTabs.length > 1;
 
-  const [mapping, setMapping] = React.useState<Record<string, string>>({});
+  const [mapping, setMapping] = React.useState<Record<string, string>>(
+    resume?.mapping ?? {},
+  );
 
   /**
    * Dedupe-Config für die Card "Duplikate erkennen". Default: enabled mit
@@ -100,7 +126,7 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
    * Mount selbst `suggestRules` auf und schreibt das Ergebnis hier rein.
    */
   const [dedupeConfig, setDedupeConfig] = React.useState<DedupeConfig>(
-    RUN_WIZARD_DEDUPE_DEFAULT,
+    resume?.dedupeConfig ?? RUN_WIZARD_DEDUPE_DEFAULT,
   );
 
   /**
@@ -449,7 +475,7 @@ export function RunWizard({ campaignId, campaignName, pdfEnabled }: RunWizardPro
   return (
     <>
       <PageHeader
-        title="Neue Runde"
+        title={resume ? "Runde fortsetzen" : "Neue Runde"}
         subtitle={`Kampagne ${campaignName} . Schritt ${step + 1} von ${STEPS.length}: ${STEPS[step]}`}
       />
 
