@@ -26,7 +26,7 @@ import type {
   PlaceholderFormat,
   PlaceholderMapping,
 } from "./types";
-import { applyPlaceholderRules } from "./rules";
+import { findMatchingRule } from "./rules";
 
 /**
  * System-Platzhalter sind reservierte Keys, die NICHT aus Lead-Daten
@@ -248,15 +248,17 @@ function resolveValue(
     const entry = (mapping as PlaceholderMapping)[key];
     if (entry) {
       // Rohwert aus der Spalte lesen (leer, wenn keine Spalte / Zelle leer),
-      // dann Wenn-Dann-Regeln anwenden. Ergebnis leer → Fallback-Kette.
+      // dann Wenn-Dann-Regeln anwenden. Trifft eine Regel, ist ihr Output
+      // FINAL — auch wenn er leer ist („Feld leeren"). Der Fallback greift
+      // nur, wenn KEINE Regel zutrifft und der Rohwert leer ist.
       const raw = entry.column
         ? (lookupLeadValueCI(leadData, entry.column) ?? "")
         : "";
-      const v =
-        Array.isArray(entry.rules) && entry.rules.length > 0
-          ? applyPlaceholderRules(raw, entry.rules)
-          : raw;
-      if (v.length > 0) return v;
+      if (Array.isArray(entry.rules) && entry.rules.length > 0) {
+        const hit = findMatchingRule(raw, entry.rules);
+        if (hit) return hit.output;
+      }
+      if (raw.length > 0) return raw;
       if (typeof entry.fallback === "string" && entry.fallback.length > 0) {
         return entry.fallback;
       }

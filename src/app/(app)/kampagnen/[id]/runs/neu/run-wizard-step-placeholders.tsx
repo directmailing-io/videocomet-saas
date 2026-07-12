@@ -26,7 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
-import { applyPlaceholderRules } from "@/lib/placeholders/rules";
+import { findMatchingRule } from "@/lib/placeholders/rules";
 import { ValueRulesDialog } from "./value-rules-dialog";
 import type { PlaceholderRule } from "@/lib/placeholders/types";
 // TODO: Sobald Agent A's `src/lib/placeholders/types.ts` final ist, hier den
@@ -106,14 +106,15 @@ function substituteForPreview(
     const entry = mapping[key];
     if (!entry) return inlineFallback ?? "";
     const col = entry.column;
-    // Gleiche Semantik wie resolveValue() im Worker: Regeln transformieren
-    // den Rohwert VOR der Fallback-Kette (gemeinsame Engine aus rules.ts).
+    // Gleiche Semantik wie resolveValue() im Worker: trifft eine Regel,
+    // ist ihr Output FINAL (auch leer = „Feld leeren"); sonst Rohwert,
+    // dann Fallback-Kette (gemeinsame Engine aus rules.ts).
     const raw = col ? (lead[col] ?? "") : "";
-    const v =
-      Array.isArray(entry.rules) && entry.rules.length > 0
-        ? applyPlaceholderRules(raw, entry.rules)
-        : raw;
-    if (v.trim() !== "") return v;
+    if (Array.isArray(entry.rules) && entry.rules.length > 0) {
+      const hit = findMatchingRule(raw, entry.rules);
+      if (hit) return hit.output;
+    }
+    if (raw.trim() !== "") return raw;
     if (entry.fallback && entry.fallback !== "") return entry.fallback;
     return inlineFallback ?? "";
   });
