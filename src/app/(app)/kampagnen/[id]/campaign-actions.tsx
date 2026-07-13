@@ -3,10 +3,22 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2, AlertTriangle, Share2 } from "lucide-react";
+import {
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  Share2,
+  MoreVertical,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -101,14 +113,33 @@ export function CampaignActions({
       >
         <Link href={`/kampagnen/${campaignId}/bearbeiten`}>Bearbeiten</Link>
       </Button>
-      <Button
-        variant="danger"
-        iconLeft={<Trash2 className="size-4" />}
-        onClick={openDelete}
-        type="button"
-      >
-        Löschen
-      </Button>
+      {/* Kampagne-Löschen bewusst NICHT als prominenter roter Button:
+          direkt neben den Run-Tabs wirkte er wie „Auswahl löschen" und
+          hat User erschreckt. Destruktive Kampagnen-Aktion lebt jetzt
+          im Overflow-Menü; die zweistufige Bestätigung bleibt. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Weitere Aktionen"
+            className="inline-flex size-9 items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-line-soft transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+          >
+            <MoreVertical className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            danger
+            onSelect={(e) => {
+              e.preventDefault();
+              openDelete();
+            }}
+          >
+            <Trash2 className="size-4" />
+            Kampagne löschen
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <ShareDialog
         campaignId={campaignId}

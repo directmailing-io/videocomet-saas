@@ -76,12 +76,20 @@ interface RunsTableProps {
 
 /**
  * A run is eligible for the bulk-PDF export when it is completed AND has at
- * least one successfully generated lead. Other statuses (draft, generating,
- * failed-with-zero-leads, …) may not be selected; the checkbox renders
- * disabled with a tooltip in that case.
+ * least one successfully generated lead.
  */
 function canBulkExport(r: RunRow): boolean {
   return r.status === "completed" && r.completedLeads > 0;
+}
+
+/**
+ * Auswählbar sind alle Runden in einem finalen Status — die Auswahl dient
+ * sowohl dem Bulk-Export (nur exportierbare Teilmenge) als auch dem
+ * Bulk-Löschen. Aktive Runden (preflight/generating/…) bleiben gesperrt,
+ * damit niemand eine laufende Pipeline unterm Hintern weglöscht.
+ */
+function canSelect(r: RunRow): boolean {
+  return isFinal(r.status);
 }
 
 type FinalStatus = "completed" | "failed" | "cancelled" | "draft";
@@ -193,6 +201,8 @@ export function RunsTable({
     () => new Set(),
   );
   const [bulkExportOpen, setBulkExportOpen] = React.useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = React.useState(false);
+  const [bulkDeleting, setBulkDeleting] = React.useState(false);
 
   // Reseed local state when the server-rendered initial data changes
   // (e.g. after a router.refresh() following a delete or a navigation back).
@@ -207,7 +217,7 @@ export function RunsTable({
       let changed = false;
       const next = new Set<string>();
       for (const r of runs) {
-        if (prev.has(r.id) && canBulkExport(r)) {
+        if (prev.has(r.id) && canSelect(r)) {
           next.add(r.id);
         } else if (prev.has(r.id)) {
           changed = true;
@@ -218,10 +228,7 @@ export function RunsTable({
     });
   }, [runs]);
 
-  const eligibleRuns = React.useMemo(
-    () => runs.filter(canBulkExport),
-    [runs],
-  );
+  const eligibleRuns = React.useMemo(() => runs.filter(canSelect), [runs]);
   const selectableCount = eligibleRuns.length;
   const selectedCount = selectedIds.size;
   const masterState: boolean | "indeterminate" =
@@ -254,22 +261,26 @@ export function RunsTable({
     setSelectedIds(new Set());
   }
 
-  // Memoise the array of selected ids so the dialog doesn't re-mount on every
+  // Export arbeitet nur auf der exportierbaren Teilmenge der Auswahl —
+  // Löschen dagegen auf der GESAMTEN Auswahl.
+  const selectedExportableRuns = React.useMemo(
+    () => runs.filter((r) => selectedIds.has(r.id) && canBulkExport(r)),
+    [runs, selectedIds],
+  );
+  // Memoise the array of ids so the dialog doesn't re-mount on every
   // poll-induced re-render of `runs`.
-  const selectedIdsList = React.useMemo(
-    () => Array.from(selectedIds),
-    [selectedIds],
+  const exportableIdsList = React.useMemo(
+    () => selectedExportableRuns.map((r) => r.id),
+    [selectedExportableRuns],
   );
   const selectedRunsForDialog = React.useMemo(
     () =>
-      runs
-        .filter((r) => selectedIds.has(r.id))
-        .map((r) => ({
-          id: r.id,
-          name: r.name,
-          completedLeads: r.completedLeads,
-        })),
-    [runs, selectedIds],
+      selectedExportableRuns.map((r) => ({
+        id: r.id,
+        name: r.name,
+        completedLeads: r.completedLeads,
+      })),
+    [selectedExportableRuns],
   );
 
   const hasActive = runs.some(
@@ -407,6 +418,49 @@ export function RunsTable({
     }
   }
 
+  async function confirmBulkDelete() {
+    const targets = runs.filter((r) => selectedIds.has(r.id));
+    if (targets.length === 0) return;
+    setBulkDeleting(true);
+    let deleted = 0;
+    const failed: RunRow[] = [];
+    // Sequentiell statt Promise.all: jeder DELETE räumt Videos/PDFs bei
+    // Bunny mit ab — parallel würde das Rate-Limits/Timeouts provozieren.
+    for (const target of targets) {
+      try {
+        const res = await fetch(`/api/runs/${target.id}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          deleted += 1;
+          setRuns((prev) => prev.filter((r) => r.id !== target.id));
+        } else {
+          failed.push(target);
+        }
+      } catch {
+        failed.push(target);
+      }
+    }
+    setBulkDeleting(false);
+    setBulkDeleteOpen(false);
+    clearSelection();
+    if (failed.length === 0) {
+      toast({
+        title: deleted === 1 ? "Runde gelöscht" : `${deleted} Runden gelöscht`,
+        variant: "success",
+      });
+    } else {
+      toast({
+        title: "Teilweise fehlgeschlagen",
+        description: `${deleted} gelöscht, ${failed.length} fehlgeschlagen: ${failed
+          .map((r) => r.name)
+          .join(", ")}`,
+        variant: "danger",
+      });
+    }
+    router.refresh();
+  }
+
   return (
     <TooltipProvider delayDuration={150}>
       <Table>
@@ -440,7 +494,7 @@ export function RunsTable({
                 ? `/kampagnen/${campaignId}/runs/neu?resume=${r.id}`
                 : `/kampagnen/${campaignId}/runs/${r.id}`;
             const final = isFinal(r.status);
-            const eligible = canBulkExport(r);
+            const eligible = canSelect(r);
             const checked = selectedIds.has(r.id);
             return (
               <TableRow
@@ -475,12 +529,12 @@ export function RunsTable({
                           <Checkbox
                             checked={false}
                             disabled
-                            aria-label={`Run ${r.name} kann nicht exportiert werden`}
+                            aria-label={`Run ${r.name} läuft gerade und kann nicht ausgewählt werden`}
                           />
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        Keine fertigen Leads zum Exportieren
+                        Runde läuft gerade — Auswahl erst nach Abschluss
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -587,12 +641,41 @@ export function RunsTable({
             </button>
             <Button
               size="sm"
-              variant="brand"
-              iconLeft={<Archive className="size-4" />}
-              onClick={() => setBulkExportOpen(true)}
+              variant="danger"
+              iconLeft={<Trash2 className="size-4" />}
+              onClick={() => setBulkDeleteOpen(true)}
             >
-              Bulk-Export
+              Löschen ({selectedCount})
             </Button>
+            {selectedExportableRuns.length > 0 ? (
+              <Button
+                size="sm"
+                variant="brand"
+                iconLeft={<Archive className="size-4" />}
+                onClick={() => setBulkExportOpen(true)}
+              >
+                Bulk-Export ({selectedExportableRuns.length})
+              </Button>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Button
+                      size="sm"
+                      variant="brand"
+                      disabled
+                      iconLeft={<Archive className="size-4" />}
+                    >
+                      Bulk-Export
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Keine der ausgewählten Runden hat fertige Leads zum
+                  Exportieren
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         </div>
       )}
@@ -600,11 +683,67 @@ export function RunsTable({
       <BulkExportDialog
         open={bulkExportOpen}
         onOpenChange={setBulkExportOpen}
-        runIds={selectedIdsList}
+        runIds={exportableIdsList}
         runs={selectedRunsForDialog}
         campaignName={campaignName}
         onSuccess={clearSelection}
       />
+
+      {/* Bulk-Delete confirm ------------------------------------------ */}
+      <Dialog
+        open={bulkDeleteOpen}
+        onOpenChange={(open) => {
+          if (!open && !bulkDeleting) setBulkDeleteOpen(false);
+        }}
+      >
+        <DialogContent size="md">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedCount === 1
+                ? "Ausgewählte Runde löschen?"
+                : `${selectedCount} ausgewählte Runden löschen?`}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedCount === 1 ? "Diese Runde wird" : "Diese Runden werden"}{" "}
+              unwiderruflich gelöscht — inklusive aller Leads, Videos und
+              PDFs. Die Kampagne selbst bleibt bestehen.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-40 overflow-y-auto list-disc pl-5 text-sm text-ink space-y-1">
+            {runs
+              .filter((r) => selectedIds.has(r.id))
+              .map((r) => (
+                <li key={r.id}>
+                  <span className="font-medium">{r.name}</span>{" "}
+                  <span className="text-ink-muted">
+                    ({r.completedLeads} Leads)
+                  </span>
+                </li>
+              ))}
+          </ul>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setBulkDeleteOpen(false)}
+              disabled={bulkDeleting}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              variant="danger"
+              type="button"
+              onClick={() => void confirmBulkDelete()}
+              loading={bulkDeleting}
+              iconLeft={<Trash2 className="size-4" />}
+            >
+              {selectedCount === 1
+                ? "Runde löschen"
+                : `${selectedCount} Runden löschen`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ResetTrackingDialog
         open={resetTarget !== null}
