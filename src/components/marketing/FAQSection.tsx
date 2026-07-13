@@ -120,7 +120,7 @@ export function FAQSection() {
           <p className="text-center text-sm text-ink-muted mt-10 leading-relaxed">
             Noch eine Frage offen?{" "}
             <a
-              href="/kontakt"
+              href="mailto:info@videocomet.de"
               className="text-brand-deep font-semibold hover:underline"
             >
               Schreib uns kurz
