@@ -717,6 +717,9 @@ export const userDomains = pgTable("user_domains", {
   sslExpiresAt: timestamp("ssl_expires_at", { withTimezone: true }),
   lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
   lastError: text("last_error"),
+  // Ziel fuer Requests auf die Domain-Root ("/"). NULL = neutrale
+  // 404-Seite (Default), sonst 302-Redirect auf diese URL.
+  rootRedirectUrl: text("root_redirect_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userIdx: index("user_domains_user_idx").on(t.userId),

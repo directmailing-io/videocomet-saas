@@ -30,6 +30,7 @@ export async function GET(): Promise<NextResponse> {
       sslExpiresAt: d.sslExpiresAt,
       lastCheckedAt: d.lastCheckedAt,
       lastError: d.lastError,
+      rootRedirectUrl: d.rootRedirectUrl,
       createdAt: d.createdAt,
       dnsInstructions: {
         verifyRecord: {

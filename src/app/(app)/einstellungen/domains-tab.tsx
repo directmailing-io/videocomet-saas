@@ -21,6 +21,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -31,6 +33,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toaster";
 import {
+  CornerUpRight,
   Globe,
   Info,
   Plus,
@@ -85,6 +88,11 @@ export function DomainsTab() {
 
   // Re-Check pro Zeile
   const [verifyingId, setVerifyingId] = React.useState<string | null>(null);
+
+  // Startseiten-Verhalten (Root-Redirect)
+  const [rootTarget, setRootTarget] = React.useState<DomainListItem | null>(
+    null,
+  );
 
   const fetchDomains = React.useCallback(async () => {
     try {
@@ -279,6 +287,7 @@ export function DomainsTab() {
             onInstructions={openInstructions}
             onVerify={handleVerify}
             onDelete={openDelete}
+            onRootRedirect={setRootTarget}
           />
         )}
 
@@ -298,6 +307,15 @@ export function DomainsTab() {
         onOpenChange={setModalOpen}
         existingDomain={modalDomain}
         onDomainChanged={() => {
+          void fetchDomains();
+        }}
+      />
+
+      <RootRedirectDialog
+        target={rootTarget}
+        onClose={() => setRootTarget(null)}
+        onSaved={() => {
+          setRootTarget(null);
           void fetchDomains();
         }}
       />
@@ -326,6 +344,7 @@ interface DomainsTableProps {
   onInstructions: (d: DomainListItem) => void;
   onVerify: (d: DomainListItem) => void;
   onDelete: (d: DomainListItem) => void;
+  onRootRedirect: (d: DomainListItem) => void;
 }
 
 function DomainsTable({
@@ -334,6 +353,7 @@ function DomainsTable({
   onInstructions,
   onVerify,
   onDelete,
+  onRootRedirect,
 }: DomainsTableProps) {
   return (
     <Table>
@@ -364,6 +384,15 @@ function DomainsTable({
                     <p className="text-xs text-ink-muted capitalize">
                       {d.kind === "apex" ? "Apex-Domain" : "Subdomain"}
                     </p>
+                    {d.rootRedirectUrl ? (
+                      <p
+                        className="text-[11px] text-ink-muted mt-0.5 max-w-[240px] truncate"
+                        title={`Startseite leitet weiter auf ${d.rootRedirectUrl}`}
+                      >
+                        <CornerUpRight className="size-3 inline mr-1 -mt-px" />
+                        {d.rootRedirectUrl}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </TableCell>
@@ -417,6 +446,15 @@ function DomainsTable({
                   <Button
                     variant="ghost"
                     size="sm"
+                    onClick={() => onRootRedirect(d)}
+                    iconLeft={<CornerUpRight className="size-3.5" />}
+                    title="Was Besucher auf der Startseite der Domain sehen"
+                  >
+                    Startseite
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => onDelete(d)}
                     iconLeft={<Trash2 className="size-3.5" />}
                     className="text-danger hover:text-danger"
@@ -431,6 +469,159 @@ function DomainsTable({
         })}
       </TableBody>
     </Table>
+  );
+}
+
+// ── Startseiten-Verhalten (Root-Redirect) ───────────────────────────────────
+
+interface RootRedirectDialogProps {
+  target: DomainListItem | null;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function RootRedirectDialog({ target, onClose, onSaved }: RootRedirectDialogProps) {
+  const { toast } = useToast();
+  const open = target !== null;
+  const [mode, setMode] = React.useState<"404" | "redirect">("404");
+  const [url, setUrl] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  // Beim Öffnen mit dem gespeicherten Stand der Domain initialisieren.
+  React.useEffect(() => {
+    if (!target) return;
+    if (target.rootRedirectUrl) {
+      setMode("redirect");
+      setUrl(target.rootRedirectUrl);
+    } else {
+      setMode("404");
+      setUrl("");
+    }
+  }, [target]);
+
+  async function save() {
+    if (!target) return;
+    const value = mode === "redirect" ? url.trim() : null;
+    if (mode === "redirect" && !value) {
+      toast({
+        title: "URL fehlt",
+        description: "Bitte gib die Ziel-URL für die Weiterleitung an.",
+        variant: "danger",
+      });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/domains/${target.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rootRedirectUrl: value }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast({
+          title: "Speichern fehlgeschlagen",
+          description: body.error ?? `HTTP ${res.status}`,
+          variant: "danger",
+        });
+        return;
+      }
+      toast({
+        title: "Startseite aktualisiert",
+        description:
+          value === null
+            ? `${target.hostname} zeigt jetzt die neutrale 404-Seite.`
+            : `${target.hostname} leitet jetzt weiter auf ${value}.`,
+        variant: "success",
+      });
+      onSaved();
+    } catch {
+      toast({
+        title: "Speichern fehlgeschlagen",
+        description: "Verbindung zum Server fehlgeschlagen.",
+        variant: "danger",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const optionBase =
+    "w-full text-left rounded-squircle-sm border px-4 py-3 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30";
+  const optionActive = "border-brand bg-brand-soft/40";
+  const optionInactive = "border-line hover:border-ink-muted/40";
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o && !saving) onClose();
+      }}
+    >
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>Startseite der Domain</DialogTitle>
+          <DialogDescription>
+            Was sollen Besucher sehen, die{" "}
+            <span className="font-mono text-ink">{target?.hostname}</span>{" "}
+            direkt aufrufen — also ohne persönlichen Link?
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2.5">
+          <button
+            type="button"
+            className={`${optionBase} ${mode === "404" ? optionActive : optionInactive}`}
+            onClick={() => setMode("404")}
+          >
+            <p className="text-sm font-semibold text-ink">
+              Neutrale 404-Seite (Standard)
+            </p>
+            <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+              Dezente „Seite nicht gefunden"-Seite ohne jedes Branding —
+              weder VIDEOCOMET noch Ihre Marke werden genannt.
+            </p>
+          </button>
+          <button
+            type="button"
+            className={`${optionBase} ${mode === "redirect" ? optionActive : optionInactive}`}
+            onClick={() => setMode("redirect")}
+          >
+            <p className="text-sm font-semibold text-ink">
+              Auf eigene Seite weiterleiten
+            </p>
+            <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+              Besucher werden auf eine URL Ihrer Wahl umgeleitet, z.B. Ihre
+              Firmen-Website.
+            </p>
+          </button>
+        </div>
+
+        {mode === "redirect" && (
+          <div>
+            <Label htmlFor="root-redirect-url">Ziel-URL</Label>
+            <Input
+              id="root-redirect-url"
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://ihre-firma.de"
+              autoComplete="off"
+              autoFocus
+            />
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Abbrechen
+          </Button>
+          <Button onClick={() => void save()} loading={saving}>
+            Speichern
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

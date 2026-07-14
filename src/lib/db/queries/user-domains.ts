@@ -42,6 +42,7 @@ export interface UserDomain {
   sslExpiresAt: Date | null;
   lastCheckedAt: Date | null;
   lastError: string | null;
+  rootRedirectUrl: string | null;
   createdAt: Date;
 }
 
@@ -58,6 +59,7 @@ function rowToDomain(r: typeof userDomains.$inferSelect): UserDomain {
     sslExpiresAt: r.sslExpiresAt,
     lastCheckedAt: r.lastCheckedAt,
     lastError: r.lastError,
+    rootRedirectUrl: r.rootRedirectUrl,
     createdAt: r.createdAt,
   };
 }
@@ -202,6 +204,20 @@ export async function updateDomainStatus(
   }>,
 ): Promise<void> {
   await db.update(userDomains).set(patch).where(eq(userDomains.id, domainId));
+}
+
+/** Setzt (oder loescht) das Root-Redirect-Ziel einer Domain. Tenant-scoped. */
+export async function updateDomainRootRedirect(
+  domainId: string,
+  userId: string,
+  rootRedirectUrl: string | null,
+): Promise<boolean> {
+  const rows = await db
+    .update(userDomains)
+    .set({ rootRedirectUrl })
+    .where(and(eq(userDomains.id, domainId), eq(userDomains.userId, userId)))
+    .returning({ id: userDomains.id });
+  return rows.length > 0;
 }
 
 /**

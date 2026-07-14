@@ -35,6 +35,7 @@ export interface DomainListItem {
   sslExpiresAt: string | null;
   lastCheckedAt: string | null;
   lastError: string | null;
+  rootRedirectUrl?: string | null;
   createdAt: string;
   dnsInstructions?: DnsInstructions;
 }

@@ -89,7 +89,7 @@ function isMarketingOnlyPath(pathname: string): boolean {
  */
 function isPassthroughPath(pathname: string): boolean {
   return (
-    pathname === "/" ||  // root: zeigen wir kein Lead → eigenes Catch-all
+    pathname === "/" ||  // root: auf Custom-Domains eigener Rewrite → /domain-root (siehe unten)
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/static/") ||
@@ -238,6 +238,17 @@ export function middleware(req: NextRequest) {
   // hat, leitet /v/[slug]/page.tsx (Node-Runtime, kann DB) intern via 307
   // auf /cv/<slug>?_host=<host> um. Damit DAS nicht erneut zum /v/-Rewrite
   // wird, müssen wir `/cv/`-Pfade hier auch durchlassen.
+  // Root auf Custom-Domains: NIE die VIDEOCOMET-Marketing-Page zeigen
+  // (white-label!). Der Node-Handler /domain-root entscheidet per DB:
+  // 302 auf die vom User konfigurierte URL oder neutrale 404-Seite.
+  if (hostKind === "custom" && pathname === "/") {
+    const url = req.nextUrl.clone();
+    url.pathname = "/domain-root";
+    url.search = "";
+    url.searchParams.set("_host", rawHost);
+    return NextResponse.rewrite(url);
+  }
+
   if (hostKind === "custom" && !isPassthroughPath(pathname)) {
     if (pathname.startsWith("/v/")) return NextResponse.next();
     if (pathname.startsWith("/cv/")) return NextResponse.next();
