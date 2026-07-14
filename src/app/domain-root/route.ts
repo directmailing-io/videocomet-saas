@@ -16,6 +16,7 @@ export const runtime = "nodejs";
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { resolveCustomDomainHost } from "@/lib/custom-domain-host";
 import { getDomainByHostname } from "@/lib/db/queries/user-domains";
 
 function escapeHtml(s: string): string {
@@ -102,7 +103,11 @@ function notFoundPage(hostname: string | null): NextResponse {
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const hostParam = req.nextUrl.searchParams.get("_host");
+  // NICHT nextUrl.searchParams direkt lesen — nach Middleware-Rewrites
+  // kommt `_host` in Node-Handlern unzuverlaessig an (bekanntes Next-14-
+  // Verhalten, siehe ENGINEERING-NOTE in /v/[slug]/route.ts). Der Helper
+  // faellt auf den Host-Header zurueck.
+  const hostParam = resolveCustomDomainHost(req);
   if (!hostParam) return notFoundPage(null);
 
   const domain = await getDomainByHostname(hostParam);
