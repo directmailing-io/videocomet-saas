@@ -17,10 +17,7 @@ const COLUMNS: ReadonlyArray<{ title: string; links: ReadonlyArray<FooterLink> }
   {
     title: "Unternehmen",
     links: [
-      { label: "Über uns", href: "/ueber-uns" },
       { label: "Kontakt", href: "mailto:info@videocomet.de" },
-      { label: "Karriere", href: "/karriere" },
-      { label: "Blog", href: "/blog" },
     ],
   },
   {
