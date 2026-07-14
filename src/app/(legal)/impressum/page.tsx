@@ -10,7 +10,7 @@ export default function ImpressumPage() {
 
       <h2>Anbieter</h2>
       <p>
-        Daniel Kurzeja
+        VIDEOCOMET GmbH
         <br />
         Herrleinstr. 39
         <br />
@@ -18,6 +18,9 @@ export default function ImpressumPage() {
         <br />
         Deutschland
       </p>
+
+      <h2>Vertreten durch</h2>
+      <p>Geschäftsführer: Daniel Kurzeja</p>
 
       <h2>Kontakt</h2>
       <p>
@@ -27,15 +30,21 @@ export default function ImpressumPage() {
         <a href="mailto:info@videocomet.de">info@videocomet.de</a>
       </p>
 
+      <h2>Registereintrag</h2>
+      <p>
+        Eintragung im Handelsregister
+        <br />
+        Registergericht: Amtsgericht Bamberg
+        <br />
+        Registernummer: <strong>HRB 11915</strong>
+      </p>
+
       <h2>Umsatzsteuer</h2>
       <p>
         Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG:
         <br />
         <strong>DE369220308</strong>
       </p>
-
-      <h2>Steuernummer</h2>
-      <p>249/141/40389</p>
 
       <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
       <p>

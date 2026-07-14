@@ -13,10 +13,23 @@ export default function DatenschutzPage() {
 
       <h2>1. Verantwortlicher</h2>
       <p>
-        Verantwortlicher im Sinne der Datenschutz-Grundverordnung (DSGVO) ist
-        der im{" "}
-        <a href="/impressum">Impressum</a> genannte Anbieter der Plattform
-        VIDEOCOMET.
+        Verantwortlicher im Sinne der Datenschutz-Grundverordnung (DSGVO) ist:
+      </p>
+      <p>
+        VIDEOCOMET GmbH
+        <br />
+        Herrleinstr. 39
+        <br />
+        97437 Haßfurt
+        <br />
+        Deutschland
+        <br />
+        Vertreten durch den Geschäftsführer Daniel Kurzeja
+        <br />
+        E-Mail: <a href="mailto:info@videocomet.de">info@videocomet.de</a>
+      </p>
+      <p>
+        Weitere Angaben finden Sie im <a href="/impressum">Impressum</a>.
       </p>
 
       <h2>2. Verarbeitete Daten</h2>

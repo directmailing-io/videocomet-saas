@@ -16,7 +16,9 @@ export default function AgbPage() {
       <h2>§ 1 Geltungsbereich</h2>
       <p>
         Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Verträge
-        zwischen VIDEOCOMET (nachfolgend „Anbieter") und Unternehmern im Sinne
+        zwischen der VIDEOCOMET GmbH, Herrleinstr. 39, 97437 Haßfurt,
+        eingetragen im Handelsregister des Amtsgerichts Bamberg unter
+        HRB 11915 (nachfolgend „Anbieter"), und Unternehmern im Sinne
         des § 14 BGB (nachfolgend „Kunde") über die Nutzung der VIDEOCOMET-
         Plattform (nachfolgend „Dienst").
       </p>

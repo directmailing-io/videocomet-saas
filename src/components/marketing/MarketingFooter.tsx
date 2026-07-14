@@ -140,7 +140,7 @@ export function MarketingFooter({ variant = "light" }: { variant?: "light" | "da
           }
         >
           <span className={dark ? "text-xs text-white/50" : "text-xs text-ink-muted"}>
-            © {year} VIDEOCOMET. Alle Rechte vorbehalten.
+            © {year} VIDEOCOMET GmbH. Alle Rechte vorbehalten.
           </span>
           <GermanyBadge dark={dark} />
         </div>
