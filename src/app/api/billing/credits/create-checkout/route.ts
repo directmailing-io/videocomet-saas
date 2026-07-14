@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
         // Reverse-Charge-Hinweis bei EU-B2B kommt automatisch von
         // Stripe Tax wenn USt-ID gegeben ist.
         footer:
-          "VIDEOCOMET GmbH · Herrleinstr. 39 · 97437 Haßfurt · Amtsgericht Bamberg, HRB 11915 · USt-IdNr. DE369220308\nZahlbar sofort nach Erhalt. Für Rückfragen: info@videocomet.de",
+          "VIDEOCOMET GmbH · Herrleinstr. 39 · 97437 Haßfurt · Amtsgericht Schweinfurt, HRB 9217 · USt-IdNr. DE362734064\nZahlbar sofort nach Erhalt. Für Rückfragen: info@videocomet.de",
         rendering_options: { amount_tax_display: "include_inclusive_tax" },
       },
     },

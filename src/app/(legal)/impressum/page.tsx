@@ -34,16 +34,19 @@ export default function ImpressumPage() {
       <p>
         Eintragung im Handelsregister
         <br />
-        Registergericht: Amtsgericht Bamberg
+        Registergericht: Amtsgericht Schweinfurt
         <br />
-        Registernummer: <strong>HRB 11915</strong>
+        Registernummer: <strong>HRB 9217</strong>
       </p>
 
       <h2>Umsatzsteuer</h2>
       <p>
         Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG:
         <br />
-        <strong>DE369220308</strong>
+        <strong>DE362734064</strong>
+      </p>
+      <p>
+        Steuernummer: 249/141/40389
       </p>
 
       <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
