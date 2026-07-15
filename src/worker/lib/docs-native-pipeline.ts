@@ -366,10 +366,19 @@ export async function renderViaDocsApi(
             },
           },
           {
+            // lineSpacing 100% + Abstaende 0: Der QR-Absatz erbt sonst den
+            // Zeilenabstand des URL-Absatzes (~115%) — das kostet ~9pt und
+            // schiebt knappe Briefe (langer {{ort}}/{{firma}}-Umbruch) auf
+            // Seite 2, obwohl der QR selbst noch passen wuerde.
             updateParagraphStyle: {
               range: { startIndex: qrAnchorEnd, endIndex: qrAnchorEnd + 1 },
-              paragraphStyle: { alignment: qrAlignment },
-              fields: "alignment",
+              paragraphStyle: {
+                alignment: qrAlignment,
+                lineSpacing: 100,
+                spaceAbove: { magnitude: 0, unit: "PT" },
+                spaceBelow: { magnitude: 0, unit: "PT" },
+              },
+              fields: "alignment,lineSpacing,spaceAbove,spaceBelow",
             },
           },
           { deletePositionedObject: { objectId: qrTarget.objectId } },
@@ -441,8 +450,18 @@ export async function renderViaDocsApi(
     // entfernen wir Leerabsaetze oberhalb des QR — genau das, was ein Mensch
     // im Doc auch taete —, bis die Template-Seitenzahl wieder erreicht ist.
     if (qrInlineObjectId && baselinePages !== null) {
-      const MAX_ITERATIONS = 4;
+      const MAX_ITERATIONS = 6;
       const EMPTIES_PER_ITERATION = 4;
+      // Stufe 2, wenn keine Leerabsaetze mehr uebrig sind: marginBottom in
+      // 4pt-Schritten reduzieren (max 8pt). Haeufiger Restfall: Ein langer
+      // {{ort}}/{{firma}}-Wert erzeugt zusaetzliche Zeilenumbrueche und der
+      // QR verfehlt die Seite um wenige Punkte (Erler-Fall: 2,4pt). Die
+      // QR-Groesse bleibt dabei exakt die Platzhalter-Groesse; der Docs-
+      // Footer liegt im marginFooter-Bereich und bleibt frei.
+      const MARGIN_STEP_PT = 4;
+      const MARGIN_MAX_REDUCTION_PT = 8;
+      let marginReducedPt = 0;
+      let currentMarginBottomPt: number | null = null;
       for (let i = 0; i < MAX_ITERATIONS; i++) {
         const pages = await countPdfPages(pdfBuffer);
         if (pages <= baselinePages) break;
@@ -455,26 +474,45 @@ export async function renderViaDocsApi(
         const batch = findEmptyParagraphsBeforeInlineObject(struct.data, qrInlineObjectId)
           .slice(-EMPTIES_PER_ITERATION)
           .sort((a, b) => b.start - a.start);
-        if (batch.length === 0) {
+        let requests: docs_v1.Schema$Request[];
+        if (batch.length > 0) {
           console.warn(
-            `[docs-native] page overflow (${pages} > ${baselinePages}) but no empty paragraphs left to remove — accepting extra page.`,
+            `[docs-native] page overflow (${pages} > ${baselinePages}) — removing ${batch.length} empty paragraph(s) (iteration ${i + 1}/${MAX_ITERATIONS})`,
+          );
+          requests = batch.map((r) => ({
+            deleteContentRange: {
+              range: { startIndex: r.start, endIndex: r.end },
+            },
+          }));
+        } else if (marginReducedPt < MARGIN_MAX_REDUCTION_PT) {
+          currentMarginBottomPt ??=
+            struct.data.documentStyle?.marginBottom?.magnitude ?? 72;
+          currentMarginBottomPt -= MARGIN_STEP_PT;
+          marginReducedPt += MARGIN_STEP_PT;
+          console.warn(
+            `[docs-native] page overflow (${pages} > ${baselinePages}) — no empty paragraphs left, reducing marginBottom to ${currentMarginBottomPt}pt (iteration ${i + 1}/${MAX_ITERATIONS})`,
+          );
+          requests = [
+            {
+              updateDocumentStyle: {
+                documentStyle: {
+                  marginBottom: { magnitude: currentMarginBottomPt, unit: "PT" },
+                },
+                fields: "marginBottom",
+              },
+            },
+          ];
+        } else {
+          console.warn(
+            `[docs-native] page overflow (${pages} > ${baselinePages}) — compensation exhausted, accepting extra page.`,
           );
           break;
         }
-        console.warn(
-          `[docs-native] page overflow (${pages} > ${baselinePages}) — removing ${batch.length} empty paragraph(s) (iteration ${i + 1}/${MAX_ITERATIONS})`,
-        );
         await withGoogleRetry("docs.documents.batchUpdate(compensate)", async () => {
           await acquireDocsWriteSlot();
           return docs.documents.batchUpdate({
             documentId: copyDocId!,
-            requestBody: {
-              requests: batch.map((r) => ({
-                deleteContentRange: {
-                  range: { startIndex: r.start, endIndex: r.end },
-                },
-              })),
-            },
+            requestBody: { requests },
           });
         });
         pdfBuffer = await exportPdf();
