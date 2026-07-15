@@ -26,19 +26,23 @@ export async function generateQrPng(
   const qr = QRCode.create(url, { errorCorrectionLevel: "Q" });
   const moduleCount = qr.modules.size;
 
-  // Standard quiet zone is 4 modules on each side -> total = moduleCount + 8.
-  // If the requested pixel size is smaller than even one pixel per module
-  // (without quiet zone), the code is unrenderable at that resolution.
+  // If the requested pixel size is smaller than even one pixel per module,
+  // the code is unrenderable at that resolution.
   if (sizePx < moduleCount) {
     throw new Error("QR-Größe zu klein");
   }
 
   // Black-on-white (Standard: schwarze Module auf weißem Hintergrund).
+  // margin: 0 — KEINE eingebackene Quiet-Zone. Der QR wird 1:1 in einen
+  // Platzhalter im Brief-Template eingesetzt (Docs replaceImage behaelt die
+  // Platzhalter-Groesse bei); ein weisser Rand im PNG wuerde bei floating
+  // Platzhaltern (IN_FRONT_OF_TEXT) den umliegenden Text verdecken. Die
+  // Quiet-Zone liefert das weisse Briefpapier rund um den Platzhalter.
   return QRCode.toBuffer(url, {
     errorCorrectionLevel: "Q",
     type: "png",
     width: sizePx,
-    margin: 4,
+    margin: 0,
     color: {
       dark: "#000000FF", // module color -> black dots
       light: "#FFFFFFFF", // background -> white
