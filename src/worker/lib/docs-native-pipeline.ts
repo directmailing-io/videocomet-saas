@@ -27,10 +27,29 @@
  *     - 0.95..1.05 (quadratisch) → QR-Kandidat
  *     - 1.70..1.83 (~16:9)       → Thumbnail-Kandidat
  *   Bei mehreren Kandidaten: den ERSTEN nehmen (Doc-Reihenfolge).
+ *
+ * QR-Ersetzung — inline vs. positioned (Incident 2026-07-15):
+ *   Ein FLOATING QR-Platzhalter (positionedObjects) wird von Googles Renderer
+ *   am unteren Seitenrand GECLAMPT: Wird der Brieftext durch laengere
+ *   Personalisierungs-Werte eine Zeile laenger, wandert die Textzeile ueber
+ *   dem QR nach unten, die Box aber nicht mehr → Text laeuft sichtbar in den
+ *   QR (gemessen: Box blieb bei identischer Seiten-Position, waehrend die
+ *   URL-Zeile 14pt tiefer rutschte). Die Docs-API kann positioned objects
+ *   weder verschieben noch resizen. Darum wird ein positioned QR-Platzhalter
+ *   in ein INLINE-Bild konvertiert: deletePositionedObject + insertInlineImage
+ *   in einem eigenen Absatz direkt nach dem Anker-Absatz, mit exakt der
+ *   Platzhalter-Groesse. Ein Inline-Bild reserviert seinen Platz im Textfluss
+ *   — Text kann nie hineinlaufen, und der QR wandert immer mit seiner Zeile.
+ *   Inline-Platzhalter werden weiterhin per replaceImage ersetzt (kein
+ *   Clamping-Problem, Layout bleibt 1:1 erhalten).
+ *   WICHTIG: Die Index-basierten Insert-Requests MUESSEN im batchUpdate VOR
+ *   allen replaceAllText-Requests stehen — Textersetzungen verschieben die
+ *   Indizes aus documents.get.
  */
 
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { PDFDocument } from "pdf-lib";
 import { getDriveClient, getDocsClient, extractDocId } from "@/lib/google-docs/sa-auth";
 import { uploadFile, deleteFile } from "@/lib/bunny/storage";
 import { acquireDocsWriteSlot, withGoogleRetry } from "./google-api-guard";
@@ -75,8 +94,17 @@ function getSharedDriveId(): string {
  * Original-Pixel-Groesse via Docs-API nicht direkt zugaenglich ist —
  * Aspect-Ratio ist aber stabil (100x100 → 1:1 bleibt 1:1, egal wie skaliert).
  */
+interface QrTarget {
+  objectId: string;
+  kind: "inline" | "positioned";
+  widthPt: number;
+  heightPt: number;
+  /** Nur bei positioned: horizontaler Offset relativ zur Textspalte. */
+  leftOffsetPt: number;
+}
+
 interface ImageCandidates {
-  qrObjectId: string | null;
+  qr: QrTarget | null;
   thumbObjectId: string | null;
 }
 
@@ -86,38 +114,135 @@ function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
   // "Wrap text / Behind / In front" (floating) in `positionedObjects`.
   // Beide Object-IDs teilen sich den Namespace (`kix.<hash>`) und beide
   // sind gültige `imageObjectId`-Werte für replaceImage.
-  const candidates: Array<{ id: string; aspect: number }> = [];
+  const candidates: Array<{
+    id: string;
+    kind: "inline" | "positioned";
+    w: number;
+    h: number;
+    leftOffsetPt: number;
+  }> = [];
 
   for (const [id, obj] of Object.entries(doc.inlineObjects ?? {})) {
     const size = obj.inlineObjectProperties?.embeddedObject?.size;
     const w = size?.width?.magnitude;
     const h = size?.height?.magnitude;
     if (!w || !h) continue;
-    candidates.push({ id, aspect: w / h });
+    candidates.push({ id, kind: "inline", w, h, leftOffsetPt: 0 });
   }
   for (const [id, obj] of Object.entries(doc.positionedObjects ?? {})) {
     const size = obj.positionedObjectProperties?.embeddedObject?.size;
     const w = size?.width?.magnitude;
     const h = size?.height?.magnitude;
     if (!w || !h) continue;
-    candidates.push({ id, aspect: w / h });
+    candidates.push({
+      id,
+      kind: "positioned",
+      w,
+      h,
+      leftOffsetPt: obj.positionedObjectProperties?.positioning?.leftOffset?.magnitude ?? 0,
+    });
   }
 
-  let qrObjectId: string | null = null;
+  let qr: QrTarget | null = null;
   let thumbObjectId: string | null = null;
   for (const c of candidates) {
+    const aspect = c.w / c.h;
     // Quadratisch → QR
-    if (!qrObjectId && c.aspect >= 0.95 && c.aspect <= 1.05) {
-      qrObjectId = c.id;
+    if (!qr && aspect >= 0.95 && aspect <= 1.05) {
+      qr = {
+        objectId: c.id,
+        kind: c.kind,
+        widthPt: c.w,
+        heightPt: c.h,
+        leftOffsetPt: c.leftOffsetPt,
+      };
       continue;
     }
     // 16:9 → Thumbnail
-    if (!thumbObjectId && c.aspect >= 1.7 && c.aspect <= 1.83) {
+    if (!thumbObjectId && aspect >= 1.7 && aspect <= 1.83) {
       thumbObjectId = c.id;
       continue;
     }
   }
-  return { qrObjectId, thumbObjectId };
+  return { qr, thumbObjectId };
+}
+
+/**
+ * Seitenzahl des unveraenderten Templates, gecacht pro Source-Doc-ID.
+ * Wird als Referenz benutzt, um Seitenueberlauf durch das eingefuegte
+ * Inline-QR zu erkennen (das Inline-Bild belegt ~60pt echten Textfluss-
+ * Platz, den der floating Platzhalter nicht brauchte).
+ */
+const templatePageCountCache = new Map<string, number>();
+
+async function countPdfPages(buf: Buffer): Promise<number> {
+  const pdf = await PDFDocument.load(buf, { ignoreEncryption: true });
+  return pdf.getPageCount();
+}
+
+/**
+ * Sammelt alle LEEREN Absaetze (nur \n, keine verankerten Objekte) vor dem
+ * Absatz, der das angegebene Inline-Objekt enthaelt — in Doc-Reihenfolge.
+ * Kandidaten fuer die Ueberlauf-Kompensation. Achtung: Leerabsaetze koennen
+ * winzig formatiert sein (Mini-Fontgroesse als Fein-Spacer), einzelne
+ * Loeschungen bringen dann kaum Hoehe — darum werden mehrere pro Iteration
+ * geloescht.
+ */
+function findEmptyParagraphsBeforeInlineObject(
+  doc: docs_v1.Schema$Document,
+  inlineObjectId: string,
+): Array<{ start: number; end: number }> {
+  const empties: Array<{ start: number; end: number }> = [];
+  for (const el of doc.body?.content ?? []) {
+    const p = el.paragraph;
+    if (!p || typeof el.startIndex !== "number" || typeof el.endIndex !== "number") continue;
+    const containsQr = (p.elements ?? []).some(
+      (e) => e.inlineObjectElement?.inlineObjectId === inlineObjectId,
+    );
+    if (containsQr) return empties;
+    const isEmpty =
+      el.endIndex - el.startIndex === 1 && (p.positionedObjectIds ?? []).length === 0;
+    if (isEmpty) empties.push({ start: el.startIndex, end: el.endIndex });
+  }
+  return [];
+}
+
+/**
+ * Findet den Absatz, an dem ein positioned object verankert ist, und gibt
+ * dessen endIndex zurueck (Index HINTER dem terminierenden \n).
+ */
+function findAnchorParagraphEnd(
+  doc: docs_v1.Schema$Document,
+  objectId: string,
+): number | null {
+  for (const el of doc.body?.content ?? []) {
+    const p = el.paragraph;
+    if (!p) continue;
+    if ((p.positionedObjectIds ?? []).includes(objectId) && typeof el.endIndex === "number") {
+      return el.endIndex;
+    }
+  }
+  return null;
+}
+
+/**
+ * Leitet die horizontale Ausrichtung des Inline-QR aus der Position des
+ * urspruenglichen positioned object ab (leftOffset ist relativ zum linken
+ * Spaltenrand), damit der QR horizontal dort landet, wo der Platzhalter sass.
+ */
+function computeQrAlignment(
+  doc: docs_v1.Schema$Document,
+  qr: QrTarget,
+): "START" | "CENTER" | "END" {
+  const ds = doc.documentStyle;
+  const pageW = ds?.pageSize?.width?.magnitude;
+  const marginL = ds?.marginLeft?.magnitude ?? 72;
+  const marginR = ds?.marginRight?.magnitude ?? 72;
+  if (!pageW) return "CENTER";
+  const columnW = pageW - marginL - marginR;
+  const qrCenter = qr.leftOffsetPt + qr.widthPt / 2;
+  if (Math.abs(qrCenter - columnW / 2) <= 24) return "CENTER";
+  return qrCenter < columnW / 2 ? "START" : "END";
 }
 
 export async function renderViaDocsApi(
@@ -151,21 +276,47 @@ export async function renderViaDocsApi(
     copyDocId = copy.data.id;
 
     // 2. Doc-Struktur holen für Bild-Identifikation.
-    let qrObjectId: string | null = null;
+    let qrTarget: QrTarget | null = null;
+    let qrAnchorEnd: number | null = null;
+    let qrAlignment: "START" | "CENTER" | "END" = "CENTER";
     let thumbObjectId: string | null = null;
     if (input.qrPngPath || input.thumbnailFilePath) {
       const structure = await withGoogleRetry("docs.documents.get", () =>
         docs.documents.get({ documentId: copyDocId! }),
       );
       const candidates = findImageCandidates(structure.data);
-      qrObjectId = candidates.qrObjectId;
+      qrTarget = candidates.qr;
       thumbObjectId = candidates.thumbObjectId;
+      if (qrTarget?.kind === "positioned") {
+        qrAnchorEnd = findAnchorParagraphEnd(structure.data, qrTarget.objectId);
+        qrAlignment = computeQrAlignment(structure.data, qrTarget);
+      }
+    }
+
+    // 2b. Referenz-Seitenzahl des unveraenderten Templates (nur bei
+    // Inline-Konvertierung noetig, pro Template gecacht). Die Copy ist hier
+    // noch unveraendert — ihr Export entspricht dem Template.
+    let baselinePages: number | null = null;
+    if (qrTarget?.kind === "positioned" && qrAnchorEnd !== null && input.qrPngPath) {
+      const cached = templatePageCountCache.get(docId);
+      if (cached !== undefined) {
+        baselinePages = cached;
+      } else {
+        const baseRes = await withGoogleRetry("drive.files.export(baseline)", () =>
+          drive.files.export(
+            { fileId: copyDocId!, mimeType: "application/pdf" },
+            { responseType: "arraybuffer" },
+          ),
+        );
+        baselinePages = await countPdfPages(Buffer.from(baseRes.data as ArrayBuffer));
+        templatePageCountCache.set(docId, baselinePages);
+      }
     }
 
     // 3. QR und Thumbnail nach Bunny hochladen, damit Docs-API sie via URL
     // referenzieren kann. Bunny-CDN-URL ist public HTTPS — passt fuer replaceImage.
     let qrBunnyUrl: string | null = null;
-    if (input.qrPngPath && qrObjectId) {
+    if (input.qrPngPath && qrTarget) {
       const buf = await readFile(input.qrPngPath);
       const remotePath = `docs-native-tmp/qr-${randomUUID()}.png`;
       const uploaded = await uploadFile({
@@ -191,22 +342,53 @@ export async function renderViaDocsApi(
       bunnyCleanupPaths.push(uploaded.remotePath);
     }
 
-    // 4. Requests fuer batchUpdate zusammenbauen: replaceAllText + replaceImage.
+    // 4. Requests fuer batchUpdate zusammenbauen.
+    // Index-basierte QR-Requests MUESSEN zuerst kommen (siehe Header-Kommentar):
+    // replaceAllText veraendert Textlaengen und damit alle Indizes dahinter.
     const requests: docs_v1.Schema$Request[] = [];
+    if (qrTarget && qrBunnyUrl) {
+      if (qrTarget.kind === "positioned" && qrAnchorEnd !== null) {
+        // Floating-Platzhalter → Inline-Konvertierung.
+        // Anker-Absatz endet bei qrAnchorEnd; sein terminierendes \n liegt
+        // bei qrAnchorEnd-1. Dort ein \n einfuegen splittet den Absatz und
+        // erzeugt einen leeren Folge-Absatz [qrAnchorEnd, qrAnchorEnd+1),
+        // in den das Inline-Bild bei Index qrAnchorEnd eingesetzt wird.
+        requests.push(
+          { insertText: { location: { index: qrAnchorEnd - 1 }, text: "\n" } },
+          {
+            insertInlineImage: {
+              location: { index: qrAnchorEnd },
+              uri: qrBunnyUrl,
+              objectSize: {
+                width: { magnitude: qrTarget.widthPt, unit: "PT" },
+                height: { magnitude: qrTarget.heightPt, unit: "PT" },
+              },
+            },
+          },
+          {
+            updateParagraphStyle: {
+              range: { startIndex: qrAnchorEnd, endIndex: qrAnchorEnd + 1 },
+              paragraphStyle: { alignment: qrAlignment },
+              fields: "alignment",
+            },
+          },
+          { deletePositionedObject: { objectId: qrTarget.objectId } },
+        );
+      } else {
+        requests.push({
+          replaceImage: {
+            imageObjectId: qrTarget.objectId,
+            uri: qrBunnyUrl,
+            imageReplaceMethod: "CENTER_CROP",
+          },
+        });
+      }
+    }
     for (const [key, value] of Object.entries(input.textVars)) {
       requests.push({
         replaceAllText: {
           containsText: { text: `{{${key}}}`, matchCase: true },
           replaceText: value ?? "",
-        },
-      });
-    }
-    if (qrObjectId && qrBunnyUrl) {
-      requests.push({
-        replaceImage: {
-          imageObjectId: qrObjectId,
-          uri: qrBunnyUrl,
-          imageReplaceMethod: "CENTER_CROP",
         },
       });
     }
@@ -221,6 +403,7 @@ export async function renderViaDocsApi(
     }
 
     let textReplacements = 0;
+    let qrInlineObjectId: string | null = null;
     if (requests.length > 0) {
       // Slot-Acquire INNERHALB der Retry-Fn: jeder Versuch (auch Retry)
       // ist ein Write und zaehlt auf die 60/min-Quota.
@@ -231,25 +414,77 @@ export async function renderViaDocsApi(
           requestBody: { requests },
         });
       });
-      textReplacements = (res.data.replies ?? []).reduce(
+      const replies = res.data.replies ?? [];
+      textReplacements = replies.reduce(
         (sum, r) => sum + (r.replaceAllText?.occurrencesChanged ?? 0),
         0,
       );
+      qrInlineObjectId =
+        replies.find((r) => r.insertInlineImage?.objectId)?.insertInlineImage?.objectId ?? null;
     }
 
     // 5. PDF-Export via Google's eigenen Renderer.
-    const pdfRes = await withGoogleRetry("drive.files.export", () =>
-      drive.files.export(
-        { fileId: copyDocId!, mimeType: "application/pdf" },
-        { responseType: "arraybuffer" },
-      ),
-    );
-    const pdfBuffer = Buffer.from(pdfRes.data as ArrayBuffer);
+    const exportPdf = async (): Promise<Buffer> => {
+      const pdfRes = await withGoogleRetry("drive.files.export", () =>
+        drive.files.export(
+          { fileId: copyDocId!, mimeType: "application/pdf" },
+          { responseType: "arraybuffer" },
+        ),
+      );
+      return Buffer.from(pdfRes.data as ArrayBuffer);
+    };
+    let pdfBuffer = await exportPdf();
+
+    // 5b. Ueberlauf-Kompensation: Das Inline-QR belegt ~60pt Textfluss-Platz,
+    // den der floating Platzhalter nicht brauchte. Laeuft der Brief dadurch
+    // (oder durch laengere Personalisierungs-Werte) auf eine Extra-Seite,
+    // entfernen wir Leerabsaetze oberhalb des QR — genau das, was ein Mensch
+    // im Doc auch taete —, bis die Template-Seitenzahl wieder erreicht ist.
+    if (qrInlineObjectId && baselinePages !== null) {
+      const MAX_ITERATIONS = 4;
+      const EMPTIES_PER_ITERATION = 4;
+      for (let i = 0; i < MAX_ITERATIONS; i++) {
+        const pages = await countPdfPages(pdfBuffer);
+        if (pages <= baselinePages) break;
+        const struct = await withGoogleRetry("docs.documents.get(compensate)", () =>
+          docs.documents.get({ documentId: copyDocId! }),
+        );
+        // Die dem QR am naechsten liegenden Leerabsaetze zuerst loeschen
+        // (kleinster optischer Eingriff), in EINEM batchUpdate mit absteigend
+        // sortierten Ranges, damit die Indizes gueltig bleiben.
+        const batch = findEmptyParagraphsBeforeInlineObject(struct.data, qrInlineObjectId)
+          .slice(-EMPTIES_PER_ITERATION)
+          .sort((a, b) => b.start - a.start);
+        if (batch.length === 0) {
+          console.warn(
+            `[docs-native] page overflow (${pages} > ${baselinePages}) but no empty paragraphs left to remove — accepting extra page.`,
+          );
+          break;
+        }
+        console.warn(
+          `[docs-native] page overflow (${pages} > ${baselinePages}) — removing ${batch.length} empty paragraph(s) (iteration ${i + 1}/${MAX_ITERATIONS})`,
+        );
+        await withGoogleRetry("docs.documents.batchUpdate(compensate)", async () => {
+          await acquireDocsWriteSlot();
+          return docs.documents.batchUpdate({
+            documentId: copyDocId!,
+            requestBody: {
+              requests: batch.map((r) => ({
+                deleteContentRange: {
+                  range: { startIndex: r.start, endIndex: r.end },
+                },
+              })),
+            },
+          });
+        });
+        pdfBuffer = await exportPdf();
+      }
+    }
 
     return {
       pdfBuffer,
       textReplacements,
-      qrReplaced: qrObjectId !== null && qrBunnyUrl !== null,
+      qrReplaced: qrTarget !== null && qrBunnyUrl !== null,
       thumbReplaced: thumbObjectId !== null && thumbBunnyUrl !== null,
       copyDocId,
     };
