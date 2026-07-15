@@ -54,7 +54,7 @@ export function PricingSection() {
   return (
     <section
       id="pricing"
-      className="relative z-[2] w-full bg-white py-24 md:py-32 overflow-hidden"
+      className="relative z-[2] w-full bg-white py-16 md:py-32 overflow-hidden"
     >
       <div
         aria-hidden

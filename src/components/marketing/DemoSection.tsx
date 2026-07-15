@@ -5,7 +5,7 @@ export function DemoSection() {
   return (
     <section
       id="demo"
-      className="relative z-[1] w-full bg-black text-white overflow-hidden py-32 md:py-40"
+      className="relative z-[1] w-full bg-black text-white overflow-hidden py-20 md:py-40"
     >
       {/* Sehr softer, vollflächiger Brand-Purple-Glow — keine harten
           Übergänge mehr: zentriert, gross, mit weichem Falloff bis 100 %. */}

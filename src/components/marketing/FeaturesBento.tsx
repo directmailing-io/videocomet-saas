@@ -33,7 +33,7 @@ export function FeaturesBento() {
   return (
     <section
       id="features"
-      className="relative z-[2] w-full bg-white py-24 md:py-32 overflow-hidden"
+      className="relative z-[2] w-full bg-white py-16 md:py-32 overflow-hidden"
     >
       <div
         aria-hidden
@@ -198,7 +198,7 @@ function FeatureCardMesh({
   sub: string;
 }) {
   return (
-    <div className="relative h-full overflow-hidden rounded-3xl border border-line p-8 md:p-12 flex flex-col md:flex-row gap-10 md:gap-14 items-center shadow-[0_4px_22px_-12px_rgba(15,23,42,0.12)]">
+    <div className="relative h-full overflow-hidden rounded-3xl border border-line p-8 md:p-12 flex flex-col lg:flex-row gap-10 lg:gap-14 items-center shadow-[0_4px_22px_-12px_rgba(15,23,42,0.12)]">
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
@@ -221,7 +221,7 @@ function FeatureCardMesh({
         {children}
       </div>
 
-      <div className="relative md:w-[360px] md:shrink-0 text-center md:text-left">
+      <div className="relative lg:w-[360px] lg:shrink-0 text-center lg:text-left">
         <h3 className="text-[26px] md:text-[32px] font-bold tracking-[-0.02em] text-ink leading-[1.1] text-balance">
           {title}
         </h3>

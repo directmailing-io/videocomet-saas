@@ -10,8 +10,10 @@ import {
   Globe,
   LineChart,
   Mail,
+  Menu,
   Plug,
   Video,
+  X,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
@@ -28,6 +30,7 @@ import { cn } from "@/lib/utils";
 export function MarketingNav() {
   const [overDark, setOverDark] = React.useState(true);
   const [featuresOpen, setFeaturesOpen] = React.useState(false);
+  const [mobileOpen, setMobileOpen] = React.useState(false);
   const menuWrapperRef = React.useRef<HTMLDivElement>(null);
 
   // Dark/Light je nach Scroll-Position. Light = ueber #how-it-works ODER
@@ -157,7 +160,7 @@ export function MarketingNav() {
           ) : null}
         </nav>
 
-        {/* Rechts: Login + CTA */}
+        {/* Rechts: Login + CTA + Mobile-Toggle */}
         <div className="flex items-center gap-2 shrink-0">
           <Link
             href="/login"
@@ -182,8 +185,59 @@ export function MarketingNav() {
             Zugang erhalten
             <ArrowRight className="size-3.5" aria-hidden />
           </Link>
+          <button
+            type="button"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-expanded={mobileOpen}
+            aria-label={mobileOpen ? "Menü schließen" : "Menü öffnen"}
+            className={cn(
+              "md:hidden inline-flex items-center justify-center size-9 rounded-full transition-colors",
+              overDark
+                ? "text-white/90 hover:bg-white/10"
+                : "text-ink hover:bg-surface-soft",
+            )}
+          >
+            {mobileOpen ? (
+              <X className="size-5" aria-hidden />
+            ) : (
+              <Menu className="size-5" aria-hidden />
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Mobile-Menü */}
+      {mobileOpen ? (
+        <nav
+          className={cn(
+            "md:hidden border-t px-6 py-3 flex flex-col",
+            overDark ? "border-white/10" : "border-line",
+          )}
+        >
+          {[
+            { href: "#demo", label: "Live-Demo" },
+            { href: "#how-it-works", label: "Ablauf" },
+            { href: "#features", label: "Features" },
+            { href: "#pricing", label: "Preise" },
+            { href: "#faq", label: "FAQ" },
+            { href: "/login", label: "Login" },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setMobileOpen(false)}
+              className={cn(
+                "py-2.5 text-[15px] font-medium transition-colors",
+                overDark
+                  ? "text-white/85 hover:text-white"
+                  : "text-ink hover:text-brand-deep",
+              )}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      ) : null}
     </header>
   );
 }

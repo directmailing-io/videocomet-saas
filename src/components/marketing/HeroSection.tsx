@@ -47,8 +47,8 @@ export function HeroSection() {
       <div className="relative z-10 w-full h-full max-w-6xl mx-auto px-6 md:px-10 flex flex-col justify-center gap-5 pt-16">
         <div className="vc-hero-eyebrow inline-flex items-center gap-3 text-[10px] tracking-[0.22em] uppercase opacity-0">
           <span className="text-white/95">Die geheime Strategie der Marktführer</span>
-          <span className="block w-3 h-px bg-white/30" />
-          <span className="text-white/45">VIDEOCOMET</span>
+          <span className="hidden sm:block w-3 h-px bg-white/30" />
+          <span className="hidden sm:inline text-white/45">VIDEOCOMET</span>
         </div>
 
         <h1 className="vc-hero-title font-light tracking-[-0.04em] leading-[1.04] text-white text-[clamp(36px,4.8vw,68px)] max-w-[14ch] text-balance">

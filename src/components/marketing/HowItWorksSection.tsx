@@ -266,10 +266,22 @@ export function HowItWorksSection() {
     setManual(true);
   };
 
+  // Aktiven Step im scrollbaren Stepper (Phone) sichtbar halten — nur den
+  // Container scrollen, nie die Seite (kein scrollIntoView).
+  const stepScrollerRef = React.useRef<HTMLDivElement>(null);
+  const stepBtnRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
+  React.useEffect(() => {
+    const scroller = stepScrollerRef.current;
+    const btn = stepBtnRefs.current[step];
+    if (!scroller || !btn || scroller.scrollWidth <= scroller.clientWidth) return;
+    const target = btn.offsetLeft - (scroller.clientWidth - btn.offsetWidth) / 2;
+    scroller.scrollTo({ left: target, behavior: "smooth" });
+  }, [step]);
+
   return (
     <section
       id="how-it-works"
-      className="relative z-[2] w-full bg-white py-24 md:py-32 rounded-t-[32px] md:rounded-t-[48px] -mt-8 md:-mt-12 shadow-[0_-20px_60px_-20px_rgba(0,0,0,0.45)]"
+      className="relative z-[2] w-full bg-white py-16 md:py-32 rounded-t-[32px] md:rounded-t-[48px] -mt-8 md:-mt-12 shadow-[0_-20px_60px_-20px_rgba(0,0,0,0.45)]"
     >
       <div className="max-w-6xl mx-auto px-6 md:px-10">
         <div className="max-w-2xl mx-auto text-center mb-12">
@@ -296,9 +308,13 @@ export function HowItWorksSection() {
         </div>
 
         {/* Step-Stepper — visuelle Checkliste / Reihenfolge mit
-            verbindender Linie zwischen den nummerierten Kreisen */}
-        <div className="mb-10">
-          <div className="relative flex items-start justify-between max-w-4xl mx-auto px-2">
+            verbindender Linie zwischen den nummerierten Kreisen.
+            Auf Phones horizontal scrollbar (6 Steps passen nicht in 375px). */}
+        <div
+          ref={stepScrollerRef}
+          className="mb-10 overflow-x-auto -mx-6 px-6 md:mx-0 md:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          <div className="relative flex items-start justify-between gap-2 max-w-4xl mx-auto px-2 min-w-[560px]">
             {/* Verbindungslinie hinter den Kreisen */}
             <div
               aria-hidden
@@ -320,6 +336,9 @@ export function HowItWorksSection() {
               return (
                 <button
                   key={s.id}
+                  ref={(el) => {
+                    stepBtnRefs.current[i] = el;
+                  }}
                   type="button"
                   onClick={() => onStepClick(i)}
                   aria-current={isActive ? "step" : undefined}
@@ -1812,13 +1831,13 @@ function ExportCsvLayer({ active }: { active: boolean }) {
         </div>
 
         {/* Table */}
-        <table className="w-full text-xs">
+        <table className="w-full text-xs table-fixed">
           <thead>
             <tr className="bg-surface-soft border-b border-line text-[10px] uppercase tracking-wider">
-              <th className="text-left py-2 px-3 font-semibold text-ink-muted">
+              <th className="text-left py-2 px-3 font-semibold text-ink-muted w-[26%]">
                 Vorname
               </th>
-              <th className="text-left py-2 px-3 font-semibold text-ink-muted">
+              <th className="hidden sm:table-cell text-left py-2 px-3 font-semibold text-ink-muted sm:w-[30%]">
                 Firma
               </th>
               <th className="text-left py-2 px-3 font-semibold text-brand-deep bg-brand-soft/60 border-l border-brand/20 relative">
@@ -1835,9 +1854,9 @@ function ExportCsvLayer({ active }: { active: boolean }) {
           <tbody>
             {SAMPLE.map((l, i) => (
               <tr key={i} className="border-b border-line/60">
-                <td className="py-2 px-3 text-ink font-medium">{l.first}</td>
-                <td className="py-2 px-3 text-ink-soft">{l.company}</td>
-                <td className="py-2 px-3 text-brand-deep font-mono text-[10px] bg-brand-soft/30 border-l border-brand/20 truncate max-w-[200px]">
+                <td className="py-2 px-3 text-ink font-medium truncate">{l.first}</td>
+                <td className="hidden sm:table-cell py-2 px-3 text-ink-soft truncate">{l.company}</td>
+                <td className="py-2 px-3 text-brand-deep font-mono text-[10px] bg-brand-soft/30 border-l border-brand/20 truncate">
                   deine-domain.de/{l.slug}
                 </td>
               </tr>
