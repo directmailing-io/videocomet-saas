@@ -34,6 +34,7 @@ import { readFile } from "node:fs/promises";
 import { getDriveClient, getDocsClient, extractDocId } from "@/lib/google-docs/sa-auth";
 import { uploadFile, deleteFile } from "@/lib/bunny/storage";
 import { acquireDocsWriteSlot, withGoogleRetry } from "./google-api-guard";
+import { fitQrToPlaceholder } from "./qr-placeholder-fit";
 import type { docs_v1 } from "googleapis";
 
 export interface DocsNativePipelineInput {
@@ -77,6 +78,8 @@ function getSharedDriveId(): string {
  */
 interface ImageCandidates {
   qrObjectId: string | null;
+  /** contentUri des QR-Platzhalter-Bilds — fuer die WYSIWYG-Vermessung. */
+  qrContentUri: string | null;
   thumbObjectId: string | null;
 }
 
@@ -86,29 +89,31 @@ function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
   // "Wrap text / Behind / In front" (floating) in `positionedObjects`.
   // Beide Object-IDs teilen sich den Namespace (`kix.<hash>`) und beide
   // sind gültige `imageObjectId`-Werte für replaceImage.
-  const candidates: Array<{ id: string; aspect: number }> = [];
+  const candidates: Array<{ id: string; aspect: number; contentUri: string | null }> = [];
 
   for (const [id, obj] of Object.entries(doc.inlineObjects ?? {})) {
-    const size = obj.inlineObjectProperties?.embeddedObject?.size;
-    const w = size?.width?.magnitude;
-    const h = size?.height?.magnitude;
+    const eo = obj.inlineObjectProperties?.embeddedObject;
+    const w = eo?.size?.width?.magnitude;
+    const h = eo?.size?.height?.magnitude;
     if (!w || !h) continue;
-    candidates.push({ id, aspect: w / h });
+    candidates.push({ id, aspect: w / h, contentUri: eo?.imageProperties?.contentUri ?? null });
   }
   for (const [id, obj] of Object.entries(doc.positionedObjects ?? {})) {
-    const size = obj.positionedObjectProperties?.embeddedObject?.size;
-    const w = size?.width?.magnitude;
-    const h = size?.height?.magnitude;
+    const eo = obj.positionedObjectProperties?.embeddedObject;
+    const w = eo?.size?.width?.magnitude;
+    const h = eo?.size?.height?.magnitude;
     if (!w || !h) continue;
-    candidates.push({ id, aspect: w / h });
+    candidates.push({ id, aspect: w / h, contentUri: eo?.imageProperties?.contentUri ?? null });
   }
 
   let qrObjectId: string | null = null;
+  let qrContentUri: string | null = null;
   let thumbObjectId: string | null = null;
   for (const c of candidates) {
     // Quadratisch → QR
     if (!qrObjectId && c.aspect >= 0.95 && c.aspect <= 1.05) {
       qrObjectId = c.id;
+      qrContentUri = c.contentUri;
       continue;
     }
     // 16:9 → Thumbnail
@@ -117,7 +122,7 @@ function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
       continue;
     }
   }
-  return { qrObjectId, thumbObjectId };
+  return { qrObjectId, qrContentUri, thumbObjectId };
 }
 
 export async function renderViaDocsApi(
@@ -152,6 +157,7 @@ export async function renderViaDocsApi(
 
     // 2. Doc-Struktur holen für Bild-Identifikation.
     let qrObjectId: string | null = null;
+    let qrContentUri: string | null = null;
     let thumbObjectId: string | null = null;
     if (input.qrPngPath || input.thumbnailFilePath) {
       const structure = await withGoogleRetry("docs.documents.get", () =>
@@ -159,6 +165,7 @@ export async function renderViaDocsApi(
       );
       const candidates = findImageCandidates(structure.data);
       qrObjectId = candidates.qrObjectId;
+      qrContentUri = candidates.qrContentUri;
       thumbObjectId = candidates.thumbObjectId;
     }
 
@@ -166,7 +173,24 @@ export async function renderViaDocsApi(
     // referenzieren kann. Bunny-CDN-URL ist public HTTPS — passt fuer replaceImage.
     let qrBunnyUrl: string | null = null;
     if (input.qrPngPath && qrObjectId) {
-      const buf = await readFile(input.qrPngPath);
+      let buf: Buffer = await readFile(input.qrPngPath);
+      // WYSIWYG: QR an die Geometrie des Platzhalter-Bilds anpassen
+      // (weisser Innenrand der Beispiel-Grafik wird uebernommen), damit
+      // der gedruckte QR aussieht wie im Template gesetzt. Bei Fehlern
+      // (contentUri abgelaufen o.ae.) bleibt der QR randlos.
+      if (qrContentUri) {
+        try {
+          const phRes = await fetch(qrContentUri);
+          if (phRes.ok) {
+            const placeholderPng = Buffer.from(await phRes.arrayBuffer());
+            buf = await fitQrToPlaceholder(buf, placeholderPng);
+          }
+        } catch (err) {
+          console.warn(
+            `[docs-native] qr-placeholder-fit failed, using bare QR: ${err instanceof Error ? err.message : "?"}`,
+          );
+        }
+      }
       const remotePath = `docs-native-tmp/qr-${randomUUID()}.png`;
       const uploaded = await uploadFile({
         buffer: buf,
