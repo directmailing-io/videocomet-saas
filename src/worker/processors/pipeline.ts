@@ -95,6 +95,10 @@ const STAGE_TIMEOUTS_MS = {
   landingpageScreenshot: 45_000, // Puppeteer goto + networkidle + screenshot + upload
   docxModify: 30_000, // docxtemplater + image inject
   docxToPdf: 60_000, // LibreOffice headless conversion
+  // Renderer 4.0 (Docs-API-nativ): enthaelt Rate-Limiter-Wartezeit
+  // (50 Writes/min geteilt durch 16 parallele Jobs → bis ~40s Slot-Wait)
+  // plus Retry-Backoff bei 429/5xx (bis ~62s kumuliert) plus Render (~8s).
+  docsNativeRender: 270_000,
   pdfCompress: 20_000, // Ghostscript pass
   pdfUpload: 30_000, // Bunny storage PUT
 } as const;
@@ -1246,7 +1250,7 @@ export async function pipelineProcessor(
                   qrPngPath,
                   thumbnailFilePath: nativeThumbnailLocalPath,
                 }),
-              STAGE_TIMEOUTS_MS.docxModify + STAGE_TIMEOUTS_MS.docxToPdf,
+              STAGE_TIMEOUTS_MS.docsNativeRender,
               "docsNativeRender",
             );
             drivePdfBuffer = nativeResult.pdfBuffer;
@@ -1261,14 +1265,20 @@ export async function pipelineProcessor(
             });
           }
         } catch (err) {
+          // KEIN stiller Fallback mehr (Incident 2026-07-15): der HTML-Renderer
+          // liefert strukturell anderes Layout (Floating-Bilder weg, Font-
+          // Fallback, Letter statt A4) — ein optisch kaputter Brief ist
+          // teurer als ein fehlgeschlagener Job. Fehler durchreichen →
+          // BullMQ-Retry; wenn auch der scheitert, wird der Lead als failed
+          // markiert und kann gezielt regeneriert werden.
           await insertPipelineEvent({
             runId: data.runId,
             leadId: data.leadId,
-            level: "warn",
+            level: "error",
             stage: "docx",
-            message: `${leadLabel}: docs-native failed (${(err as Error)?.message}); falling back to HTML-Renderer`,
+            message: `${leadLabel}: docs-native failed (${(err as Error)?.message}) — kein HTML-Fallback, Job wird neu versucht`,
           });
-          drivePdfBuffer = null;
+          throw err;
         }
       }
 

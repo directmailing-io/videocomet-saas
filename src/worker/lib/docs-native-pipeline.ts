@@ -33,6 +33,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { getDriveClient, getDocsClient, extractDocId } from "@/lib/google-docs/sa-auth";
 import { uploadFile, deleteFile } from "@/lib/bunny/storage";
+import { acquireDocsWriteSlot, withGoogleRetry } from "./google-api-guard";
 import type { docs_v1 } from "googleapis";
 
 export interface DocsNativePipelineInput {
@@ -137,11 +138,13 @@ export async function renderViaDocsApi(
 
   try {
     // 1. Doc in Shared Drive kopieren.
-    const copy = await drive.files.copy({
-      fileId: docId,
-      requestBody: { name: copyName, parents: [sharedDriveId] },
-      supportsAllDrives: true,
-    });
+    const copy = await withGoogleRetry("drive.files.copy", () =>
+      drive.files.copy({
+        fileId: docId,
+        requestBody: { name: copyName, parents: [sharedDriveId] },
+        supportsAllDrives: true,
+      }),
+    );
     if (!copy.data.id) {
       throw new Error("drive.files.copy hat keine ID zurückgegeben.");
     }
@@ -151,7 +154,9 @@ export async function renderViaDocsApi(
     let qrObjectId: string | null = null;
     let thumbObjectId: string | null = null;
     if (input.qrPngPath || input.thumbnailFilePath) {
-      const structure = await docs.documents.get({ documentId: copyDocId });
+      const structure = await withGoogleRetry("docs.documents.get", () =>
+        docs.documents.get({ documentId: copyDocId! }),
+      );
       const candidates = findImageCandidates(structure.data);
       qrObjectId = candidates.qrObjectId;
       thumbObjectId = candidates.thumbObjectId;
@@ -217,9 +222,14 @@ export async function renderViaDocsApi(
 
     let textReplacements = 0;
     if (requests.length > 0) {
-      const res = await docs.documents.batchUpdate({
-        documentId: copyDocId,
-        requestBody: { requests },
+      // Slot-Acquire INNERHALB der Retry-Fn: jeder Versuch (auch Retry)
+      // ist ein Write und zaehlt auf die 60/min-Quota.
+      const res = await withGoogleRetry("docs.documents.batchUpdate", async () => {
+        await acquireDocsWriteSlot();
+        return docs.documents.batchUpdate({
+          documentId: copyDocId!,
+          requestBody: { requests },
+        });
       });
       textReplacements = (res.data.replies ?? []).reduce(
         (sum, r) => sum + (r.replaceAllText?.occurrencesChanged ?? 0),
@@ -228,9 +238,11 @@ export async function renderViaDocsApi(
     }
 
     // 5. PDF-Export via Google's eigenen Renderer.
-    const pdfRes = await drive.files.export(
-      { fileId: copyDocId, mimeType: "application/pdf" },
-      { responseType: "arraybuffer" },
+    const pdfRes = await withGoogleRetry("drive.files.export", () =>
+      drive.files.export(
+        { fileId: copyDocId!, mimeType: "application/pdf" },
+        { responseType: "arraybuffer" },
+      ),
     );
     const pdfBuffer = Buffer.from(pdfRes.data as ArrayBuffer);
 
