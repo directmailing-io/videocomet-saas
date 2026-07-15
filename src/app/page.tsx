@@ -1,7 +1,7 @@
 import { DemoSection } from "@/components/marketing/DemoSection";
 import { FAQSection } from "@/components/marketing/FAQSection";
 import { FeaturesBento } from "@/components/marketing/FeaturesBento";
-import { HeroScrollVideo } from "@/components/marketing/HeroScrollVideo";
+import { HeroSection } from "@/components/marketing/HeroSection";
 import { HowItWorksSection } from "@/components/marketing/HowItWorksSection";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
@@ -12,7 +12,7 @@ export default function HomePage() {
   return (
     <div className="flex flex-col">
       <MarketingNav />
-      <HeroScrollVideo />
+      <HeroSection />
       <DemoSection />
       <HowItWorksSection />
       <FeaturesBento />
