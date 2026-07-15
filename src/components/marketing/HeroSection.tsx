@@ -44,9 +44,7 @@ export function HeroSection() {
       />
 
       {/* Hero content */}
-      <div className="relative z-10 w-full h-full max-w-6xl mx-auto px-6 md:px-10 grid grid-rows-[1fr_auto_auto_auto_auto_auto] gap-5 content-end pb-[clamp(72px,9vh,128px)]">
-        <div />
-
+      <div className="relative z-10 w-full h-full max-w-6xl mx-auto px-6 md:px-10 flex flex-col justify-center gap-5 pt-16">
         <div className="vc-hero-eyebrow inline-flex items-center gap-3 text-[10px] tracking-[0.22em] uppercase opacity-0">
           <span className="text-white/95">Die geheime Strategie der Marktführer</span>
           <span className="block w-3 h-px bg-white/30" />
