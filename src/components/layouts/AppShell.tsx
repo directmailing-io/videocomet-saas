@@ -71,22 +71,34 @@ interface NavItem {
 // "Aktivität" und "Analytics" sind als ein Nav-Punkt zusammengeführt — beide
 // Routen highlighten denselben Eintrag, die Sub-Navigation innerhalb der Seite
 // schaltet zwischen Übersicht und Live-Feed.
-const NAV: NavItem[] = [
-  { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { key: "campaigns", label: "Kampagnen", href: "/kampagnen", icon: Megaphone },
-  { key: "contacts", label: "Alle Kontakte", href: "/kontakte", icon: Users2 },
+const NAV_GROUPS: Array<{ label: string | null; items: NavItem[] }> = [
   {
-    key: "analytics",
-    label: "Analytics",
-    href: "/analytics",
-    icon: BarChart3,
-    matchPrefixes: ["/aktivitaet"],
+    label: null,
+    items: [
+      { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { key: "campaigns", label: "Kampagnen", href: "/kampagnen", icon: Megaphone },
+      { key: "contacts", label: "Alle Kontakte", href: "/kontakte", icon: Users2 },
+      {
+        key: "analytics",
+        label: "Analytics",
+        href: "/analytics",
+        icon: BarChart3,
+        matchPrefixes: ["/aktivitaet"],
+      },
+    ],
   },
-  { key: "media", label: "Mediathek", href: "/mediathek", icon: Library },
-  { key: "landingpages", label: "Landingpages", href: "/landingpages", icon: LayoutTemplate },
-  { key: "envelopes", label: "Umschläge", href: "/umschlaege", icon: MailIcon },
-  { key: "settings", label: "Einstellungen", href: "/einstellungen", icon: Settings },
+  {
+    label: "Setup",
+    items: [
+      { key: "media", label: "Mediathek", href: "/mediathek", icon: Library },
+      { key: "landingpages", label: "Landingpages", href: "/landingpages", icon: LayoutTemplate },
+      { key: "envelopes", label: "Umschläge", href: "/umschlaege", icon: MailIcon },
+      { key: "settings", label: "Einstellungen", href: "/einstellungen", icon: Settings },
+    ],
+  },
 ];
+
+const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
 function isNavActive(item: NavItem, pathname: string): boolean {
   if (pathname === item.href || pathname.startsWith(item.href + "/")) return true;
@@ -101,32 +113,41 @@ function isNavActive(item: NavItem, pathname: string): boolean {
 function NavList({ onSelect }: { onSelect?: () => void }) {
   const pathname = usePathname() ?? "/dashboard";
   return (
-    <nav className="flex flex-col gap-0.5 px-3">
-      {NAV.map((item) => {
-        const { key, label, href, icon: Icon } = item;
-        const active = isNavActive(item, pathname);
-        return (
-          <Link
-            key={key}
-            href={href}
-            onClick={onSelect}
-            className={cn(
-              "group flex h-9 items-center gap-3 rounded-squircle-sm px-3 text-sm font-medium transition-colors",
-              active
-                ? "bg-brand-soft text-brand-deep"
-                : "text-ink-soft hover:bg-line-soft hover:text-ink"
-            )}
-          >
-            <Icon
-              className={cn(
-                "size-4 shrink-0",
-                active ? "text-brand-deep" : "text-ink-muted group-hover:text-ink"
-              )}
-            />
-            <span className="truncate">{label}</span>
-          </Link>
-        );
-      })}
+    <nav className="flex flex-col px-3">
+      {NAV_GROUPS.map((group, gi) => (
+        <div key={group.label ?? gi} className={cn("flex flex-col gap-0.5", gi > 0 && "mt-6")}>
+          {group.label && (
+            <span className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+              {group.label}
+            </span>
+          )}
+          {group.items.map((item) => {
+            const { key, label, href, icon: Icon } = item;
+            const active = isNavActive(item, pathname);
+            return (
+              <Link
+                key={key}
+                href={href}
+                onClick={onSelect}
+                className={cn(
+                  "group flex h-9 items-center gap-3 rounded-squircle-sm px-3 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-brand-soft text-brand-deep"
+                    : "text-ink-soft hover:bg-line-soft hover:text-ink"
+                )}
+              >
+                <Icon
+                  className={cn(
+                    "size-4 shrink-0",
+                    active ? "text-brand-deep" : "text-ink-muted group-hover:text-ink"
+                  )}
+                />
+                <span className="truncate">{label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 }

@@ -28,31 +28,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
 
-/**
- * Light wrapper über StatCard, der unter dem Wert eine einzeilige
- * Erläuterungs-Zeile rendert. Die Basis-StatCard kennt keinen `hint`-Prop —
- * wir fügen die Zeile per CSS-Sibling hinzu.
- */
-function StatCardWithHint({
-  label,
-  value,
-  icon,
-  hint,
-}: {
-  label: string;
-  value: string;
-  icon: React.ReactNode;
-  hint: string;
-}) {
-  return (
-    <div className="relative">
-      <StatCard label={label} value={value} icon={icon} />
-      <p className="absolute bottom-3 left-5 right-5 text-[11px] text-ink-muted truncate">
-        {hint}
-      </p>
-    </div>
-  );
-}
 import { RunsTable, type RunRow } from "./runs-table";
 import { CampaignActions } from "./campaign-actions";
 import {
@@ -225,26 +200,26 @@ export default async function CampaignDetailPage({
 
         {/* ── Übersicht ───────────────────────────────────────────── */}
         <TabsContent value="übersicht">
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-            <StatCardWithHint
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+            <StatCard
               label="Gesamt-Leads"
               value={leadsCount.toLocaleString("de-DE")}
               icon={<Users />}
               hint={`über ${initialRuns.length} ${initialRuns.length === 1 ? "Runde" : "Runden"}`}
             />
-            <StatCardWithHint
+            <StatCard
               label="Öffnungsrate"
               value={fmtPercent(uniqueViewedCount, leadsCount)}
               icon={<Eye />}
               hint={`${uniqueViewedCount.toLocaleString("de-DE")} Leads geöffnet`}
             />
-            <StatCardWithHint
+            <StatCard
               label="Play-Rate"
               value={fmtPercent(uniquePlayedCount, leadsCount)}
               icon={<Play />}
               hint={`${uniquePlayedCount.toLocaleString("de-DE")} Leads abgespielt`}
             />
-            <StatCardWithHint
+            <StatCard
               label="Watch-Time gesamt"
               value={fmtDuration(summary.watchTimeSec)}
               icon={<Timer />}
@@ -254,7 +229,7 @@ export default async function CampaignDetailPage({
                   : "noch keine Plays"
               }
             />
-            <StatCardWithHint
+            <StatCard
               label="CTA-Rate"
               value={fmtPercent(uniqueCtaCount, leadsCount)}
               icon={<MousePointerClick />}
@@ -262,30 +237,53 @@ export default async function CampaignDetailPage({
             />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            {/* Webcam-Vorschau */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+            {/* Webcam-Vorschau: Video links, Metadaten rechts daneben —
+                kein zentriertes Portrait-Video in leerer Riesen-Card */}
             <Card className="lg:col-span-2">
               <CardHeader>
                 <CardTitle>Webcam-Aufnahme</CardTitle>
               </CardHeader>
               <CardContent>
-                <WebcamPreview media={webcamMedia} />
+                <WebcamPreview
+                  media={webcamMedia}
+                  meta={[
+                    { label: "Modus", value: modeLabel(campaign.mode) },
+                    {
+                      label: "Erstellt am",
+                      value: formatDate(campaign.createdAt),
+                    },
+                    {
+                      label: "Runden",
+                      value: initialRuns.length.toLocaleString("de-DE"),
+                    },
+                    {
+                      label: "Leads",
+                      value: leadsCount.toLocaleString("de-DE"),
+                    },
+                  ]}
+                />
               </CardContent>
             </Card>
 
             {/* Analytics-Quick-Link */}
             <Card>
               <CardHeader>
-                <CardTitle>Mehr Details</CardTitle>
+                <CardTitle>Analytics</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-ink-muted">
+              <CardContent className="space-y-4">
+                <p className="text-sm text-ink-muted leading-relaxed">
                   Tiefgehende Analyse mit Zeitverlauf, Top-Leads und
                   Event-Log finden Sie im Analytics-Bereich.
                 </p>
-                <Button asChild variant="ghost" iconLeft={<BarChart3 className="size-4" />}>
+                <Button
+                  asChild
+                  variant="subtle"
+                  className="w-full justify-center"
+                  iconLeft={<BarChart3 className="size-4" />}
+                >
                   <Link href={`/analytics/kampagnen/${campaign.id}`}>
-                    Pro-Kampagne-Analytics öffnen
+                    Kampagnen-Analytics öffnen
                   </Link>
                 </Button>
               </CardContent>
@@ -465,12 +463,14 @@ export default async function CampaignDetailPage({
 }
 
 /**
- * Webcam-Vorschau: lädt das in der Kampagne hinterlegte Webcam-MediaItem
- * und rendert einen abspielbaren `<video>`-Player. Fällt zurück auf eine
- * informative Empty-State-Meldung statt einer leeren grauen Fläche.
+ * Webcam-Vorschau: Video links, Metadaten-Panel rechts daneben — so füllt
+ * auch ein 9:16-Portrait-Video die Card sinnvoll aus, statt zentriert in
+ * leerer Fläche zu schweben. Fällt zurück auf eine informative
+ * Empty-State-Meldung statt einer leeren grauen Fläche.
  */
 function WebcamPreview({
   media,
+  meta,
 }: {
   media: {
     publicUrl: string;
@@ -479,6 +479,7 @@ function WebcamPreview({
     width?: number | null;
     height?: number | null;
   } | null;
+  meta: Array<{ label: string; value: string }>;
 }) {
   if (!media || !media.publicUrl) {
     return (
@@ -509,37 +510,51 @@ function WebcamPreview({
     /^https?:\/\/[^/]+\/([0-9a-f-]{36})\/playlist\.m3u8(?:\?.*)?$/i,
   );
   const aspectClass = isPortrait
-    ? "aspect-[9/16] mx-auto max-h-[60vh] max-w-[260px]"
-    : "aspect-video w-full";
+    ? "aspect-[9/16] w-[200px] sm:w-[220px] shrink-0"
+    : "aspect-video w-full sm:max-w-[380px] sm:shrink-0";
+
+  const player = streamMatch ? (
+    // autoplay=false: Kampagnen-Seite zeigt evtl. mehrere Videos auf
+    // einmal — niemand will Auto-Play-Chaos.
+    <iframe
+      src={`https://iframe.mediadelivery.net/embed/670919/${streamMatch[1]}?autoplay=false&preload=false`}
+      allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+      allowFullScreen
+      className={`${aspectClass} rounded-squircle-md bg-ink border-0`}
+      title={media.name}
+    />
+  ) : (
+    <video
+      src={media.publicUrl}
+      controls
+      preload="metadata"
+      className={`${aspectClass} rounded-squircle-md bg-ink border border-line object-contain`}
+    />
+  );
+
+  const rows: Array<{ label: string; value: string }> = [
+    { label: "Datei", value: media.name },
+    ...(media.durationSec
+      ? [{ label: "Dauer", value: fmtDuration(media.durationSec) }]
+      : []),
+    ...meta,
+  ];
 
   return (
-    <div className="space-y-2">
-      {streamMatch ? (
-        // autoplay=false: Kampagnen-Seite zeigt evtl. mehrere Videos auf
-        // einmal — niemand will Auto-Play-Chaos.
-        <iframe
-          src={`https://iframe.mediadelivery.net/embed/670919/${streamMatch[1]}?autoplay=false&preload=false`}
-          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-          allowFullScreen
-          className={`${aspectClass} rounded-squircle-md bg-ink border border-line border-0`}
-          title={media.name}
-        />
-      ) : (
-        <video
-          src={media.publicUrl}
-          controls
-          preload="metadata"
-          className={`${aspectClass} rounded-squircle-md bg-ink border border-line object-contain`}
-        />
-      )}
-      <div className="flex items-center justify-between text-xs text-ink-muted">
-        <span className="truncate">{media.name}</span>
-        {media.durationSec ? (
-          <span className="tabular-nums">
-            {fmtDuration(media.durationSec)}
-          </span>
-        ) : null}
-      </div>
+    <div className="flex flex-col sm:flex-row gap-6">
+      <div className="mx-auto sm:mx-0">{player}</div>
+      <dl className="flex-1 min-w-0 grid grid-cols-2 gap-x-6 gap-y-4 content-start">
+        {rows.map((row) => (
+          <div key={row.label} className="min-w-0">
+            <dt className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-1">
+              {row.label}
+            </dt>
+            <dd className="text-sm text-ink truncate" title={row.value}>
+              {row.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }

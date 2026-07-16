@@ -9,11 +9,13 @@ export interface StatCardProps extends React.HTMLAttributes<HTMLDivElement> {
   trend?: number;
   trendLabel?: string;
   icon?: React.ReactNode;
+  /** Einzeilige Erläuterung unter dem Wert (z. B. "2 Leads geöffnet"). */
+  hint?: string;
 }
 
 export const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(
   (
-    { className, label, value, unit, trend, trendLabel, icon, ...props },
+    { className, label, value, unit, trend, trendLabel, icon, hint, ...props },
     ref
   ) => {
     const trendUp = typeof trend === "number" && trend > 0;
@@ -45,6 +47,9 @@ export const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(
           </span>
           {unit && <span className="text-sm text-ink-muted">{unit}</span>}
         </div>
+        {hint && (
+          <p className="text-xs text-ink-muted truncate -mt-1">{hint}</p>
+        )}
         {typeof trend === "number" && (
           <div
             className={cn(
