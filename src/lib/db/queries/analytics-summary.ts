@@ -551,6 +551,7 @@ export interface CampaignLeadRow {
   ctaClickCount: number;
   lastCtaAt: Date | null;
   errorMessage: string | null;
+  abVariant: "A" | "B" | null;
   createdAt: Date;
 }
 
@@ -584,6 +585,7 @@ export async function listAllCampaignLeads(
       ctaClickCount: leads.ctaClickCount,
       lastCtaAt: leads.lastCtaAt,
       errorMessage: leads.errorMessage,
+      abVariant: leads.abVariant,
       createdAt: leads.createdAt,
     })
     .from(leads)

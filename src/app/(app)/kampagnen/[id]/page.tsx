@@ -30,6 +30,7 @@ import { StatCard } from "@/components/ui/stat-card";
 
 import { RunsTable, type RunRow } from "./runs-table";
 import { CampaignActions } from "./campaign-actions";
+import { AbTestSettings } from "./ab-test-settings";
 import {
   CampaignLeadsTable,
   type CampaignLeadRowSerialized,
@@ -133,6 +134,16 @@ export default async function CampaignDetailPage({
     createdAt: r.createdAt ? r.createdAt.toISOString() : null,
     startedAt: r.startedAt ? r.startedAt.toISOString() : null,
     completedAt: r.completedAt ? r.completedAt.toISOString() : null,
+    ab: r.abConfig
+      ? {
+          mode: r.abConfig.mode,
+          weightA: r.abConfig.weightA,
+          leadsA: r.abLeadsA,
+          leadsB: r.abLeadsB,
+          viewedA: r.abViewedA,
+          viewedB: r.abViewedB,
+        }
+      : null,
   }));
 
   // Aggregates aus getCampaignDeepDive ODER aus allLeads als Fallback
@@ -169,6 +180,15 @@ export default async function CampaignDetailPage({
   }));
 
   const appUrl = process.env.APP_URL ?? "https://app.videocomet.de";
+
+  // ── A/B-Test: Varianten-Aggregate über alle Runden ──────────────────────
+  // Zuteilung steht denormalisiert an jedem Lead (ab_variant) — die Karte
+  // erscheint, sobald der Test aktiv ist ODER historische A/B-Leads
+  // existieren (Test kann inzwischen beendet sein).
+  const abLeadsA = allLeads.filter((l) => l.abVariant === "A");
+  const abLeadsB = allLeads.filter((l) => l.abVariant === "B");
+  const showAbComparison =
+    campaign.abTestingEnabled || abLeadsA.length + abLeadsB.length > 0;
 
   return (
     <>
@@ -243,6 +263,16 @@ export default async function CampaignDetailPage({
               hint={`${uniqueCtaCount.toLocaleString("de-DE")} Leads geklickt`}
             />
           </div>
+
+          {showAbComparison && (
+            <div className="mb-6">
+              <AbVariantComparison
+                leadsA={abLeadsA}
+                leadsB={abLeadsB}
+                testActive={campaign.abTestingEnabled}
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
             {/* Webcam-Vorschau: Video links, Metadaten rechts daneben —
@@ -369,7 +399,14 @@ export default async function CampaignDetailPage({
         </TabsContent>
 
         {/* ── Einstellungen ──────────────────────────────────────── */}
-        <TabsContent value="einstellungen">
+        <TabsContent value="einstellungen" className="space-y-5">
+          <AbTestSettings
+            campaignId={campaign.id}
+            pdfEnabled={campaign.pdfEnabled}
+            urlA={campaign.pdfGoogleDocsUrl}
+            urlB={campaign.pdfGoogleDocsUrlB}
+            enabled={campaign.abTestingEnabled}
+          />
           <Card>
             <CardHeader>
               <CardTitle>Konfiguration</CardTitle>
@@ -466,6 +503,156 @@ export default async function CampaignDetailPage({
         </TabsContent>
       </Tabs>
     </>
+  );
+}
+
+/**
+ * A/B-Varianten-Vergleich für den Übersicht-Tab. Aggregiert die
+ * denormalisierten Tracking-Zähler der Leads je Variante und markiert den
+ * Gewinner nach Öffnungsrate. Bei kleinen Stichproben (<30 Leads pro
+ * Variante) warnen wir vor voreiligen Schlüssen statt einen Gewinner
+ * auszurufen.
+ */
+function AbVariantComparison({
+  leadsA,
+  leadsB,
+  testActive,
+}: {
+  leadsA: Array<{
+    viewCount: number;
+    playCount: number;
+    watchTimeSec: number;
+    ctaClickCount: number;
+  }>;
+  leadsB: Array<{
+    viewCount: number;
+    playCount: number;
+    watchTimeSec: number;
+    ctaClickCount: number;
+  }>;
+  testActive: boolean;
+}) {
+  function stats(
+    rows: Array<{
+      viewCount: number;
+      playCount: number;
+      watchTimeSec: number;
+      ctaClickCount: number;
+    }>,
+  ) {
+    const n = rows.length;
+    const viewed = rows.filter((l) => l.viewCount > 0).length;
+    const played = rows.filter((l) => l.playCount > 0).length;
+    const cta = rows.filter((l) => l.ctaClickCount > 0).length;
+    const plays = rows.reduce((s, l) => s + l.playCount, 0);
+    const watchTime = rows.reduce((s, l) => s + l.watchTimeSec, 0);
+    return { n, viewed, played, cta, plays, watchTime };
+  }
+
+  const a = stats(leadsA);
+  const b = stats(leadsB);
+  const smallSample = Math.min(a.n, b.n) < 30;
+  const openRateA = a.n > 0 ? a.viewed / a.n : 0;
+  const openRateB = b.n > 0 ? b.viewed / b.n : 0;
+  const winner: "A" | "B" | null =
+    a.n === 0 || b.n === 0 || openRateA === openRateB
+      ? null
+      : openRateA > openRateB
+        ? "A"
+        : "B";
+
+  const metricRows: Array<{
+    label: string;
+    a: string;
+    b: string;
+  }> = [
+    {
+      label: "Leads",
+      a: a.n.toLocaleString("de-DE"),
+      b: b.n.toLocaleString("de-DE"),
+    },
+    {
+      label: "Öffnungsrate",
+      a: fmtPercent(a.viewed, a.n),
+      b: fmtPercent(b.viewed, b.n),
+    },
+    {
+      label: "Play-Rate",
+      a: fmtPercent(a.played, a.n),
+      b: fmtPercent(b.played, b.n),
+    },
+    {
+      label: "Ø Watch-Time pro Play",
+      a: a.plays > 0 ? fmtDuration(Math.round(a.watchTime / a.plays)) : "–",
+      b: b.plays > 0 ? fmtDuration(Math.round(b.watchTime / b.plays)) : "–",
+    },
+    {
+      label: "CTA-Rate",
+      a: fmtPercent(a.cta, a.n),
+      b: fmtPercent(b.cta, b.n),
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          A/B-Test — Brief-Vergleich
+          {testActive ? (
+            <Badge variant="brand" dot>
+              Test läuft
+            </Badge>
+          ) : (
+            <Badge variant="neutral" dot>
+              Test beendet
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line text-left">
+                <th className="py-2 pr-4 text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                  Kennzahl
+                </th>
+                <th className="py-2 pr-4 font-semibold text-ink">
+                  <span className="inline-flex items-center gap-2">
+                    Brief A
+                    {winner === "A" && !smallSample && (
+                      <Badge variant="success">Vorne</Badge>
+                    )}
+                  </span>
+                </th>
+                <th className="py-2 font-semibold text-ink">
+                  <span className="inline-flex items-center gap-2">
+                    Brief B
+                    {winner === "B" && !smallSample && (
+                      <Badge variant="success">Vorne</Badge>
+                    )}
+                  </span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {metricRows.map((row) => (
+                <tr key={row.label} className="border-b border-line/60 last:border-0">
+                  <td className="py-2.5 pr-4 text-ink-muted">{row.label}</td>
+                  <td className="py-2.5 pr-4 tabular-nums text-ink">{row.a}</td>
+                  <td className="py-2.5 tabular-nums text-ink">{row.b}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-ink-muted">
+          {smallSample
+            ? "Noch wenig Daten (unter 30 Leads pro Variante) — die Raten können stark schwanken. Warten Sie mit der Gewinner-Entscheidung, bis mehr Briefe geöffnet wurden."
+            : "Der Gewinner wird nach Öffnungsrate markiert. Den Test beenden und den Gewinner übernehmen können Sie im Tab „Einstellungen“."}
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 

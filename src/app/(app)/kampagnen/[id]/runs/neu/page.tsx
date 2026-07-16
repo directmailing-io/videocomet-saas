@@ -74,11 +74,21 @@ export default async function NewRunPage({
     }
   }
 
+  // Spiegel der `abActive`-Bedingung im Start-Endpoint: nur wenn der Test
+  // aktiviert ist UND beide Brief-URLs vorliegen, zeigt der Wizard die
+  // Split-Regel und schickt sie beim Start mit.
+  const abTestingActive =
+    campaign.abTestingEnabled &&
+    campaign.pdfEnabled &&
+    Boolean(campaign.pdfGoogleDocsUrl?.trim()) &&
+    Boolean(campaign.pdfGoogleDocsUrlB?.trim());
+
   return (
     <RunWizard
       campaignId={campaign.id}
       campaignName={campaign.name}
       pdfEnabled={campaign.pdfEnabled}
+      abTestingActive={abTestingActive}
       resume={resumeState}
     />
   );

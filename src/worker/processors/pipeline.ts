@@ -40,6 +40,7 @@ import { eq, sql } from "drizzle-orm";
 import type { Job } from "bullmq";
 import { db } from "@/lib/db";
 import { campaigns, leads, mediaItems, runs, userDomains } from "@/lib/db/schema";
+import type { RunAbConfig } from "@/lib/db/schema";
 import { updateLeadStatus } from "@/lib/db/queries/leads";
 import { finalizeRunIfAllLeadsDone } from "@/lib/db/queries/runs";
 import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
@@ -1157,11 +1158,23 @@ export async function pipelineProcessor(
       }
     }
 
+    // ── A/B-Test: Brief-Vorlage pro Lead (Migration 0034) ──────────────
+    // run.abConfig ist der beim Start eingefrorene Snapshot (urlA/urlB).
+    // Mit Snapshot aber ohne Varianten-Zuteilung (sollte nicht vorkommen)
+    // greift die eingefrorene urlA — NICHT die Live-Kampagnen-URL, die
+    // sich seit dem Start geändert haben kann (Gewinner übernommen).
+    const runAbConfig = (run.abConfig as RunAbConfig | null) ?? null;
+    const effectivePdfDocsUrl = runAbConfig
+      ? lead.abVariant === "B"
+        ? runAbConfig.urlB
+        : runAbConfig.urlA
+      : campaign.pdfGoogleDocsUrl;
+
     // ── Stages 6-9: PDF pipeline (only if enabled and not skipped) ──
     if (
       !skipPdf &&
       campaign.pdfEnabled &&
-      campaign.pdfGoogleDocsUrl &&
+      effectivePdfDocsUrl &&
       pageUrl
     ) {
       const pdfStart = Date.now();
@@ -1239,7 +1252,7 @@ export async function pipelineProcessor(
             const nativeResult = await withStageTimeout(
               () =>
                 renderViaDocsApi({
-                  googleDocsUrl: campaign.pdfGoogleDocsUrl!,
+                  googleDocsUrl: effectivePdfDocsUrl,
                   textVars: buildDocxVars(
                     lead.data ?? {},
                     pageUrl!,
@@ -1325,7 +1338,7 @@ export async function pipelineProcessor(
           const driveResult = await withStageTimeout(
             () =>
               renderViaHtml({
-                googleDocsUrl: campaign.pdfGoogleDocsUrl!,
+                googleDocsUrl: effectivePdfDocsUrl,
                 textVars: buildDocxVars(
                   lead.data ?? {},
                   pageUrl!,
@@ -1379,7 +1392,7 @@ export async function pipelineProcessor(
           () =>
             runDocxModify({
               outDir: workDir,
-              googleDocsUrl: campaign.pdfGoogleDocsUrl!,
+              googleDocsUrl: effectivePdfDocsUrl,
               vars: buildDocxVars(
                 lead.data ?? {},
                 pageUrl!,
@@ -1458,7 +1471,7 @@ export async function pipelineProcessor(
     } else if (
       pdfAlreadyDone &&
       campaign.pdfEnabled &&
-      campaign.pdfGoogleDocsUrl
+      effectivePdfDocsUrl
     ) {
       // PDF was already produced on a prior attempt — log the skip
       // (4 stages collapsed into one event for log brevity).

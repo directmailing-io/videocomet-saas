@@ -42,6 +42,12 @@ export interface RunWizardProps {
   campaignName: string;
   pdfEnabled: boolean;
   /**
+   * true wenn der Brief-A/B-Test der Kampagne startklar ist (aktiviert +
+   * beide Google-Docs-URLs hinterlegt). Dann zeigt Step 3 die Split-Regel
+   * und der Start-POST schickt `{ab:{mode,weightA}}` mit.
+   */
+  abTestingActive: boolean;
+  /**
    * Fortsetzen einer unfertigen Runde (Status draft/mapping): der Server
    * rekonstruiert Preview + Legacy-Mapping aus `runs.column_mapping` und
    * der Wizard startet direkt in Step 1. Der Platzhalter-Mapping-Step lädt
@@ -81,6 +87,7 @@ export function RunWizard({
   campaignId,
   campaignName,
   pdfEnabled,
+  abTestingActive,
   resume,
 }: RunWizardProps) {
   const router = useRouter();
@@ -119,6 +126,26 @@ export function RunWizard({
   const [mapping, setMapping] = React.useState<Record<string, string>>(
     resume?.mapping ?? {},
   );
+
+  // ── A/B-Split-Regel (nur relevant wenn abTestingActive) ───────────────
+  const [abMode, setAbMode] = React.useState<"random" | "sequential">(
+    "random",
+  );
+  const [abWeightA, setAbWeightA] = React.useState(50);
+
+  /**
+   * Request-Init für POST /api/runs/[id]/start. Bei aktivem A/B-Test wird
+   * die Split-Regel mitgeschickt — das Backend friert sie zusammen mit
+   * beiden Brief-URLs als Snapshot in `runs.ab_config` ein.
+   */
+  function startRequestInit(): RequestInit {
+    if (!abTestingActive) return { method: "POST" };
+    return {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ab: { mode: abMode, weightA: abWeightA } }),
+    };
+  }
 
   /**
    * Dedupe-Config für die Card "Duplikate erkennen". Default: enabled mit
@@ -316,7 +343,7 @@ export function RunWizard({
       // dann jede sequentiell starten.
       if (bulkMode) {
         // 1) Erste Runde (Master) starten wie im Standard-Fall
-        const sr = await fetch(`/api/runs/${runId}/start`, { method: "POST" });
+        const sr = await fetch(`/api/runs/${runId}/start`, startRequestInit());
         const sj = await sr.json();
         if (!sr.ok) {
           setError(sj?.error ?? "Erste Runde konnte nicht gestartet werden.");
@@ -371,7 +398,7 @@ export function RunWizard({
         // 3) Alle zusaetzlichen Runden sequentiell starten
         const extraIds = (bulkJson.runs ?? []).map((r: { id: string }) => r.id);
         for (const id of extraIds) {
-          const r = await fetch(`/api/runs/${id}/start`, { method: "POST" });
+          const r = await fetch(`/api/runs/${id}/start`, startRequestInit());
           if (!r.ok) {
             // Best-effort: continue, User sieht die Runde als draft und kann
             // manuell starten. Nicht abbrechen.
@@ -385,7 +412,7 @@ export function RunWizard({
       }
 
       // ── Standard-Weg (1 Runde) ──────────────────────────────────────────
-      const sr = await fetch(`/api/runs/${runId}/start`, { method: "POST" });
+      const sr = await fetch(`/api/runs/${runId}/start`, startRequestInit());
       const sj = await sr.json();
       if (!sr.ok) {
         setError(sj?.error ?? "Runde konnte nicht gestartet werden.");
@@ -767,7 +794,111 @@ export function RunWizard({
         const dedupeStats = dedupeWillRun
           ? detectDuplicates(preview.rows, dedupeConfig).stats
           : null;
+        // Effektive Lead-Zahl für die A/B-Vorschau. Bei Multi-Tab kennt der
+        // Client nur die Zeilen-Summen — die exakte Zuteilung passiert
+        // server-seitig pro Runde, hier zeigen wir nur die erste Runde.
+        const abLeadCount = Math.max(
+          0,
+          preview.totalRows - (dedupeStats?.excluded ?? 0),
+        );
+        const abCountA = Math.round((abWeightA / 100) * abLeadCount);
+        const AB_PRESETS = [50, 60, 70, 80, 40, 30, 20];
         return (
+          <div className="space-y-6">
+          {abTestingActive && (
+            <Card>
+              <CardHeader>
+                <CardTitle>A/B-Test — Verteilung der Briefe</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <p className="text-sm text-ink-muted">
+                  Diese Kampagne testet zwei Brief-Vorlagen. Legen Sie fest,
+                  wie die Leads dieser Runde auf Brief A und Brief B
+                  aufgeteilt werden.
+                </p>
+                <div>
+                  <Label>Verteilungs-Modus</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setAbMode("random")}
+                      className={cn(
+                        "flex flex-col items-start gap-1 rounded-squircle-md border p-4 text-left transition-colors",
+                        abMode === "random"
+                          ? "border-brand bg-brand-soft"
+                          : "border-line hover:border-line",
+                      )}
+                    >
+                      <span className="text-sm font-semibold text-ink">
+                        Zufällig
+                      </span>
+                      <span className="text-xs text-ink-muted">
+                        Leads werden zufällig gemischt und nach Gewichtung
+                        aufgeteilt — fairster Vergleich.
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAbMode("sequential")}
+                      className={cn(
+                        "flex flex-col items-start gap-1 rounded-squircle-md border p-4 text-left transition-colors",
+                        abMode === "sequential"
+                          ? "border-brand bg-brand-soft"
+                          : "border-line hover:border-line",
+                      )}
+                    >
+                      <span className="text-sm font-semibold text-ink">
+                        Der Reihe nach
+                      </span>
+                      <span className="text-xs text-ink-muted">
+                        Die ersten {abWeightA} % der Liste bekommen Brief A,
+                        der Rest Brief B.
+                      </span>
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <Label>Gewichtung (Brief A / Brief B)</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {AB_PRESETS.map((w) => (
+                      <button
+                        key={w}
+                        type="button"
+                        onClick={() => setAbWeightA(w)}
+                        className={cn(
+                          "rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-colors tabular-nums",
+                          abWeightA === w
+                            ? "border-brand bg-brand text-white"
+                            : "border-line text-ink hover:border-brand hover:text-brand-deep",
+                        )}
+                      >
+                        {w}/{100 - w}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="rounded-squircle-sm bg-brand-soft/40 border border-brand-soft px-3 py-2 text-sm text-ink">
+                  {bulkMode ? (
+                    <>
+                      Die Regel gilt für alle {selectedTabs.length} Runden —
+                      jede Runde wird einzeln nach{" "}
+                      <strong>
+                        {abWeightA}/{100 - abWeightA}
+                      </strong>{" "}
+                      aufgeteilt.
+                    </>
+                  ) : (
+                    <>
+                      <strong>{abCountA}</strong> Lead
+                      {abCountA === 1 ? "" : "s"} → Brief A ·{" "}
+                      <strong>{abLeadCount - abCountA}</strong> Lead
+                      {abLeadCount - abCountA === 1 ? "" : "s"} → Brief B
+                    </>
+                  )}
+                </p>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Zusammenfassung</CardTitle>
@@ -828,6 +959,12 @@ export function RunWizard({
                   <Badge variant="warn">Kein Mapping gesetzt</Badge>
                 )}
                 {pdfEnabled && <Badge variant="success">PDF-Brief aktiv</Badge>}
+                {abTestingActive && (
+                  <Badge variant="brand">
+                    A/B-Test · {abWeightA}/{100 - abWeightA} ·{" "}
+                    {abMode === "sequential" ? "Der Reihe nach" : "Zufällig"}
+                  </Badge>
+                )}
               </div>
               <RunCostEstimate
                 leadCount={
@@ -848,6 +985,7 @@ export function RunWizard({
               />
             </CardContent>
           </Card>
+          </div>
         );
       })()}
 

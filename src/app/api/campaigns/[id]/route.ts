@@ -40,6 +40,12 @@ const patchSchema = z.object({
     .optional(),
   pdfEnabled: z.boolean().optional(),
   pdfGoogleDocsUrl: z.string().url().nullable().optional(),
+  // ── A/B-Test (Migration 0034) ─────────────────────────────────────────
+  // Aktivieren = abTestingEnabled:true + pdfGoogleDocsUrlB setzen.
+  // Gewinner B übernehmen = pdfGoogleDocsUrl:<urlB> + abTestingEnabled:false.
+  // Laufende Runden bleiben unberührt (Snapshot in runs.ab_config).
+  abTestingEnabled: z.boolean().optional(),
+  pdfGoogleDocsUrlB: z.string().url().nullable().optional(),
   pdfQrEnabled: z.boolean().optional(),
   pdfThumbnailEnabled: z.boolean().optional(),
   pdfThumbnailFrameMs: z.number().int().nonnegative().nullable().optional(),

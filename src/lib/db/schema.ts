@@ -207,6 +207,13 @@ export const campaigns = pgTable("campaigns", {
   pdfThumbnailEnabled: boolean("pdf_thumbnail_enabled").notNull().default(false),
   pdfThumbnailFrameMs: integer("pdf_thumbnail_frame_ms"),
 
+  // ── A/B-Test (Migration 0034) ──────────────────────────────────────
+  // Wenn aktiv, hat die Kampagne einen zweiten Brief (Variante B);
+  // `pdfGoogleDocsUrl` bleibt Variante A. Die Verteilungsregel wird pro
+  // Runde konfiguriert und beim Start in `runs.abConfig` gesnapshottet.
+  abTestingEnabled: boolean("ab_testing_enabled").notNull().default(false),
+  pdfGoogleDocsUrlB: text("pdf_google_docs_url_b"),
+
   // ── Thumbnail-Generator (Migration 0018) ─────────────────────────────
   // Feature-Toggle + Slide-artige Konfiguration für ein eigenes Thumbnail-
   // Bild der Kampagne. Wenn `thumbnailImage` Platzhalter enthält, rendert
@@ -307,6 +314,23 @@ export const envelopeTemplates = pgTable("envelope_templates", {
   userIdx: index("envelope_templates_user_idx").on(t.userId).where(sql`${t.deletedAt} IS NULL`),
 }));
 
+/**
+ * A/B-Test-Snapshot einer Runde (Migration 0034). Wird beim Run-Start aus
+ * den Kampagnen-Einstellungen + der User-Auswahl im Wizard eingefroren —
+ * spätere Kampagnen-Änderungen (Test deaktivieren, Briefe tauschen)
+ * beeinflussen laufende/abgeschlossene Runden nicht.
+ */
+export interface RunAbConfig {
+  /** "random" = zufällige Zuteilung, "sequential" = erste X% nach rowIndex → A */
+  mode: "random" | "sequential";
+  /** Anteil Variante A in Prozent (10–90). Variante B erhält den Rest. */
+  weightA: number;
+  /** Google-Docs-URL Brief A zum Zeitpunkt des Starts. */
+  urlA: string;
+  /** Google-Docs-URL Brief B zum Zeitpunkt des Starts. */
+  urlB: string;
+}
+
 // ── Runs (Runden) ───────────────────────────────────────────────────────────
 export const runs = pgTable("runs", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -347,6 +371,13 @@ export const runs = pgTable("runs", {
     () => envelopeTemplates.id,
     { onDelete: "set null" },
   ),
+
+  /**
+   * A/B-Test-Snapshot (Migration 0034). NULL = Runde ohne A/B-Test.
+   * Die Pipeline liest die Brief-URLs pro Variante aus diesem Snapshot,
+   * nie live aus der Kampagne.
+   */
+  abConfig: jsonb("ab_config").$type<RunAbConfig | null>(),
 
   // ── Preflight (Phase 1) ──────────────────────────────────────────────
   // Lifecycle-Marker für die Lead-Quality-Check-Phase. NULL solange der
@@ -460,6 +491,12 @@ export const leads = pgTable("leads", {
    * verwendet. NULL = Feature inaktiv ODER Lead nutzt den Run-Cache.
    */
   customThumbnailUrl: text("custom_thumbnail_url"),
+  /**
+   * A/B-Test-Variante dieses Leads (Migration 0034). "A" | "B".
+   * NULL = Runde ohne A/B-Test. Wird beim Run-Start zugeteilt (nach
+   * Dedupe + Validierung) und ist danach unveränderlich.
+   */
+  abVariant: text("ab_variant").$type<"A" | "B" | null>(),
   pdfUrl: text("pdf_url"),
   pdfExpiresAt: timestamp("pdf_expires_at", { withTimezone: true }),
   /** Umschlag-PDF pro Lead (Migration 0031). */

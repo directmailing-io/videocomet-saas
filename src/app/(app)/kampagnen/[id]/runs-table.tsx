@@ -66,6 +66,63 @@ export interface RunRow {
   createdAt: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  /** A/B-Test-Snapshot + Live-Zähler je Variante (null = ohne A/B-Test). */
+  ab: {
+    mode: "random" | "sequential";
+    weightA: number;
+    leadsA: number;
+    leadsB: number;
+    viewedA: number;
+    viewedB: number;
+  } | null;
+}
+
+function abModeLabel(mode: "random" | "sequential"): string {
+  return mode === "sequential" ? "Der Reihe nach" : "Zufällig";
+}
+
+function abOpenRate(viewed: number, total: number): string {
+  if (total <= 0) return "–";
+  return `${Math.round((viewed / total) * 100)} %`;
+}
+
+/**
+ * Kompakte A/B-Zelle: Verteilungs-Regel als Badge, darunter die
+ * Öffnungsrate beider Brief-Varianten. Details (Plays, Watch-Time, CTA)
+ * stehen in der Varianten-Auswertung im Übersicht-Tab.
+ */
+function AbCell({ ab }: { ab: NonNullable<RunRow["ab"]> }) {
+  return (
+    <div className="space-y-1">
+      <Badge variant="brand">
+        A/B · {ab.weightA}/{100 - ab.weightA} · {abModeLabel(ab.mode)}
+      </Badge>
+      <div className="flex items-center gap-3 text-xs text-ink-muted tabular-nums whitespace-nowrap">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              <span className="font-semibold text-ink">A</span>{" "}
+              {abOpenRate(ab.viewedA, ab.leadsA)}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            Brief A: {ab.viewedA} von {ab.leadsA} Leads geöffnet
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              <span className="font-semibold text-ink">B</span>{" "}
+              {abOpenRate(ab.viewedB, ab.leadsB)}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            Brief B: {ab.viewedB} von {ab.leadsB} Leads geöffnet
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
+  );
 }
 
 interface RunsTableProps {
@@ -227,6 +284,10 @@ export function RunsTable({
       return changed ? next : prev;
     });
   }, [runs]);
+
+  // Spalte "A/B-Test" nur zeigen, wenn mindestens eine Runde damit lief —
+  // Kampagnen ohne A/B-Test behalten die schlanke Tabelle.
+  const anyAb = runs.some((r) => r.ab !== null);
 
   const eligibleRuns = React.useMemo(() => runs.filter(canSelect), [runs]);
   const selectableCount = eligibleRuns.length;
@@ -477,6 +538,7 @@ export function RunsTable({
             <TableHead>Name</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Fortschritt</TableHead>
+            {anyAb && <TableHead>A/B-Test</TableHead>}
             <TableHead>Erstellt</TableHead>
             <TableHead className="w-12 text-right">Aktionen</TableHead>
           </TableRow>
@@ -567,6 +629,15 @@ export function RunsTable({
                     </span>
                   </div>
                 </TableCell>
+                {anyAb && (
+                  <TableCell>
+                    {r.ab ? (
+                      <AbCell ab={r.ab} />
+                    ) : (
+                      <span className="text-xs text-ink-muted">—</span>
+                    )}
+                  </TableCell>
+                )}
                 <TableCell className="text-ink-muted">
                   {formatDate(r.createdAt)}
                 </TableCell>

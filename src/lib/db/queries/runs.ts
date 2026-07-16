@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { analyticsEvents, leadEvents, leads, runs } from "@/lib/db/schema";
+import type { RunAbConfig } from "@/lib/db/schema";
 import { enqueueWebhooksForRunFinalized } from "@/lib/webhooks/lead-event-hook";
 
 /**
@@ -196,6 +197,13 @@ export interface RunWithCounts {
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
+  /** A/B-Snapshot der Runde (null = Runde lief ohne A/B-Test). */
+  abConfig: RunAbConfig | null;
+  /** Live-Zähler je Variante — nur relevant wenn abConfig gesetzt. */
+  abLeadsA: number;
+  abLeadsB: number;
+  abViewedA: number;
+  abViewedB: number;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -439,6 +447,25 @@ export async function listCampaignRunsWithCounts(
         SELECT COUNT(*)::int FROM ${leads}
         WHERE ${leads.runId} = ${runs.id} AND ${leads.status} = 'failed'
       )`,
+      abConfig: runs.abConfig,
+      // A/B-Zähler je Variante. `removed_at IS NULL` spiegelt die Zuteilung
+      // im Start-Endpoint (nur echte Leads zählen in die Quote).
+      abLeadsA: sql<number>`(
+        SELECT COUNT(*)::int FROM ${leads}
+        WHERE ${leads.runId} = ${runs.id} AND ${leads.abVariant} = 'A' AND ${leads.removedAt} IS NULL
+      )`,
+      abLeadsB: sql<number>`(
+        SELECT COUNT(*)::int FROM ${leads}
+        WHERE ${leads.runId} = ${runs.id} AND ${leads.abVariant} = 'B' AND ${leads.removedAt} IS NULL
+      )`,
+      abViewedA: sql<number>`(
+        SELECT COUNT(*)::int FROM ${leads}
+        WHERE ${leads.runId} = ${runs.id} AND ${leads.abVariant} = 'A' AND ${leads.removedAt} IS NULL AND ${leads.viewCount} > 0
+      )`,
+      abViewedB: sql<number>`(
+        SELECT COUNT(*)::int FROM ${leads}
+        WHERE ${leads.runId} = ${runs.id} AND ${leads.abVariant} = 'B' AND ${leads.removedAt} IS NULL AND ${leads.viewCount} > 0
+      )`,
     })
     .from(runs)
     .where(
@@ -463,6 +490,11 @@ export async function listCampaignRunsWithCounts(
     startedAt: r.startedAt,
     completedAt: r.completedAt,
     createdAt: r.createdAt,
+    abConfig: (r.abConfig as RunAbConfig | null) ?? null,
+    abLeadsA: r.abLeadsA ?? 0,
+    abLeadsB: r.abLeadsB ?? 0,
+    abViewedA: r.abViewedA ?? 0,
+    abViewedB: r.abViewedB ?? 0,
   }));
 }
 

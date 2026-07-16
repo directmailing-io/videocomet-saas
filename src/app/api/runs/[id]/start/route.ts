@@ -11,6 +11,7 @@ import {
   leads,
   runs,
   type RemovedDetail,
+  type RunAbConfig,
 } from "@/lib/db/schema";
 import { getRun, updateRun } from "@/lib/db/queries/runs";
 import {
@@ -88,11 +89,38 @@ interface StoredColumnMapping {
  * `job-enqueue.ts`-Helper.
  */
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } },
 ) {
   const auth = await requireUserApi();
   if (!auth.ok) return auth.response;
+
+  // Optionaler Body: A/B-Split-Regel aus dem Runden-Wizard. Der Endpoint
+  // wurde historisch ohne Body aufgerufen — ein fehlender/leerer Body ist
+  // weiterhin gültig.
+  let abRequest: { mode: "random" | "sequential"; weightA: number } | null = null;
+  try {
+    const body = await req.json();
+    if (body && typeof body === "object" && body.ab) {
+      const mode = body.ab.mode;
+      const weightA = Number(body.ab.weightA);
+      if (
+        (mode === "random" || mode === "sequential") &&
+        Number.isInteger(weightA) &&
+        weightA >= 10 &&
+        weightA <= 90
+      ) {
+        abRequest = { mode, weightA };
+      } else {
+        return NextResponse.json(
+          { error: "Ungültige A/B-Test-Konfiguration." },
+          { status: 400 },
+        );
+      }
+    }
+  } catch {
+    // kein/kein-JSON-Body → kein A/B-Request
+  }
 
   let run;
   try {
@@ -394,11 +422,81 @@ export async function POST(
   // Screenshot wäre dann nutzlos, weil die Lead-URL gar nicht ins Video
   // einfließt. In diesem Fall überspringen wir Phase 1 komplett.
   const [campaignRow] = await db
-    .select({ mode: campaigns.mode })
+    .select({
+      mode: campaigns.mode,
+      abTestingEnabled: campaigns.abTestingEnabled,
+      pdfEnabled: campaigns.pdfEnabled,
+      pdfGoogleDocsUrl: campaigns.pdfGoogleDocsUrl,
+      pdfGoogleDocsUrlB: campaigns.pdfGoogleDocsUrlB,
+    })
     .from(campaigns)
     .where(eq(campaigns.id, run.campaignId))
     .limit(1);
   const skipPreflight = campaignRow?.mode === "webcam-only";
+
+  // ── A/B-Test: Varianten-Zuteilung ────────────────────────────────────────
+  //
+  // Läuft NACH Dedupe + Validierung, damit nur echte (nicht-removed) Leads
+  // in die Quote zählen. Die Regel + beide Brief-URLs werden als Snapshot in
+  // `runs.abConfig` eingefroren — spätere Kampagnen-Änderungen (Test
+  // deaktivieren, Gewinner übernehmen) ändern laufende Runden nicht.
+  //
+  // Exakte Quote statt Münzwurf: bei "random" wird per Fisher-Yates
+  // geshuffelt und exakt round(n·weightA%) Leads bekommen A — ein
+  // Bernoulli-Wurf pro Lead würde bei kleinen Listen stark streuen.
+  let abConfig: RunAbConfig | null = null;
+  const abActive =
+    campaignRow?.abTestingEnabled === true &&
+    campaignRow.pdfEnabled === true &&
+    typeof campaignRow.pdfGoogleDocsUrl === "string" &&
+    campaignRow.pdfGoogleDocsUrl.trim() !== "" &&
+    typeof campaignRow.pdfGoogleDocsUrlB === "string" &&
+    campaignRow.pdfGoogleDocsUrlB.trim() !== "";
+  if (abActive) {
+    // Wizard schickt die Regel mit; Fallback (z.B. API-Aufrufe ohne Body):
+    // zufällig 50/50.
+    const rule = abRequest ?? { mode: "random" as const, weightA: 50 };
+    abConfig = {
+      mode: rule.mode,
+      weightA: rule.weightA,
+      urlA: campaignRow.pdfGoogleDocsUrl!.trim(),
+      urlB: campaignRow.pdfGoogleDocsUrlB!.trim(),
+    };
+
+    const eligible = await db
+      .select({ id: leads.id, rowIndex: leads.rowIndex })
+      .from(leads)
+      .where(and(eq(leads.runId, params.id), isNull(leads.removedAt)))
+      .orderBy(leads.rowIndex);
+
+    const countA = Math.round((rule.weightA / 100) * eligible.length);
+    let idsA: string[];
+    if (rule.mode === "sequential") {
+      idsA = eligible.slice(0, countA).map((l) => l.id);
+    } else {
+      const shuffled = [...eligible];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      idsA = shuffled.slice(0, countA).map((l) => l.id);
+    }
+    const idsASet = new Set(idsA);
+    const idsB = eligible.filter((l) => !idsASet.has(l.id)).map((l) => l.id);
+
+    if (idsA.length > 0) {
+      await db
+        .update(leads)
+        .set({ abVariant: "A" })
+        .where(inArray(leads.id, idsA));
+    }
+    if (idsB.length > 0) {
+      await db
+        .update(leads)
+        .set({ abVariant: "B" })
+        .where(inArray(leads.id, idsB));
+    }
+  }
 
   if (skipPreflight) {
     // ── Direkter Phase-2-Pfad ────────────────────────────────────────────
@@ -425,6 +523,7 @@ export async function POST(
       // NICHT approved.
       approvedLeadCount: inserted - incompleteCount - dedupeRemovedCount,
       customLpVersionId,
+      abConfig,
     });
 
     await db
@@ -474,6 +573,7 @@ export async function POST(
     preflightStartedAt: new Date(),
     totalLeads: inserted,
     customLpVersionId,
+    abConfig,
   });
 
   await db
