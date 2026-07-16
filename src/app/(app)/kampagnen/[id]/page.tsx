@@ -176,11 +176,18 @@ export default async function CampaignDetailPage({
         title={campaign.name}
         subtitle={`Modus: ${modeLabel(campaign.mode)} · Erstellt am ${formatDate(campaign.createdAt)}`}
         actions={
-          <CampaignActions
-            campaignId={campaign.id}
-            campaignName={campaign.name}
-            appUrl={appUrl}
-          />
+          <>
+            <Button asChild iconLeft={<Plus className="size-4" />}>
+              <Link href={`/kampagnen/${campaign.id}/runs/neu`}>
+                Neue Runde
+              </Link>
+            </Button>
+            <CampaignActions
+              campaignId={campaign.id}
+              campaignName={campaign.name}
+              appUrl={appUrl}
+            />
+          </>
         }
       />
 
