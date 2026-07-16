@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toaster";
+import { AbSplitPicker, type AbSplitMode } from "@/components/ab/ab-split-picker";
 
 export interface AbTestSettingsProps {
   campaignId: string;
@@ -26,6 +27,9 @@ export interface AbTestSettingsProps {
   /** Brief B = campaigns.pdf_google_docs_url_b. */
   urlB: string | null;
   enabled: boolean;
+  /** Standard-Verteilung (Migration 0035) — vorbefüllt den Runden-Wizard. */
+  splitMode: AbSplitMode;
+  splitWeightA: number;
 }
 
 function isGoogleDocsUrl(value: string): boolean {
@@ -50,12 +54,17 @@ export function AbTestSettings({
   urlA,
   urlB,
   enabled,
+  splitMode,
+  splitWeightA,
 }: AbTestSettingsProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [urlBDraft, setUrlBDraft] = React.useState(urlB ?? "");
+  const [modeDraft, setModeDraft] = React.useState<AbSplitMode>(splitMode);
+  const [weightDraft, setWeightDraft] = React.useState(splitWeightA);
+  const splitDirty = modeDraft !== splitMode || weightDraft !== splitWeightA;
   const [pending, setPending] = React.useState<
-    "activate" | "keepA" | "adoptB" | null
+    "activate" | "keepA" | "adoptB" | "split" | null
   >(null);
   const [adoptBOpen, setAdoptBOpen] = React.useState(false);
 
@@ -63,7 +72,7 @@ export function AbTestSettings({
   const canActivate = Boolean(urlA) && urlBValid;
 
   async function patch(
-    action: "activate" | "keepA" | "adoptB",
+    action: "activate" | "keepA" | "adoptB" | "split",
     body: Record<string, unknown>,
     successTitle: string,
   ) {
@@ -159,6 +168,42 @@ export function AbTestSettings({
           </div>
         </div>
 
+        <div className="rounded-squircle-md border border-line p-4 space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-ink">
+              Standard-Verteilung
+            </p>
+            <p className="mt-0.5 text-xs text-ink-muted leading-relaxed">
+              Gilt als Vorgabe für jede neue Runde — beim Start einer Runde
+              können Sie sie jederzeit anpassen. Bereits gestartete Runden
+              behalten ihre Verteilung.
+            </p>
+          </div>
+          <AbSplitPicker
+            mode={modeDraft}
+            weightA={weightDraft}
+            onModeChange={setModeDraft}
+            onWeightChange={setWeightDraft}
+            disabled={!pdfEnabled}
+          />
+          {enabled && (
+            <Button
+              variant="subtle"
+              onClick={() =>
+                void patch(
+                  "split",
+                  { abSplitMode: modeDraft, abSplitWeightA: weightDraft },
+                  "Standard-Verteilung gespeichert",
+                )
+              }
+              loading={pending === "split"}
+              disabled={!splitDirty || pending !== null}
+            >
+              Verteilung speichern
+            </Button>
+          )}
+        </div>
+
         {!enabled ? (
           <div className="flex flex-wrap items-center gap-3">
             <Button
@@ -168,6 +213,8 @@ export function AbTestSettings({
                   {
                     abTestingEnabled: true,
                     pdfGoogleDocsUrlB: urlBDraft.trim(),
+                    abSplitMode: modeDraft,
+                    abSplitWeightA: weightDraft,
                   },
                   "A/B-Test aktiviert",
                 )

@@ -38,6 +38,8 @@ const createSchema = z.object({
   // Start-Endpoint erneut — hier reicht Format-Validierung.
   abTestingEnabled: z.boolean().optional(),
   pdfGoogleDocsUrlB: z.string().url().nullable().optional(),
+  abSplitMode: z.enum(["random", "sequential"]).optional(),
+  abSplitWeightA: z.number().int().min(10).max(90).optional(),
   pdfQrEnabled: z.boolean().optional(),
   pdfThumbnailEnabled: z.boolean().optional(),
   pdfThumbnailFrameMs: z.number().int().nonnegative().nullable().optional(),

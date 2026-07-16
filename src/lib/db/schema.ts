@@ -213,6 +213,13 @@ export const campaigns = pgTable("campaigns", {
   // Runde konfiguriert und beim Start in `runs.abConfig` gesnapshottet.
   abTestingEnabled: boolean("ab_testing_enabled").notNull().default(false),
   pdfGoogleDocsUrlB: text("pdf_google_docs_url_b"),
+  // Standard-Verteilung (Migration 0035): befüllt den Runden-Wizard vor
+  // und dient dem Start-Endpoint als Fallback, wenn kein Body kommt.
+  abSplitMode: text("ab_split_mode")
+    .$type<"random" | "sequential">()
+    .notNull()
+    .default("random"),
+  abSplitWeightA: integer("ab_split_weight_a").notNull().default(50),
 
   // ── Thumbnail-Generator (Migration 0018) ─────────────────────────────
   // Feature-Toggle + Slide-artige Konfiguration für ein eigenes Thumbnail-

@@ -20,6 +20,7 @@ import {
 } from "@/components/editor/thumbnail-image-editor";
 import type { SegmentEditorMediaItem } from "@/components/editor/segment-editor";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
+import { AbSplitPicker, type AbSplitMode } from "@/components/ab/ab-split-picker";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,6 +41,8 @@ export interface WizardStep5PdfPatch {
   pdfGoogleDocsUrl?: string;
   abTestingEnabled?: boolean;
   pdfGoogleDocsUrlB?: string;
+  abSplitMode?: AbSplitMode;
+  abSplitWeightA?: number;
   pdfQrEnabled?: boolean;
   pdfThumbnailEnabled?: boolean;
   pdfThumbnailFrameMs?: number | null;
@@ -55,6 +58,9 @@ export interface WizardStep5Props {
   /** A/B-Test für Brief-Vorlagen — Brief A ist `googleDocsUrl`. */
   abTestingEnabled: boolean;
   googleDocsUrlB: string;
+  /** Standard-Verteilung — vorbefüllt den Runden-Wizard, dort überschreibbar. */
+  abSplitMode: AbSplitMode;
+  abSplitWeightA: number;
   qrEnabled: boolean;
   thumbnailEnabled: boolean;
   frameMs: number | null;
@@ -78,6 +84,8 @@ export function WizardStep5Pdf({
   googleDocsUrl,
   abTestingEnabled,
   googleDocsUrlB,
+  abSplitMode,
+  abSplitWeightA,
   qrEnabled,
   thumbnailEnabled,
   frameMs,
@@ -182,20 +190,37 @@ export function WizardStep5Pdf({
             </div>
 
             {abTestingEnabled && (
-              <div className="mt-4">
-                <Label htmlFor="pdf-docs-b">Brief B (Google-Docs-URL)</Label>
-                <UrlPicker
-                  id="pdf-docs-b"
-                  value={googleDocsUrlB}
-                  onChange={(v) => onChange({ pdfGoogleDocsUrlB: v })}
-                  placeholder="https://docs.google.com/document/d/..."
-                  types={["gdoc"]}
-                />
-                <p className="text-xs text-ink-muted mt-1.5">
-                  Brief A ist die URL oben. Die Verteilung (zufällig oder der
-                  Reihe nach, Gewichtung wie 50/50 oder 70/30) legst Du beim
-                  Start jeder Runde fest.
-                </p>
+              <div className="mt-4 space-y-5">
+                <div>
+                  <Label htmlFor="pdf-docs-b">Brief B (Google-Docs-URL)</Label>
+                  <UrlPicker
+                    id="pdf-docs-b"
+                    value={googleDocsUrlB}
+                    onChange={(v) => onChange({ pdfGoogleDocsUrlB: v })}
+                    placeholder="https://docs.google.com/document/d/..."
+                    types={["gdoc"]}
+                  />
+                  <p className="text-xs text-ink-muted mt-1.5">
+                    Brief A ist die URL oben.
+                  </p>
+                </div>
+                <div className="rounded-squircle-md border border-line p-4 space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-ink">
+                      Standard-Verteilung
+                    </p>
+                    <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+                      Gilt als Vorgabe für jede Runde — beim Start einer Runde
+                      kannst Du sie jederzeit anpassen.
+                    </p>
+                  </div>
+                  <AbSplitPicker
+                    mode={abSplitMode}
+                    weightA={abSplitWeightA}
+                    onModeChange={(m) => onChange({ abSplitMode: m })}
+                    onWeightChange={(w) => onChange({ abSplitWeightA: w })}
+                  />
+                </div>
               </div>
             )}
           </div>

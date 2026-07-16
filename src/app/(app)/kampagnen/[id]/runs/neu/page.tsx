@@ -89,6 +89,8 @@ export default async function NewRunPage({
       campaignName={campaign.name}
       pdfEnabled={campaign.pdfEnabled}
       abTestingActive={abTestingActive}
+      abDefaultMode={campaign.abSplitMode}
+      abDefaultWeightA={campaign.abSplitWeightA}
       resume={resumeState}
     />
   );

@@ -138,7 +138,9 @@ export function WizardStep6Summary({
                 {state.pdfThumbnailEnabled ? "Ja" : "Nein"} . A/B-Test:{" "}
                 {state.abTestingEnabled &&
                 (state.pdfGoogleDocsUrlB ?? "").trim()
-                  ? "Aktiv (Brief A + B)"
+                  ? `Aktiv (Brief A + B, ${state.abSplitWeightA}/${
+                      100 - state.abSplitWeightA
+                    } ${state.abSplitMode === "sequential" ? "der Reihe nach" : "zufällig"})`
                   : "Nein"}
               </p>
             )}

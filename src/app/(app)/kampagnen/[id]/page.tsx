@@ -406,6 +406,8 @@ export default async function CampaignDetailPage({
             urlA={campaign.pdfGoogleDocsUrl}
             urlB={campaign.pdfGoogleDocsUrlB}
             enabled={campaign.abTestingEnabled}
+            splitMode={campaign.abSplitMode}
+            splitWeightA={campaign.abSplitWeightA}
           />
           <Card>
             <CardHeader>

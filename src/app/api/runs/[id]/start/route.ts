@@ -428,6 +428,8 @@ export async function POST(
       pdfEnabled: campaigns.pdfEnabled,
       pdfGoogleDocsUrl: campaigns.pdfGoogleDocsUrl,
       pdfGoogleDocsUrlB: campaigns.pdfGoogleDocsUrlB,
+      abSplitMode: campaigns.abSplitMode,
+      abSplitWeightA: campaigns.abSplitWeightA,
     })
     .from(campaigns)
     .where(eq(campaigns.id, run.campaignId))
@@ -454,8 +456,11 @@ export async function POST(
     campaignRow.pdfGoogleDocsUrlB.trim() !== "";
   if (abActive) {
     // Wizard schickt die Regel mit; Fallback (z.B. API-Aufrufe ohne Body):
-    // zufällig 50/50.
-    const rule = abRequest ?? { mode: "random" as const, weightA: 50 };
+    // Standard-Verteilung der Kampagne (Migration 0035).
+    const rule = abRequest ?? {
+      mode: campaignRow.abSplitMode,
+      weightA: campaignRow.abSplitWeightA,
+    };
     abConfig = {
       mode: rule.mode,
       weightA: rule.weightA,

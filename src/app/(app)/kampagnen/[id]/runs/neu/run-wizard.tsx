@@ -36,6 +36,7 @@ import {
 import { detectDuplicates } from "@/lib/dedupe/engine";
 import type { DedupeConfig } from "@/lib/dedupe/types";
 import { MultiTabPicker, type SelectedTab, type SheetTabInfo } from "./tab-picker";
+import { AbSplitPicker, type AbSplitMode } from "@/components/ab/ab-split-picker";
 
 export interface RunWizardProps {
   campaignId: string;
@@ -47,6 +48,12 @@ export interface RunWizardProps {
    * und der Start-POST schickt `{ab:{mode,weightA}}` mit.
    */
   abTestingActive: boolean;
+  /**
+   * Standard-Verteilung der Kampagne (Migration 0035) — befüllt die
+   * Split-Regel in Step 3 vor; pro Runde weiterhin überschreibbar.
+   */
+  abDefaultMode: AbSplitMode;
+  abDefaultWeightA: number;
   /**
    * Fortsetzen einer unfertigen Runde (Status draft/mapping): der Server
    * rekonstruiert Preview + Legacy-Mapping aus `runs.column_mapping` und
@@ -88,6 +95,8 @@ export function RunWizard({
   campaignName,
   pdfEnabled,
   abTestingActive,
+  abDefaultMode,
+  abDefaultWeightA,
   resume,
 }: RunWizardProps) {
   const router = useRouter();
@@ -128,10 +137,12 @@ export function RunWizard({
   );
 
   // ── A/B-Split-Regel (nur relevant wenn abTestingActive) ───────────────
-  const [abMode, setAbMode] = React.useState<"random" | "sequential">(
-    "random",
+  // Vorbefüllt mit der Standard-Verteilung der Kampagne; pro Runde
+  // überschreibbar — der Start friert die effektive Regel als Snapshot ein.
+  const [abMode, setAbMode] = React.useState<AbSplitMode>(
+    abDefaultMode,
   );
-  const [abWeightA, setAbWeightA] = React.useState(50);
+  const [abWeightA, setAbWeightA] = React.useState(abDefaultWeightA);
 
   /**
    * Request-Init für POST /api/runs/[id]/start. Bei aktivem A/B-Test wird
@@ -802,7 +813,6 @@ export function RunWizard({
           preview.totalRows - (dedupeStats?.excluded ?? 0),
         );
         const abCountA = Math.round((abWeightA / 100) * abLeadCount);
-        const AB_PRESETS = [50, 60, 70, 80, 40, 30, 20];
         return (
           <div className="space-y-6">
           {abTestingActive && (
@@ -812,90 +822,35 @@ export function RunWizard({
               </CardHeader>
               <CardContent className="space-y-5">
                 <p className="text-sm text-ink-muted">
-                  Diese Kampagne testet zwei Brief-Vorlagen. Legen Sie fest,
-                  wie die Leads dieser Runde auf Brief A und Brief B
-                  aufgeteilt werden.
+                  Diese Kampagne testet zwei Brief-Vorlagen. Vorbefüllt mit
+                  der Standard-Verteilung der Kampagne — für diese Runde
+                  frei anpassbar.
                 </p>
-                <div>
-                  <Label>Verteilungs-Modus</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setAbMode("random")}
-                      className={cn(
-                        "flex flex-col items-start gap-1 rounded-squircle-md border p-4 text-left transition-colors",
-                        abMode === "random"
-                          ? "border-brand bg-brand-soft"
-                          : "border-line hover:border-line",
-                      )}
-                    >
-                      <span className="text-sm font-semibold text-ink">
-                        Zufällig
-                      </span>
-                      <span className="text-xs text-ink-muted">
-                        Leads werden zufällig gemischt und nach Gewichtung
-                        aufgeteilt — fairster Vergleich.
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAbMode("sequential")}
-                      className={cn(
-                        "flex flex-col items-start gap-1 rounded-squircle-md border p-4 text-left transition-colors",
-                        abMode === "sequential"
-                          ? "border-brand bg-brand-soft"
-                          : "border-line hover:border-line",
-                      )}
-                    >
-                      <span className="text-sm font-semibold text-ink">
-                        Der Reihe nach
-                      </span>
-                      <span className="text-xs text-ink-muted">
-                        Die ersten {abWeightA} % der Liste bekommen Brief A,
-                        der Rest Brief B.
-                      </span>
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <Label>Gewichtung (Brief A / Brief B)</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {AB_PRESETS.map((w) => (
-                      <button
-                        key={w}
-                        type="button"
-                        onClick={() => setAbWeightA(w)}
-                        className={cn(
-                          "rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-colors tabular-nums",
-                          abWeightA === w
-                            ? "border-brand bg-brand text-white"
-                            : "border-line text-ink hover:border-brand hover:text-brand-deep",
-                        )}
-                      >
-                        {w}/{100 - w}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <p className="rounded-squircle-sm bg-brand-soft/40 border border-brand-soft px-3 py-2 text-sm text-ink">
-                  {bulkMode ? (
-                    <>
-                      Die Regel gilt für alle {selectedTabs.length} Runden —
-                      jede Runde wird einzeln nach{" "}
-                      <strong>
-                        {abWeightA}/{100 - abWeightA}
-                      </strong>{" "}
-                      aufgeteilt.
-                    </>
-                  ) : (
-                    <>
-                      <strong>{abCountA}</strong> Lead
-                      {abCountA === 1 ? "" : "s"} → Brief A ·{" "}
-                      <strong>{abLeadCount - abCountA}</strong> Lead
-                      {abLeadCount - abCountA === 1 ? "" : "s"} → Brief B
-                    </>
-                  )}
-                </p>
+                <AbSplitPicker
+                  mode={abMode}
+                  weightA={abWeightA}
+                  onModeChange={setAbMode}
+                  onWeightChange={setAbWeightA}
+                  previewLine={
+                    bulkMode ? (
+                      <>
+                        Die Regel gilt für alle {selectedTabs.length} Runden —
+                        jede Runde wird einzeln nach{" "}
+                        <strong>
+                          {abWeightA}/{100 - abWeightA}
+                        </strong>{" "}
+                        aufgeteilt.
+                      </>
+                    ) : (
+                      <>
+                        <strong>{abCountA}</strong> Lead
+                        {abCountA === 1 ? "" : "s"} → Brief A ·{" "}
+                        <strong>{abLeadCount - abCountA}</strong> Lead
+                        {abLeadCount - abCountA === 1 ? "" : "s"} → Brief B
+                      </>
+                    )
+                  }
+                />
               </CardContent>
             </Card>
           )}

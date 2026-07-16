@@ -84,6 +84,9 @@ export interface WizardState {
   /** A/B-Test für Brief-Vorlagen — Brief A ist `pdfGoogleDocsUrl`. */
   abTestingEnabled: boolean;
   pdfGoogleDocsUrlB: string;
+  /** Standard-Verteilung des A/B-Tests — pro Runde überschreibbar. */
+  abSplitMode: "random" | "sequential";
+  abSplitWeightA: number;
   pdfQrEnabled: boolean;
   pdfThumbnailEnabled: boolean;
   pdfThumbnailFrameMs: number | null;
@@ -179,6 +182,8 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
     pdfGoogleDocsUrl: "",
     abTestingEnabled: false,
     pdfGoogleDocsUrlB: "",
+    abSplitMode: "random",
+    abSplitWeightA: 50,
     pdfQrEnabled: false,
     pdfThumbnailEnabled: false,
     pdfThumbnailFrameMs: null,
@@ -257,6 +262,8 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
             state.pdfEnabled && state.abTestingEnabled
               ? (state.pdfGoogleDocsUrlB ?? "").trim() || null
               : null,
+          abSplitMode: state.abSplitMode,
+          abSplitWeightA: state.abSplitWeightA,
           pdfQrEnabled: state.pdfQrEnabled,
           pdfThumbnailEnabled: state.pdfThumbnailEnabled,
           pdfThumbnailFrameMs: state.pdfThumbnailFrameMs,
@@ -443,6 +450,8 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
               googleDocsUrl={state.pdfGoogleDocsUrl}
               abTestingEnabled={state.abTestingEnabled}
               googleDocsUrlB={state.pdfGoogleDocsUrlB ?? ""}
+              abSplitMode={state.abSplitMode}
+              abSplitWeightA={state.abSplitWeightA}
               qrEnabled={state.pdfQrEnabled}
               thumbnailEnabled={state.pdfThumbnailEnabled}
               frameMs={state.pdfThumbnailFrameMs}

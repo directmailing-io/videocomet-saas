@@ -46,6 +46,9 @@ const patchSchema = z.object({
   // Laufende Runden bleiben unberührt (Snapshot in runs.ab_config).
   abTestingEnabled: z.boolean().optional(),
   pdfGoogleDocsUrlB: z.string().url().nullable().optional(),
+  // Standard-Verteilung (Migration 0035) — vorbefüllt den Runden-Wizard.
+  abSplitMode: z.enum(["random", "sequential"]).optional(),
+  abSplitWeightA: z.number().int().min(10).max(90).optional(),
   pdfQrEnabled: z.boolean().optional(),
   pdfThumbnailEnabled: z.boolean().optional(),
   pdfThumbnailFrameMs: z.number().int().nonnegative().nullable().optional(),

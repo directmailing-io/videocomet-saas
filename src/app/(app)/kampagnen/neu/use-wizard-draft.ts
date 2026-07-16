@@ -241,6 +241,8 @@ export function useWizardDraft(
       thumbnailPlayIcon?: boolean;
       abTestingEnabled?: boolean;
       pdfGoogleDocsUrlB?: string;
+      abSplitMode?: WizardState["abSplitMode"];
+      abSplitWeightA?: number;
     };
     const fallbackMode: WizardState["thumbnailMode"] = prev.thumbnailImageEnabled
       ? "custom_image"
@@ -253,6 +255,8 @@ export function useWizardDraft(
       thumbnailPlayIcon: prev.thumbnailPlayIcon ?? false,
       abTestingEnabled: prev.abTestingEnabled ?? false,
       pdfGoogleDocsUrlB: prev.pdfGoogleDocsUrlB ?? "",
+      abSplitMode: prev.abSplitMode ?? "random",
+      abSplitWeightA: prev.abSplitWeightA ?? 50,
     };
     io.setState(migrated);
     io.setStep(existingDraft.step);
