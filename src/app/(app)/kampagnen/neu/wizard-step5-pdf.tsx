@@ -1,7 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Camera, Image as ImageIcon, MonitorPlay, Play } from "lucide-react";
+import {
+  Camera,
+  FlaskConical,
+  Image as ImageIcon,
+  MonitorPlay,
+  Play,
+} from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { PlaceholderHelper } from "@/components/editor/placeholder-helper";
@@ -32,6 +38,8 @@ type ThumbnailMode = "frame" | "custom_image" | "landingpage_screenshot";
 export interface WizardStep5PdfPatch {
   pdfEnabled?: boolean;
   pdfGoogleDocsUrl?: string;
+  abTestingEnabled?: boolean;
+  pdfGoogleDocsUrlB?: string;
   pdfQrEnabled?: boolean;
   pdfThumbnailEnabled?: boolean;
   pdfThumbnailFrameMs?: number | null;
@@ -44,6 +52,9 @@ export interface WizardStep5PdfPatch {
 export interface WizardStep5Props {
   enabled: boolean;
   googleDocsUrl: string;
+  /** A/B-Test für Brief-Vorlagen — Brief A ist `googleDocsUrl`. */
+  abTestingEnabled: boolean;
+  googleDocsUrlB: string;
   qrEnabled: boolean;
   thumbnailEnabled: boolean;
   frameMs: number | null;
@@ -65,6 +76,8 @@ export interface WizardStep5Props {
 export function WizardStep5Pdf({
   enabled,
   googleDocsUrl,
+  abTestingEnabled,
+  googleDocsUrlB,
   qrEnabled,
   thumbnailEnabled,
   frameMs,
@@ -145,6 +158,46 @@ export function WizardStep5Pdf({
               oder als neue URL eintippen.
             </p>
             <DriveRendererBanner />
+          </div>
+
+          {/* ── A/B-Test für Brief-Vorlagen ─────────────────────────── */}
+          <div className="pt-3 border-t border-line">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink inline-flex items-center gap-1.5">
+                  <FlaskConical className="size-4 text-brand-deep" />
+                  A/B-Test für Brief-Vorlagen
+                </p>
+                <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+                  Teste zwei Brief-Vorlagen gegeneinander. Die Leads jeder
+                  Runde werden nach Deiner Regel auf Brief A und Brief B
+                  aufgeteilt — die Auswertung siehst Du im Übersicht-Tab der
+                  Kampagne.
+                </p>
+              </div>
+              <Switch
+                checked={abTestingEnabled}
+                onCheckedChange={(v) => onChange({ abTestingEnabled: v })}
+              />
+            </div>
+
+            {abTestingEnabled && (
+              <div className="mt-4">
+                <Label htmlFor="pdf-docs-b">Brief B (Google-Docs-URL)</Label>
+                <UrlPicker
+                  id="pdf-docs-b"
+                  value={googleDocsUrlB}
+                  onChange={(v) => onChange({ pdfGoogleDocsUrlB: v })}
+                  placeholder="https://docs.google.com/document/d/..."
+                  types={["gdoc"]}
+                />
+                <p className="text-xs text-ink-muted mt-1.5">
+                  Brief A ist die URL oben. Die Verteilung (zufällig oder der
+                  Reihe nach, Gewichtung wie 50/50 oder 70/30) legst Du beim
+                  Start jeder Runde fest.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="pt-3 border-t border-line space-y-3">

@@ -239,6 +239,8 @@ export function useWizardDraft(
     const prev = existingDraft.state as WizardState & {
       thumbnailMode?: WizardState["thumbnailMode"];
       thumbnailPlayIcon?: boolean;
+      abTestingEnabled?: boolean;
+      pdfGoogleDocsUrlB?: string;
     };
     const fallbackMode: WizardState["thumbnailMode"] = prev.thumbnailImageEnabled
       ? "custom_image"
@@ -249,6 +251,8 @@ export function useWizardDraft(
       thumbnailImage: prev.thumbnailImage ?? null,
       thumbnailMode: prev.thumbnailMode ?? fallbackMode,
       thumbnailPlayIcon: prev.thumbnailPlayIcon ?? false,
+      abTestingEnabled: prev.abTestingEnabled ?? false,
+      pdfGoogleDocsUrlB: prev.pdfGoogleDocsUrlB ?? "",
     };
     io.setState(migrated);
     io.setStep(existingDraft.step);

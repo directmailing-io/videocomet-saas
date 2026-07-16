@@ -81,6 +81,9 @@ export interface WizardState {
   slugTemplate: string | null;
   pdfEnabled: boolean;
   pdfGoogleDocsUrl: string;
+  /** A/B-Test für Brief-Vorlagen — Brief A ist `pdfGoogleDocsUrl`. */
+  abTestingEnabled: boolean;
+  pdfGoogleDocsUrlB: string;
   pdfQrEnabled: boolean;
   pdfThumbnailEnabled: boolean;
   pdfThumbnailFrameMs: number | null;
@@ -174,6 +177,8 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
     slugTemplate: null,
     pdfEnabled: false,
     pdfGoogleDocsUrl: "",
+    abTestingEnabled: false,
+    pdfGoogleDocsUrlB: "",
     pdfQrEnabled: false,
     pdfThumbnailEnabled: false,
     pdfThumbnailFrameMs: null,
@@ -241,6 +246,17 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
           slugTemplate: state.slugTemplate,
           pdfEnabled: state.pdfEnabled,
           pdfGoogleDocsUrl: state.pdfGoogleDocsUrl || null,
+          // A/B nur aktiv persistieren, wenn die Voraussetzungen wirklich
+          // erfüllt sind (PDF an + beide URLs) — sonst sauber aus/leer.
+          abTestingEnabled:
+            state.pdfEnabled &&
+            state.abTestingEnabled &&
+            Boolean(state.pdfGoogleDocsUrl.trim()) &&
+            Boolean((state.pdfGoogleDocsUrlB ?? "").trim()),
+          pdfGoogleDocsUrlB:
+            state.pdfEnabled && state.abTestingEnabled
+              ? (state.pdfGoogleDocsUrlB ?? "").trim() || null
+              : null,
           pdfQrEnabled: state.pdfQrEnabled,
           pdfThumbnailEnabled: state.pdfThumbnailEnabled,
           pdfThumbnailFrameMs: state.pdfThumbnailFrameMs,
@@ -287,7 +303,13 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
       return Boolean(state.landingPageTemplateId || state.customLpTemplateId);
     if (step === 4) {
       if (!state.pdfEnabled) return true;
-      return state.pdfGoogleDocsUrl.trim().length > 0;
+      if (state.pdfGoogleDocsUrl.trim().length === 0) return false;
+      // A/B eingeschaltet → Brief B ist Pflicht, sonst wäre der Test
+      // still-inaktiv und der User wundert sich später.
+      if (state.abTestingEnabled) {
+        return (state.pdfGoogleDocsUrlB ?? "").trim().length > 0;
+      }
+      return true;
     }
     if (step === 5) return state.name.trim().length > 0;
     return true;
@@ -419,6 +441,8 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
             <WizardStep5Pdf
               enabled={state.pdfEnabled}
               googleDocsUrl={state.pdfGoogleDocsUrl}
+              abTestingEnabled={state.abTestingEnabled}
+              googleDocsUrlB={state.pdfGoogleDocsUrlB ?? ""}
               qrEnabled={state.pdfQrEnabled}
               thumbnailEnabled={state.pdfThumbnailEnabled}
               frameMs={state.pdfThumbnailFrameMs}
@@ -438,6 +462,7 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
             state={state}
             webcams={webcams}
             templates={initialData.templates}
+            customTemplates={initialData.customTemplates}
             onNameChange={(name) => update({ name })}
           />
         )}

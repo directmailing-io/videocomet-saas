@@ -9,12 +9,14 @@ import type {
   WizardState,
   WizardWebcam,
   WizardTemplate,
+  WizardCustomTemplate,
 } from "./wizard-container";
 
 export interface WizardStep6Props {
   state: WizardState;
   webcams: WizardWebcam[];
   templates: WizardTemplate[];
+  customTemplates?: WizardCustomTemplate[];
   onNameChange: (name: string) => void;
 }
 
@@ -38,10 +40,15 @@ export function WizardStep6Summary({
   state,
   webcams,
   templates,
+  customTemplates,
   onNameChange,
 }: WizardStep6Props) {
   const webcam = webcams.find((w) => w.id === state.webcamMediaId);
   const tpl = templates.find((t) => t.id === state.landingPageTemplateId);
+  // Custom-HTML-Vorlage hat Vorrang (analog zur Submit-Logik im Container).
+  const customTpl = customTemplates?.find(
+    (t) => t.id === state.customLpTemplateId,
+  );
 
   return (
     <div>
@@ -102,12 +109,18 @@ export function WizardStep6Summary({
               Landingpage
             </p>
             <p className="text-sm text-ink">
-              {tpl?.name ?? <span className="text-ink-muted">Keine</span>}
+              {customTpl?.name ?? tpl?.name ?? (
+                <span className="text-ink-muted">Keine</span>
+              )}
             </p>
-            {tpl && (
-              <p className="text-xs text-ink-muted mt-1 capitalize">
-                Theme: {tpl.themeId}
-              </p>
+            {customTpl ? (
+              <p className="text-xs text-ink-muted mt-1">Eigene HTML-Vorlage</p>
+            ) : (
+              tpl && (
+                <p className="text-xs text-ink-muted mt-1 capitalize">
+                  Theme: {tpl.themeId}
+                </p>
+              )
             )}
           </CardContent>
         </Card>
@@ -122,7 +135,11 @@ export function WizardStep6Summary({
             {state.pdfEnabled && (
               <p className="text-xs text-ink-muted mt-2">
                 QR: {state.pdfQrEnabled ? "Ja" : "Nein"} . Thumbnail:{" "}
-                {state.pdfThumbnailEnabled ? "Ja" : "Nein"}
+                {state.pdfThumbnailEnabled ? "Ja" : "Nein"} . A/B-Test:{" "}
+                {state.abTestingEnabled &&
+                (state.pdfGoogleDocsUrlB ?? "").trim()
+                  ? "Aktiv (Brief A + B)"
+                  : "Nein"}
               </p>
             )}
           </CardContent>

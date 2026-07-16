@@ -33,6 +33,11 @@ const createSchema = z.object({
     .optional(),
   pdfEnabled: z.boolean().optional(),
   pdfGoogleDocsUrl: z.string().url().nullable().optional(),
+  // A/B-Test direkt bei der Erstellung: Brief B + Aktivierung. Die
+  // Aktiv-Semantik (nur wirksam wenn pdfEnabled + beide URLs) prüft der
+  // Start-Endpoint erneut — hier reicht Format-Validierung.
+  abTestingEnabled: z.boolean().optional(),
+  pdfGoogleDocsUrlB: z.string().url().nullable().optional(),
   pdfQrEnabled: z.boolean().optional(),
   pdfThumbnailEnabled: z.boolean().optional(),
   pdfThumbnailFrameMs: z.number().int().nonnegative().nullable().optional(),

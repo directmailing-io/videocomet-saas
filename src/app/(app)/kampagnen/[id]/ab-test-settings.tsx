@@ -186,6 +186,12 @@ export function AbTestSettings({
           </div>
         ) : (
           <div className="space-y-3">
+            <div className="rounded-squircle-sm border border-line bg-surface-soft px-3 py-2 text-xs text-ink-muted leading-relaxed">
+              Die Auswertung (Öffnungsrate, Play-Rate, Watch-Time pro Brief)
+              finden Sie im <span className="font-medium text-ink">Übersicht-Tab</span>{" "}
+              — die Runden-Tabelle zeigt zusätzlich pro Runde die verwendete
+              Verteilung und die Öffnungsraten beider Briefe.
+            </div>
             <div className="flex flex-wrap items-center gap-3">
               <Button
                 variant="subtle"
