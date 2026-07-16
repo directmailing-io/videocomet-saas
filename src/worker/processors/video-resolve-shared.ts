@@ -30,6 +30,7 @@ import { db } from "@/lib/db";
 import { runs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import {
+  deleteVideo,
   getVideo,
   getVideoDownloadUrls,
   uploadVideo,
@@ -37,8 +38,10 @@ import {
 import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
 import {
   claimSharedVideoUpload,
+  clearSharedVideoUploadRecord,
   getSharedRunVideoState,
   markSharedVideoUploading,
+  recordSharedVideoUpload,
   setSharedVideoFailed,
   setSharedVideoReady,
   touchSharedVideoLock,
@@ -49,7 +52,20 @@ import { trackAndRefAsset } from "../lib/bunny-asset-tracking";
 import { waitForBunnyEncoding } from "../lib/wait-for-bunny-encoding";
 
 const POLL_INTERVAL_MS = 1500;
-const POLL_TIMEOUT_MS = 120_000;
+// Nicht-Lock-Owner warten so lange wie der Owner maximal aufs Encoding wartet
+// (plus Puffer) — sonst failen 19 von 20 Lead-Jobs während der Owner noch
+// legitim auf Bunny wartet.
+const POLL_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * Wie lange der Lock-Owner PRO Job-Attempt auf Bunnys Encoding wartet. Bunny-
+ * Backlogs von mehreren Minuten sind real (Incident 2026-07-16: Library-weiter
+ * Encoding-Stau). Mit attempts:2 + Watchdog-Re-Enqueue ergibt das ein Gesamt-
+ * Fenster von ~12 min — und dank idempotentem Upload (persistierte videoId)
+ * kostet jeder weitere Versuch nur Warten, keinen erneuten Upload.
+ */
+const SHARED_ENCODING_TIMEOUT_MS = 4 * 60_000;
+const SHARED_ENCODING_POLL_MS = 10_000;
 
 /**
  * Intervall für den Stale-Lock-Heartbeat während compress/upload läuft (Bug E2).
@@ -276,6 +292,53 @@ async function resolveExistingStream(
 }
 
 /**
+ * Prüft, ob ein früherer (fehlgeschlagener) Versuch bereits erfolgreich zu
+ * Bunny hochgeladen hat. Wenn ja UND das Video dort noch lebt (kein status=5),
+ * liefern wir die Daten zurück — der Caller überspringt Download/Compress/
+ * Upload und wartet nur noch aufs Encoding. Verhindert Duplikat-Uploads bei
+ * Encoding-Timeouts (Incident 2026-07-16: 3 identische Videos pro Run).
+ */
+async function findResumableUpload(
+  runId: string,
+): Promise<{ videoId: string; hlsUrl: string; thumbnailUrl: string } | null> {
+  const prior = await getSharedRunVideoState(runId);
+  if (!prior?.bunnyVideoId || !prior.videoUrl || !prior.thumbnailUrl) {
+    return null;
+  }
+  try {
+    const meta = await getVideo(prior.bunnyVideoId);
+    const status = Number(meta.status ?? 0);
+    if (status === 5) {
+      // Bunny hat die Quelle verworfen — Video löschen, Record leeren,
+      // frisch hochladen.
+      console.warn(
+        `[video-resolve-shared] persisted upload ${prior.bunnyVideoId} has status=5 — discarding, will re-upload`,
+      );
+      try {
+        await deleteVideo(prior.bunnyVideoId);
+      } catch {
+        /* best-effort */
+      }
+      await clearSharedVideoUploadRecord(runId);
+      return null;
+    }
+    return {
+      videoId: prior.bunnyVideoId,
+      hlsUrl: prior.videoUrl,
+      thumbnailUrl: prior.thumbnailUrl,
+    };
+  } catch (err) {
+    // 404 (Video weg) oder transienter Fehler: Record verwerfen und frisch
+    // hochladen — schlimmstenfalls entsteht EIN Duplikat, nie ein hängender Run.
+    console.warn(
+      `[video-resolve-shared] resume check failed for ${prior.bunnyVideoId}: ${(err as Error).message} — re-uploading`,
+    );
+    await clearSharedVideoUploadRecord(runId);
+    return null;
+  }
+}
+
+/**
  * Pfad B: Source liegt in Bunny Storage / extern → herunterladen,
  * compressForBunny, uploadVideo. Lock-Owner ist verantwortlich.
  */
@@ -299,58 +362,93 @@ async function resolveByUpload(
       void touchSharedVideoLock(input.runId);
     }, SHARED_LOCK_HEARTBEAT_MS);
 
-    // Download mit Referer (Bunny Hotlink-Protection).
-    const referer = process.env.APP_URL ?? "https://app.videocomet.de";
-    const res = await fetch(input.webcamMediaUrl, {
-      headers: {
-        Referer: referer,
-        Origin: referer,
-        "User-Agent": "videocomet-worker/1.0",
-      },
-    });
-    if (!res.ok) {
-      throw new Error(
-        `[video-resolve-shared] source fetch ${res.status} ${input.webcamMediaUrl}`,
+    let videoId: string;
+    let hlsUrl: string;
+    let thumbnailUrl: string;
+    let fallbackOrientation: VideoOrientation = "landscape";
+    let bytesOut: number | undefined;
+
+    const resumed = await findResumableUpload(input.runId);
+    if (resumed) {
+      ({ videoId, hlsUrl, thumbnailUrl } = resumed);
+      await markSharedVideoUploading(input.runId);
+      await insertPipelineEvent({
+        runId: input.runId,
+        leadId: null,
+        level: "info",
+        stage: "shared-video",
+        message: `resume: Video ${videoId.slice(0, 8)}… bereits hochgeladen — warte nur aufs Bunny-Encoding (kein erneuter Upload)`,
+      });
+    } else {
+      // Download mit Referer (Bunny Hotlink-Protection).
+      const referer = process.env.APP_URL ?? "https://app.videocomet.de";
+      const res = await fetch(input.webcamMediaUrl, {
+        headers: {
+          Referer: referer,
+          Origin: referer,
+          "User-Agent": "videocomet-worker/1.0",
+        },
+      });
+      if (!res.ok) {
+        throw new Error(
+          `[video-resolve-shared] source fetch ${res.status} ${input.webcamMediaUrl}`,
+        );
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+
+      workDir = join(
+        tmpdir(),
+        `shared-${input.runId}-${randomUUID()}`,
       );
+      await mkdir(workDir, { recursive: true });
+      const rawPath = join(workDir, "source.raw");
+      const compressedPath = join(workDir, "source-compressed.mp4");
+      await writeFile(rawPath, buf);
+
+      const compress = await compressForBunny({
+        inputPath: rawPath,
+        outputPath: compressedPath,
+        reason: "shared-webcam-source",
+      });
+      fallbackOrientation = compress.orientation;
+      bytesOut = compress.bytesOut;
+
+      await markSharedVideoUploading(input.runId);
+
+      const uploaded = await uploadVideo({
+        filePath: compressedPath,
+        title: `Shared run video ${input.runId}`,
+      });
+      videoId = uploaded.videoId;
+      hlsUrl = uploaded.hlsUrl;
+      thumbnailUrl = uploaded.thumbnailUrl;
+
+      // Upload SOFORT persistieren (state bleibt 'uploading') — ein Retry
+      // nach Encoding-Timeout darf nicht erneut hochladen.
+      await recordSharedVideoUpload(input.runId, {
+        bunnyVideoId: videoId,
+        videoUrl: hlsUrl,
+        thumbnailUrl,
+      });
     }
-    const buf = Buffer.from(await res.arrayBuffer());
-
-    workDir = join(
-      tmpdir(),
-      `shared-${input.runId}-${randomUUID()}`,
-    );
-    await mkdir(workDir, { recursive: true });
-    const rawPath = join(workDir, "source.raw");
-    const compressedPath = join(workDir, "source-compressed.mp4");
-    await writeFile(rawPath, buf);
-
-    const compress = await compressForBunny({
-      inputPath: rawPath,
-      outputPath: compressedPath,
-      reason: "shared-webcam-source",
-    });
-
-    await markSharedVideoUploading(input.runId);
-
-    const uploaded = await uploadVideo({
-      filePath: compressedPath,
-      title: `Shared run video ${input.runId}`,
-    });
 
     // Bug E1 Fix: synchron auf Bunny-Encoding warten, bevor wir mp4Url
     // berechnen. Sonst liefert getVideoDownloadUrls leer/original-only und
     // der Custom-LP-Player faellt auf 404 zurück. Throws RetryableError nach
-    // 60 s — BullMQ retried mit Backoff, der shared-Lock bleibt auf
-    // 'uploading' (failed → cleanup im outer catch).
-    const parsed = parseStreamHlsUrl(uploaded.hlsUrl);
+    // Timeout — BullMQ retried mit Backoff; dank persistierter videoId wartet
+    // der Retry dann nur weiter statt neu hochzuladen.
+    const parsed = parseStreamHlsUrl(hlsUrl);
     let width: number | null = compressWidthFromOrientation(
-      compress.orientation,
+      fallbackOrientation,
     );
     let height: number | null = compressHeightFromOrientation(
-      compress.orientation,
+      fallbackOrientation,
     );
     let mp4Url: string | null = null;
-    const ready = await waitForBunnyEncoding(uploaded.videoId);
+    const ready = await waitForBunnyEncoding(videoId, {
+      timeoutMs: SHARED_ENCODING_TIMEOUT_MS,
+      intervalMs: SHARED_ENCODING_POLL_MS,
+    });
     if (ready.width > 0 && ready.height > 0) {
       width = ready.width;
       height = ready.height;
@@ -358,7 +456,7 @@ async function resolveByUpload(
     if (parsed) {
       try {
         const downloads = await getVideoDownloadUrls(
-          uploaded.videoId,
+          videoId,
           parsed.cdnHostname,
         );
         mp4Url = downloads[0]?.url ?? null;
@@ -366,19 +464,19 @@ async function resolveByUpload(
         // Sollte nach ready-state selten passieren; wir akzeptieren null und
         // lassen die public-LP lazy nachsuchen.
         console.warn(
-          `[video-resolve-shared] getVideoDownloadUrls failed for ${uploaded.videoId}: ${(err as Error).message}`,
+          `[video-resolve-shared] getVideoDownloadUrls failed for ${videoId}: ${(err as Error).message}`,
         );
       }
     }
     const orientation: VideoOrientation =
       width != null && height != null
         ? orientationFromDims(width, height)
-        : compress.orientation;
+        : fallbackOrientation;
 
     await setSharedVideoReady(input.runId, {
-      bunnyVideoId: uploaded.videoId,
-      videoUrl: uploaded.hlsUrl,
-      thumbnailUrl: uploaded.thumbnailUrl,
+      bunnyVideoId: videoId,
+      videoUrl: hlsUrl,
+      thumbnailUrl,
       mp4Url,
       width,
       height,
@@ -388,20 +486,20 @@ async function resolveByUpload(
       trackInput: {
         userId: input.userId,
         kind: "stream",
-        bunnyId: uploaded.videoId,
-        cdnUrl: uploaded.hlsUrl,
+        bunnyId: videoId,
+        cdnUrl: hlsUrl,
         width,
         height,
-        bytes: compress.bytesOut,
+        bytes: bytesOut,
       },
       ownerType: "run",
       ownerId: input.runId,
     });
 
     return {
-      bunnyVideoId: uploaded.videoId,
-      hlsUrl: uploaded.hlsUrl,
-      thumbnailUrl: uploaded.thumbnailUrl,
+      bunnyVideoId: videoId,
+      hlsUrl,
+      thumbnailUrl,
       mp4Url,
       width,
       height,

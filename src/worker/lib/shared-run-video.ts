@@ -195,6 +195,45 @@ export async function markSharedVideoUploading(runId: string): Promise<void> {
     );
 }
 
+/**
+ * Persistiert die Bunny-videoId SOFORT nach erfolgreichem Upload, während
+ * state noch 'uploading' ist. Macht den Upload idempotent: ein Retry nach
+ * Encoding-Timeout findet die Id, überspringt Download/Compress/Upload und
+ * wartet nur noch aufs Encoding. Ohne das entstand pro Retry ein neues
+ * Duplikat-Video bei Bunny (Incident 2026-07-16, Run 34ae8bbf: 3 Duplikate).
+ */
+export async function recordSharedVideoUpload(
+  runId: string,
+  fields: { bunnyVideoId: string; videoUrl: string; thumbnailUrl: string },
+): Promise<void> {
+  await db
+    .update(runs)
+    .set({
+      sharedBunnyVideoId: fields.bunnyVideoId,
+      sharedVideoUrl: fields.videoUrl,
+      sharedThumbnailUrl: fields.thumbnailUrl,
+    })
+    .where(eq(runs.id, runId));
+}
+
+/**
+ * Verwirft eine persistierte Upload-Record (z. B. wenn Bunny das Video mit
+ * status=5 verworfen oder gelöscht hat) — der nächste Claim lädt dann frisch
+ * hoch.
+ */
+export async function clearSharedVideoUploadRecord(
+  runId: string,
+): Promise<void> {
+  await db
+    .update(runs)
+    .set({
+      sharedBunnyVideoId: null,
+      sharedVideoUrl: null,
+      sharedThumbnailUrl: null,
+    })
+    .where(eq(runs.id, runId));
+}
+
 export interface SharedVideoReadyFields {
   bunnyVideoId: string;
   videoUrl: string;
