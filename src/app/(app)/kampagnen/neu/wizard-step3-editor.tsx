@@ -558,7 +558,7 @@ export function WizardStep3Editor({
               <div className="flex items-center gap-2.5 rounded-squircle-md border border-line bg-surface-soft px-4 py-2.5 text-sm text-ink-muted">
                 <Info className="size-4 shrink-0" />
                 <span>
-                  Am Ende sind noch {formatDuration(remainingMs)} frei — dort
+                  Am Ende sind noch {formatFree(remainingMs)} frei — dort
                   läuft nur deine Webcam-Aufnahme, ohne Segment.
                 </span>
               </div>
@@ -631,6 +631,13 @@ export function WizardStep3Editor({
       />
     </div>
   );
+}
+
+/** Menschlich lesbare Restzeit, z. B. „22 Sekunden" oder „1:05 Minuten". */
+function formatFree(ms: number): string {
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return `${sec} Sekunde${sec === 1 ? "" : "n"}`;
+  return `${formatShort(ms)} Minuten`;
 }
 
 /** Kurzformat m:ss (ohne Millisekunden) für die Dauer-Anzeige. */
