@@ -69,6 +69,7 @@ export default async function RunDetailPage({
     thumbnailUrl: l.thumbnailUrl,
     errorMessage: l.errorMessage,
     completedAt: l.completedAt ? l.completedAt.toISOString() : null,
+    abVariant: l.abVariant ?? null,
     data: l.data as Record<string, string>,
     // Per-lead override: falls leads.domain_id explizit gesetzt ist (also
     // der Lead wurde mit der aktiven Custom-Domain generiert) und die
@@ -108,6 +109,7 @@ export default async function RunDetailPage({
             runId={runId}
             campaignId={campaign.id}
             pdfEnabled={campaign.pdfEnabled}
+            abActive={run.abConfig != null}
             initialRun={{
               id: run.id,
               name: run.name,

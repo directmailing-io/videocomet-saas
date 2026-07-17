@@ -40,6 +40,7 @@ export async function GET(
   }
 
   const leadRows = await listLeadsByRun(params.id, auth.user.id);
+  const abActive = run.abConfig != null;
 
   const appUrl = process.env.APP_URL ?? "https://app.videocomet.de";
 
@@ -87,6 +88,7 @@ export async function GET(
     out["Video-URL"] = lead.videoUrl ?? "";
     out["PDF-URL"] = lead.pdfUrl ?? "";
     out["Status"] = statusLabel(lead.status);
+    if (abActive) out["Brief"] = lead.abVariant ?? "";
     return out;
   });
 
@@ -113,7 +115,14 @@ export async function GET(
 
   // XLSX
   const ws = XLSX.utils.json_to_sheet(exportRows, {
-    header: [...dataColumns, "Landingpage-URL", "Video-URL", "PDF-URL", "Status"],
+    header: [
+      ...dataColumns,
+      "Landingpage-URL",
+      "Video-URL",
+      "PDF-URL",
+      "Status",
+      ...(abActive ? ["Brief"] : []),
+    ],
   });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Leads");

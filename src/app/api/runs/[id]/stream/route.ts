@@ -237,6 +237,7 @@ function projectLead(
     errorMessage: l.errorMessage,
     completedAt: l.completedAt,
     envelopePdfUrl: l.envelopePdfUrl,
+    abVariant: l.abVariant,
     data: l.data,
     viewCount: l.viewCount,
     firstViewedAt: l.firstViewedAt,

@@ -52,6 +52,8 @@ interface LeadRow {
   thumbnailUrl: string | null;
   errorMessage: string | null;
   completedAt: string | null;
+  /** Brief-Variante bei A/B-Runden ("A" | "B"), sonst null. */
+  abVariant?: "A" | "B" | null;
   data: Record<string, string>;
   // Tracking aggregates (denormalized on `leads`). Optional because the SSE
   // tick payload from /api/runs/:id/stream doesn't include them — we MERGE
@@ -67,10 +69,17 @@ interface LeadRow {
   customHostname?: string | null;
 }
 
-type FilterKey = "all" | "opened" | "played" | "cta";
+type FilterKey = "all" | "opened" | "played" | "cta" | "briefA" | "briefB";
 
 function isFilterKey(value: string | null | undefined): value is FilterKey {
-  return value === "all" || value === "opened" || value === "played" || value === "cta";
+  return (
+    value === "all" ||
+    value === "opened" ||
+    value === "played" ||
+    value === "cta" ||
+    value === "briefA" ||
+    value === "briefB"
+  );
 }
 
 interface Counts {
@@ -106,6 +115,8 @@ export interface LiveTableProps {
   runId: string;
   campaignId: string;
   pdfEnabled: boolean;
+  /** True wenn die Runde mit A/B-Brief-Test gestartet wurde (runs.ab_config gesetzt). */
+  abActive: boolean;
   initialRun: {
     id: string;
     name: string;
@@ -174,6 +185,7 @@ export function LiveTable({
   runId,
   campaignId: _campaignId,
   pdfEnabled,
+  abActive,
   initialRun,
   initialCounts,
   initialLeads,
@@ -491,13 +503,17 @@ export function LiveTable({
   const trackingCounts = React.useMemo(() => {
     let opened = 0,
       played = 0,
-      clicked = 0;
+      clicked = 0,
+      briefA = 0,
+      briefB = 0;
     for (const l of leads) {
       if ((l.viewCount ?? 0) > 0) opened++;
       if ((l.playCount ?? 0) > 0) played++;
       if ((l.ctaClickCount ?? 0) > 0) clicked++;
+      if (l.abVariant === "A") briefA++;
+      if (l.abVariant === "B") briefB++;
     }
-    return { opened, played, clicked };
+    return { opened, played, clicked, briefA, briefB };
   }, [leads]);
 
   const filteredLeads = React.useMemo(() => {
@@ -508,6 +524,10 @@ export function LiveTable({
         return leads.filter((l) => (l.playCount ?? 0) > 0);
       case "cta":
         return leads.filter((l) => (l.ctaClickCount ?? 0) > 0);
+      case "briefA":
+        return leads.filter((l) => l.abVariant === "A");
+      case "briefB":
+        return leads.filter((l) => l.abVariant === "B");
       default:
         return leads;
     }
@@ -610,7 +630,11 @@ export function LiveTable({
                 </DropdownMenuContent>
               </DropdownMenu>
               {pdfEnabled && (
-                <BundleDialog runId={runId} runName={initialRun.name} />
+                <BundleDialog
+                  runId={runId}
+                  runName={initialRun.name}
+                  abActive={abActive}
+                />
               )}
             </div>
           </div>
@@ -773,6 +797,23 @@ export function LiveTable({
         >
           CTA geklickt <FilterPillCount>{trackingCounts.clicked}</FilterPillCount>
         </FilterPill>
+        {abActive && (
+          <>
+            <span className="mx-1 h-4 w-px bg-line" aria-hidden />
+            <FilterPill
+              active={filter === "briefA"}
+              onClick={() => updateFilter("briefA")}
+            >
+              Brief A <FilterPillCount>{trackingCounts.briefA}</FilterPillCount>
+            </FilterPill>
+            <FilterPill
+              active={filter === "briefB"}
+              onClick={() => updateFilter("briefB")}
+            >
+              Brief B <FilterPillCount>{trackingCounts.briefB}</FilterPillCount>
+            </FilterPill>
+          </>
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-squircle-md border border-line bg-surface">
@@ -783,6 +824,7 @@ export function LiveTable({
               <TableHead>Name</TableHead>
               <TableHead>E-Mail</TableHead>
               <TableHead>Status</TableHead>
+              {abActive && <TableHead>Brief</TableHead>}
               <TableHead>Aufrufe</TableHead>
               <TableHead>Wiedergabe</TableHead>
               <TableHead>Klicks</TableHead>
@@ -796,7 +838,10 @@ export function LiveTable({
           <TableBody>
             {filteredLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center text-ink-muted py-8">
+                <TableCell
+                  colSpan={abActive ? 13 : 12}
+                  className="text-center text-ink-muted py-8"
+                >
                   {leads.length === 0
                     ? "Noch keine Leads."
                     : "Keine Leads im aktiven Filter."}
@@ -825,6 +870,17 @@ export function LiveTable({
                       {statusLabel(l.status)}
                     </Badge>
                   </TableCell>
+                  {abActive && (
+                    <TableCell>
+                      {l.abVariant ? (
+                        <Badge variant={l.abVariant === "A" ? "brand" : "warn"}>
+                          {l.abVariant}
+                        </Badge>
+                      ) : (
+                        <span className="text-ink-muted text-xs">—</span>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell className="text-xs">
                     {(l.viewCount ?? 0) > 0 ? (
                       <span className="inline-flex flex-col">

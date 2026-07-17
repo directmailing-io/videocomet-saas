@@ -71,6 +71,7 @@ export async function GET(
     listExcludedLeadsByRun(params.id, auth.user.id),
   ]);
   const successLeads = allSuccessLeads.filter((l) => l.status === "completed");
+  const abActive = run.abConfig != null;
 
   // ── Sheet 1: Erfolgreich ────────────────────────────────────────────────
   const successDataCols = collectDataColumns(
@@ -81,6 +82,7 @@ export async function GET(
     "Landingpage-URL",
     "Video-URL",
     ...(pdfEnabled ? ["PDF-URL"] : []),
+    ...(abActive ? ["Brief"] : []),
   ];
   const sheet1Rows: string[][] = successLeads.map((lead) => {
     const data = (lead.data ?? {}) as Record<string, string>;
@@ -99,6 +101,7 @@ export async function GET(
     row.push(lpUrl);
     row.push(lead.videoUrl ?? "");
     if (pdfEnabled) row.push(lead.pdfUrl ?? "");
+    if (abActive) row.push(lead.abVariant ?? "");
     return row;
   });
 

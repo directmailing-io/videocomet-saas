@@ -26,13 +26,44 @@ import {
 export interface BundleDialogProps {
   runId: string;
   runName: string;
+  abActive?: boolean;
 }
 
 const PDFS_PER_FILE = [10, 25, 50, 100, 200, 500];
 
-export function BundleDialog({ runId, runName }: BundleDialogProps) {
+type BundleVariant = "mixed" | "split" | "A" | "B";
+
+const VARIANT_OPTIONS: {
+  value: BundleVariant;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    value: "mixed",
+    label: "Original-Reihenfolge (gemischt)",
+    hint: "A und B durcheinander, sortiert wie in der Tabelle.",
+  },
+  {
+    value: "split",
+    label: "Nach Variante getrennt",
+    hint: "Ein Ordner pro Variante — Umschläge exakt in gleicher Reihenfolge.",
+  },
+  {
+    value: "A",
+    label: "Nur Brief A",
+    hint: "Bundle enthält ausschließlich Leads mit Variante A.",
+  },
+  {
+    value: "B",
+    label: "Nur Brief B",
+    hint: "Bundle enthält ausschließlich Leads mit Variante B.",
+  },
+];
+
+export function BundleDialog({ runId, runName, abActive = false }: BundleDialogProps) {
   const [open, setOpen] = React.useState(false);
   const [pdfsPerFile, setPdfsPerFile] = React.useState("100");
+  const [variant, setVariant] = React.useState<BundleVariant>("mixed");
   // Default base name: runName slugified light. User can overwrite.
   const defaultBase = React.useMemo(
     () =>
@@ -55,6 +86,7 @@ export function BundleDialog({ runId, runName }: BundleDialogProps) {
       pdfsPerFile,
       baseName: baseName.trim() || defaultBase,
     });
+    if (abActive && variant !== "mixed") params.set("variant", variant);
     window.location.href = `/api/runs/${runId}/pdf-bundle?${params}`;
     setOpen(false);
   }
@@ -77,6 +109,49 @@ export function BundleDialog({ runId, runName }: BundleDialogProps) {
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {abActive && (
+            <div>
+              <Label>Zusammenstellung (Split-Test)</Label>
+              <div
+                role="radiogroup"
+                aria-label="Zusammenstellung"
+                className="mt-1 space-y-1.5"
+              >
+                {VARIANT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={variant === opt.value}
+                    onClick={() => setVariant(opt.value)}
+                    className={`flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors ${
+                      variant === opt.value
+                        ? "border-brand bg-brand/5"
+                        : "border-line hover:border-ink-muted/40"
+                    }`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`mt-1 size-3.5 shrink-0 rounded-full border-2 ${
+                        variant === opt.value
+                          ? "border-brand bg-brand"
+                          : "border-line"
+                      }`}
+                    />
+                    <span>
+                      <span className="block text-sm font-medium">
+                        {opt.label}
+                      </span>
+                      <span className="block text-xs text-ink-muted">
+                        {opt.hint}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <Label htmlFor="bundle-name">Dateiname</Label>
             <Input

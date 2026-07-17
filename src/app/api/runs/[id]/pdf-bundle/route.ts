@@ -6,16 +6,33 @@ import { z } from "zod";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getRun } from "@/lib/db/queries/runs";
 import { getCompletedLeadsForBundle } from "@/lib/db/queries/leads";
+import type { leads } from "@/lib/db/schema";
+import type { PDFDocument as PDFDocumentType } from "pdf-lib";
+
+type Lead = typeof leads.$inferSelect;
 
 /**
  * POST /api/runs/[id]/pdf-bundle
  *
- * Body: `{ pdfsPerFile: number, baseName?: string }`
+ * Body: `{ pdfsPerFile: number, baseName?: string, variant?: BundleVariant }`
  *
  * Konzept (User-Wunsch):
  *   - Es werden ALLE fertigen Leads in das Bundle aufgenommen.
  *   - Je `pdfsPerFile` Lead-PDFs werden zu EINER Multi-Page-PDF gemerged.
  *   - Bei 1000 Leads + 100 pro Datei → 10 grosse PDFs als ZIP.
+ *
+ * A/B-Varianten (`variant`):
+ *   - "mixed" (Default): Original-Reihenfolge, A und B gemischt.
+ *   - "split": ein ZIP, aber getrennte Ordner briefe-A/ + briefe-B/
+ *     (+ umschlaege-A/ / umschlaege-B/) mit eigener Nummerierung.
+ *   - "A" / "B": nur die Leads der gewählten Variante.
+ *
+ * Umschlag-Garantie: Umschläge werden über EXAKT dieselbe Lead-Liste,
+ * Sortierung und Batch-Aufteilung gebaut wie die Briefe — Brief-Datei
+ * `…_1-100.pdf` und Umschlag-Datei `…umschlaege_1-100.pdf` enthalten
+ * dieselben Leads in derselben Reihenfolge (Kuvertier-Sicherheit).
+ * Abweichungen (fehlender Umschlag / fehlgeschlagener Download) landen als
+ * Warnung in einer README.txt im ZIP statt still auseinanderzulaufen.
  *
  * Tech-Note: pdf-lib + jszip via dynamic import. archiver und Next-
  * Webpack vertragen sich auch mit serverComponentsExternalPackages
@@ -27,9 +44,13 @@ const sizeSchema = z
   .int()
   .refine((n) => n >= 1 && n <= 1000, "PDFs pro Datei: 1..1000");
 
+const variantSchema = z.enum(["mixed", "split", "A", "B"]);
+type BundleVariant = z.infer<typeof variantSchema>;
+
 const bodySchema = z.object({
   pdfsPerFile: sizeSchema,
   baseName: z.string().max(80).optional(),
+  variant: variantSchema.optional(),
 });
 
 export async function POST(
@@ -39,12 +60,17 @@ export async function POST(
   const auth = await requireUserApi();
   if (!auth.ok) return auth.response;
 
-  let body: { pdfsPerFile: number; baseName?: string };
+  let body: {
+    pdfsPerFile: number;
+    baseName?: string;
+    variant?: BundleVariant;
+  };
   try {
     const json = await req.json();
     body = bodySchema.parse({
       pdfsPerFile: Number(json.pdfsPerFile),
       baseName: typeof json.baseName === "string" ? json.baseName : undefined,
+      variant: typeof json.variant === "string" ? json.variant : undefined,
     });
   } catch (err) {
     return NextResponse.json(
@@ -61,6 +87,7 @@ export async function POST(
     auth.user.id,
     body.pdfsPerFile,
     body.baseName,
+    body.variant ?? "mixed",
   );
 }
 
@@ -76,12 +103,16 @@ export async function GET(
     Math.min(1000, Number(req.nextUrl.searchParams.get("pdfsPerFile") ?? 100)),
   );
   const baseNameRaw = req.nextUrl.searchParams.get("baseName") ?? undefined;
+  const variantParsed = variantSchema.safeParse(
+    req.nextUrl.searchParams.get("variant") ?? "mixed",
+  );
 
   return buildBundle(
     params.id,
     auth.user.id,
     pdfsPerFile,
     baseNameRaw ?? undefined,
+    variantParsed.success ? variantParsed.data : "mixed",
   );
 }
 
@@ -102,11 +133,103 @@ function sanitizeBaseName(input: string | undefined, fallback: string): string {
   return s.slice(0, 60) || "videocomet";
 }
 
+/** Eine Export-Gruppe = ein zusammenhängender Brief-Stapel (+ passende Umschläge). */
+interface BundleGroup {
+  /** Lesbarer Name für README ("Brief A", "Alle Briefe", …). */
+  label: string;
+  /** Dateiname-Suffix, z.B. "_A". Leer für gemischt. */
+  suffix: string;
+  /** ZIP-Ordner für Briefe. Leer = Root. */
+  letterDir: string;
+  /** ZIP-Ordner für Umschläge. */
+  envelopeDir: string;
+  leads: Lead[];
+}
+
+function leadLabel(lead: Lead): string {
+  const d = (lead.data ?? {}) as Record<string, string>;
+  const name =
+    [d.firstName || d.Vorname, d.lastName || d.Nachname]
+      .filter(Boolean)
+      .join(" ") ||
+    d.name ||
+    d.email ||
+    d["E-Mail"] ||
+    lead.id.slice(0, 8);
+  return `Zeile ${lead.rowIndex + 1} (${name})`;
+}
+
+function buildGroups(
+  variant: BundleVariant,
+  completed: Lead[],
+): BundleGroup[] {
+  if (variant === "mixed") {
+    return [
+      {
+        label: "Alle Briefe (Original-Reihenfolge)",
+        suffix: "",
+        letterDir: "",
+        envelopeDir: "umschlaege",
+        leads: completed,
+      },
+    ];
+  }
+  if (variant === "A" || variant === "B") {
+    return [
+      {
+        label: `Brief ${variant}`,
+        suffix: `_${variant}`,
+        letterDir: "",
+        envelopeDir: "umschlaege",
+        leads: completed.filter((l) => l.abVariant === variant),
+      },
+    ];
+  }
+  // split
+  const a = completed.filter((l) => l.abVariant === "A");
+  const b = completed.filter((l) => l.abVariant === "B");
+  const rest = completed.filter(
+    (l) => l.abVariant !== "A" && l.abVariant !== "B",
+  );
+  const groups: BundleGroup[] = [];
+  if (a.length > 0) {
+    groups.push({
+      label: "Brief A",
+      suffix: "_A",
+      letterDir: "briefe-A",
+      envelopeDir: "umschlaege-A",
+      leads: a,
+    });
+  }
+  if (b.length > 0) {
+    groups.push({
+      label: "Brief B",
+      suffix: "_B",
+      letterDir: "briefe-B",
+      envelopeDir: "umschlaege-B",
+      leads: b,
+    });
+  }
+  if (rest.length > 0) {
+    // Defensive: Leads ohne Varianten-Zuordnung (sollte bei A/B-Runden nicht
+    // vorkommen) nicht still verschlucken.
+    groups.push({
+      label: "Ohne Varianten-Zuordnung",
+      suffix: "_ohne-variante",
+      letterDir: "briefe-ohne-variante",
+      envelopeDir: "umschlaege-ohne-variante",
+      leads: rest,
+    });
+  }
+  return groups;
+}
+
 async function buildBundle(
   runId: string,
   userId: string,
   pdfsPerFile: number,
   baseNameInput: string | undefined,
+  variant: BundleVariant,
 ): Promise<Response> {
   let run;
   try {
@@ -129,6 +252,21 @@ async function buildBundle(
     );
   }
 
+  const groups = buildGroups(variant, completed).filter(
+    (g) => g.leads.length > 0,
+  );
+  if (groups.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          variant === "A" || variant === "B"
+            ? `Keine Leads mit Brief ${variant} in dieser Runde.`
+            : "Keine passenden Leads in dieser Runde.",
+      },
+      { status: 404 },
+    );
+  }
+
   const baseName = sanitizeBaseName(baseNameInput, run.name);
   const zipFilename = `${baseName}_pdf-bundle.zip`;
 
@@ -141,83 +279,110 @@ async function buildBundle(
   const JSZip = JSZipMod.default ?? (JSZipMod as unknown as typeof import("jszip"));
 
   const zip = new JSZip();
+  const warnings: string[] = [];
+  // Umschläge nur bauen, wenn die Runde überhaupt Umschläge hat.
+  const hasEnvelopes = completed.some((l) => !!l.envelopePdfUrl);
+
+  async function appendPdf(merged: PDFDocumentType, url: string): Promise<void> {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const src = await PDFDocument.load(buf, { ignoreEncryption: true });
+    const pages = await merged.copyPages(src, src.getPageIndices());
+    for (const p of pages) merged.addPage(p);
+  }
 
   try {
-    for (let batchStart = 0; batchStart < completed.length; batchStart += pdfsPerFile) {
-      const batch = completed.slice(batchStart, batchStart + pdfsPerFile);
-      const firstIdx = batchStart + 1;
-      const lastIdx = batchStart + batch.length;
+    for (const group of groups) {
+      for (
+        let batchStart = 0;
+        batchStart < group.leads.length;
+        batchStart += pdfsPerFile
+      ) {
+        const batch = group.leads.slice(batchStart, batchStart + pdfsPerFile);
+        const firstIdx = batchStart + 1;
+        const lastIdx = batchStart + batch.length;
+        const rangeName = `${baseName}${group.suffix}_${firstIdx}-${lastIdx}.pdf`;
 
-      const merged = await PDFDocument.create();
-      for (const lead of batch) {
-        if (!lead.pdfUrl) continue;
-        try {
-          const res = await fetch(lead.pdfUrl);
-          if (!res.ok) {
-            // eslint-disable-next-line no-console
-            console.warn(
-              `[pdf-bundle] skip lead=${lead.id} HTTP ${res.status}`,
+        // Briefe und Umschläge im SELBEN Loop über die SELBE Lead-Liste —
+        // dadurch ist die Reihenfolge in beiden Dateien garantiert identisch.
+        const letterDoc = await PDFDocument.create();
+        const envelopeDoc = hasEnvelopes ? await PDFDocument.create() : null;
+
+        for (const lead of batch) {
+          if (lead.pdfUrl) {
+            try {
+              await appendPdf(letterDoc, lead.pdfUrl);
+            } catch (err) {
+              warnings.push(
+                `${leadLabel(lead)}: Brief-PDF konnte nicht geladen werden (${err instanceof Error ? err.message : "Fehler"}) — fehlt in ${rangeName}. Umschlag-Reihenfolge weicht in diesem Batch ab!`,
+              );
+            }
+          } else {
+            warnings.push(
+              `${leadLabel(lead)}: kein Brief-PDF vorhanden — fehlt in ${rangeName}.`,
             );
-            continue;
           }
-          const buf = Buffer.from(await res.arrayBuffer());
-          const src = await PDFDocument.load(buf, {
-            ignoreEncryption: true,
-          });
-          const pages = await merged.copyPages(src, src.getPageIndices());
-          for (const p of pages) merged.addPage(p);
-        } catch (err) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[pdf-bundle] merge fail lead=${lead.id}:`,
-            err instanceof Error ? err.message : err,
+
+          if (envelopeDoc) {
+            if (lead.envelopePdfUrl) {
+              try {
+                await appendPdf(envelopeDoc, lead.envelopePdfUrl);
+              } catch (err) {
+                warnings.push(
+                  `${leadLabel(lead)}: Umschlag-PDF konnte nicht geladen werden (${err instanceof Error ? err.message : "Fehler"}) — Brief-/Umschlag-Reihenfolge weicht in Batch ${firstIdx}-${lastIdx} ab!`,
+                );
+              }
+            } else {
+              warnings.push(
+                `${leadLabel(lead)}: kein Umschlag vorhanden — Brief-/Umschlag-Reihenfolge weicht in Batch ${firstIdx}-${lastIdx} ab!`,
+              );
+            }
+          }
+        }
+
+        const letterBytes = await letterDoc.save();
+        const letterPath = group.letterDir
+          ? `${group.letterDir}/${rangeName}`
+          : rangeName;
+        zip.file(letterPath, letterBytes);
+
+        if (envelopeDoc && envelopeDoc.getPageCount() > 0) {
+          const envelopeBytes = await envelopeDoc.save();
+          zip.file(
+            `${group.envelopeDir}/${baseName}_umschlaege${group.suffix}_${firstIdx}-${lastIdx}.pdf`,
+            envelopeBytes,
           );
         }
       }
-
-      const mergedBytes = await merged.save();
-      const pdfName = `${baseName}_${firstIdx}-${lastIdx}.pdf`;
-      zip.file(pdfName, mergedBytes);
     }
 
-    // ── Umschlaege (Migration 0031) ─────────────────────────────────────
-    // Wenn mindestens ein Lead ein envelope_pdf_url hat, bauen wir einen
-    // zweiten Merge-Loop und legen alle Umschlaege in umschlaege/*.pdf ab.
-    // Analoges Batching wie bei Briefen: N pro Multi-Page-PDF.
-    const withEnvelope = completed.filter((l) => !!l.envelopePdfUrl);
-    if (withEnvelope.length > 0) {
-      for (
-        let batchStart = 0;
-        batchStart < withEnvelope.length;
-        batchStart += pdfsPerFile
-      ) {
-        const batch = withEnvelope.slice(batchStart, batchStart + pdfsPerFile);
-        const firstIdx = batchStart + 1;
-        const lastIdx = batchStart + batch.length;
-        const merged = await PDFDocument.create();
-        for (const lead of batch) {
-          if (!lead.envelopePdfUrl) continue;
-          try {
-            const res = await fetch(lead.envelopePdfUrl);
-            if (!res.ok) continue;
-            const buf = Buffer.from(await res.arrayBuffer());
-            const src = await PDFDocument.load(buf, { ignoreEncryption: true });
-            const pages = await merged.copyPages(src, src.getPageIndices());
-            for (const p of pages) merged.addPage(p);
-          } catch (err) {
-            // eslint-disable-next-line no-console
-            console.warn(
-              `[pdf-bundle] envelope merge fail lead=${lead.id}:`,
-              err instanceof Error ? err.message : err,
-            );
-          }
-        }
-        const mergedBytes = await merged.save();
-        zip.file(
-          `umschlaege/${baseName}_umschlaege_${firstIdx}-${lastIdx}.pdf`,
-          mergedBytes,
+    // README: Manifest + Warnungen. Immer bei Varianten-Auswahl oder wenn
+    // etwas schiefging — der Lettershop soll Abweichungen sehen, nicht raten.
+    if (variant !== "mixed" || warnings.length > 0) {
+      const lines: string[] = [
+        `PDF-Bundle "${baseName}" — Runde: ${run.name}`,
+        `Zusammenstellung: ${
+          variant === "mixed"
+            ? "Original-Reihenfolge (gemischt)"
+            : variant === "split"
+              ? "Nach Brief-Variante getrennt"
+              : `Nur Brief ${variant}`
+        }`,
+        "",
+        ...groups.map((g) => `${g.label}: ${g.leads.length} Leads`),
+        "",
+        "Brief- und Umschlag-Dateien mit gleichem Nummernbereich enthalten",
+        "dieselben Leads in derselben Reihenfolge (Kuvertier-Reihenfolge).",
+      ];
+      if (warnings.length > 0) {
+        lines.push(
+          "",
+          `ACHTUNG — ${warnings.length} Abweichung(en):`,
+          ...warnings.map((w) => `  - ${w}`),
         );
       }
+      zip.file("README.txt", lines.join("\n") + "\n");
     }
 
     // JSZip generateAsync streamed nicht — wir bauen das gesamte ZIP
