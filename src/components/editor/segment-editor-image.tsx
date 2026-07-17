@@ -5,6 +5,7 @@ import { ImageIcon, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import type { ImageSegment } from "@/lib/segments/types";
+import { AdvancedSettings } from "./advanced-settings";
 
 interface MediaItem {
   id: string;
@@ -98,6 +99,8 @@ export function SegmentEditorImage({
         </div>
       )}
 
+      <AdvancedSettings hint="Darstellung, Position, Hintergrund">
+        <div className="space-y-5">
       <div>
         <Label>Anzeige-Modus</Label>
         <div className="inline-flex rounded-full border border-line bg-surface p-1">
@@ -179,6 +182,8 @@ export function SegmentEditorImage({
           </div>
         </div>
       )}
+        </div>
+      </AdvancedSettings>
     </div>
   );
 }

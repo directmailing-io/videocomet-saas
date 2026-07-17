@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import type { Segment, TextSegment } from "@/lib/segments/types";
 import { textSegmentToSlide } from "@/lib/segments/defaults";
+import { AdvancedSettings } from "./advanced-settings";
 
 interface SegmentEditorTextProps {
   segment: TextSegment;
@@ -102,6 +103,7 @@ export function SegmentEditorText({
         </div>
       </div>
 
+      <AdvancedSettings hint="Hintergrund- und Textfarbe">
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label>Hintergrundfarbe</Label>
@@ -130,6 +132,7 @@ export function SegmentEditorText({
           </div>
         </div>
       </div>
+      </AdvancedSettings>
 
       <div>
         <Label>

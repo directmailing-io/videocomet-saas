@@ -119,9 +119,18 @@ export function SegmentEditor({
           <span className="text-sm font-semibold text-ink">
             {segment.label?.trim() || meta.label}
           </span>
+          {currentSegmentIndex != null &&
+            currentSegmentIndex >= 0 &&
+            allSegments &&
+            allSegments.length > 0 && (
+              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[11px] font-medium text-ink-muted">
+                Segment {currentSegmentIndex + 1} von {allSegments.length}
+              </span>
+            )}
         </div>
 
         <div className="ml-auto flex flex-wrap items-center gap-3">
+          <span className="text-xs font-medium text-ink-muted">Dauer</span>
           <DurationInput
             valueMs={segment.durationMs}
             onChange={(ms) => onChange({ ...segment, durationMs: ms })}

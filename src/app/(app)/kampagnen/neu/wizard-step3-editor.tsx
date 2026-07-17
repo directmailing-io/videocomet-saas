@@ -2,17 +2,13 @@
 
 import * as React from "react";
 import {
-  Globe,
-  Image as ImageIcon,
   Video as VideoIcon,
-  FileText,
-  Presentation,
-  Type,
   Plus,
   Sparkles,
   Info,
   AlertTriangle,
-  Wand2,
+  PictureInPicture2,
+  MousePointerClick,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -33,11 +29,13 @@ import {
   formatDuration,
   adjustToFit,
 } from "@/lib/segments/duration";
+import { segmentStartMs } from "@/lib/segments/timeline";
 import { PreviewPlayer } from "@/components/editor/preview-player";
 import { Timeline } from "@/components/editor/timeline";
 import { SegmentEditor } from "@/components/editor/segment-editor";
 import { GSlideImportDialog } from "@/components/editor/gslide-import-dialog";
 import { CanvaImportDialog } from "@/components/editor/canva-import-dialog";
+import { AddSegmentDialog, SegmentTypeGrid } from "./add-segment-dialog";
 
 export interface WizardStep3Props {
   segments: Segment[];
@@ -58,67 +56,6 @@ export interface WizardStep3Props {
   onPipShapeChange: (shape: "square" | "rounded" | "circle") => void;
 }
 
-interface AddCard {
-  kind: SegmentKind;
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  description: string;
-}
-
-const ADD_CARDS: AddCard[] = [
-  {
-    kind: "slide",
-    icon: Sparkles,
-    title: "Freie Folie",
-    description:
-      "Multi-Layer mit Bildern, Formen und Text — alle Google-Fonts, Platzhalter überall, frei platzierbar.",
-  },
-  {
-    kind: "gslide",
-    icon: Presentation,
-    title: "Google Slides",
-    description:
-      "Veröffentlichtes Slides-Deck importieren — jede Folie wird ein Segment mit Platzhalter-Ersetzung.",
-  },
-  {
-    kind: "canva",
-    icon: Wand2,
-    title: "Canva",
-    description:
-      "Importiere ein Design aus Canva. Platzhalter werden in den Folien erkannt und personalisiert.",
-  },
-  {
-    kind: "website",
-    icon: Globe,
-    title: "Website",
-    description: "Personalisierte URL pro Empfänger als Vollbild rendern.",
-  },
-  {
-    kind: "image",
-    icon: ImageIcon,
-    title: "Bild",
-    description: "Aus deiner Medien-Bibliothek einsetzen, mit Hintergrund.",
-  },
-  {
-    kind: "video",
-    icon: VideoIcon,
-    title: "Video",
-    description: "Clip einbinden, optional als Browser-Frame stylen.",
-  },
-  {
-    kind: "gdocs",
-    icon: FileText,
-    title: "Google Docs",
-    description: "Öffentliches Doc scrollen oder als Standbild zeigen.",
-  },
-  {
-    kind: "text",
-    icon: Type,
-    title: "Text (klassisch)",
-    description: "Schlanke Textfolie mit Farbe, Größe und Variablen.",
-  },
-];
-
 /** Mindest-Rest, damit das Add-Segment noch sinnvoll passt. */
 const MIN_REMAINING_FOR_ADD_MS = 200;
 
@@ -135,8 +72,34 @@ export function WizardStep3Editor({
 }: WizardStep3Props) {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [currentTimeMs, setCurrentTimeMs] = React.useState(0);
+  const [addDialogOpen, setAddDialogOpen] = React.useState(false);
   const [gslideDialogOpen, setGslideDialogOpen] = React.useState(false);
   const [canvaDialogOpen, setCanvaDialogOpen] = React.useState(false);
+
+  // Externer Seek-Befehl an den PreviewPlayer (Timeline-Klick, Segment-Wahl).
+  const seekNonceRef = React.useRef(0);
+  const [seekRequest, setSeekRequest] = React.useState<{
+    ms: number;
+    nonce: number;
+  } | null>(null);
+  const requestSeek = React.useCallback((ms: number) => {
+    seekNonceRef.current += 1;
+    setSeekRequest({ ms, nonce: seekNonceRef.current });
+    setCurrentTimeMs(ms);
+  }, []);
+
+  // Container des Segment-Editors — nach Auswahl sanft ins Bild scrollen.
+  const editorRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (!selectedId) return;
+    const raf = requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [selectedId]);
 
   // Wir bekommen webcamDurationSec evtl. nicht aus den Props (ältere Media-
   // Items wurden ohne durationSec hochgeladen). In dem Fall sniffen wir die
@@ -212,25 +175,45 @@ export function WizardStep3Editor({
   const webcamShorterThanSegments =
     webcamDurationMs != null && total > webcamDurationMs;
 
+  /** Segment auswählen + Vorschau/Timeline auf dessen Anfang springen. */
+  const selectSegment = React.useCallback(
+    (id: string | null) => {
+      setSelectedId(id);
+      if (id) {
+        const idx = segments.findIndex((s) => s.id === id);
+        if (idx >= 0) requestSeek(segmentStartMs(segments, idx));
+      }
+    },
+    [segments, requestSeek],
+  );
+
   function addSegment(kind: SegmentKind) {
-    if (webcamDurationMs == null) return;
-    if (!canAdd) return;
-    // Google Slides öffnet einen Import-Dialog, statt direkt ein leeres
-    // Segment in die Timeline zu legen — der Dialog erzeugt nach Auswahl
-    // ggf. mehrere Segmente in einem Rutsch.
-    if (kind === "gslide") {
-      setGslideDialogOpen(true);
-      return;
-    }
-    if (kind === "canva") {
-      setCanvaDialogOpen(true);
-      return;
-    }
+    if (webcamDurationMs == null || !canAdd) return;
     // Smart-Add: nimm den verbleibenden Rest, wenn weniger als Default frei.
     const durationMs = Math.min(DEFAULT_SEGMENT_DURATION_MS, remainingMs);
     const seg = createSegment(kind, { durationMs });
     onSegmentsChange([...segments, seg]);
     setSelectedId(seg.id);
+    // Vorschau auf den Anfang des neuen Segments springen.
+    requestSeek(total);
+  }
+
+  /**
+   * Auswahl im Segment-Typ-Dialog/-Grid. Google Slides und Canva öffnen
+   * eigene Import-Dialoge — leicht verzögert, damit sich der Auswahl-Dialog
+   * erst sauber schließen kann (Radix-Focus-Handling).
+   */
+  function handlePickSegmentType(kind: SegmentKind) {
+    setAddDialogOpen(false);
+    if (kind === "gslide") {
+      window.setTimeout(() => setGslideDialogOpen(true), 180);
+      return;
+    }
+    if (kind === "canva") {
+      window.setTimeout(() => setCanvaDialogOpen(true), 180);
+      return;
+    }
+    addSegment(kind);
   }
 
   /**
@@ -255,6 +238,7 @@ export function WizardStep3Editor({
     // Erstes neues Segment selektieren — gibt dem User direkt visuelles
     // Feedback und macht den Refresh-Button erreichbar.
     setSelectedId(accepted[0].id);
+    requestSeek(total);
   }
 
   /**
@@ -276,6 +260,7 @@ export function WizardStep3Editor({
     if (accepted.length === 0) return;
     onSegmentsChange([...segments, ...accepted]);
     setSelectedId(accepted[0].id);
+    requestSeek(total);
   }
 
   function updateSegment(updated: Segment) {
@@ -317,7 +302,9 @@ export function WizardStep3Editor({
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-lg font-semibold text-ink mb-1">Editor</h2>
+          <h2 className="text-lg font-semibold text-ink mb-1">
+            Video gestalten
+          </h2>
           <p className="text-sm text-ink-muted">
             Du siehst diesen Schritt, weil du Modus
             <span className="font-semibold text-ink"> „Mit Präsentation"</span>{" "}
@@ -347,164 +334,66 @@ export function WizardStep3Editor({
     );
   }
 
-  // Status-Pill-Farbcoding
-  const pillTone: "ok" | "neutral" | "warn" =
-    Math.abs(remainingMs) < 100
-      ? "ok"
-      : webcamShorterThanSegments
+  // Status-Farbcoding für die Dauer-Anzeige.
+  const durationTone: "ok" | "neutral" | "warn" =
+    webcamShorterThanSegments
       ? "warn"
+      : remainingMs < 100
+      ? "ok"
       : "neutral";
+
+  const hasSegments = segments.length > 0;
 
   return (
     <div className="space-y-8">
-      {/* Header mit Status-Pill */}
+      {/* Header mit Dauer-Anzeige */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-ink mb-1">Editor</h2>
+          <h2 className="text-lg font-semibold text-ink mb-1">
+            Video gestalten
+          </h2>
           <p className="text-sm text-ink-muted max-w-xl">
-            Baue deine Videopräsentation. Reihenfolge, Dauer auf
-            Millisekunde, PiP-Position und Form lassen sich frei anpassen.
-            <span className="block mt-1 text-[11px] text-ink-muted/80">
-              Dieser Schritt erscheint nur, weil im Modus-Step „Mit
-              Präsentation" gewählt ist.
-            </span>
+            Deine Webcam-Aufnahme läuft durchgehend als kleine Einblendung.
+            Daneben zeigst du Inhalte in{" "}
+            <span className="font-semibold text-ink">Segmenten</span> —
+            Abschnitte wie Folien, Bilder oder Webseiten, die nacheinander
+            ablaufen.
           </p>
         </div>
-        <DurationPill
+        <DurationSummary
           totalMs={total}
           webcamMs={webcamDurationMs}
           remainingMs={remainingMs}
-          tone={pillTone}
+          tone={durationTone}
         />
       </div>
 
-      {/* Warn-Banner: Webcam ist kürzer als Segmente. */}
-      {webcamShorterThanSegments && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-squircle-md border border-warn/40 bg-warn/5 px-4 py-3">
-          <div className="flex items-center gap-2.5 text-sm">
-            <AlertTriangle className="size-4 text-warn shrink-0" />
-            <span className="text-ink">
-              Webcam-Dauer ist jetzt kürzer als deine Segmente — bitte
-              anpassen, sonst wird das Audio abgeschnitten.
-            </span>
-          </div>
-          <Button size="sm" variant="subtle" onClick={autoFit}>
-            Segmente automatisch anpassen
-          </Button>
-        </div>
-      )}
-
-      {/* Info-Banner unter Limit oder perfekt. */}
-      {!webcamShorterThanSegments && segments.length > 0 && (
-        <div
-          className={cn(
-            "flex items-center gap-2.5 rounded-squircle-md border px-4 py-2.5 text-sm",
-            remainingMs < 100
-              ? "border-ok/30 bg-ok/5 text-ink"
-              : "border-line bg-surface-soft text-ink-muted",
-          )}
-        >
-          {remainingMs < 100 ? (
-            <Sparkles className="size-4 text-ok shrink-0" />
-          ) : (
-            <Info className="size-4 text-ink-muted shrink-0" />
-          )}
-          <span>
-            {remainingMs < 100
-              ? "Perfekt — Segmente passen genau zur Webcam-Aufnahme."
-              : `Du hast noch ${formatDuration(
-                  remainingMs,
-                )} freie Zeit am Ende.`}
+      {/* Abschnitt: Webcam-Einblendung */}
+      <Card className="p-5">
+        <div className="mb-4 flex items-start gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep">
+            <PictureInPicture2 className="size-4" />
           </span>
-        </div>
-      )}
-
-      {/* Add-Segment Cards */}
-      <section aria-labelledby="add-segment-heading" className="space-y-3">
-        <div className="flex items-baseline justify-between gap-3">
-          <h3
-            id="add-segment-heading"
-            className="text-sm font-semibold text-ink"
-          >
-            Segment hinzufügen
-          </h3>
-          {!canAdd && (
-            <span className="text-xs text-ink-muted">
-              Webcam-Dauer voll ausgenutzt — Segmente kürzen, um Platz zu
-              schaffen.
-            </span>
-          )}
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {ADD_CARDS.map((card) => {
-            const Icon = card.icon;
-            const disabled = !canAdd;
-            return (
-              <button
-                key={card.kind}
-                type="button"
-                onClick={() => addSegment(card.kind)}
-                disabled={disabled}
-                title={
-                  disabled
-                    ? "Webcam-Dauer voll ausgenutzt — bestehende Segmente zuerst kürzen"
-                    : `${card.title} hinzufügen`
-                }
-                className={cn(
-                  "group flex flex-col items-start gap-2 text-left rounded-squircle-md border p-4 transition-all",
-                  disabled
-                    ? "border-line bg-surface-soft opacity-60 cursor-not-allowed"
-                    : "border-line bg-surface hover:border-brand hover:shadow-card hover:-translate-y-0.5 active:translate-y-0",
-                )}
-              >
-                <span
-                  className={cn(
-                    "inline-flex size-8 items-center justify-center rounded-full transition-colors",
-                    disabled
-                      ? "bg-ink/5 text-ink-muted"
-                      : "bg-brand-soft text-brand-deep group-hover:bg-brand group-hover:text-white",
-                  )}
-                >
-                  <Icon className="size-4" />
-                </span>
-                <span className="text-sm font-semibold text-ink leading-tight">
-                  {card.title}
-                </span>
-                <span className="text-[11px] leading-snug text-ink-muted">
-                  {card.description}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Preview + PiP-Settings */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <PreviewPlayer
-            segments={segments}
-            webcamUrl={webcamUrl}
-            webcamDurationSec={effectiveWebcamSec}
-            pipPosition={pipPosition}
-            pipShape={pipShape}
-            sampleData={{
-              firstName: "Max",
-              lastName: "Mustermann",
-              company: "Acme GmbH",
-            }}
-          />
-        </div>
-
-        <div className="space-y-5">
           <div>
-            <Label>PiP-Position</Label>
+            <h3 className="text-sm font-semibold text-ink">
+              Webcam-Einblendung
+            </h3>
+            <p className="text-xs text-ink-muted">
+              Lege fest, wo und in welcher Form deine Aufnahme im fertigen
+              Video erscheint.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div>
+            <Label>Position</Label>
             <div className="grid grid-cols-2 gap-2 mt-2">
               {(["bottom-left", "bottom-right"] as const).map((pos) => (
                 <button
                   key={pos}
                   type="button"
                   onClick={() => onPipPositionChange(pos)}
+                  aria-pressed={pipPosition === pos}
                   className={cn(
                     "rounded-squircle-md border p-3 text-xs font-medium transition-all",
                     pipPosition === pos
@@ -522,84 +411,205 @@ export function WizardStep3Editor({
                       )}
                     />
                   </div>
-                  {pos === "bottom-left" ? "Links" : "Rechts"}
+                  {pos === "bottom-left" ? "Links unten" : "Rechts unten"}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <Label>PiP-Form</Label>
+            <Label>Form</Label>
             <div className="grid grid-cols-3 gap-2 mt-2">
               {(
                 [
                   { v: "square", label: "Eckig", radius: "rounded-none" },
-                  { v: "rounded", label: "Rund.", radius: "rounded-md" },
-                  { v: "circle", label: "Rund", radius: "rounded-full" },
+                  { v: "rounded", label: "Abgerundet", radius: "rounded-md" },
+                  { v: "circle", label: "Kreis", radius: "rounded-full" },
                 ] as const
               ).map((opt) => (
                 <button
                   key={opt.v}
                   type="button"
                   onClick={() => onPipShapeChange(opt.v)}
+                  aria-pressed={pipShape === opt.v}
                   className={cn(
-                    "rounded-squircle-md border p-2 text-[11px] font-medium transition-all flex flex-col items-center gap-1.5",
+                    "rounded-squircle-md border p-3 text-xs font-medium transition-all flex flex-col items-center gap-2",
                     pipShape === opt.v
                       ? "border-brand bg-brand-soft text-brand-deep"
                       : "border-line text-ink hover:border-brand/50",
                   )}
                 >
-                  <span className={cn("size-6 bg-brand", opt.radius)} />
+                  <span className={cn("size-7 bg-brand", opt.radius)} />
                   {opt.label}
                 </button>
               ))}
             </div>
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Timeline - Skala ist immer die Webcam-Dauer, damit kein Overflow
-          visuell entstehen kann. */}
-      <Timeline
-        segments={segments}
-        currentTimeMs={currentTimeMs}
-        totalDurationMs={webcamDurationMs}
-        webcamDurationMs={webcamDurationMs}
-        selectedSegmentId={selectedId}
-        onSelectSegment={setSelectedId}
-        onSegmentsChange={onSegmentsChange}
-        onSeek={setCurrentTimeMs}
-      />
+      {/* Abschnitt: Präsentation */}
+      <section aria-labelledby="presentation-heading" className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3
+              id="presentation-heading"
+              className="text-sm font-semibold text-ink"
+            >
+              Präsentation
+            </h3>
+            <p className="text-xs text-ink-muted">
+              {hasSegments
+                ? "Vorschau ansehen, Segmente in der Zeitleiste anordnen und per Klick bearbeiten."
+                : "Füge dein erstes Segment hinzu — es läuft neben deiner Webcam-Einblendung."}
+            </p>
+          </div>
+          {hasSegments && (
+            <Button
+              type="button"
+              variant="brand"
+              size="sm"
+              onClick={() => setAddDialogOpen(true)}
+              disabled={!canAdd}
+              title={
+                canAdd
+                  ? "Neues Segment hinzufügen"
+                  : "Webcam-Dauer voll ausgenutzt — bestehende Segmente zuerst kürzen"
+              }
+              iconLeft={<Plus className="size-4" />}
+            >
+              Segment hinzufügen
+            </Button>
+          )}
+        </div>
 
-      {/* Aktiver Segment-Editor */}
-      {selectedSegment ? (
-        <SegmentEditor
-          segment={selectedSegment}
-          onChange={updateSegment}
-          onDelete={() => deleteSegment(selectedSegment.id)}
-          mediaItems={mediaItems}
-          webcamDurationMs={webcamDurationMs}
-          otherSegmentsDurationMs={total - selectedSegment.durationMs}
-          webcamUrl={webcamUrl}
-          allSegments={segments}
-          currentSegmentIndex={
-            selectedSegmentIndex != null && selectedSegmentIndex >= 0
-              ? selectedSegmentIndex
-              : null
-          }
-        />
-      ) : segments.length > 0 ? (
-        <Card className="p-6 text-center text-sm text-ink-muted">
-          Wähle ein Segment in der Timeline aus, um es zu bearbeiten.
-        </Card>
-      ) : (
-        <Card className="p-8 text-center">
-          <Plus className="size-6 text-ink-muted mx-auto mb-2" />
-          <p className="text-sm text-ink-muted">
-            Füge oben ein erstes Segment hinzu, um zu starten.
+        {!canAdd && hasSegments && !webcamShorterThanSegments && (
+          <p className="text-xs text-ink-muted">
+            Webcam-Dauer voll ausgenutzt — kürze ein Segment, um Platz für
+            weitere zu schaffen.
           </p>
-        </Card>
+        )}
+
+        {/* Warn-Banner: Webcam ist kürzer als Segmente. */}
+        {webcamShorterThanSegments && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-squircle-md border border-warn/40 bg-warn/5 px-4 py-3">
+            <div className="flex items-center gap-2.5 text-sm">
+              <AlertTriangle className="size-4 text-warn shrink-0" />
+              <span className="text-ink">
+                Deine Segmente sind zusammen länger als die Webcam-Aufnahme —
+                bitte anpassen, sonst wird der Ton abgeschnitten.
+              </span>
+            </div>
+            <Button size="sm" variant="subtle" onClick={autoFit}>
+              Automatisch anpassen
+            </Button>
+          </div>
+        )}
+
+        {!hasSegments ? (
+          <Card className="p-6">
+            <div className="mb-5 flex items-start gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep">
+                <Sparkles className="size-4" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-ink">
+                  Womit möchtest du starten?
+                </p>
+                <p className="text-xs text-ink-muted">
+                  Du kannst später beliebig viele Segmente hinzufügen und die
+                  Reihenfolge ändern.
+                </p>
+              </div>
+            </div>
+            <SegmentTypeGrid onSelect={handlePickSegmentType} />
+          </Card>
+        ) : (
+          <>
+            <PreviewPlayer
+              segments={segments}
+              webcamUrl={webcamUrl}
+              webcamDurationSec={effectiveWebcamSec}
+              pipPosition={pipPosition}
+              pipShape={pipShape}
+              sampleData={{
+                firstName: "Max",
+                lastName: "Mustermann",
+                company: "Acme GmbH",
+              }}
+              seekRequest={seekRequest}
+              onTimeChange={setCurrentTimeMs}
+            />
+
+            {/* Timeline - Skala ist immer die Webcam-Dauer, damit kein
+                Overflow visuell entstehen kann. */}
+            <Timeline
+              segments={segments}
+              currentTimeMs={currentTimeMs}
+              totalDurationMs={webcamDurationMs}
+              webcamDurationMs={webcamDurationMs}
+              selectedSegmentId={selectedId}
+              onSelectSegment={selectSegment}
+              onSegmentsChange={onSegmentsChange}
+              onSeek={requestSeek}
+            />
+
+            {remainingMs >= 100 && !webcamShorterThanSegments && (
+              <div className="flex items-center gap-2.5 rounded-squircle-md border border-line bg-surface-soft px-4 py-2.5 text-sm text-ink-muted">
+                <Info className="size-4 shrink-0" />
+                <span>
+                  Am Ende sind noch {formatDuration(remainingMs)} frei — dort
+                  läuft nur deine Webcam-Aufnahme, ohne Segment.
+                </span>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* Abschnitt: Segment bearbeiten */}
+      {hasSegments && (
+        <section aria-labelledby="segment-edit-heading" className="space-y-3">
+          <h3
+            id="segment-edit-heading"
+            className="text-sm font-semibold text-ink"
+          >
+            Segment bearbeiten
+          </h3>
+          {selectedSegment ? (
+            <div ref={editorRef}>
+              <SegmentEditor
+                segment={selectedSegment}
+                onChange={updateSegment}
+                onDelete={() => deleteSegment(selectedSegment.id)}
+                mediaItems={mediaItems}
+                webcamDurationMs={webcamDurationMs}
+                otherSegmentsDurationMs={total - selectedSegment.durationMs}
+                webcamUrl={webcamUrl}
+                allSegments={segments}
+                currentSegmentIndex={
+                  selectedSegmentIndex != null && selectedSegmentIndex >= 0
+                    ? selectedSegmentIndex
+                    : null
+                }
+              />
+            </div>
+          ) : (
+            <Card className="p-6 text-center text-sm text-ink-muted">
+              <MousePointerClick className="mx-auto mb-2 size-5 opacity-60" />
+              Klicke ein Segment in der Zeitleiste an, um es hier zu
+              bearbeiten.
+            </Card>
+          )}
+        </section>
       )}
+
+      {/* Segment-Typ-Auswahl */}
+      <AddSegmentDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        onSelect={handlePickSegmentType}
+      />
 
       {/* Google-Slides-Import-Dialog. Wird nur gerendert, wenn open=true,
           damit der Reset-Effect im Dialog sauber triggern kann. */}
@@ -623,15 +633,19 @@ export function WizardStep3Editor({
   );
 }
 
+/** Kurzformat m:ss (ohne Millisekunden) für die Dauer-Anzeige. */
+function formatShort(ms: number): string {
+  const totalSec = Math.max(0, Math.round(ms / 1000));
+  const mm = Math.floor(totalSec / 60);
+  const ss = totalSec % 60;
+  return `${mm}:${ss.toString().padStart(2, "0")}`;
+}
+
 /**
- * Kompakter Dauer-Status-Pill oben rechts im Header.
- * Zeigt: Summe / Webcam-Dauer / freie Restzeit. Farbcoding:
- * - ok (grün): Restzeit < 100ms → praktisch perfekt befüllt.
- * - neutral (grau): es gibt noch Platz.
- * - warn (rot): Segmente sind länger als Webcam (sollte nicht passieren,
- *   aber als Sicherheitsnetz).
+ * Dauer-Anzeige oben rechts: Fortschrittsbalken „belegt von Webcam-Dauer".
+ * Exakte Werte (mit Millisekunden) stehen im title-Tooltip.
  */
-function DurationPill({
+function DurationSummary({
   totalMs,
   webcamMs,
   remainingMs,
@@ -642,45 +656,56 @@ function DurationPill({
   remainingMs: number;
   tone: "ok" | "neutral" | "warn";
 }) {
-  const toneClass: Record<typeof tone, string> = {
-    ok: "border-ok/40 bg-ok/5 text-ink",
-    neutral: "border-line bg-surface-soft text-ink",
-    warn: "border-warn/50 bg-warn/5 text-ink",
-  };
-  const dotClass: Record<typeof tone, string> = {
+  const pct = Math.max(
+    0,
+    Math.min(100, (totalMs / Math.max(1, webcamMs)) * 100),
+  );
+  const barClass: Record<typeof tone, string> = {
     ok: "bg-ok",
-    neutral: "bg-ink-muted",
+    neutral: "bg-brand",
     warn: "bg-warn",
   };
-  const remainingLabel =
-    remainingMs <= 0
-      ? "voll ausgenutzt"
+  const statusLabel =
+    tone === "warn"
+      ? "zu lang"
       : remainingMs < 100
-      ? "voll ausgenutzt"
-      : `${formatDuration(remainingMs)} frei`;
+      ? "voll belegt"
+      : `noch ${formatShort(remainingMs)} frei`;
 
   return (
     <div
-      className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium",
-        toneClass[tone],
-      )}
+      className="w-56 rounded-squircle-md border border-line bg-surface px-4 py-3"
+      title={`Segmente: ${formatDuration(totalMs)} · Webcam: ${formatDuration(
+        webcamMs,
+      )} · Frei: ${formatDuration(Math.max(0, remainingMs))}`}
     >
-      <span
-        aria-hidden
-        className={cn("inline-block size-1.5 rounded-full", dotClass[tone])}
-      />
-      <span className="font-mono tabular-nums">
-        Σ {formatDuration(totalMs)}
-      </span>
-      <span className="text-ink-muted">von</span>
-      <span className="font-mono tabular-nums">
-        {formatDuration(webcamMs)}
-      </span>
-      <span className="text-ink-muted">·</span>
-      <span className={tone === "ok" ? "text-ok" : "text-ink-muted"}>
-        {remainingLabel}
-      </span>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-mono text-xs tabular-nums text-ink">
+          {formatShort(totalMs)}{" "}
+          <span className="text-ink-muted">/ {formatShort(webcamMs)}</span>
+        </span>
+        <span
+          className={cn(
+            "text-[11px] font-medium",
+            tone === "warn"
+              ? "text-warn"
+              : tone === "ok"
+              ? "text-ok"
+              : "text-ink-muted",
+          )}
+        >
+          {statusLabel}
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line/60">
+        <div
+          className={cn("h-full rounded-full transition-all", barClass[tone])}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="mt-1.5 text-[11px] text-ink-muted">
+        Segment-Zeit von Webcam-Dauer belegt
+      </p>
     </div>
   );
 }

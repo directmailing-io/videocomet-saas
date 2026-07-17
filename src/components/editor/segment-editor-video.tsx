@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { CropRatio, VideoSegment } from "@/lib/segments/types";
+import { AdvancedSettings } from "./advanced-settings";
 
 interface MediaItem {
   id: string;
@@ -177,9 +178,11 @@ export function SegmentEditorVideo({
         </div>
       )}
 
+      <AdvancedSettings hint="Zuschneiden, Seitenverhältnis, Browser-Rahmen">
+        <div className="space-y-5">
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label htmlFor={`trim-start-${segment.id}`}>Trim-Start (Sek.)</Label>
+          <Label htmlFor={`trim-start-${segment.id}`}>Video-Start (Sek.)</Label>
           <Input
             id={`trim-start-${segment.id}`}
             inputMode="decimal"
@@ -193,7 +196,7 @@ export function SegmentEditorVideo({
           />
         </div>
         <div>
-          <Label htmlFor={`trim-end-${segment.id}`}>Trim-Ende (Sek.)</Label>
+          <Label htmlFor={`trim-end-${segment.id}`}>Video-Ende (Sek.)</Label>
           <Input
             id={`trim-end-${segment.id}`}
             inputMode="decimal"
@@ -209,7 +212,7 @@ export function SegmentEditorVideo({
       </div>
 
       <div>
-        <Label>Crop-Verhaeltnis</Label>
+        <Label>Seitenverhältnis</Label>
         <Select
           value={segment.cropRatio}
           onValueChange={(v) =>
@@ -267,6 +270,8 @@ export function SegmentEditorVideo({
           </div>
         )}
       </div>
+        </div>
+      </AdvancedSettings>
     </div>
   );
 }

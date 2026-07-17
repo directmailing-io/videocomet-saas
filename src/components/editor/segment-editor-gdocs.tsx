@@ -171,12 +171,11 @@ export function SegmentEditorGDocs({
         </div>
       )}
 
-      <div className="flex gap-3 rounded-squircle-sm border border-brand-200 bg-brand-soft p-4 text-sm text-brand-deep">
-        <Info className="size-4 shrink-0 mt-0.5" />
+      <div className="flex gap-2.5 rounded-squircle-sm border border-brand-200 bg-brand-soft p-3 text-xs text-brand-deep">
+        <Info className="size-3.5 shrink-0 mt-0.5" />
         <p>
-          Das Dokument muss öffentlich (mit Link freigegeben) sein, damit es
-          während des Renderns geladen werden kann. Im Modus „Scroll-Aufnahme"
-          spielt der Worker deine Scroll-Bewegungen 1:1 nach.
+          Wichtig: Das Dokument muss öffentlich (mit Link freigegeben) sein,
+          damit es im Video gezeigt werden kann.
         </p>
       </div>
 

@@ -48,6 +48,13 @@ export interface PreviewPlayerProps {
   pipShape: "square" | "rounded" | "circle";
   /** Optional lead data used for `{{firstName}}`-style placeholder preview. */
   sampleData?: Record<string, string>;
+  /**
+   * Externer Seek-Befehl (z. B. Klick in die Timeline oder Segment-Auswahl).
+   * `nonce` erzwingt die Ausführung auch bei gleichem `ms`-Wert.
+   */
+  seekRequest?: { ms: number; nonce: number } | null;
+  /** Meldet den Playhead (gedrosselt) nach außen, z. B. an die Timeline. */
+  onTimeChange?: (ms: number) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -125,6 +132,8 @@ export function PreviewPlayer({
   pipPosition,
   pipShape,
   sampleData,
+  seekRequest,
+  onTimeChange,
 }: PreviewPlayerProps) {
   const totalDurationMs = React.useMemo(
     () => getTotalDurationMs(segments),
@@ -165,6 +174,17 @@ export function PreviewPlayer({
   React.useEffect(() => {
     webcamMutedRef.current = webcamMuted;
   }, [webcamMuted]);
+  /** onTimeChange in einer Ref, damit der rAF-Closure aktuell bleibt. */
+  const onTimeChangeRef = React.useRef(onTimeChange);
+  React.useEffect(() => {
+    onTimeChangeRef.current = onTimeChange;
+  }, [onTimeChange]);
+  /** Letzter Timestamp, zu dem onTimeChange gefeuert hat (Throttle). */
+  const lastTimeEmitRef = React.useRef(0);
+
+  const emitTime = React.useCallback((ms: number) => {
+    onTimeChangeRef.current?.(ms);
+  }, []);
 
   // ── Aktive Folie + Offsets ──────────────────────────────────────────
   const active = React.useMemo(
@@ -215,6 +235,22 @@ export function PreviewPlayer({
     // Nur bei Längenänderung neu auswerten.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalDurationMs]);
+
+  // Externer Seek (Timeline-Klick, Segment-Auswahl): Playhead hart setzen.
+  const seekNonce = seekRequest?.nonce ?? null;
+  React.useEffect(() => {
+    if (seekNonce === null || !seekRequest) return;
+    const clamped = Math.max(0, Math.min(totalRef.current, seekRequest.ms));
+    playheadRef.current = clamped;
+    setPlayheadMs(clamped);
+    hardSeekAll(clamped);
+    if (playingRef.current) {
+      setMediaPlayback(true);
+    }
+    emitTime(clamped);
+    // Nur auf neue nonce reagieren.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seekNonce]);
 
   /* ------------------------------------------------------------------ */
   /* Drift-Check + lokale Seek-Helfer                                   */
@@ -364,12 +400,19 @@ export function PreviewPlayer({
           playingRef.current = false;
           setPlaying(false);
           setPlayheadMs(0);
+          onTimeChangeRef.current?.(0);
           return;
         }
         playheadRef.current = nextMs;
         // React-State weniger oft updaten als rAF feuert wäre ideal,
         // aber wir brauchen es für die Folien-Wechsel-Detection.
         setPlayheadMs(nextMs);
+
+        // Timeline-Playhead gedrosselt nach außen melden (~4×/s reicht).
+        if (now - lastTimeEmitRef.current > 250) {
+          lastTimeEmitRef.current = now;
+          onTimeChangeRef.current?.(nextMs);
+        }
 
         // Drift-Check (max alle DRIFT_CHECK_INTERVAL_MS).
         if (now - lastDriftCheckRef.current > DRIFT_CHECK_INTERVAL_MS) {
@@ -495,6 +538,7 @@ export function PreviewPlayer({
     if (playingRef.current) {
       setMediaPlayback(true);
     }
+    emitTime(clamped);
   }
 
   /* ------------------------------------------------------------------ */

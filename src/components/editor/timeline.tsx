@@ -204,7 +204,7 @@ export function Timeline({
         )}
       >
         <p className="text-sm text-ink-muted px-6 text-center">
-          Keine Segmente. Füge oben Segmente hinzu, um sie hier zu sehen.
+          Noch keine Segmente. Klicke auf „Segment hinzufügen", um zu starten.
         </p>
       </div>
     );
