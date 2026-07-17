@@ -32,7 +32,12 @@ import type { Job } from "bullmq";
 import type { Page } from "puppeteer-core";
 import { uploadFile } from "@/lib/bunny/storage";
 import { getContext } from "../lib/browser-pool";
-import { dismissCookieBanners } from "../lib/cookie-dismiss";
+import {
+  prepareCleanPage,
+  acquireHostSlot,
+  RenderNotReadyError,
+  type CleanPageSession,
+} from "../lib/clean-render";
 import { renderGDocsToBunnyHostedHtml } from "../lib/gdocs-render-pipeline";
 import {
   getScreenshotJobRedisKey,
@@ -157,8 +162,17 @@ export async function screenshotProcessor(
   // ---------------------------------------------------------------------
   const ctx = await getContext();
   const pageHolder: { current: Page | null } = { current: null };
+  const cleanupHolder: {
+    releaseSlot: (() => void) | null;
+    clean: CleanPageSession | null;
+  } = { releaseSlot: null, clean: null };
+  let captureOk = false;
+  let captureProblem: string | null = null;
 
   try {
+    // Host-Throttle: max. 2 parallele Loads pro Host (Schicht 4b).
+    cleanupHolder.releaseSlot = await acquireHostSlot(url);
+
     const page = await ctx.context.newPage();
     pageHolder.current = page;
     await page.setViewport({
@@ -166,6 +180,10 @@ export async function screenshotProcessor(
       height: VIEWPORT.height,
       deviceScaleFactor: 1,
     });
+
+    // Clean-Render Schicht 0+1: Adblocker + Consent-Preseed VOR goto.
+    const clean = await prepareCleanPage(page, url);
+    cleanupHolder.clean = clean;
 
     try {
       await page.goto(url, {
@@ -183,7 +201,16 @@ export async function screenshotProcessor(
       }
     }
     await new Promise((r) => setTimeout(r, 1_000));
-    await dismissCookieBanners(page, 3_000).catch(() => false);
+
+    // Clean-Render Schicht 2–4: Dismiss + QA-Gate. Watchdog überspringen —
+    // gleich nach dem Screenshot ist Schluss. RenderNotReadyError propagiert
+    // (Fehlerseiten-Screenshot wäre für den Preflight irreführend).
+    try {
+      await clean.stabilize({ dismissTimeoutMs: 3_000, skipWatchdog: true });
+    } catch (err) {
+      if (err instanceof RenderNotReadyError) throw err;
+      // Sonstige stabilize-Fehler nie fatal.
+    }
 
     // Force overflow auto so we can measure the real document height.
     await page
@@ -222,17 +249,27 @@ export async function screenshotProcessor(
       height,
     });
 
+    captureOk = true;
     return { imageUrl: upload.url, width: VIEWPORT.width, height };
   } catch (err) {
+    captureProblem =
+      err instanceof RenderNotReadyError ? err.problem : "capture_error";
     const message = err instanceof Error ? err.message : String(err);
     await writeJobResult(jobId, { status: "failed", error: message }).catch(
       () => undefined,
     );
     throw err instanceof Error ? err : new Error(message);
   } finally {
+    // Telemetrie + Adblock-Disable (Schicht 5).
+    if (cleanupHolder.clean) {
+      await cleanupHolder.clean
+        .finish(captureOk, captureProblem)
+        .catch(() => undefined);
+    }
     if (pageHolder.current) {
       await pageHolder.current.close().catch(() => undefined);
     }
     await ctx.close();
+    cleanupHolder.releaseSlot?.();
   }
 }

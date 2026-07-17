@@ -5,6 +5,8 @@ FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat python3 make g++
 WORKDIR /app
 COPY package.json package-lock.json* ./
+# puppeteer ist Peer-Dep des Adblockers — Browser-Download im App-Image überspringen.
+ENV PUPPETEER_SKIP_DOWNLOAD=1
 RUN npm ci --include=optional
 
 FROM node:22-alpine AS builder

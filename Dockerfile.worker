@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json* ./
+# System-Chromium wird genutzt — Browser-Download von puppeteer (Peer-Dep des Adblockers) überspringen.
+ENV PUPPETEER_SKIP_DOWNLOAD=1
 RUN npm ci --include=optional
 
 FROM node:22-bookworm-slim AS runner

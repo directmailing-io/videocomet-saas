@@ -64,6 +64,38 @@ const COOKIE_BANNER_SELECTORS: string[] = [
   "#shopify-pc__banner__btn-accept",
   // Custom-Modals (z.B. inuvet.com)
   "#modal-accept-all",
+  // Didomi
+  "#didomi-notice-agree-button",
+  // Iubenda
+  ".iubenda-cs-accept-btn",
+  // Osano
+  ".osano-cm-accept-all",
+  // Quantcast Choice
+  '#qc-cmp2-ui button[mode="primary"]',
+  // Sourcepoint (rendert im iframe; sp_choice_type_11 = Accept All)
+  ".sp_choice_type_11",
+  'button[title="Accept All"]',
+  'button[title="Alle akzeptieren"]',
+  // Finsweet Cookie Consent (Webflow)
+  '[fs-cc="allow"]',
+  // HubSpot CMS Banner
+  "#hs-eu-confirmation-button",
+  // Wix native
+  '[data-hook="consent-banner-apply-button"]',
+  // Squarespace
+  ".sqs-cookie-banner-v2-accept",
+  // Google Funding Choices
+  ".fc-cta-consent",
+  // Cookie Notice (WordPress)
+  "#cn-accept-cookie",
+  // Moove GDPR (WordPress)
+  ".moove-gdpr-infobar-allow-all",
+  // Civic Cookie Control
+  "#ccc-notify-accept",
+  // cookie-script.com
+  "#cookiescript_accept",
+  // Termly
+  ".t-acceptAllButton",
   // Generische Klassen / IDs
   ".accept-all-cookies",
   ".accept-cookies",
@@ -113,6 +145,23 @@ const HIDE_CONTAINER_SELECTORS: string[] = [
   "#cookieConsent",
   ".cc-window",
   ".cc-banner",
+  "#didomi-host",
+  "#qc-cmp2-container",
+  "#iubenda-cs-banner",
+  ".osano-cm-window",
+  '[id^="sp_message_container"]',
+  ".fc-consent-root",
+  "#hs-eu-cookie-confirmation",
+  '[data-hook="consent-banner-root"]',
+  ".sqs-cookie-banner-v2",
+  "#cookiescript_injected",
+  "#cookie-notice",
+  "#moove_gdpr_cookie_info_bar",
+  "#ccc",
+  "#termly-code-snippet-support",
+  "#cookiefirst-root",
+  '[data-cookiefirst-widget="banner"]',
+  "#axeptio_overlay",
 ];
 
 /**
@@ -233,6 +282,115 @@ function hideCookieUiInPage(hideSelectors: string[]): number {
   return hidden;
 }
 
+/**
+ * Läuft in page.evaluate (nur Main-Frame): ruft offizielle CMP-JS-APIs auf.
+ * Das ist der sauberste Weg — die CMP räumt selbst Backdrop, Scroll-Lock und
+ * Folgedialoge weg. Gibt den Namen der getroffenen CMP zurück oder null.
+ * Alle Aufrufe einzeln geguardet: eine kaputte API darf die nächste nicht
+ * verhindern.
+ */
+function tryCmpApisInPage(): string | null {
+  const w = window as unknown as Record<string, any>;
+  const attempts: Array<[string, () => boolean]> = [
+    [
+      "usercentrics",
+      () => {
+        if (!w.UC_UI?.acceptAllConsents) return false;
+        w.UC_UI.acceptAllConsents();
+        w.UC_UI.closeCMP?.();
+        return true;
+      },
+    ],
+    [
+      "cookiebot",
+      () => {
+        if (!w.Cookiebot?.submitCustomConsent) return false;
+        w.Cookiebot.submitCustomConsent(true, true, true);
+        w.Cookiebot.hide?.();
+        return true;
+      },
+    ],
+    [
+      "onetrust",
+      () => {
+        if (!w.OneTrust?.AllowAll) return false;
+        w.OneTrust.AllowAll();
+        w.OneTrust.Close?.();
+        return true;
+      },
+    ],
+    [
+      "complianz",
+      () => {
+        if (typeof w.cmplz_accept_all !== "function") return false;
+        w.cmplz_accept_all();
+        return true;
+      },
+    ],
+    [
+      "klaro",
+      () => {
+        const m = w.klaro?.getManager?.();
+        if (!m?.changeAll) return false;
+        m.changeAll(true);
+        m.saveAndApplyConsents?.();
+        return true;
+      },
+    ],
+    [
+      "tarteaucitron",
+      () => {
+        if (!w.tarteaucitron?.userInterface?.respondAll) return false;
+        w.tarteaucitron.userInterface.respondAll(true);
+        return true;
+      },
+    ],
+    [
+      "didomi",
+      () => {
+        if (!w.Didomi?.setUserAgreeToAll) return false;
+        w.Didomi.setUserAgreeToAll();
+        return true;
+      },
+    ],
+    [
+      "cookiefirst",
+      () => {
+        if (!w.CookieFirst?.acceptAllCategories) return false;
+        w.CookieFirst.acceptAllCategories();
+        return true;
+      },
+    ],
+    [
+      "osano",
+      () => {
+        if (!w.Osano?.cm) return false;
+        w.Osano.cm.acceptAll?.();
+        w.Osano.cm.hideDialog?.();
+        return true;
+      },
+    ],
+    [
+      "shopify-privacy",
+      () => {
+        const cp = w.Shopify?.customerPrivacy;
+        if (!cp?.setTrackingConsent) return false;
+        cp.setTrackingConsent(true, () => undefined);
+        return true;
+      },
+    ],
+  ];
+
+  for (const [name, attempt] of attempts) {
+    try {
+      if (attempt()) return name;
+    } catch {
+      // API vorhanden aber wirft → nächste
+    }
+  }
+  return null;
+}
+
 async function tryKnownSelectors(frame: Frame): Promise<string | null> {
   for (const selector of COOKIE_BANNER_SELECTORS) {
     try {
@@ -249,22 +407,43 @@ async function tryKnownSelectors(frame: Frame): Promise<string | null> {
   return null;
 }
 
+/** Strukturiertes Ergebnis für Telemetrie (Schicht 5). */
+export type DismissResult = {
+  /** Getroffene CMP-JS-API (z. B. "usercentrics"), sonst null. */
+  api: string | null;
+  /** Geklickter Selektor bzw. Deep-Scan-Label, sonst null. */
+  clicked: string | null;
+  /** Anzahl heuristisch versteckter Overlays. */
+  hidden: number;
+  /** true, wenn irgendeine Maßnahme gegriffen hat. */
+  any: boolean;
+};
+
 /**
- * Versucht über `timeoutMs` Millisekunden ein Cookie-Banner zu schließen
- * (Klick in allen Frames inkl. Shadow-DOM) und versteckt zum Abschluss
- * verbliebene/bekannte Banner-Container per CSS.
- *
- * @returns `true` wenn geklickt oder etwas versteckt wurde, sonst `false`.
+ * Versucht über `timeoutMs` Millisekunden ein Cookie-Banner zu schließen:
+ * erst offizielle CMP-JS-APIs (Main-Frame), dann Klick in allen Frames
+ * inkl. Shadow-DOM, dann ESC; zum Abschluss werden verbliebene/bekannte
+ * Banner-Container per CSS versteckt.
  */
 export async function dismissCookieBanners(
   page: Page,
   timeoutMs = 5_000,
-): Promise<boolean> {
+): Promise<DismissResult> {
   const deadline = Date.now() + timeoutMs;
   const intervalMs = 250;
   let clicked: string | null = null;
+  let api: string | null = null;
 
-  while (Date.now() < deadline && !clicked) {
+  while (Date.now() < deadline && !clicked && !api) {
+    // Phase 0: offizielle CMP-JS-APIs (nur Main-Frame — CMPs hängen am
+    // Top-Window, auch wenn ihre UI im iframe rendert).
+    try {
+      api = await page.evaluate(tryCmpApisInPage);
+    } catch {
+      // Page navigiert gerade o. ä.
+    }
+    if (api) break;
+
     for (const frame of page.frames()) {
       // Phase A: bekannte Selektoren.
       clicked = await tryKnownSelectors(frame);
@@ -285,11 +464,22 @@ export async function dismissCookieBanners(
     if (!clicked) await new Promise((r) => setTimeout(r, intervalMs));
   }
 
-  if (clicked) {
+  if (api) {
+    // eslint-disable-next-line no-console
+    console.log(`[cookie-dismiss] cmp api ${api}`);
+    await new Promise((r) => setTimeout(r, 600));
+  } else if (clicked) {
     // eslint-disable-next-line no-console
     console.log(`[cookie-dismiss] clicked ${clicked}`);
     // Banner-Animationen ausblenden lassen.
     await new Promise((r) => setTimeout(r, 600));
+  } else {
+    // Phase C: ESC schließt viele Modals (Newsletter-Popups, manche CMPs).
+    try {
+      await page.keyboard.press("Escape");
+    } catch {
+      // Page weg
+    }
   }
 
   // Hide-Pass läuft IMMER — Sicherheitsnetz für unbekannte CMPs und für
@@ -304,9 +494,14 @@ export async function dismissCookieBanners(
     // eslint-disable-next-line no-console
     console.log(`[cookie-dismiss] hid ${hidden} overlay(s) heuristically`);
   }
-  if (!clicked && hidden === 0) {
+  if (!api && !clicked && hidden === 0) {
     // eslint-disable-next-line no-console
     console.log("[cookie-dismiss] no banner found");
   }
-  return Boolean(clicked) || hidden > 0;
+  return {
+    api,
+    clicked,
+    hidden,
+    any: Boolean(api) || Boolean(clicked) || hidden > 0,
+  };
 }

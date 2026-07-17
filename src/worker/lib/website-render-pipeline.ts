@@ -34,7 +34,12 @@ import sharp from "sharp";
 import type { Page, CDPSession } from "puppeteer-core";
 import type { ScrollFrame } from "@/lib/segments/types";
 import { getContext, type PooledContext } from "./browser-pool";
-import { dismissCookieBanners } from "./cookie-dismiss";
+import {
+  prepareCleanPage,
+  acquireHostSlot,
+  RenderNotReadyError,
+  type CleanPageSession,
+} from "./clean-render";
 
 /**
  * Schnelle DNS-Vorab-Prüfung: löst den Host der URL in 3s auf, sonst wirft.
@@ -254,6 +259,10 @@ async function fallbackScreenshotPath(
       height: viewport.height,
       deviceScaleFactor: 1,
     });
+    // Clean-Render light: Adblock + Preseed + Dismiss, aber ohne Watchdog/
+    // Telemetrie (der Haupt-Run hat schon einen Telemetrie-Eintrag) und ohne
+    // QA-Gate-Throw — dieser Pfad ist die letzte Rettung vor Schwarzbild.
+    const fbClean = await prepareCleanPage(fbPage, opts.url);
     await fbPage
       .goto(opts.url, {
         waitUntil: "networkidle2",
@@ -261,7 +270,9 @@ async function fallbackScreenshotPath(
       })
       .catch(() => undefined);
     await new Promise((r) => setTimeout(r, 1_000));
-    await dismissCookieBanners(fbPage, 3_000).catch(() => false);
+    await fbClean
+      .stabilize({ dismissTimeoutMs: 3_000, skipWatchdog: true })
+      .catch(() => undefined);
     await fbPage
       .evaluate(() => {
         const css = document.createElement("style");
@@ -374,8 +385,17 @@ export async function renderWebsiteCapture(
   const ctx = await getContext();
   const pageHolder: { current: Page | null } = { current: null };
   const clientHolder: { current: CDPSession | null } = { current: null };
+  const cleanupHolder: {
+    releaseSlot: (() => void) | null;
+    clean: CleanPageSession | null;
+  } = { releaseSlot: null, clean: null };
+  let captureOk = false;
+  let captureProblem: string | null = null;
 
   const run = async (): Promise<RenderWebsiteResult> => {
+    // Host-Throttle: max. 2 parallele Loads pro Shop-Host (Schicht 4b).
+    cleanupHolder.releaseSlot = await acquireHostSlot(opts.url);
+
     // ── 1. Live-Page öffnen ───────────────────────────────────────────
     const page = await ctx.context.newPage();
     pageHolder.current = page;
@@ -388,6 +408,10 @@ export async function renderWebsiteCapture(
     // DNS-Preflight: bei broken Domain sofort werfen, kein 30s+10s
     // page.goto-Tanz für offensichtlich nicht erreichbare URLs.
     await preflightDnsCheck(opts.url);
+
+    // Clean-Render Schicht 0+1: Adblocker + Consent-Preseed VOR goto.
+    const clean = await prepareCleanPage(page, opts.url);
+    cleanupHolder.clean = clean;
 
     try {
       await page.goto(opts.url, {
@@ -406,7 +430,15 @@ export async function renderWebsiteCapture(
     }
 
     await new Promise((r) => setTimeout(r, 1_200));
-    await dismissCookieBanners(page, 3_000).catch(() => false);
+
+    // Clean-Render Schicht 2–4: Dismiss + QA-Gate (wirft RenderNotReadyError
+    // bei Fehlerseite auch nach Reload → Caller rendert Platzhalter) + Watchdog.
+    try {
+      await clean.stabilize({ dismissTimeoutMs: 3_000 });
+    } catch (err) {
+      if (err instanceof RenderNotReadyError) throw err;
+      // Sonstige stabilize-Fehler nie fatal.
+    }
 
     // Scrollbars + smooth-scroll abschalten.
     await page
@@ -624,8 +656,20 @@ export async function renderWebsiteCapture(
   };
 
   try {
-    return await withTimeout(run(), HARD_TIMEOUT_MS, "renderWebsiteCapture");
+    const result = await withTimeout(run(), HARD_TIMEOUT_MS, "renderWebsiteCapture");
+    captureOk = true;
+    return result;
+  } catch (err) {
+    captureProblem =
+      err instanceof RenderNotReadyError ? err.problem : "capture_error";
+    throw err;
   } finally {
+    // Telemetrie + Watchdog-Stop + Adblock-Disable (Schicht 5).
+    if (cleanupHolder.clean) {
+      await cleanupHolder.clean
+        .finish(captureOk, captureProblem)
+        .catch(() => undefined);
+    }
     if (clientHolder.current) {
       await clientHolder.current.detach().catch(() => undefined);
     }
@@ -633,5 +677,6 @@ export async function renderWebsiteCapture(
       await pageHolder.current.close().catch(() => undefined);
     }
     await ctx.close();
+    cleanupHolder.releaseSlot?.();
   }
 }

@@ -27,7 +27,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "puppeteer-core";
 import { getContext } from "./browser-pool";
-import { dismissCookieBanners } from "./cookie-dismiss";
+import {
+  prepareCleanPage,
+  acquireHostSlot,
+  RenderNotReadyError,
+  type CleanPageSession,
+} from "./clean-render";
 
 /** Zwei unterstützte Capture-Modi (siehe Modul-Doc oben). */
 export type CaptureMode = "static-hero" | "scroll-recorded";
@@ -235,8 +240,17 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
 
   const ctx = await getContext();
   const pageHolder: { current: Page | null } = { current: null };
+  const cleanupHolder: {
+    releaseSlot: (() => void) | null;
+    clean: CleanPageSession | null;
+  } = { releaseSlot: null, clean: null };
+  let captureOk = false;
+  let captureProblem: string | null = null;
 
   const run = async (): Promise<RecordResult> => {
+    // Host-Throttle: max. 2 parallele Loads pro Shop-Host (Schicht 4b).
+    cleanupHolder.releaseSlot = await acquireHostSlot(opts.url);
+
     const page = await ctx.context.newPage();
     pageHolder.current = page;
     await page.setViewport({
@@ -244,6 +258,10 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
       height: viewport.height,
       deviceScaleFactor: 1,
     });
+
+    // Clean-Render Schicht 0+1: Adblocker + Consent-Preseed VOR goto.
+    const clean = await prepareCleanPage(page, opts.url);
+    cleanupHolder.clean = clean;
 
     // Navigate. Fall back through progressively cheaper waitUntil signals
     // so that flaky third-party trackers don't bork the whole capture.
@@ -266,8 +284,14 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
     // Let CSS / hero-images settle.
     await new Promise((r) => setTimeout(r, 1_000));
 
-    // Cookie-Banner möglichst früh wegklicken, damit der Hero sichtbar wird.
-    await dismissCookieBanners(page, 3_000).catch(() => false);
+    // Clean-Render Schicht 2–4: Dismiss + QA-Gate (wirft RenderNotReadyError
+    // wenn die Seite auch nach Reload eine Fehlerseite zeigt) + Watchdog.
+    try {
+      await clean.stabilize({ dismissTimeoutMs: 3_000 });
+    } catch (err) {
+      if (err instanceof RenderNotReadyError) throw err;
+      // Sonstige stabilize-Fehler nie fatal — Aufnahme läuft weiter.
+    }
 
     // Pin overflow to auto — some sites lock the body to overflow:hidden.
     await page
@@ -349,12 +373,25 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
   };
 
   try {
-    return await withTimeout(run(), HARD_TIMEOUT_MS, "recordCapture");
+    const result = await withTimeout(run(), HARD_TIMEOUT_MS, "recordCapture");
+    captureOk = true;
+    return result;
+  } catch (err) {
+    captureProblem =
+      err instanceof RenderNotReadyError ? err.problem : "capture_error";
+    throw err;
   } finally {
+    // Telemetrie + Watchdog-Stop + Adblock-Disable (Schicht 5).
+    if (cleanupHolder.clean) {
+      await cleanupHolder.clean
+        .finish(captureOk, captureProblem)
+        .catch(() => undefined);
+    }
     if (pageHolder.current) {
       await pageHolder.current.close().catch(() => undefined);
     }
     await ctx.close();
+    cleanupHolder.releaseSlot?.();
   }
 }
 

@@ -1322,6 +1322,33 @@ export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
 export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
 export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
 
+// ── Domain-Render-Profile (Clean-Render-Telemetrie, Migration 0036) ─────────
+//
+// Ein Row pro Hostname, upserted nach jedem Website-Capture. Sammelt, welche
+// Plattform/CMP erkannt wurde und welche Schicht das Banner entschärft hat.
+// Grundlage für: Debugging einzelner Kunden-Domains, Erfolgsraten-Monitoring
+// und späteres gezieltes Nachschärfen der Selektor-/Preseed-Rezepte.
+export const domainRenderProfiles = pgTable("domain_render_profiles", {
+  /** Hostname ohne www. — z. B. "inuvet.com". */
+  hostname: text("hostname").primaryKey(),
+  /** Erkannte Plattform: 'shopify' | 'shopware' | 'wordpress' | 'wix' | 'webflow' | 'squarespace' | 'hubspot' | 'unknown'. */
+  platform: text("platform").notNull().default("unknown"),
+  /** Erkannte CMP (z. B. 'cookiebot', 'usercentrics', 'pandectes'), 'none' oder 'unknown'. */
+  cmp: text("cmp").notNull().default("unknown"),
+  /** Welche Schicht zuletzt gegriffen hat: 'api:<name>' | 'click' | 'hide' | 'watchdog' | 'none'. */
+  resolvedBy: text("resolved_by").notNull().default("none"),
+  /** Anzahl erfolgreicher Captures. */
+  successCount: integer("success_count").notNull().default(0),
+  /** Anzahl fehlgeschlagener Captures (inkl. QA-Gate-Fails). */
+  failCount: integer("fail_count").notNull().default(0),
+  /** Letztes QA-Gate-Problem ('platform_error_page' | 'bot_interstitial' | 'empty_page'), NULL wenn zuletzt ok. */
+  lastProblem: text("last_problem"),
+  lastCaptureAt: timestamp("last_capture_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DomainRenderProfile = typeof domainRenderProfiles.$inferSelect;
+
 // ── Index-Namen als Konstanten ────────────────────────────────────────────
 //
 // Werden vom Worker (`landingpage-create.ts`) zur Erkennung von
