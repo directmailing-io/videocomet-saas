@@ -23,17 +23,20 @@ import {
   Presentation,
   Wand2,
 } from "lucide-react";
-import type {
-  Segment,
-  TextSegment,
-  ImageSegment,
-  VideoSegment,
-  WebsiteSegment,
-  GDocsSegment,
-  GSlideSegment,
-  CanvaSegment,
-  WebCaptureMode,
+import {
+  SLIDE_STAGE_WIDTH,
+  type Segment,
+  type SlideSegment,
+  type TextSegment,
+  type ImageSegment,
+  type VideoSegment,
+  type WebsiteSegment,
+  type GDocsSegment,
+  type GSlideSegment,
+  type CanvaSegment,
+  type WebCaptureMode,
 } from "@/lib/segments/types";
+import { SlideRender } from "@/lib/slide/slide-render";
 
 /** Lesbare deutsche Labels für die Aufnahme-Modi (Preview-Badge). */
 const CAPTURE_MODE_LABELS: Record<WebCaptureMode, string> = {
@@ -464,8 +467,40 @@ export function PreviewSegmentRender({
     case "canva":
       return <RenderCanva segment={segment} />;
     case "slide":
-      // Slide-Editor wird in dieser Vorschau (Step 3 klassisch) nicht
-      // gerendert — der eigene Editor-Pfad rendert SlideSegments separat.
-      return null;
+      return <RenderSlide segment={segment} sampleData={sampleData} />;
   }
+}
+
+/**
+ * Freie Folie: nutzt den geteilten SlideRender (gleiche Komponente wie
+ * Worker + Folien-Editor) und skaliert die 1280×720-Bühne per
+ * ResizeObserver auf die Container-Breite.
+ */
+function RenderSlide({
+  segment,
+  sampleData,
+}: {
+  segment: SlideSegment;
+  sampleData?: Record<string, string>;
+}) {
+  const ref = React.useRef<HTMLDivElement | null>(null);
+  const [scale, setScale] = React.useState(0);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setScale(el.clientWidth / SLIDE_STAGE_WIDTH);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="absolute inset-0 overflow-hidden">
+      {scale > 0 && (
+        <SlideRender slide={segment} leadData={sampleData} scale={scale} />
+      )}
+    </div>
+  );
 }
