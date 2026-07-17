@@ -55,6 +55,10 @@ export interface PreviewPlayerProps {
   seekRequest?: { ms: number; nonce: number } | null;
   /** Meldet den Playhead (gedrosselt) nach außen, z. B. an die Timeline. */
   onTimeChange?: (ms: number) => void;
+  /** Klick auf die Webcam-Blase in der Vorschau. */
+  onPipClick?: () => void;
+  /** Hebt die Webcam-Blase hervor (z. B. wenn im Inspector ausgewählt). */
+  pipSelected?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -134,6 +138,8 @@ export function PreviewPlayer({
   sampleData,
   seekRequest,
   onTimeChange,
+  onPipClick,
+  pipSelected,
 }: PreviewPlayerProps) {
   const totalDurationMs = React.useMemo(
     () => getTotalDurationMs(segments),
@@ -661,10 +667,27 @@ export function PreviewPlayer({
         {/* Webcam-PiP-Overlay — 25% der Bühnenbreite */}
         {webcamUrl && (
           <div
+            role={onPipClick ? "button" : undefined}
+            tabIndex={onPipClick ? 0 : undefined}
+            aria-label={onPipClick ? "Webcam-Einblendung bearbeiten" : undefined}
+            onClick={onPipClick}
+            onKeyDown={
+              onPipClick
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onPipClick();
+                    }
+                  }
+                : undefined
+            }
             className={cn(
               "absolute overflow-hidden bg-ink shadow-lg ring-1 ring-black/10",
               pipPosCls,
               pipShapeCls,
+              onPipClick &&
+                "cursor-pointer transition-shadow hover:ring-2 hover:ring-brand/60",
+              pipSelected && "ring-2 ring-brand",
             )}
             style={
               pipShape === "circle"

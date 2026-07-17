@@ -71,6 +71,12 @@ export interface SegmentEditorProps {
    * Webcam-Monitor-Toggle disabled.
    */
   currentSegmentIndex?: number | null;
+  /**
+   * Wenn gesetzt, wird für "Freie Folie"-Segmente statt des breiten
+   * Inline-Editors ein Button gerendert, der den Vollbild-Folien-Editor
+   * öffnet (Panel-Modus im Studio-Layout).
+   */
+  onOpenSlideEditor?: () => void;
 }
 
 const KIND_META: Record<SegmentKind, { label: string; Icon: React.ComponentType<{ className?: string }> }> = {
@@ -94,6 +100,7 @@ export function SegmentEditor({
   webcamUrl,
   allSegments,
   currentSegmentIndex,
+  onOpenSlideEditor,
 }: SegmentEditorProps) {
   const meta = KIND_META[segment.kind];
   const Icon = meta.Icon;
@@ -111,46 +118,46 @@ export function SegmentEditor({
 
   return (
     <Card className="overflow-hidden">
-      <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface-soft px-5 py-3">
+      <div className="space-y-3 border-b border-line bg-surface-soft px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="inline-flex size-8 items-center justify-center rounded-full bg-brand-soft text-brand-deep">
+          <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-deep">
             <Icon className="size-4" />
           </span>
-          <span className="text-sm font-semibold text-ink">
-            {segment.label?.trim() || meta.label}
-          </span>
-          {currentSegmentIndex != null &&
-            currentSegmentIndex >= 0 &&
-            allSegments &&
-            allSegments.length > 0 && (
-              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[11px] font-medium text-ink-muted">
-                Segment {currentSegmentIndex + 1} von {allSegments.length}
-              </span>
-            )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-ink">
+              {segment.label?.trim() || meta.label}
+            </p>
+            {currentSegmentIndex != null &&
+              currentSegmentIndex >= 0 &&
+              allSegments &&
+              allSegments.length > 0 && (
+                <p className="text-[11px] font-medium text-ink-muted">
+                  Segment {currentSegmentIndex + 1} von {allSegments.length}
+                </p>
+              )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onDelete}
+            className="shrink-0 text-danger hover:bg-danger/10 hover:border-danger/40"
+            aria-label="Segment löschen"
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
         </div>
-
-        <div className="ml-auto flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-3">
           <span className="text-xs font-medium text-ink-muted">Dauer</span>
           <DurationInput
             valueMs={segment.durationMs}
             onChange={(ms) => onChange({ ...segment, durationMs: ms })}
             maxMs={maxMs}
           />
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onDelete}
-            iconLeft={<Trash2 className="size-3.5" />}
-            className="text-danger hover:bg-danger/10 hover:border-danger/40"
-            aria-label="Segment löschen"
-          >
-            Löschen
-          </Button>
         </div>
       </div>
 
-      <div className="p-5">
+      <div className="p-4">
         <SegmentBody
           segment={segment}
           onChange={onChange}
@@ -158,6 +165,7 @@ export function SegmentEditor({
           webcamUrl={webcamUrl ?? null}
           allSegments={allSegments ?? null}
           currentSegmentIndex={currentSegmentIndex ?? null}
+          onOpenSlideEditor={onOpenSlideEditor ?? null}
         />
       </div>
     </Card>
@@ -171,6 +179,7 @@ function SegmentBody({
   webcamUrl,
   allSegments,
   currentSegmentIndex,
+  onOpenSlideEditor,
 }: {
   segment: Segment;
   onChange: (s: Segment) => void;
@@ -178,6 +187,7 @@ function SegmentBody({
   webcamUrl: string | null;
   allSegments: Segment[] | null;
   currentSegmentIndex: number | null;
+  onOpenSlideEditor: (() => void) | null;
 }) {
   switch (segment.kind) {
     case "text":
@@ -232,6 +242,26 @@ function SegmentBody({
         />
       );
     case "slide":
+      if (onOpenSlideEditor) {
+        return (
+          <div className="space-y-3">
+            <p className="text-xs leading-relaxed text-ink-muted">
+              Freie Folien gestaltest du im großen Folien-Editor mit Texten,
+              Bildern, Formen und Platzhaltern.
+            </p>
+            <Button
+              type="button"
+              variant="brand"
+              size="sm"
+              onClick={onOpenSlideEditor}
+              iconLeft={<Sparkles className="size-3.5" />}
+              className="w-full"
+            >
+              Folie gestalten (Vollbild)
+            </Button>
+          </div>
+        );
+      }
       return (
         <SegmentEditorSlide
           segment={segment}

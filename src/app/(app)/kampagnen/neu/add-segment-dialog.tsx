@@ -102,9 +102,15 @@ const SEGMENT_TYPE_GROUPS: SegmentTypeGroup[] = [
 interface SegmentTypeGridProps {
   onSelect: (kind: SegmentKind) => void;
   className?: string;
+  /** 1 = einspaltig (schmales Panel), 2 = zweispaltig ab sm (Dialog). */
+  columns?: 1 | 2;
 }
 
-export function SegmentTypeGrid({ onSelect, className }: SegmentTypeGridProps) {
+export function SegmentTypeGrid({
+  onSelect,
+  className,
+  columns = 2,
+}: SegmentTypeGridProps) {
   return (
     <div className={cn("space-y-5", className)}>
       {SEGMENT_TYPE_GROUPS.map((group) => (
@@ -112,7 +118,12 @@ export function SegmentTypeGrid({ onSelect, className }: SegmentTypeGridProps) {
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
             {group.label}
           </p>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+          <div
+            className={cn(
+              "grid grid-cols-1 gap-2.5",
+              columns === 2 && "sm:grid-cols-2",
+            )}
+          >
             {group.options.map(({ kind, title, description, Icon }) => (
               <button
                 key={kind}
