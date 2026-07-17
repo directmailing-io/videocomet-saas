@@ -11,6 +11,8 @@
  *   - Google-Docs-Segment      campaigns.segments[].docsUrl             {{key}}
  *   - Block-LP                 landing_page_templates.content (JSONB)   {{key|fallback}}
  *   - Custom-LP                custom_lp_versions.* (HTML/CSS/JS Bunny) {{key|fallback}}
+ *   - Website-Segment          campaigns.segments[] (kind "website")    Mapping-Key
+ *                              = urlColumn oder "website" (Lead-URL-Spalte)
  *
  * Verhalten bei nicht-zugänglichen Quellen (z. B. Google-Doc offline):
  *   - Wir ENTFERNEN den Source-Eintrag nicht, sondern markieren ihn als
@@ -37,7 +39,9 @@ import {
   isGDocsSegment,
   isGSlideSegment,
   isCanvaSegment,
+  isWebsiteSegment,
 } from "@/lib/segments/types";
+import { websiteSegmentMappingKey } from "./website-url";
 import type {
   DetectedPlaceholder,
   PlaceholderSource,
@@ -179,6 +183,21 @@ function scanSegments(
       for (const layer of seg.layers) {
         scanLayer(layer, acc, label);
       }
+      return;
+    }
+    if (isWebsiteSegment(seg)) {
+      // Website-Segmente brauchen pro Lead eine URL-Spalte. Statt sie im
+      // Kampagnen-Editor festzunageln, taucht sie hier als Platzhalter im
+      // Mapping-Schritt auf — der User weist die Spalte erst zu, wenn die
+      // Leadliste tatsächlich existiert.
+      pushHit(acc, websiteSegmentMappingKey(seg), {
+        kind: "website",
+        label:
+          seg.label?.trim() ||
+          (seg.captureMode === "scroll-recorded"
+            ? `Webseite-Scrollvideo ${ordinal}`
+            : `Webseite-Segment ${ordinal}`),
+      });
       return;
     }
     if (isGDocsSegment(seg)) {

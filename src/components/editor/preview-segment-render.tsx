@@ -286,7 +286,11 @@ function RenderVideo({
 }
 
 function RenderWebsite({ segment }: { segment: WebsiteSegment }) {
-  const showUrl = segment.fallbackUrl || `Spalte: ${segment.urlColumn || "?"}`;
+  const showUrl =
+    segment.fallbackUrl ||
+    (segment.urlColumn
+      ? `Spalte: ${segment.urlColumn}`
+      : "Website aus Leadliste (Zuweisung im Mapping-Schritt)");
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-surface-soft p-8">
       <div className="w-full max-w-md rounded-squircle-md border border-line bg-surface px-6 py-5 shadow-card">

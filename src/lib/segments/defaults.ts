@@ -137,7 +137,9 @@ export function createWebsiteSegment(
   return {
     ...baseFields("website", opts),
     kind: "website",
-    urlColumn: "website",
+    // Leer: die Lead-URL-Spalte wird erst im Mapping-Schritt des
+    // Run-Wizards zugewiesen (Key "website").
+    urlColumn: "",
     fallbackUrl: "https://example.com",
     captureMode: "static-hero",
   };

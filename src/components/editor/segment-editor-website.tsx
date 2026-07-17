@@ -86,23 +86,6 @@ export function SegmentEditorWebsite({
   return (
     <div className="space-y-5">
       <div>
-        <Label htmlFor={`url-col-${segment.id}`}>CSV-Spalte mit Lead-URL</Label>
-        <Input
-          id={`url-col-${segment.id}`}
-          value={segment.urlColumn}
-          onChange={(e) =>
-            onChange({ ...segment, urlColumn: e.target.value })
-          }
-          placeholder="website"
-        />
-        <p className="mt-1 text-xs text-ink-muted">
-          Name der Spalte mit der Website des jeweiligen Leads.
-          Jedes Lead-Video zeigt seine eigene Website, dein Scroll-Verhalten
-          wird 1:1 darauf abgespielt.
-        </p>
-      </div>
-
-      <div>
         <Label htmlFor={`fallback-${segment.id}`}>Vorschau-URL (Fallback)</Label>
         <Input
           id={`fallback-${segment.id}`}
@@ -193,9 +176,11 @@ export function SegmentEditorWebsite({
           <p>
             Die Vorschau-URL nutzt du nur zum Aufzeichnen deiner Scroll-
             Bewegung. Beim Generieren öffnet der Worker die jeweilige
-            Website jedes Leads (aus der CSV-Spalte) und spielt deine
-            Bewegung exakt darüber ab — so bekommt Max sein max.de, Anna
-            ihr anna.de mit identischem Scroll-Pattern.
+            Website jedes Leads und spielt deine Bewegung exakt darüber
+            ab — so bekommt Max sein max.de, Anna ihr anna.de mit
+            identischem Scroll-Pattern. Welche Spalte deiner Leadliste die
+            Website enthält, legst du später beim Erstellen der Runde im
+            Mapping-Schritt fest.
           </p>
         </div>
       </div>

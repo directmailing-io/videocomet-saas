@@ -109,7 +109,11 @@ export interface VideoSegment extends SegmentBase {
 
 export interface WebsiteSegment extends SegmentBase {
   kind: "website";
-  /** CSV-Spalte, die die URL pro Lead enthält. */
+  /**
+   * CSV-Spalte, die die URL pro Lead enthält. Darf leer sein — dann wird
+   * die Spalte erst im Mapping-Schritt des Run-Wizards zugewiesen
+   * (Mapping-Key "website", s. `@/lib/placeholders/website-url`).
+   */
   urlColumn: string;
   /** Fallback-URL, falls Lead keinen Wert in urlColumn hat. */
   fallbackUrl: string;

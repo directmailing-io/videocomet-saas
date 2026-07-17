@@ -139,6 +139,8 @@ function sourceKindLabel(kind: PlaceholderSource["kind"]): string {
       return "Umschlag";
     case "slug":
       return "Subdomain";
+    case "website":
+      return "Webseite-Video";
     default:
       return kind;
   }

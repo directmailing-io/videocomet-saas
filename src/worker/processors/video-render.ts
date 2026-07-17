@@ -45,7 +45,8 @@ import {
   renderUnreachablePlaceholder,
 } from "../lib/website-render-pipeline";
 import type { Segment } from "@/lib/segments/types";
-import { substitute } from "@/lib/placeholders/substitute";
+import { substitute, resolveValue } from "@/lib/placeholders/substitute";
+import { websiteSegmentMappingKey } from "@/lib/placeholders/website-url";
 import type {
   LegacyMapping,
   PlaceholderMapping,
@@ -544,15 +545,17 @@ async function renderSegmentsBase(opts: {
           outputPath: partPath,
         });
       } else if (seg.kind === "website") {
-        // Website-Segment: Lead-URL aus der CSV-Spalte (urlColumn), sonst
-        // generische Top-Level-URL, sonst statische seg.fallbackUrl.
-        const colKey = seg.urlColumn?.trim();
-        const fromCsv =
-          colKey && opts.leadData
-            ? pickFieldCI(opts.leadData, [colKey])
-            : null;
+        // Website-Segment: Lead-URL über das Run-Mapping auflösen (Spalte
+        // wird im Mapping-Schritt des Wizards zugewiesen; Key = urlColumn
+        // oder "website"). resolveValue fällt ohne Mapping-Eintrag auf den
+        // direkten CI-Lookup in leadData zurück (= altes Verhalten), danach
+        // generische Top-Level-URL, danach statische seg.fallbackUrl.
+        const mappingKey = websiteSegmentMappingKey(seg);
+        const fromLead = opts.leadData
+          ? resolveValue(mappingKey, opts.leadData, opts.placeholderMapping)
+          : null;
         const url =
-          normaliseWebsiteUrl(fromCsv) ??
+          normaliseWebsiteUrl(fromLead) ??
           normaliseWebsiteUrl(opts.fallbackWebsite) ??
           normaliseWebsiteUrl(seg.fallbackUrl) ??
           null;
