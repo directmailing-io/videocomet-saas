@@ -22,6 +22,7 @@ import {
   DEFAULT_SLUG_TEMPLATE,
   renderSlugTemplate,
 } from "@/lib/slug";
+import { WizardReloadButton } from "./wizard-reload-button";
 
 interface Template {
   id: string;
@@ -62,6 +63,10 @@ export interface WizardStep4Props {
   // ── Slug-Template ─────────────────────────────────────────────────────────
   slugTemplate: string | null;
   onSlugTemplateChange: (template: string | null) => void;
+
+  // ── Daten-Reload (Asset im neuen Tab erstellt → hier nachladen) ──────────
+  onReload?: () => void;
+  reloading?: boolean;
 }
 
 const THEME_PREVIEW: Record<string, string> = {
@@ -119,6 +124,8 @@ export function WizardStep4Landingpage({
   onDomainChange,
   slugTemplate,
   onSlugTemplateChange,
+  onReload,
+  reloading,
 }: WizardStep4Props) {
   // Auto-deselect domain that became inactive between page-load and step 4
   React.useEffect(() => {
@@ -307,9 +314,19 @@ export function WizardStep4Landingpage({
 
       {/* ── 3. Landingpage-Vorlage ────────────────────────────────────────── */}
       <section>
-        <h2 className="text-lg font-semibold text-ink mb-1">
-          Landingpage-Vorlage wählen
-        </h2>
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <h2 className="text-lg font-semibold text-ink">
+            Landingpage-Vorlage wählen
+          </h2>
+          {onReload && (
+            <WizardReloadButton
+              onReload={onReload}
+              reloading={reloading ?? false}
+              label="Neu laden"
+              className="shrink-0"
+            />
+          )}
+        </div>
         <p className="text-sm text-ink-muted mb-4">
           Wählen Sie eine Block-basierte Vorlage ODER Ihre eigene
           HTML-Vorlage. Beides ist möglich — beim Speichern wird die
@@ -328,11 +345,21 @@ export function WizardStep4Landingpage({
             action={
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <Button asChild iconLeft={<Plus className="size-4" />}>
-                  <Link href="/landingpages/neu">Landingpage erstellen</Link>
+                  <Link href="/landingpages/neu" target="_blank">
+                    Landingpage erstellen
+                  </Link>
                 </Button>
                 <Button asChild variant="ghost">
                   <Link href="/landingpages">Zur Landingpage-Uebersicht</Link>
                 </Button>
+                {onReload && (
+                  <WizardReloadButton
+                    onReload={onReload}
+                    reloading={reloading ?? false}
+                    label="Neu laden"
+                    variant="subtle"
+                  />
+                )}
               </div>
             }
           />

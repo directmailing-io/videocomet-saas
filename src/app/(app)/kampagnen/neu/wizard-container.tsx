@@ -15,6 +15,7 @@ import { WizardStep5Pdf } from "./wizard-step5-pdf";
 import { WizardStep6Summary } from "./wizard-step6-summary";
 import { useWizardDraft } from "./use-wizard-draft";
 import { DraftRestoreBanner, DraftStatusPill } from "./wizard-draft-ui";
+import { WizardReloadButton } from "./wizard-reload-button";
 
 export interface WizardWebcam {
   id: string;
@@ -197,6 +198,18 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
     setState((s) => ({ ...s, ...patch }));
   }, []);
 
+  // ── Daten-Reload ohne State-Verlust ─────────────────────────────────────
+  //
+  // router.refresh() lässt die Server-Component (page.tsx) neu laufen und
+  // aktualisiert `initialData` (Vorlagen, Custom-LPs, Domains, Mediathek).
+  // Client-State (Wizard-Eingaben, aktueller Schritt) bleibt dabei erhalten —
+  // so kann der User z. B. eine Landingpage-Vorlage im neuen Tab anlegen und
+  // sie hier per Klick nachladen.
+  const [reloading, startReload] = React.useTransition();
+  const reloadData = React.useCallback(() => {
+    startReload(() => router.refresh());
+  }, [router]);
+
   // ── Draft-Persistenz (Auto-Save) ────────────────────────────────────────
   //
   // Hält den Wizard-Fortschritt in localStorage am Leben, damit ein Wechsel
@@ -337,7 +350,8 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
         />
       )}
 
-      <ol className="flex items-center gap-2 mb-8 overflow-x-auto pb-2">
+      <div className="flex items-start justify-between gap-3 mb-8">
+        <ol className="flex items-center gap-2 overflow-x-auto pb-2">
         {STEPS.map((label, idx) => {
           const isActive = idx === step;
           const isDone = idx < step;
@@ -375,7 +389,13 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
             </li>
           );
         })}
-      </ol>
+        </ol>
+        <WizardReloadButton
+          onReload={reloadData}
+          reloading={reloading}
+          className="shrink-0"
+        />
+      </div>
 
       <div className="min-h-[320px]">
         {step === 0 && (
@@ -440,6 +460,8 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
             onDomainChange={(id) => update({ domainId: id })}
             slugTemplate={state.slugTemplate}
             onSlugTemplateChange={(t) => update({ slugTemplate: t })}
+            onReload={reloadData}
+            reloading={reloading}
           />
         )}
         {step === 4 && (() => {

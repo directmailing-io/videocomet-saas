@@ -30,7 +30,7 @@
  */
 
 import * as React from "react";
-import { Play, Pause, Loader2 } from "lucide-react";
+import { Play, Pause, Loader2, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Segment } from "@/lib/segments/types";
 import { segmentStartMs } from "@/lib/segments/timeline";
@@ -135,6 +135,12 @@ export function PreviewPlayer({
   const [playing, setPlaying] = React.useState(false);
   /** True, sobald das aktive Video-Segment `canplay` gefeuert hat. */
   const [stageVideoReady, setStageVideoReady] = React.useState(true);
+  /**
+   * Webcam-Ton. Default AN: Die Wiedergabe startet immer über den
+   * Play-Button (User-Geste), daher greift die Autoplay-Policy nicht —
+   * unmuted play() ist erlaubt.
+   */
+  const [webcamMuted, setWebcamMuted] = React.useState(false);
 
   // ── Refs ────────────────────────────────────────────────────────────
   /** Letzter timestamp aus rAF — für Delta-Berechnung. */
@@ -154,6 +160,11 @@ export function PreviewPlayer({
   const stageVideoRef = React.useRef<HTMLVideoElement | null>(null);
   /** Webcam-PiP-Video. */
   const webcamRef = React.useRef<HTMLVideoElement | null>(null);
+  /** webcamMuted in einer Ref, damit Play-Handler den aktuellen Wert sehen. */
+  const webcamMutedRef = React.useRef(webcamMuted);
+  React.useEffect(() => {
+    webcamMutedRef.current = webcamMuted;
+  }, [webcamMuted]);
 
   // ── Aktive Folie + Offsets ──────────────────────────────────────────
   const active = React.useMemo(
@@ -284,9 +295,11 @@ export function PreviewPlayer({
       const webEl = webcamRef.current;
 
       if (shouldPlay) {
-        // Webcam muss gemutet sein, sonst blockiert Autoplay-Policy.
+        // Ton folgt dem User-Toggle. play() läuft immer nach einer
+        // User-Geste (Play-Button), daher blockiert die Autoplay-Policy
+        // auch unmuted nicht.
         if (webEl) {
-          webEl.muted = true;
+          webEl.muted = webcamMutedRef.current;
           // play() liefert ein Promise, das bei abgebrochenem play()
           // (z.B. wenn unmittelbar gepaust wird) rejected — wir ignorieren das.
           webEl.play().catch(() => {});
@@ -444,7 +457,7 @@ export function PreviewPlayer({
     }
     // Auch hier: bei laufender Wiedergabe sicherstellen, dass Webcam läuft.
     if (playing && webEl.paused) {
-      webEl.muted = true;
+      webEl.muted = webcamMutedRef.current;
       webEl.play().catch(() => {});
     } else if (!playing && !webEl.paused) {
       try {
@@ -527,9 +540,18 @@ export function PreviewPlayer({
       /* ignore */
     }
     if (playingRef.current) {
-      el.muted = true;
+      el.muted = webcamMutedRef.current;
       el.play().catch(() => {});
     }
+  }
+
+  function toggleWebcamMute() {
+    setWebcamMuted((m) => {
+      const next = !m;
+      const el = webcamRef.current;
+      if (el) el.muted = next;
+      return next;
+    });
   }
 
   /* ------------------------------------------------------------------ */
@@ -610,7 +632,7 @@ export function PreviewPlayer({
             <video
               ref={webcamRef}
               src={webcamUrl}
-              muted
+              muted={webcamMuted}
               playsInline
               preload="auto"
               className="h-full w-full object-cover"
@@ -638,6 +660,26 @@ export function PreviewPlayer({
             <Pause className="size-4 fill-current" />
           ) : (
             <Play className="size-4 fill-current" />
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={toggleWebcamMute}
+          disabled={!webcamUrl}
+          aria-label={webcamMuted ? "Ton einschalten" : "Ton ausschalten"}
+          title={webcamMuted ? "Ton einschalten" : "Ton ausschalten"}
+          className={cn(
+            "inline-flex size-8 items-center justify-center rounded-full transition-colors",
+            webcamUrl
+              ? "text-ink-muted hover:bg-surface-soft hover:text-ink"
+              : "cursor-not-allowed text-line",
+          )}
+        >
+          {webcamMuted ? (
+            <VolumeX className="size-4" />
+          ) : (
+            <Volume2 className="size-4" />
           )}
         </button>
 
