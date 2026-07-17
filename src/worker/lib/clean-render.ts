@@ -113,6 +113,17 @@ export async function prepareCleanPage(
   page: Page,
   url: string,
 ): Promise<CleanPageSession> {
+  // tsx/esbuild (keepNames) wrappt innere Funktionen mit einem __name-Helper.
+  // Beim Serialisieren via page.evaluate fehlt der im Browser-Context →
+  // "__name is not defined". No-op-Shim in jedem Document dieser Page.
+  try {
+    await page.evaluateOnNewDocument(
+      "self.__name = self.__name || function(f){return f};",
+    );
+  } catch {
+    // best-effort
+  }
+
   let disableAdblock: () => Promise<void> = async () => {};
   try {
     disableAdblock = await enableAdblock(page);
