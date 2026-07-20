@@ -5,9 +5,7 @@ import {
   RotateCw,
   Presentation,
   AlertTriangle,
-  CheckCircle2,
   ImageOff,
-  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
@@ -180,16 +178,14 @@ export function SegmentEditorGSlide({
         </span>
       </div>
 
-      {/* Info-Zeile */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-squircle-sm border border-line bg-surface-soft px-4 py-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-ink">
-            Folie {segment.slideIndex + 1} aus Präsentation
-          </p>
-          <p className="mt-0.5 text-xs text-ink-muted">
-            Zuletzt synchronisiert: {formatRelative(segment.lastFetchedAt)}
-          </p>
-        </div>
+      {/* Sync-Zeile */}
+      <div className="flex items-center justify-between gap-3">
+        <p className="min-w-0 text-xs text-ink-muted">
+          In Google Slides geändert? Einmal aktualisieren.
+          <span className="block text-[11px] text-ink-muted/80">
+            Stand: {formatRelative(segment.lastFetchedAt)}
+          </span>
+        </p>
         <Button
           type="button"
           variant="subtle"
@@ -204,18 +200,12 @@ export function SegmentEditorGSlide({
 
       {/* Platzhalter */}
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-          Erkannte Platzhalter
-        </p>
+        <p className="mb-2 text-xs font-medium text-ink">Platzhalter</p>
         {segment.detectedPlaceholders.length === 0 ? (
-          <div className="flex items-start gap-2 rounded-squircle-sm border border-line bg-surface-soft p-3 text-xs text-ink-muted">
-            <Info className="size-3.5 shrink-0 mt-0.5" />
-            <span className="leading-snug">
-              Auf dieser Folie wurden keine{" "}
-              <code className="font-mono">{"{{key}}"}</code>-Platzhalter
-              gefunden. Sie wird unverändert gerendert.
-            </span>
-          </div>
+          <p className="text-xs leading-snug text-ink-muted">
+            Keine <code className="font-mono">{"{{key}}"}</code>-Platzhalter
+            auf dieser Folie — sie wird unverändert gezeigt.
+          </p>
         ) : (
           <>
             <div className="flex flex-wrap gap-1.5 mb-2">
@@ -246,38 +236,20 @@ export function SegmentEditorGSlide({
                     Diese Platzhalter werden NICHT pro Lead ersetzt.
                   </strong>{" "}
                   Die Folie wurde über die alte „Im Web veröffentlichen"-
-                  Variante eingebunden — Google rendert hier Text als
-                  Vektor-Pfade, die wir nicht mehr substituieren können. Teile
-                  das Deck stattdessen über{" "}
+                  Variante eingebunden. Teile das Deck stattdessen über{" "}
                   <strong>Teilen → Jeder mit dem Link → Betrachter</strong> und
                   importiere es neu.
                 </span>
               </div>
             ) : (
-              <div className="flex items-start gap-2 rounded-squircle-sm border border-brand-200 bg-brand-soft p-3 text-xs text-brand-deep">
-                <CheckCircle2 className="size-3.5 shrink-0 mt-0.5" />
-                <span className="leading-snug">
-                  Diese Platzhalter werden pro Lead aus deinen CSV-Daten
-                  ersetzt — wir rendern die Folie serverseitig mit den
-                  jeweiligen Werten.
-                </span>
-              </div>
+              <p className="text-xs leading-snug text-ink-muted">
+                Werden pro Lead automatisch mit den Daten aus deiner
+                Leadliste ersetzt.
+              </p>
             )}
           </>
         )}
       </div>
-
-      {/* Sync-Hinweis */}
-      {!refreshError && (
-        <div className="flex items-start gap-2.5 rounded-squircle-sm border border-brand-200 bg-brand-soft px-4 py-3 text-sm text-brand-deep">
-          <Info className="size-4 shrink-0 mt-0.5" />
-          <span className="leading-snug">
-            Hast du die Slides nachträglich bearbeitet? Speichere in Google
-            Slides und klicke hier auf „Aktualisieren" — sonst nutzen wir den
-            alten Stand.
-          </span>
-        </div>
-      )}
 
       {/* Inline-Error */}
       {refreshError && (

@@ -165,13 +165,13 @@ export function SegmentEditorGDocs({
         </div>
       )}
 
-      <div className="flex gap-2.5 rounded-squircle-sm border border-brand-200 bg-brand-soft p-3 text-xs text-brand-deep">
+      <p className="flex gap-2 text-xs leading-snug text-ink-muted">
         <Info className="size-3.5 shrink-0 mt-0.5" />
-        <p>
-          Wichtig: Das Dokument muss öffentlich (mit Link freigegeben) sein,
-          damit es im Video gezeigt werden kann.
-        </p>
-      </div>
+        <span>
+          Das Dokument muss „mit Link freigegeben" sein, sonst kann es im
+          Video nicht gezeigt werden.
+        </span>
+      </p>
 
       <PlaceholderHelper googleDocsUrl={segment.docsUrl} compact />
 

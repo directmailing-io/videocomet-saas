@@ -172,8 +172,9 @@ export function PlaceholderHelper({
   return (
     <div
       className={cn(
-        "rounded-squircle-md border border-line bg-surface",
-        compact ? "p-4 space-y-4" : "p-5 space-y-5",
+        compact
+          ? "space-y-4 border-t border-line pt-4"
+          : "rounded-squircle-md border border-line bg-surface p-5 space-y-5",
       )}
     >
       {/* Section 1: Available placeholders */}
@@ -190,7 +191,7 @@ export function PlaceholderHelper({
           </header>
         )}
         {compact && (
-          <p className="text-xs font-semibold text-ink-muted uppercase tracking-wide mb-2">
+          <p className="text-xs font-medium text-ink mb-2">
             Verfügbare Platzhalter
           </p>
         )}
@@ -289,7 +290,7 @@ export function PlaceholderHelper({
           </header>
         )}
         {compact && (
-          <p className="text-xs font-semibold text-ink-muted uppercase tracking-wide mb-2">
+          <p className="text-xs font-medium text-ink mb-2">
             Marker-Vorlagen
           </p>
         )}

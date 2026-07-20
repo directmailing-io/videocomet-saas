@@ -103,7 +103,6 @@ export function SegmentEditor({
   onOpenSlideEditor,
 }: SegmentEditorProps) {
   const meta = KIND_META[segment.kind];
-  const Icon = meta.Icon;
 
   // Hartes Maximum: Webcam-Dauer minus Summe der anderen Segmente.
   // Wenn die Caller-Komponente otherSegmentsDurationMs nicht setzt, fallen
@@ -118,11 +117,8 @@ export function SegmentEditor({
 
   return (
     <Card className="overflow-hidden">
-      <div className="space-y-3 border-b border-line bg-surface-soft px-4 py-3">
+      <div className="space-y-2.5 border-b border-line px-4 pb-3 pt-4">
         <div className="flex items-center gap-2">
-          <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-deep">
-            <Icon className="size-4" />
-          </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-ink">
               {segment.label?.trim() || meta.label}
@@ -130,9 +126,9 @@ export function SegmentEditor({
             {currentSegmentIndex != null &&
               currentSegmentIndex >= 0 &&
               allSegments &&
-              allSegments.length > 0 && (
-                <p className="text-[11px] font-medium text-ink-muted">
-                  Segment {currentSegmentIndex + 1} von {allSegments.length}
+              allSegments.length > 1 && (
+                <p className="text-[11px] text-ink-muted">
+                  {currentSegmentIndex + 1} von {allSegments.length}
                 </p>
               )}
           </div>
