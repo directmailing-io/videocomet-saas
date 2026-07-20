@@ -8,6 +8,7 @@ import {
   Camera,
   CheckCircle2,
   AlertTriangle,
+  ChevronDown,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -49,7 +50,7 @@ const CAPTURE_MODES: CaptureModeOption[] = [
   {
     value: "scroll-recorded",
     title: "Scroll-Aufnahme",
-    description: "Du scrollst selbst durch das Dokument, der Worker spielt es 1:1 nach.",
+    description: "Du scrollst einmal selbst, das Video spielt es 1:1 nach.",
     Icon: MoveVertical,
   },
 ];
@@ -86,7 +87,7 @@ export function SegmentEditorWebsite({
   return (
     <div className="space-y-5">
       <div>
-        <Label htmlFor={`fallback-${segment.id}`}>Vorschau-URL (Fallback)</Label>
+        <Label htmlFor={`fallback-${segment.id}`}>Vorschau-URL</Label>
         <Input
           id={`fallback-${segment.id}`}
           value={segment.fallbackUrl}
@@ -96,14 +97,13 @@ export function SegmentEditorWebsite({
           placeholder="https://www.beispiel.de"
         />
         <p className="mt-1 text-xs text-ink-muted">
-          Über diese URL nimmst du deine Scroll-Bewegung auf. Wird auch als
-          Fallback verwendet, wenn ein Lead in der CSV-Spalte keinen Wert hat.
+          Mit dieser Seite nimmst du auf und testest die Vorschau.
         </p>
       </div>
 
       <div>
         <Label>Aufnahme-Modus</Label>
-        <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="mt-2 grid grid-cols-1 gap-2">
           {CAPTURE_MODES.map((opt) => (
             <CaptureModeCard
               key={opt.value}
@@ -118,72 +118,52 @@ export function SegmentEditorWebsite({
       </div>
 
       {segment.captureMode === "scroll-recorded" && (
-        <div className="rounded-squircle-md border border-line bg-surface p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <span
-                className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-squircle-sm",
-                  hasFrames
-                    ? "bg-brand-soft text-brand-deep"
-                    : "bg-surface-soft text-ink-muted",
-                )}
-              >
-                {hasFrames ? (
-                  <CheckCircle2 className="size-4" />
-                ) : (
-                  <Camera className="size-4" />
-                )}
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-ink">
-                  Scroll-Aufnahme
-                </p>
-                <p className="text-xs text-ink-muted">
-                  {hasFrames
-                    ? `${frames.length} Frames, ${formatMs(lastT)} aufgezeichnet.`
-                    : "Noch keine Aufnahme."}
-                </p>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant={hasFrames ? "subtle" : "brand"}
-              size="sm"
-              onClick={() => setRecorderOpen(true)}
-              disabled={!previewUrlValid}
-              iconLeft={<Camera className="size-3.5" />}
+        <div className="rounded-squircle-md border border-line bg-surface p-3">
+          <div className="flex items-center gap-2.5">
+            <span
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-squircle-sm",
+                hasFrames
+                  ? "bg-brand-soft text-brand-deep"
+                  : "bg-surface-soft text-ink-muted",
+              )}
             >
-              {hasFrames ? "Erneut aufzeichnen" : "Aufnahme aufzeichnen"}
-            </Button>
+              {hasFrames ? (
+                <CheckCircle2 className="size-4" />
+              ) : (
+                <Camera className="size-4" />
+              )}
+            </span>
+            <p className="min-w-0 flex-1 text-xs text-ink-muted">
+              {hasFrames
+                ? `${frames.length} Frames, ${formatMs(lastT)} aufgezeichnet.`
+                : "Noch keine Aufnahme."}
+            </p>
           </div>
+          <Button
+            type="button"
+            variant={hasFrames ? "subtle" : "brand"}
+            size="sm"
+            onClick={() => setRecorderOpen(true)}
+            disabled={!previewUrlValid}
+            iconLeft={<Camera className="size-3.5" />}
+            className="mt-2.5 w-full"
+          >
+            {hasFrames ? "Erneut aufzeichnen" : "Aufnahme aufzeichnen"}
+          </Button>
           {!previewUrlValid && (
-            <div className="mt-3 flex gap-2 rounded-squircle-sm bg-warning/10 p-3 text-xs text-warning">
+            <div className="mt-2.5 flex gap-2 rounded-squircle-sm bg-warning/10 p-3 text-xs text-warning">
               <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
               <span>
-                Bitte zuerst eine gültige Fallback-URL eintragen, damit eine
-                Vorschau geladen werden kann.
+                Bitte zuerst eine gültige URL eintragen, damit die Vorschau
+                geladen werden kann.
               </span>
             </div>
           )}
         </div>
       )}
 
-      <div className="flex gap-3 rounded-squircle-sm border border-brand-200 bg-brand-soft p-4 text-sm text-brand-deep">
-        <Info className="size-4 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <p className="font-semibold">Personalisierte Aufnahme pro Lead</p>
-          <p>
-            Die Vorschau-URL nutzt du nur zum Aufzeichnen deiner Scroll-
-            Bewegung. Beim Generieren öffnet der Worker die jeweilige
-            Website jedes Leads und spielt deine Bewegung exakt darüber
-            ab — so bekommt Max sein max.de, Anna ihr anna.de mit
-            identischem Scroll-Pattern. Welche Spalte deiner Leadliste die
-            Website enthält, legst du später beim Erstellen der Runde im
-            Mapping-Schritt fest.
-          </p>
-        </div>
-      </div>
+      <PersonalizationHint />
 
       {recorderOpen && (
         <ScrollRecorderModal
@@ -220,7 +200,7 @@ function CaptureModeCard({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "group flex w-full items-start gap-3 rounded-squircle-md border bg-surface p-4 text-left transition",
+        "group flex w-full items-center gap-3 rounded-squircle-md border bg-surface p-3 text-left transition",
         "hover:border-brand-200 hover:bg-brand-soft/40",
         selected
           ? "border-brand-200 bg-brand-soft/60 ring-2 ring-brand"
@@ -229,13 +209,13 @@ function CaptureModeCard({
     >
       <span
         className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-squircle-sm",
+          "flex size-8 shrink-0 items-center justify-center rounded-squircle-sm",
           selected ? "bg-brand text-white" : "bg-surface-soft text-ink",
         )}
       >
         <Icon className="size-4" />
       </span>
-      <span className="flex flex-col gap-1">
+      <span className="flex min-w-0 flex-col gap-0.5">
         <span className="text-sm font-semibold leading-tight text-ink">
           {title}
         </span>
@@ -244,5 +224,37 @@ function CaptureModeCard({
         </span>
       </span>
     </button>
+  );
+}
+
+/**
+ * Aufklappbarer Hinweis zur Personalisierung — standardmäßig zu, damit das
+ * schmale Panel nicht von Erklärtext dominiert wird.
+ */
+function PersonalizationHint() {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="overflow-hidden rounded-squircle-sm border border-brand-200 bg-brand-soft/50">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-brand-deep transition-colors hover:bg-brand-soft"
+      >
+        <Info className="size-3.5 shrink-0" />
+        <span className="flex-1">Jeder Lead sieht seine eigene Website</span>
+        <ChevronDown
+          className={cn("size-3.5 transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open && (
+        <p className="border-t border-brand-200/60 px-3 py-2.5 text-xs leading-relaxed text-brand-deep">
+          Beim Generieren öffnen wir automatisch die Website jedes einzelnen
+          Leads und spielen deine Aufnahme exakt darüber ab — Max sieht
+          max.de, Anna sieht anna.de. Welche Spalte deiner Leadliste die
+          Website enthält, legst du später im Mapping-Schritt fest.
+        </p>
+      )}
+    </div>
   );
 }

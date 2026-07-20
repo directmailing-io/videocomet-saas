@@ -50,7 +50,7 @@ const CAPTURE_MODES: CaptureModeOption[] = [
   {
     value: "scroll-recorded",
     title: "Scroll-Aufnahme",
-    description: "Du scrollst selbst durch das Dokument, der Worker spielt es 1:1 nach.",
+    description: "Du scrollst einmal selbst, das Video spielt es 1:1 nach.",
     Icon: MoveVertical,
   },
 ];
@@ -105,7 +105,7 @@ export function SegmentEditorGDocs({
 
       <div>
         <Label>Aufnahme-Modus</Label>
-        <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="mt-2 grid grid-cols-1 gap-2">
           {CAPTURE_MODES.map((opt) => (
             <CaptureModeCard
               key={opt.value}
@@ -120,47 +120,41 @@ export function SegmentEditorGDocs({
       </div>
 
       {segment.captureMode === "scroll-recorded" && (
-        <div className="rounded-squircle-md border border-line bg-surface p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <span
-                className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-squircle-sm",
-                  hasFrames
-                    ? "bg-brand-soft text-brand-deep"
-                    : "bg-surface-soft text-ink-muted",
-                )}
-              >
-                {hasFrames ? (
-                  <CheckCircle2 className="size-4" />
-                ) : (
-                  <Camera className="size-4" />
-                )}
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-ink">
-                  Scroll-Aufnahme
-                </p>
-                <p className="text-xs text-ink-muted">
-                  {hasFrames
-                    ? `${frames.length} Frames, ${formatMs(lastT)} aufgezeichnet.`
-                    : "Noch keine Aufnahme."}
-                </p>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant={hasFrames ? "subtle" : "brand"}
-              size="sm"
-              onClick={() => setRecorderOpen(true)}
-              disabled={!urlValid}
-              iconLeft={<Camera className="size-3.5" />}
+        <div className="rounded-squircle-md border border-line bg-surface p-3">
+          <div className="flex items-center gap-2.5">
+            <span
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-squircle-sm",
+                hasFrames
+                  ? "bg-brand-soft text-brand-deep"
+                  : "bg-surface-soft text-ink-muted",
+              )}
             >
-              {hasFrames ? "Erneut aufzeichnen" : "Aufnahme aufzeichnen"}
-            </Button>
+              {hasFrames ? (
+                <CheckCircle2 className="size-4" />
+              ) : (
+                <Camera className="size-4" />
+              )}
+            </span>
+            <p className="min-w-0 flex-1 text-xs text-ink-muted">
+              {hasFrames
+                ? `${frames.length} Frames, ${formatMs(lastT)} aufgezeichnet.`
+                : "Noch keine Aufnahme."}
+            </p>
           </div>
+          <Button
+            type="button"
+            variant={hasFrames ? "subtle" : "brand"}
+            size="sm"
+            onClick={() => setRecorderOpen(true)}
+            disabled={!urlValid}
+            iconLeft={<Camera className="size-3.5" />}
+            className="mt-2.5 w-full"
+          >
+            {hasFrames ? "Erneut aufzeichnen" : "Aufnahme aufzeichnen"}
+          </Button>
           {!urlValid && (
-            <div className="mt-3 flex gap-2 rounded-squircle-sm bg-warning/10 p-3 text-xs text-warning">
+            <div className="mt-2.5 flex gap-2 rounded-squircle-sm bg-warning/10 p-3 text-xs text-warning">
               <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
               <span>
                 Bitte zuerst eine gültige Google-Docs-URL eintragen, damit eine
@@ -216,7 +210,7 @@ function CaptureModeCard({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "group flex w-full items-start gap-3 rounded-squircle-md border bg-surface p-4 text-left transition",
+        "group flex w-full items-center gap-3 rounded-squircle-md border bg-surface p-3 text-left transition",
         "hover:border-brand-200 hover:bg-brand-soft/40",
         selected
           ? "border-brand-200 bg-brand-soft/60 ring-2 ring-brand"
@@ -225,13 +219,13 @@ function CaptureModeCard({
     >
       <span
         className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-squircle-sm",
+          "flex size-8 shrink-0 items-center justify-center rounded-squircle-sm",
           selected ? "bg-brand text-white" : "bg-surface-soft text-ink",
         )}
       >
         <Icon className="size-4" />
       </span>
-      <span className="flex flex-col gap-1">
+      <span className="flex min-w-0 flex-col gap-0.5">
         <span className="text-sm font-semibold leading-tight text-ink">
           {title}
         </span>

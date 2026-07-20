@@ -153,6 +153,7 @@ export function SegmentEditor({
             valueMs={segment.durationMs}
             onChange={(ms) => onChange({ ...segment, durationMs: ms })}
             maxMs={maxMs}
+            compact
           />
         </div>
       </div>

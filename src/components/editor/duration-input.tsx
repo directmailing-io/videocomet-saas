@@ -13,6 +13,11 @@ export interface DurationInputProps {
   maxMs?: number;
   /** Snap-Wert. Default 100ms. */
   stepMs?: number;
+  /**
+   * Kompakte Variante fürs schmale Inspector-Panel: nur ±1s-Buttons,
+   * kleineres Wertfeld. Feinjustierung weiter per Direkteingabe möglich.
+   */
+  compact?: boolean;
   className?: string;
 }
 
@@ -63,6 +68,7 @@ export function DurationInput({
   onChange,
   maxMs,
   stepMs = 100,
+  compact = false,
   className,
 }: DurationInputProps) {
   const [editing, setEditing] = React.useState(false);
@@ -169,18 +175,20 @@ export function DurationInput({
             <Minus className="size-3.5" />
             <span className="text-[11px] font-semibold">1s</span>
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => bump(-stepMs)}
-            aria-label={`Minus ${stepMs} Millisekunden`}
-            className="px-2.5"
-            disabled={minusStepDisabled}
-          >
-            <Minus className="size-3.5" />
-            <span className="text-[11px] font-semibold">{stepMs}ms</span>
-          </Button>
+          {!compact && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => bump(-stepMs)}
+              aria-label={`Minus ${stepMs} Millisekunden`}
+              className="px-2.5"
+              disabled={minusStepDisabled}
+            >
+              <Minus className="size-3.5" />
+              <span className="text-[11px] font-semibold">{stepMs}ms</span>
+            </Button>
+          )}
         </div>
 
         {editing ? (
@@ -211,7 +219,10 @@ export function DurationInput({
               setTimeout(() => inputRef.current?.select(), 0);
             }}
             className={cn(
-              "rounded-squircle-sm border bg-surface px-4 py-2 font-mono text-base font-semibold text-ink min-w-[7.5rem] text-center hover:border-brand transition-colors",
+              "rounded-squircle-sm border bg-surface text-center font-mono font-semibold text-ink transition-colors hover:border-brand",
+              compact
+                ? "min-w-[6rem] px-3 py-1.5 text-sm"
+                : "min-w-[7.5rem] px-4 py-2 text-base",
               atMax ? "border-warn/60" : "border-line",
             )}
             aria-label="Dauer direkt eingeben"
@@ -222,23 +233,25 @@ export function DurationInput({
         )}
 
         <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => bump(stepMs)}
-            aria-label={`Plus ${stepMs} Millisekunden`}
-            className="px-2.5"
-            disabled={plusStepReallyDisabled}
-            title={
-              plusStepReallyDisabled
-                ? "Webcam-Dauer voll ausgenutzt"
-                : undefined
-            }
-          >
-            <Plus className="size-3.5" />
-            <span className="text-[11px] font-semibold">{stepMs}ms</span>
-          </Button>
+          {!compact && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => bump(stepMs)}
+              aria-label={`Plus ${stepMs} Millisekunden`}
+              className="px-2.5"
+              disabled={plusStepReallyDisabled}
+              title={
+                plusStepReallyDisabled
+                  ? "Webcam-Dauer voll ausgenutzt"
+                  : undefined
+              }
+            >
+              <Plus className="size-3.5" />
+              <span className="text-[11px] font-semibold">{stepMs}ms</span>
+            </Button>
+          )}
           <Button
             type="button"
             variant="ghost"
