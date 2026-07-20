@@ -4,10 +4,7 @@ import * as React from "react";
 import {
   FileText,
   Globe,
-  Image as ImageIcon,
   Presentation,
-  Sparkles,
-  Type,
   Video as VideoIcon,
   Wand2,
 } from "lucide-react";
@@ -38,12 +35,6 @@ const SEGMENT_TYPE_GROUPS: SegmentTypeGroup[] = [
     label: "Folien & Präsentationen",
     options: [
       {
-        kind: "slide",
-        title: "Freie Folie",
-        description: "Eigene Folie mit Texten, Bildern und Formen gestalten.",
-        Icon: Sparkles,
-      },
-      {
         kind: "gslide",
         title: "Google Slides",
         description: "Fertige Präsentation aus Google Slides importieren.",
@@ -55,23 +46,11 @@ const SEGMENT_TYPE_GROUPS: SegmentTypeGroup[] = [
         description: "Design aus Canva importieren und einbinden.",
         Icon: Wand2,
       },
-      {
-        kind: "text",
-        title: "Einfacher Text",
-        description: "Kurze Textbotschaft, z. B. mit Namen des Empfängers.",
-        Icon: Type,
-      },
     ],
   },
   {
-    label: "Bilder & Videos",
+    label: "Videos",
     options: [
-      {
-        kind: "image",
-        title: "Bild",
-        description: "Ein Bild aus der Mediathek zeigen.",
-        Icon: ImageIcon,
-      },
       {
         kind: "video",
         title: "Video",

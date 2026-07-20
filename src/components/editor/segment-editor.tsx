@@ -195,7 +195,6 @@ function SegmentBody({
         <SegmentEditorText
           segment={segment}
           onChange={(s: TextSegment) => onChange(s)}
-          onConvertToSlide={(s) => onChange(s)}
         />
       );
     case "image":
