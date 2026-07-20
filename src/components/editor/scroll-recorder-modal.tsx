@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import {
-  Camera,
   Check,
+  Clock,
   Loader2,
   RotateCcw,
   Square,
@@ -598,9 +598,9 @@ export function ScrollRecorderModal({
         <div>
           <DialogTitle>Scroll-Aufnahme</DialogTitle>
           <DialogDescription>
-            Scrolle frei durch die Vorschau. Nur deine Bewegung wird
-            aufgezeichnet — beim Generieren bekommt jeder Lead seine
-            personalisierte Seite und die Bewegung läuft 1:1 darüber.
+            Scrolle frei durch die Vorschau — nur deine Bewegung wird
+            aufgezeichnet und läuft später über die personalisierte Seite
+            jedes Leads.
           </DialogDescription>
           {initialHint && phase.kind === "ready" && (
             <p className="mt-2 text-xs text-ink-muted">{initialHint}</p>
@@ -717,7 +717,7 @@ function ViewportArea({
 }) {
   if (phase.kind === "loading") {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-squircle-md border border-dashed border-line bg-surface-soft py-20">
+      <div className="flex flex-col items-center justify-center gap-3 rounded-squircle-md bg-surface-soft py-20">
         <Loader2 className="size-6 animate-spin text-brand-deep" />
         <p className="text-sm text-ink-muted">
           Lade Vorschau des Dokuments…
@@ -731,7 +731,7 @@ function ViewportArea({
 
   if (phase.kind === "failed") {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-squircle-md border border-dashed border-danger/40 bg-danger/5 py-12 px-6 text-center">
+      <div className="flex flex-col items-center justify-center gap-3 rounded-squircle-md bg-danger-soft/60 py-12 px-6 text-center">
         <AlertCircle className="size-6 text-danger" />
         <p className="text-sm font-semibold text-ink">
           Vorschau konnte nicht geladen werden
@@ -804,7 +804,7 @@ function ImageViewport({
     <div
       ref={viewportRef}
       className={cn(
-        "aspect-video w-full overflow-auto rounded-squircle-md border border-line bg-white",
+        "aspect-video w-full overflow-auto rounded-squircle-md bg-white shadow-card",
         lockScroll && "overflow-hidden",
       )}
     >
@@ -839,7 +839,7 @@ function IframeViewport({
       onLoad={onLoad}
       onError={onError}
       title="Google-Docs-Vorschau"
-      className="block aspect-video w-full bg-white rounded-squircle-md border border-line"
+      className="block aspect-video w-full bg-white rounded-squircle-md shadow-card"
     />
   );
 }
@@ -915,26 +915,27 @@ function Controls({
     const waitingForIframe =
       source?.kind === "iframe" && !iframeLoaded;
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {toggle}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-ink-muted">
-            {waitingForIframe
-              ? "Vorschau wird gerendert…"
-              : `Max. Aufnahme-Dauer: ${formatMs(segmentDurationMs)}`}
-          </p>
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" onClick={onCancel}>
-              Abbrechen
-            </Button>
-            <Button
-              onClick={onStart}
-              disabled={waitingForIframe}
-              iconLeft={<Camera className="size-4" />}
-            >
-              Aufnahme starten
-            </Button>
-          </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-canvas-deep px-3 py-1.5 text-xs font-medium text-ink-muted">
+          <Clock className="size-3.5" />
+          {waitingForIframe
+            ? "Vorschau wird gerendert …"
+            : `max. ${formatMs(segmentDurationMs)}`}
+        </span>
+        <div className="ml-auto flex items-center gap-3">
+          <Button variant="ghost" onClick={onCancel}>
+            Abbrechen
+          </Button>
+          <Button
+            onClick={onStart}
+            disabled={waitingForIframe}
+            iconLeft={
+              <span className="size-2.5 rounded-full bg-danger ring-2 ring-white/40" />
+            }
+          >
+            Aufnahme starten
+          </Button>
         </div>
       </div>
     );
@@ -950,41 +951,45 @@ function Controls({
   }
   if (phase.kind === "recording") {
     return (
-      <div className="flex justify-between items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="inline-flex items-center gap-2 rounded-full bg-danger-soft/70 px-3 py-1.5 text-xs font-semibold text-danger tabular-nums">
+          <span className="size-2 animate-pulse rounded-full bg-danger" />
+          {formatMs(phase.elapsedMs)} / {formatMs(segmentDurationMs)}
+        </span>
         <p className="text-xs text-ink-muted">
           Scrolle frei. Auto-Stop bei {formatMs(segmentDurationMs)}.
         </p>
-        <Button
-          variant="danger"
-          onClick={onStop}
-          iconLeft={<Square className="size-4" />}
-        >
-          Aufnahme stoppen
-        </Button>
+        <div className="ml-auto">
+          <Button
+            variant="danger"
+            onClick={onStop}
+            iconLeft={<Square className="size-4" />}
+          >
+            Aufnahme stoppen
+          </Button>
+        </div>
       </div>
     );
   }
   if (phase.kind === "done") {
     const lastT = phase.frames[phase.frames.length - 1]?.t ?? 0;
     return (
-      <div className="flex flex-col gap-3">
-        {toggle}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-ink-muted">
-            {phase.frames.length} Frames aufgezeichnet, {formatMs(lastT)} lang.
-          </p>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              onClick={onRestart}
-              iconLeft={<RotateCcw className="size-4" />}
-            >
-              Erneut aufnehmen
-            </Button>
-            <Button onClick={onSave} iconLeft={<Check className="size-4" />}>
-              Übernehmen
-            </Button>
-          </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-ok-soft px-3 py-1.5 text-xs font-semibold text-ok">
+          <Check className="size-3.5" />
+          {formatMs(lastT)} aufgenommen
+        </span>
+        <div className="ml-auto flex items-center gap-3">
+          <Button
+            variant="ghost"
+            onClick={onRestart}
+            iconLeft={<RotateCcw className="size-4" />}
+          >
+            Erneut aufnehmen
+          </Button>
+          <Button onClick={onSave} iconLeft={<Check className="size-4" />}>
+            Übernehmen
+          </Button>
         </div>
       </div>
     );
@@ -1023,12 +1028,12 @@ function WebcamMonitorToggle({
       aria-pressed={enabled}
       title={available ? activeTitle : disabledTitle}
       className={cn(
-        "inline-flex items-center gap-2 self-start rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+        "inline-flex items-center gap-2 self-start rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
         available
           ? enabled
-            ? "border-brand bg-brand-soft text-brand-deep hover:bg-brand-100"
-            : "border-line bg-surface text-ink hover:bg-surface-muted"
-          : "border-line bg-surface-soft text-ink-muted cursor-not-allowed",
+            ? "bg-brand-soft text-brand-deep hover:bg-brand-100"
+            : "bg-canvas-deep text-ink hover:bg-line-soft"
+          : "bg-surface-soft text-ink-muted cursor-not-allowed",
       )}
     >
       <Icon className="size-3.5" />

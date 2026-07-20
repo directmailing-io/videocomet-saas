@@ -5,7 +5,6 @@ import {
   Video,
   Check,
   Upload,
-  RotateCcw,
   Loader2,
   Play,
   AlertCircle,
@@ -178,11 +177,6 @@ export function WizardStep1Webcam({
   const [pickerLoading, setPickerLoading] = React.useState(false);
   const [pickerError, setPickerError] = React.useState<string | null>(null);
 
-  const selected = React.useMemo(
-    () => webcams.find((w) => w.id === value) ?? null,
-    [webcams, value],
-  );
-
   // When the user opens the picker, refresh the webcam list from the API so
   // newly uploaded items appear without a full page reload.
   const loadPickerItems = React.useCallback(async () => {
@@ -252,17 +246,7 @@ export function WizardStep1Webcam({
 
   return (
     <div>
-      {selected ? (
-        <SelectedWebcamPreview
-          webcam={selected}
-          onPickOther={openPicker}
-          onReRecord={() => {
-            setUploadError(null);
-            setRecordOpen(true);
-          }}
-        />
-      ) : (
-        <div className="space-y-4">
+      <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm text-ink-muted">
               {webcams.length === 0
@@ -313,7 +297,6 @@ export function WizardStep1Webcam({
             </div>
           )}
         </div>
-      )}
 
       {/* Picker dialog (Mediathek) */}
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -418,200 +401,6 @@ export function WizardStep1Webcam({
 /* ------------------------------------------------------------------ */
 /* Sub-Components                                                     */
 /* ------------------------------------------------------------------ */
-
-/**
- * SelectedWebcamPreview — die große Vorschau, die nach Auswahl einer Webcam
- * angezeigt wird. Anders als die alte Variante:
- *   - controls + preload="metadata" + playsInline → spielt zuverlässig ab
- *     (auch in Safari/iOS und kurz nach dem Upload, wenn Bunny Edge noch warm
- *     wird)
- *   - explizite Lade- und Fehlerzustände, damit der Nutzer nicht denkt,
- *     der Player sei kaputt
- *   - „Erneut versuchen" wenn das CDN den Range-Request mal versemmelt
- */
-function SelectedWebcamPreview({
-  webcam,
-  onPickOther,
-  onReRecord,
-}: {
-  webcam: Webcam;
-  onPickOther: () => void;
-  onReRecord: () => void;
-}) {
-  const [loadState, setLoadState] = React.useState<
-    "loading" | "ready" | "error"
-  >("loading");
-  const [reloadKey, setReloadKey] = React.useState(0);
-  // Client-side fallback wenn die Server-Werte für Altbestand fehlen — wir
-  // ermitteln Aspect aus dem geladenen <video>-Element und nutzen es für den
-  // Container-Aspect (rein lokal, wird nicht zurückgeschrieben).
-  const [detectedDims, setDetectedDims] = React.useState<
-    { width: number; height: number } | null
-  >(null);
-
-  // Wenn sich die Auswahl ändert (anderes Video), zurück in den Lade-Status.
-  React.useEffect(() => {
-    setLoadState("loading");
-    setDetectedDims(null);
-  }, [webcam.id]);
-
-  /** Effektives Aspect: bevorzugt DB-Werte, dann Client-Detection. */
-  const effectiveDims =
-    webcam.width != null && webcam.height != null
-      ? { width: webcam.width, height: webcam.height }
-      : detectedDims;
-  const isPortrait =
-    effectiveDims !== null && effectiveDims.height > effectiveDims.width;
-
-  /**
-   * Bunny-Stream-GUID aus der publicUrl extrahieren (Pattern:
-   * `vz-<hash>.b-cdn.net/<guid>/playlist.m3u8`). Wenn die URL kein
-   * Stream-Pattern matcht, ist es eine Storage-URL (Webcam-Recording)
-   * und wir streamen direkt via <video>.
-   */
-  const streamGuid = React.useMemo(() => {
-    const m = webcam.publicUrl.match(
-      /^https?:\/\/[^/]+\/([0-9a-f-]{36})\/playlist\.m3u8(?:\?.*)?$/i,
-    );
-    return m ? m[1] : null;
-  }, [webcam.publicUrl]);
-
-  // Bei iframe-Embed feuert onLoad selbst dann wenn ein Error-Page angezeigt
-  // wird — wir verlassen uns auf den Initial-Load und gehen sofort auf ready,
-  // sobald die iframe geladen ist (kein server-side Status-Check noetig).
-  React.useEffect(() => {
-    if (streamGuid) setLoadState("ready");
-  }, [streamGuid, reloadKey]);
-
-  return (
-    <div className="rounded-squircle-md bg-surface shadow-card p-5">
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand-deep">
-          <Check className="size-3.5" />
-          Ausgewählt
-        </span>
-        <span className="text-sm font-semibold text-ink truncate">
-          {webcam.name}
-        </span>
-        <KindBadge kind={webcam.kind} />
-        <FormatBadge width={webcam.width} height={webcam.height} />
-        <span className="text-xs text-ink-muted">
-          {durationLabel(webcam.durationSec)}
-        </span>
-        {webcam.durationSec == null && loadState !== "error" && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted">
-            <Loader2 className="size-3 animate-spin" />
-            Dauer wird ermittelt
-          </span>
-        )}
-      </div>
-
-      {/*
-       * Container-Aspect richtet sich nach der gemessenen Source. Portrait
-       * (height > width) → schmaleres 9:16-Fenster mit gedeckelter Höhe, sonst
-       * klassisches 16:9. Wenn width/height noch unbekannt sind (Altbestand
-       * vor Migration 0011 oder Probe fehlgeschlagen), bleibt es bei 16:9
-       * — entspricht dem alten Verhalten.
-       */}
-      <div
-        className={cn(
-          "relative overflow-hidden rounded-squircle-sm bg-ink",
-          isPortrait
-            ? "w-full max-w-[280px] aspect-[9/16] max-h-[60vh]"
-            : "w-full max-w-[480px] aspect-video",
-        )}
-      >
-        {streamGuid ? (
-          // Bunny-Stream-URLs (Mediathek-Upload kind=video) haben Token-Auth +
-          // Hotlink-Protection — direktes <video src=...> bekommt 403/404.
-          // Wir nutzen Bunnys iframe-Player; der hat eigene Auth und braucht
-          // keinen Token-Key.
-          <iframe
-            key={`${webcam.id}-${reloadKey}`}
-            // autoplay=false damit das Vorschau-Video im Wizard nicht von
-            // selbst loslaeuft — User triggert via Play-Button.
-            src={`https://iframe.mediadelivery.net/embed/670919/${streamGuid}?autoplay=false&preload=false`}
-            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-            allowFullScreen
-            className="h-full w-full bg-ink border-0"
-            title={webcam.name}
-            onLoad={() => setLoadState("ready")}
-            onError={() => setLoadState("error")}
-          />
-        ) : (
-          // Bunny-Storage-URLs (Webcam-Recording, kind=webcam) sind direkt
-          // streambar — kein iframe nötig.
-          <video
-            key={`${webcam.id}-${reloadKey}`}
-            src={webcam.publicUrl}
-            controls
-            controlsList="nodownload"
-            preload="metadata"
-            playsInline
-            className="h-full w-full object-contain bg-ink"
-            onLoadedMetadata={(e) => {
-              setLoadState("ready");
-              const v = e.currentTarget as HTMLVideoElement;
-              if ((webcam.width == null || webcam.height == null) && v.videoWidth > 0 && v.videoHeight > 0) {
-                setDetectedDims({ width: v.videoWidth, height: v.videoHeight });
-              }
-            }}
-            onLoadedData={() => setLoadState("ready")}
-            onError={() => setLoadState("error")}
-          />
-        )}
-        {loadState === "loading" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/60 text-white pointer-events-none">
-            <Loader2 className="size-5 animate-spin" />
-            <span className="text-xs font-medium">Vorschau wird geladen …</span>
-          </div>
-        )}
-        {loadState === "error" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/85 p-4 text-center text-white">
-            <AlertCircle className="size-6" />
-            <span className="text-sm font-semibold">
-              Vorschau konnte nicht geladen werden
-            </span>
-            <span className="text-[11px] text-white/70 max-w-xs">
-              Das Video wurde gespeichert. Klick „Erneut laden" — das CDN
-              braucht manchmal ein paar Sekunden.
-            </span>
-            <Button
-              size="sm"
-              variant="subtle"
-              onClick={() => {
-                setLoadState("loading");
-                setReloadKey((k) => k + 1);
-              }}
-              iconLeft={<RotateCcw className="size-3.5" />}
-            >
-              Erneut laden
-            </Button>
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-wrap gap-2 mt-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onPickOther}
-          iconLeft={<RotateCcw className="size-4" />}
-        >
-          Andere wählen
-        </Button>
-        <Button
-          size="sm"
-          variant="subtle"
-          onClick={onReRecord}
-          iconLeft={<Video className="size-4" />}
-        >
-          Neu aufnehmen
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 /**
  * WebcamThumb — Grid-Tile in der Mediathek-Übersicht / im Picker-Dialog.
