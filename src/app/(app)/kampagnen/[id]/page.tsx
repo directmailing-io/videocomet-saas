@@ -1,15 +1,7 @@
 import type * as React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  BarChart3,
-  Eye,
-  MousePointerClick,
-  Play,
-  Plus,
-  Timer,
-  Users,
-} from "lucide-react";
+import { BarChart3, Plus } from "lucide-react";
 import { eq } from "drizzle-orm";
 import { requireUser } from "@/lib/auth-guard";
 import { getCampaign } from "@/lib/db/queries/campaigns";
@@ -26,7 +18,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
-import { StatCard } from "@/components/ui/stat-card";
 
 import { RunsTable, type RunRow } from "./runs-table";
 import { CampaignActions } from "./campaign-actions";
@@ -211,122 +202,56 @@ export default async function CampaignDetailPage({
         }
       />
 
-      <Tabs defaultValue="übersicht">
+      {/* Kompakte Kennzahlen-Leiste statt eigenem Übersicht-Tab — die
+          wichtigsten Raten sind so in jedem Tab sichtbar. */}
+      <div className="mb-6 rounded-squircle-lg bg-surface shadow-card px-6 py-4">
+        <div className="flex flex-wrap items-center gap-x-10 gap-y-3">
+          <QuickStat
+            label="Leads"
+            value={leadsCount.toLocaleString("de-DE")}
+          />
+          <QuickStat
+            label="Öffnungsrate"
+            value={fmtPercent(uniqueViewedCount, leadsCount)}
+          />
+          <QuickStat
+            label="Play-Rate"
+            value={fmtPercent(uniquePlayedCount, leadsCount)}
+          />
+          <QuickStat
+            label="Watch-Time"
+            value={fmtDuration(summary.watchTimeSec)}
+          />
+          <QuickStat
+            label="CTA-Rate"
+            value={fmtPercent(uniqueCtaCount, leadsCount)}
+          />
+          <div className="ml-auto">
+            <Button
+              asChild
+              variant="subtle"
+              size="sm"
+              iconLeft={<BarChart3 className="size-4" />}
+            >
+              <Link href={`/analytics/kampagnen/${campaign.id}`}>
+                Analytics
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <Tabs defaultValue="runden">
         <TabsList>
-          <TabsTrigger value="übersicht">Übersicht</TabsTrigger>
-          <TabsTrigger value="leads">
-            Leads {leadsCount > 0 && `(${leadsCount})`}
-          </TabsTrigger>
           <TabsTrigger value="runden">
             Runden {initialRuns.length > 0 && `(${initialRuns.length})`}
           </TabsTrigger>
+          <TabsTrigger value="leads">
+            Leads {leadsCount > 0 && `(${leadsCount})`}
+          </TabsTrigger>
           <TabsTrigger value="aktivität">Aktivität</TabsTrigger>
-          <TabsTrigger value="crm">CRM</TabsTrigger>
           <TabsTrigger value="einstellungen">Einstellungen</TabsTrigger>
         </TabsList>
-
-        {/* ── Übersicht ───────────────────────────────────────────── */}
-        <TabsContent value="übersicht">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-            <StatCard
-              label="Gesamt-Leads"
-              value={leadsCount.toLocaleString("de-DE")}
-              icon={<Users />}
-              hint={`über ${initialRuns.length} ${initialRuns.length === 1 ? "Runde" : "Runden"}`}
-            />
-            <StatCard
-              label="Öffnungsrate"
-              value={fmtPercent(uniqueViewedCount, leadsCount)}
-              icon={<Eye />}
-              hint={`${uniqueViewedCount.toLocaleString("de-DE")} Leads geöffnet`}
-            />
-            <StatCard
-              label="Play-Rate"
-              value={fmtPercent(uniquePlayedCount, leadsCount)}
-              icon={<Play />}
-              hint={`${uniquePlayedCount.toLocaleString("de-DE")} Leads abgespielt`}
-            />
-            <StatCard
-              label="Watch-Time gesamt"
-              value={fmtDuration(summary.watchTimeSec)}
-              icon={<Timer />}
-              hint={
-                summary.playCount > 0
-                  ? `∅ ${fmtDuration(Math.round(summary.watchTimeSec / summary.playCount))} pro Play`
-                  : "noch keine Plays"
-              }
-            />
-            <StatCard
-              label="CTA-Rate"
-              value={fmtPercent(uniqueCtaCount, leadsCount)}
-              icon={<MousePointerClick />}
-              hint={`${uniqueCtaCount.toLocaleString("de-DE")} Leads geklickt`}
-            />
-          </div>
-
-          {showAbComparison && (
-            <div className="mb-6">
-              <AbVariantComparison
-                leadsA={abLeadsA}
-                leadsB={abLeadsB}
-                testActive={campaign.abTestingEnabled}
-              />
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
-            {/* Webcam-Vorschau: Video links, Metadaten rechts daneben —
-                kein zentriertes Portrait-Video in leerer Riesen-Card */}
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>Webcam-Aufnahme</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <WebcamPreview
-                  media={webcamMedia}
-                  meta={[
-                    { label: "Modus", value: modeLabel(campaign.mode) },
-                    {
-                      label: "Erstellt am",
-                      value: formatDate(campaign.createdAt),
-                    },
-                    {
-                      label: "Runden",
-                      value: initialRuns.length.toLocaleString("de-DE"),
-                    },
-                    {
-                      label: "Leads",
-                      value: leadsCount.toLocaleString("de-DE"),
-                    },
-                  ]}
-                />
-              </CardContent>
-            </Card>
-
-            {/* Analytics-Quick-Link */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Analytics</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-ink-muted leading-relaxed">
-                  Tiefgehende Analyse mit Zeitverlauf, Top-Leads und
-                  Event-Log finden Sie im Analytics-Bereich.
-                </p>
-                <Button
-                  asChild
-                  variant="subtle"
-                  className="w-full justify-center"
-                  iconLeft={<BarChart3 className="size-4" />}
-                >
-                  <Link href={`/analytics/kampagnen/${campaign.id}`}>
-                    Kampagnen-Analytics öffnen
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
 
         {/* ── Leads ───────────────────────────────────────────────── */}
         <TabsContent value="leads">
@@ -390,16 +315,44 @@ export default async function CampaignDetailPage({
           />
         </TabsContent>
 
-        {/* ── CRM ────────────────────────────────────────────────── */}
-        <TabsContent value="crm">
-          <CrmTab
-            campaignId={campaign.id}
-            campaignName={campaign.name}
-          />
-        </TabsContent>
-
         {/* ── Einstellungen ──────────────────────────────────────── */}
         <TabsContent value="einstellungen" className="space-y-5">
+          {/* Webcam-Vorschau: Video links, Metadaten rechts daneben —
+              kein zentriertes Portrait-Video in leerer Riesen-Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Webcam-Aufnahme</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WebcamPreview
+                media={webcamMedia}
+                meta={[
+                  { label: "Modus", value: modeLabel(campaign.mode) },
+                  {
+                    label: "Erstellt am",
+                    value: formatDate(campaign.createdAt),
+                  },
+                  {
+                    label: "Runden",
+                    value: initialRuns.length.toLocaleString("de-DE"),
+                  },
+                  {
+                    label: "Leads",
+                    value: leadsCount.toLocaleString("de-DE"),
+                  },
+                ]}
+              />
+            </CardContent>
+          </Card>
+
+          {showAbComparison && (
+            <AbVariantComparison
+              leadsA={abLeadsA}
+              leadsB={abLeadsB}
+              testActive={campaign.abTestingEnabled}
+            />
+          )}
+
           <AbTestSettings
             campaignId={campaign.id}
             pdfEnabled={campaign.pdfEnabled}
@@ -502,14 +455,37 @@ export default async function CampaignDetailPage({
               </div>
             </CardContent>
           </Card>
+
+          {/* CRM & Webhooks — bewusst hier statt als eigener Tab, damit alle
+              Kampagnen-Einstellungen an einer Stelle liegen. */}
+          <div className="pt-4">
+            <h3 className="text-base font-semibold text-ink mb-1">
+              CRM & Integrationen
+            </h3>
+            <p className="text-sm text-ink-muted mb-4">
+              Lead-Events automatisch an dein CRM oder per Webhook übertragen.
+            </p>
+            <CrmTab campaignId={campaign.id} campaignName={campaign.name} />
+          </div>
         </TabsContent>
       </Tabs>
     </>
   );
 }
 
+function QuickStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+        {label}
+      </p>
+      <p className="text-lg font-semibold text-ink tabular-nums">{value}</p>
+    </div>
+  );
+}
+
 /**
- * A/B-Varianten-Vergleich für den Übersicht-Tab. Aggregiert die
+ * A/B-Varianten-Vergleich in den Einstellungen. Aggregiert die
  * denormalisierten Tracking-Zähler der Leads je Variante und markiert den
  * Gewinner nach Öffnungsrate. Bei kleinen Stichproben (<30 Leads pro
  * Variante) warnen wir vor voreiligen Schlüssen statt einen Gewinner
@@ -654,7 +630,7 @@ function AbVariantComparison({
         <p className="mt-3 text-xs text-ink-muted">
           {smallSample
             ? "Noch wenig Daten (unter 30 Leads pro Variante) — die Raten können stark schwanken. Warten Sie mit der Gewinner-Entscheidung, bis mehr Briefe geöffnet wurden."
-            : "Der Gewinner wird nach Öffnungsrate markiert. Den Test beenden und den Gewinner übernehmen können Sie im Tab „Einstellungen“."}
+            : "Der Gewinner wird nach Öffnungsrate markiert. Den Test beenden und den Gewinner übernehmen können Sie direkt darunter in den A/B-Einstellungen."}
         </p>
       </CardContent>
     </Card>

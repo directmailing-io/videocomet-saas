@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   FileArchive,
   Globe,
   LayoutTemplate,
@@ -23,11 +24,13 @@ import {
   renderSlugTemplate,
 } from "@/lib/slug";
 import { WizardReloadButton } from "./wizard-reload-button";
+import { BlockTemplateThumb } from "./block-template-thumb";
 
 interface Template {
   id: string;
   name: string;
   themeId: string;
+  content: unknown;
 }
 
 interface CustomTemplate {
@@ -35,6 +38,7 @@ interface CustomTemplate {
   name: string;
   description: string | null;
   versionCount: number;
+  thumbnailUrl: string | null;
   hasActiveVersion: boolean;
 }
 
@@ -68,13 +72,6 @@ export interface WizardStep4Props {
   onReload?: () => void;
   reloading?: boolean;
 }
-
-const THEME_PREVIEW: Record<string, string> = {
-  noir: "bg-gradient-to-br from-ink to-ink-soft",
-  clean: "bg-gradient-to-br from-surface to-surface-muted border border-line",
-  gradient: "bg-gradient-to-br from-brand to-brand-deep",
-  warm: "bg-gradient-to-br from-warn to-brand",
-};
 
 const SLUG_PRESETS: Array<{ template: string; label: string }> = [
   { template: "{firstName}-{lastName}", label: "Vor- + Nachname" },
@@ -127,6 +124,12 @@ export function WizardStep4Landingpage({
   onReload,
   reloading,
 }: WizardStep4Props) {
+  // Aufgeklappt starten, wenn der User bereits vom Standard abweicht —
+  // sonst bleiben die Optionen hinter „Anpassen" versteckt.
+  const [urlOptionsOpen, setUrlOptionsOpen] = React.useState(
+    domainId !== null || (slugTemplate !== null && slugTemplate.trim() !== ""),
+  );
+
   // Auto-deselect domain that became inactive between page-load and step 4
   React.useEffect(() => {
     if (!domainId) return;
@@ -217,8 +220,6 @@ export function WizardStep4Landingpage({
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {templates.map((tpl) => {
                     const active = tpl.id === value && !customValue;
-                    const preview =
-                      THEME_PREVIEW[tpl.themeId] ?? THEME_PREVIEW.clean;
                     return (
                       <button
                         key={tpl.id}
@@ -241,12 +242,12 @@ export function WizardStep4Landingpage({
                         )}
                         <Card className="border-0 shadow-none bg-transparent">
                           <CardContent className="p-3">
-                            <div
-                              className={cn(
-                                "aspect-[4/3] rounded-squircle-sm mb-3",
-                                preview,
-                              )}
-                            />
+                            <div className="mb-3">
+                              <BlockTemplateThumb
+                                content={tpl.content}
+                                themeId={tpl.themeId}
+                              />
+                            </div>
                             <div className="flex items-center gap-2 mb-1">
                               <p className="text-sm font-semibold text-ink truncate flex-1">
                                 {tpl.name}
@@ -334,9 +335,18 @@ export function WizardStep4Landingpage({
                         )}
                         <Card className="border-0 shadow-none bg-transparent">
                           <CardContent className="p-3">
-                            <div className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-center justify-center bg-gradient-to-br from-brand-soft to-surface-muted text-brand-deep">
-                              <FileArchive className="size-10 opacity-70" />
-                            </div>
+                            {tpl.thumbnailUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={tpl.thumbnailUrl}
+                                alt=""
+                                className="aspect-[4/3] w-full rounded-squircle-sm mb-3 object-cover object-top bg-surface-soft"
+                              />
+                            ) : (
+                              <div className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-center justify-center bg-gradient-to-br from-brand-soft to-surface-muted text-brand-deep">
+                                <FileArchive className="size-10 opacity-70" />
+                              </div>
+                            )}
                             <div className="flex items-center gap-2 mb-1">
                               <p className="text-sm font-semibold text-ink truncate flex-1">
                                 {tpl.name}
@@ -360,163 +370,144 @@ export function WizardStep4Landingpage({
         )}
       </section>
 
-      {/* ── 2. Web-Adresse (nachgelagerte Zusatz-Optionen) ───────────────── */}
-      <section className="rounded-squircle-md bg-surface-soft p-5 space-y-6">
-        <p className="text-sm font-semibold text-ink">Web-Adresse</p>
-
-        {/* Domain */}
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-1">
-            Domain für die Landingpages
-          </p>
-          <p className="text-xs text-ink-muted mb-3">
-            Wählen Sie aus, unter welcher Domain die personalisierten
-            Landingpages dieser Kampagne ausgeliefert werden.
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Default-Option */}
-            <DomainCard
-              active={domainId === null}
-              title="VIDEOCOMET-Subdomain"
-              hostname={DEFAULT_HOST}
-              description="Standard — sofort einsatzbereit."
-              badge={{ label: "Empfohlen", variant: "brand" }}
-              selectable
-              onClick={() => onDomainChange(null)}
+      {/* ── 2. Web-Adresse: URL-Vorschau zuerst, Optionen hinter „Anpassen" ── */}
+      <section className="rounded-squircle-md bg-surface-soft p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-ink">Web-Adresse</p>
+          <button
+            type="button"
+            onClick={() => setUrlOptionsOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-muted transition-colors"
+          >
+            Anpassen
+            <ChevronDown
+              className={cn(
+                "size-3.5 transition-transform",
+                urlOptionsOpen && "rotate-180",
+              )}
             />
-
-            {availableDomains.map((d) => {
-              const badge = domainStatusBadge(d.status);
-              const isActive = d.status === "active";
-              const isSelected = d.id === domainId;
-              return (
-                <DomainCard
-                  key={d.id}
-                  active={isSelected}
-                  title={d.kind === "apex" ? "Apex-Domain" : "Subdomain"}
-                  hostname={d.hostname}
-                  description={
-                    isActive
-                      ? "Bereit zur Auslieferung."
-                      : "Noch nicht aktiv — Konfiguration in den Einstellungen abschließen."
-                  }
-                  badge={badge}
-                  selectable={isActive}
-                  onClick={() => {
-                    if (isActive) onDomainChange(d.id);
-                  }}
-                />
-              );
-            })}
-          </div>
-
-          {availableDomains.length === 0 && (
-            <div className="mt-3 text-xs text-ink-muted">
-              Sie haben noch keine Custom-Domain verbunden. Sie können unter{" "}
-              <span className="font-semibold text-ink">
-                Einstellungen → Domains
-              </span>{" "}
-              eine eigene Domain hinzufügen.
-            </div>
-          )}
+          </button>
         </div>
 
-        {/* Slug-Vorlage */}
-        <div className="space-y-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-1">
-              Slug-Vorlage
-            </p>
-            <p className="text-xs text-ink-muted">
-              Bestimmt den lesbaren Teil der URL pro Lead. Platzhalter wie{" "}
-              <code className="font-mono text-xs">{"{firstName}"}</code> oder{" "}
-              <code className="font-mono text-xs">{"{companyName}"}</code>{" "}
-              werden aus den Lead-Daten ersetzt.
-            </p>
+        <div className="rounded-squircle-sm bg-surface px-4 py-3">
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5">
+            <Sparkles className="size-3.5" />
+            So sieht der Link pro Lead aus — Beispiel Peter Mueller
           </div>
+          <p className="text-sm font-mono text-ink break-all">{previewUrl}</p>
+        </div>
 
-          <div>
-            <Label htmlFor="slug-template">Vorlage</Label>
-            <Input
-              id="slug-template"
-              value={slugTemplate ?? ""}
-              placeholder={DEFAULT_SLUG_TEMPLATE}
-              onChange={(e) => {
-                const v = e.target.value;
-                onSlugTemplateChange(v.trim() === "" ? null : v);
-              }}
-              spellCheck={false}
-            />
-            <p className="mt-1.5 text-xs text-ink-muted">
-              Leer lassen für den Standard{" "}
-              <code className="font-mono">{DEFAULT_SLUG_TEMPLATE}</code>.
-            </p>
-          </div>
-
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
-              Vorschlaege
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {SLUG_PRESETS.map((preset) => {
-                const isSelected =
-                  (slugTemplate ?? DEFAULT_SLUG_TEMPLATE) === preset.template;
-                return (
-                  <button
-                    key={preset.template}
-                    type="button"
-                    onClick={() =>
-                      onSlugTemplateChange(
-                        preset.template === DEFAULT_SLUG_TEMPLATE
-                          ? null
-                          : preset.template,
-                      )
-                    }
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                      isSelected
-                        ? "bg-brand-soft text-brand-deep ring-1 ring-brand/40"
-                        : "bg-surface text-ink-muted hover:text-ink hover:bg-surface-muted",
-                    )}
-                    title={preset.template}
-                  >
-                    <span className="font-mono">{preset.template}</span>
-                    <span className="text-[10px] opacity-70">
-                      ({preset.label})
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="rounded-squircle-sm bg-surface px-4 py-3">
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5">
-              <Sparkles className="size-3.5" />
-              Live-Vorschau (mit Test-Lead Peter Mueller)
-            </div>
-            <p className="text-sm font-mono text-ink break-all">
-              {previewUrl}
-            </p>
-            {!hostForPreview && (
-              <p className="mt-1 text-[11px] text-ink-muted">
-                Hinweis: Bei der VIDEOCOMET-Subdomain wird ein 4-stelliger
-                Hex-Suffix angehaengt (z.B.{" "}
-                <span className="font-mono">a3f7</span>).
+        {urlOptionsOpen && (
+          <div className="space-y-6 pt-2">
+            {/* Domain */}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-3">
+                Domain
               </p>
-            )}
-          </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <DomainCard
+                  active={domainId === null}
+                  title="VIDEOCOMET-Subdomain"
+                  hostname={DEFAULT_HOST}
+                  description="Standard — sofort einsatzbereit."
+                  badge={{ label: "Empfohlen", variant: "brand" }}
+                  selectable
+                  onClick={() => onDomainChange(null)}
+                />
 
-          <div className="flex items-start gap-2 text-xs text-ink-muted">
-            <Globe className="size-4 shrink-0 mt-px text-ink-muted" />
-            <p className="leading-relaxed">
-              Bei Namens-Kollision wird ein 4-stelliger Hex-Suffix angehaengt
-              (z.B. <span className="font-mono">peter-mueller-a3f7</span>).
-              Leere Felder werden übersprungen.
-            </p>
+                {availableDomains.map((d) => {
+                  const badge = domainStatusBadge(d.status);
+                  const isActive = d.status === "active";
+                  const isSelected = d.id === domainId;
+                  return (
+                    <DomainCard
+                      key={d.id}
+                      active={isSelected}
+                      title={d.kind === "apex" ? "Apex-Domain" : "Subdomain"}
+                      hostname={d.hostname}
+                      description={
+                        isActive
+                          ? "Bereit zur Auslieferung."
+                          : "Noch nicht aktiv — Konfiguration in den Einstellungen abschließen."
+                      }
+                      badge={badge}
+                      selectable={isActive}
+                      onClick={() => {
+                        if (isActive) onDomainChange(d.id);
+                      }}
+                    />
+                  );
+                })}
+              </div>
+
+              {availableDomains.length === 0 && (
+                <p className="mt-3 text-xs text-ink-muted">
+                  Eigene Domain? Unter{" "}
+                  <span className="font-semibold text-ink">
+                    Einstellungen → Domains
+                  </span>{" "}
+                  verbinden.
+                </p>
+              )}
+            </div>
+
+            {/* URL-Aufbau */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                URL-Aufbau
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {SLUG_PRESETS.map((preset) => {
+                  const isSelected =
+                    (slugTemplate ?? DEFAULT_SLUG_TEMPLATE) ===
+                    preset.template;
+                  return (
+                    <button
+                      key={preset.template}
+                      type="button"
+                      onClick={() =>
+                        onSlugTemplateChange(
+                          preset.template === DEFAULT_SLUG_TEMPLATE
+                            ? null
+                            : preset.template,
+                        )
+                      }
+                      className={cn(
+                        "inline-flex items-center rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                        isSelected
+                          ? "bg-brand-soft text-brand-deep ring-1 ring-brand/40"
+                          : "bg-surface text-ink-muted hover:text-ink hover:bg-surface-muted",
+                      )}
+                      title={preset.template}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div>
+                <Label htmlFor="slug-template">Eigene Vorlage</Label>
+                <Input
+                  id="slug-template"
+                  value={slugTemplate ?? ""}
+                  placeholder={DEFAULT_SLUG_TEMPLATE}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    onSlugTemplateChange(v.trim() === "" ? null : v);
+                  }}
+                  spellCheck={false}
+                />
+                <p className="mt-1.5 text-xs text-ink-muted">
+                  Platzhalter wie{" "}
+                  <code className="font-mono">{"{firstName}"}</code> werden pro
+                  Lead ersetzt. Bei Namens-Kollision hängen wir einen kurzen
+                  Suffix an (z.B.{" "}
+                  <span className="font-mono">peter-mueller-a3f7</span>).
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </section>
     </div>
   );

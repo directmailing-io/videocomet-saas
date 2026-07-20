@@ -35,6 +35,7 @@ export interface WizardTemplate {
   id: string;
   name: string;
   themeId: string;
+  content: unknown;
 }
 
 export interface WizardCustomTemplate {
@@ -42,6 +43,7 @@ export interface WizardCustomTemplate {
   name: string;
   description: string | null;
   versionCount: number;
+  thumbnailUrl: string | null;
   hasActiveVersion: boolean;
 }
 

@@ -10,6 +10,7 @@ interface CustomLpApiRow {
   name: string;
   description: string | null;
   versionCount: number;
+  thumbnailUrl: string | null;
   activeVersion: { id: string } | null;
 }
 
@@ -73,12 +74,14 @@ export default async function NeuePage() {
           id: t.id,
           name: t.name,
           themeId: t.themeId,
+          content: t.content,
         })),
         customTemplates: customTemplates.map((t) => ({
           id: t.id,
           name: t.name,
           description: t.description,
           versionCount: t.versionCount,
+          thumbnailUrl: t.thumbnailUrl ?? null,
           hasActiveVersion: Boolean(t.activeVersion),
         })),
         media: allMedia
