@@ -3,8 +3,6 @@
 import * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import type {
   WizardState,
   WizardWebcam,
@@ -36,6 +34,22 @@ function pipShapeLabel(shape: string): string {
   return "Abgerundet";
 }
 
+/** Eine Zeile der Quittungs-Liste: Label links, Wert rechts. */
+function SummaryRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-6 py-3.5 first:pt-0 last:pb-0">
+      <span className="text-sm text-ink-muted shrink-0">{label}</span>
+      <div className="text-sm font-medium text-ink text-right">{children}</div>
+    </div>
+  );
+}
+
 export function WizardStep6Summary({
   state,
   webcams,
@@ -51,13 +65,8 @@ export function WizardStep6Summary({
   );
 
   return (
-    <div>
-      <h2 className="text-xl font-bold tracking-tight text-ink mb-1">Zusammenfassung</h2>
-      <p className="text-sm text-ink-muted mb-6">
-        Prüfe deine Einstellungen und gib der Kampagne einen Namen.
-      </p>
-
-      <div className="mb-6">
+    <div className="space-y-5">
+      <div className="rounded-squircle-lg bg-surface shadow-card p-6">
         <Label htmlFor="campaign-name">Kampagnen-Name</Label>
         <Input
           id="campaign-name"
@@ -68,72 +77,47 @@ export function WizardStep6Summary({
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
-              Webcam
-            </p>
-            <p className="text-sm text-ink">
-              {webcam?.name ?? <span className="text-ink-muted">Keine</span>}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
-              Modus
-            </p>
-            <Badge variant="brand">{modeLabel(state.mode)}</Badge>
-          </CardContent>
-        </Card>
-        {state.mode === "with-presentation" && (
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
-                Editor
-              </p>
-              <p className="text-sm text-ink">
-                {state.segments.length} Segment(e)
-              </p>
-              <p className="text-xs text-ink-muted mt-1">
+      <div className="rounded-squircle-lg bg-surface shadow-card p-6">
+        <div className="divide-y divide-line-soft">
+          <SummaryRow label="Webcam">
+            {webcam?.name ?? (
+              <span className="font-normal text-ink-muted">Keine</span>
+            )}
+          </SummaryRow>
+
+          <SummaryRow label="Modus">{modeLabel(state.mode)}</SummaryRow>
+
+          {state.mode === "with-presentation" && (
+            <SummaryRow label="Editor">
+              <p>{state.segments.length} Segment(e)</p>
+              <p className="text-xs font-normal text-ink-muted mt-1">
                 PiP: {pipPositionLabel(state.pipPosition)} .{" "}
                 {pipShapeLabel(state.pipShape)}
               </p>
-            </CardContent>
-          </Card>
-        )}
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
-              Landingpage
-            </p>
-            <p className="text-sm text-ink">
-              {customTpl?.name ?? tpl?.name ?? (
-                <span className="text-ink-muted">Keine</span>
-              )}
-            </p>
+            </SummaryRow>
+          )}
+
+          <SummaryRow label="Landingpage">
+            {customTpl?.name ?? tpl?.name ?? (
+              <span className="font-normal text-ink-muted">Keine</span>
+            )}
             {customTpl ? (
-              <p className="text-xs text-ink-muted mt-1">Eigene HTML-Vorlage</p>
+              <p className="text-xs font-normal text-ink-muted mt-1">
+                Eigene HTML-Vorlage
+              </p>
             ) : (
               tpl && (
-                <p className="text-xs text-ink-muted mt-1 capitalize">
+                <p className="text-xs font-normal text-ink-muted mt-1 capitalize">
                   Theme: {tpl.themeId}
                 </p>
               )
             )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
-              PDF-Brief
-            </p>
-            <Badge variant={state.pdfEnabled ? "success" : "neutral"} dot>
-              {state.pdfEnabled ? "Aktiv" : "Deaktiviert"}
-            </Badge>
+          </SummaryRow>
+
+          <SummaryRow label="PDF-Brief">
+            {state.pdfEnabled ? "Aktiv" : "Deaktiviert"}
             {state.pdfEnabled && (
-              <p className="text-xs text-ink-muted mt-2">
+              <p className="text-xs font-normal text-ink-muted mt-1">
                 QR: {state.pdfQrEnabled ? "Ja" : "Nein"} . Thumbnail:{" "}
                 {state.pdfThumbnailEnabled ? "Ja" : "Nein"} . A/B-Test:{" "}
                 {state.abTestingEnabled &&
@@ -144,8 +128,8 @@ export function WizardStep6Summary({
                   : "Nein"}
               </p>
             )}
-          </CardContent>
-        </Card>
+          </SummaryRow>
+        </div>
       </div>
     </div>
   );

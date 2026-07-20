@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
+import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -142,13 +141,43 @@ export interface NewCampaignWizardProps {
   };
 }
 
-const STEPS = [
-  "Webcam",
-  "Modus",
-  "Editor",
-  "Landingpage",
-  "PDF-Brief",
-  "Zusammenfassung",
+interface StepMeta {
+  label: string;
+  title: string;
+  desc: string;
+}
+
+const STEP_META: StepMeta[] = [
+  {
+    label: "Webcam",
+    title: "Wähle dein Webcam-Video",
+    desc: "Nutze eine vorhandene Aufnahme oder nimm direkt eine neue auf.",
+  },
+  {
+    label: "Modus",
+    title: "Modus wählen",
+    desc: "Bestimme, wie deine Kampagne aufgebaut ist.",
+  },
+  {
+    label: "Editor",
+    title: "Video gestalten",
+    desc: "Wähle links etwas aus — bearbeitet wird rechts.",
+  },
+  {
+    label: "Landingpage",
+    title: "Wähle deine Landingpage",
+    desc: "Vorlage und Web-Adresse für deine personalisierten Seiten.",
+  },
+  {
+    label: "PDF-Brief",
+    title: "PDF-Brief",
+    desc: "Optional: personalisierter Brief mit QR-Code und Vorschaubild.",
+  },
+  {
+    label: "Fertigstellen",
+    title: "Zusammenfassung",
+    desc: "Prüfe alles und gib deiner Kampagne einen Namen.",
+  },
 ];
 
 /**
@@ -226,7 +255,7 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
   );
 
   // Skip editor step if mode is webcam-only
-  const totalSteps = STEPS.length;
+  const totalSteps = STEP_META.length;
   const skipEditor = state.mode === "webcam-only";
 
   function next() {
@@ -335,64 +364,17 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
     return true;
   })();
 
-  return (
-    <>
-      <PageHeader
-        title="Neue Kampagne"
-        subtitle={`Schritt ${step + 1} von ${totalSteps}: ${STEPS[step]}`}
-      />
+  const meta = STEP_META[step];
+  // Editor-Step braucht die volle Breite (Studio-Layout), alle anderen
+  // Steps lesen sich in einer fokussierten, schmalen Spalte besser.
+  const contentMax = step === EDITOR_STEP_INDEX ? "max-w-[1400px]" : "max-w-3xl";
 
-      {draft.existingDraft && (
-        <DraftRestoreBanner
-          draft={draft.existingDraft}
-          onRestore={draft.restoreDraft}
-          onDiscard={draft.discardDraft}
-        />
-      )}
+  function exitWizard() {
+    router.push("/kampagnen");
+  }
 
-      <div className="flex items-start justify-between gap-3 mb-8">
-        <ol className="flex items-center gap-1.5 overflow-x-auto pb-2">
-        {STEPS.map((label, idx) => {
-          const isActive = idx === step;
-          const isDone = idx < step;
-          const isEditorSkipped = idx === EDITOR_STEP_INDEX && skipEditor;
-          return (
-            <li key={label} className="shrink-0">
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
-                  isActive && "bg-ink text-white shadow-ink",
-                  isDone && !isEditorSkipped && "bg-brand-soft text-brand-deep",
-                  !isActive && !isDone && !isEditorSkipped && "bg-surface text-ink-muted shadow-card",
-                  isEditorSkipped && "bg-surface-soft text-ink-muted line-through",
-                )}
-                title={
-                  isEditorSkipped
-                    ? "Editor wird übersprungen (Modus: Nur Webcam)"
-                    : undefined
-                }
-              >
-                {isEditorSkipped ? (
-                  "—"
-                ) : isDone ? (
-                  <Check className="size-3" />
-                ) : (
-                  <span className="tabular-nums">{idx + 1}</span>
-                )}
-                {label}
-              </span>
-            </li>
-          );
-        })}
-        </ol>
-        <WizardReloadButton
-          onReload={reloadData}
-          reloading={reloading}
-          className="shrink-0"
-        />
-      </div>
-
-      <div className="min-h-[320px]">
+  const stepContent = (
+    <div className="min-h-[320px]">
         {step === 0 && (
           <WizardStep1Webcam
             webcams={webcams}
@@ -493,43 +475,168 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
           />
         )}
       </div>
+  );
 
-      <div className="flex items-center justify-between mt-8 pt-6 border-t border-line-soft gap-3">
-        <Button
-          variant="ghost"
-          onClick={back}
-          disabled={step === 0}
-          iconLeft={<ArrowLeft className="size-4" />}
-        >
-          Zurück
-        </Button>
+  return (
+    <div className="fixed inset-0 z-40 flex bg-canvas">
+      {/* Step-Rail (Desktop) */}
+      <aside className="hidden lg:flex w-[280px] shrink-0 flex-col p-6">
         <div className="flex items-center gap-3">
-          {/* Auto-Save-Status (subtil): „Entwurf gespeichert · vor 3 Sek." */}
-          <DraftStatusPill
-            status={draft.status}
-            lastSavedAt={draft.lastSavedAt}
-            className="hidden sm:inline-flex"
+          <button
+            type="button"
+            onClick={exitWizard}
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-surface text-ink-muted shadow-card transition-colors hover:text-ink"
+            aria-label="Wizard verlassen"
+          >
+            <X className="size-4" />
+          </button>
+          <span className="text-sm font-semibold text-ink">Neue Kampagne</span>
+        </div>
+
+        <ol className="mt-10 flex flex-col gap-1.5">
+          {STEP_META.map((s, idx) => {
+            const isActive = idx === step;
+            const isDone = idx < step;
+            const isSkipped = idx === EDITOR_STEP_INDEX && skipEditor;
+            return (
+              <li key={s.label}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isDone && !isSkipped) setStep(idx);
+                  }}
+                  disabled={!isDone || isSkipped}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-full px-3 py-2.5 text-left text-sm font-medium transition-all",
+                    isActive && "bg-surface text-ink shadow-card",
+                    isDone && !isActive && "text-ink-soft hover:bg-surface/60 hover:text-ink",
+                    !isActive && !isDone && "text-ink-muted opacity-60",
+                    isSkipped && "opacity-40"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                      isActive
+                        ? "bg-ink text-white"
+                        : isDone && !isSkipped
+                          ? "bg-brand-soft text-brand-deep"
+                          : "bg-canvas-deep text-ink-muted"
+                    )}
+                  >
+                    {isDone && !isSkipped ? <Check className="size-3.5" /> : idx + 1}
+                  </span>
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">{s.label}</span>
+                    {isSkipped && (
+                      <span className="text-[11px] font-normal text-ink-muted">
+                        Wird übersprungen
+                      </span>
+                    )}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+
+        <div className="mt-auto flex flex-col items-start gap-2">
+          <DraftStatusPill status={draft.status} lastSavedAt={draft.lastSavedAt} />
+          <WizardReloadButton
+            onReload={reloadData}
+            reloading={reloading}
+            variant="subtle"
           />
-          {step < totalSteps - 1 ? (
+        </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Mobile-Topbar mit Progress */}
+        <div className="flex items-center gap-3 px-4 pt-4 lg:hidden">
+          <button
+            type="button"
+            onClick={exitWizard}
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-surface text-ink-muted shadow-card transition-colors hover:text-ink"
+            aria-label="Wizard verlassen"
+          >
+            <X className="size-4" />
+          </button>
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <span className="truncate text-xs font-medium text-ink-muted">
+              Schritt {step + 1} von {totalSteps} · {meta.label}
+            </span>
+            <div className="h-1 w-full overflow-hidden rounded-full bg-canvas-deep">
+              <div
+                className="h-full rounded-full bg-ink transition-all"
+                style={{ width: `${((step + 1) / totalSteps) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className={cn("mx-auto w-full px-6 py-10 sm:px-10", contentMax)}>
+            {draft.existingDraft && (
+              <DraftRestoreBanner
+                draft={draft.existingDraft}
+                onRestore={draft.restoreDraft}
+                onDiscard={draft.discardDraft}
+              />
+            )}
+            <div className="mb-8">
+              <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
+                {meta.title}
+              </h1>
+              <p className="mt-1.5 text-sm text-ink-muted">{meta.desc}</p>
+            </div>
+            {stepContent}
+          </div>
+        </div>
+
+        {/* Sticky-Footer */}
+        <div className="bg-canvas/80 px-6 py-4 backdrop-blur sm:px-10">
+          <div
+            className={cn(
+              "mx-auto flex w-full items-center justify-between gap-3",
+              contentMax
+            )}
+          >
             <Button
-              onClick={next}
-              disabled={!canProceed}
-              iconRight={<ArrowRight className="size-4" />}
+              variant="ghost"
+              onClick={back}
+              disabled={step === 0}
+              iconLeft={<ArrowLeft className="size-4" />}
             >
-              Weiter
+              Zurück
             </Button>
-          ) : (
-            <Button
-              onClick={handleSave}
-              disabled={!canProceed || submitting}
-              loading={submitting}
-              iconRight={<Check className="size-4" />}
-            >
-              Kampagne speichern
-            </Button>
-          )}
+            <div className="flex items-center gap-3">
+              <DraftStatusPill
+                status={draft.status}
+                lastSavedAt={draft.lastSavedAt}
+                className="hidden sm:inline-flex lg:hidden"
+              />
+              {step < totalSteps - 1 ? (
+                <Button
+                  onClick={next}
+                  disabled={!canProceed}
+                  iconRight={<ArrowRight className="size-4" />}
+                >
+                  Weiter
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSave}
+                  disabled={!canProceed || submitting}
+                  loading={submitting}
+                  iconRight={<Check className="size-4" />}
+                >
+                  Kampagne speichern
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

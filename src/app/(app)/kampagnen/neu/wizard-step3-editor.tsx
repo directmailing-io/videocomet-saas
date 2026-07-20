@@ -385,14 +385,6 @@ export function WizardStep3Editor({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-lg font-semibold text-ink mb-1">Video gestalten</h2>
-        <p className="text-sm text-ink-muted">
-          Wähle links etwas aus — bearbeitet wird rechts.
-        </p>
-      </div>
-
       {/* Studio-Layout: links Bühne + Zeitleiste, rechts Inspector-Panel */}
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
         {/* ---------------- Linke Spalte: Bühne ---------------- */}

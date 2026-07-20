@@ -126,14 +126,8 @@ export function WizardStep5Pdf({
   }
 
   return (
-    <div>
-      <h2 className="text-xl font-bold tracking-tight text-ink mb-1">PDF-Brief</h2>
-      <p className="text-sm text-ink-muted mb-6">
-        Optional: erstelle pro Lead einen personalisierten PDF-Brief inklusive
-        QR-Code und Thumbnail.
-      </p>
-
-      <div className="flex items-center justify-between bg-surface rounded-squircle-md shadow-card p-5 mb-4">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between bg-surface rounded-squircle-md shadow-card p-5">
         <div>
           <p className="text-sm font-semibold text-ink">
             PDF-Brief aktivieren
@@ -150,7 +144,7 @@ export function WizardStep5Pdf({
       </div>
 
       {enabled && (
-        <div className="space-y-5 bg-surface rounded-squircle-md shadow-card p-6">
+        <div className="space-y-8 bg-surface rounded-squircle-md shadow-card p-6">
           <div>
             <Label htmlFor="pdf-docs">Google-Docs-URL</Label>
             <UrlPicker
@@ -169,7 +163,7 @@ export function WizardStep5Pdf({
           </div>
 
           {/* ── A/B-Test für Brief-Vorlagen ─────────────────────────── */}
-          <div className="pt-4 border-t border-line-soft">
+          <div>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-ink inline-flex items-center gap-1.5">
@@ -190,7 +184,7 @@ export function WizardStep5Pdf({
             </div>
 
             {abTestingEnabled && (
-              <div className="mt-4 space-y-5">
+              <div className="mt-4 rounded-squircle-md bg-surface-soft p-5 space-y-5">
                 <div>
                   <Label htmlFor="pdf-docs-b">Brief B (Google-Docs-URL)</Label>
                   <UrlPicker
@@ -204,7 +198,7 @@ export function WizardStep5Pdf({
                     Brief A ist die URL oben.
                   </p>
                 </div>
-                <div className="rounded-squircle-md bg-surface-soft p-4 space-y-4">
+                <div className="space-y-4">
                   <div>
                     <p className="text-sm font-semibold text-ink">
                       Standard-Verteilung
@@ -225,7 +219,7 @@ export function WizardStep5Pdf({
             )}
           </div>
 
-          <div className="pt-4 border-t border-line-soft space-y-3">
+          <div className="space-y-3">
             <div>
               <p className="text-sm font-semibold text-ink">
                 Platzhalter & Vorlagen
@@ -252,7 +246,7 @@ export function WizardStep5Pdf({
             />
           </div>
 
-          <div className="flex items-center justify-between pt-4 border-t border-line-soft">
+          <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-ink">
                 QR-Code einbetten
@@ -268,7 +262,7 @@ export function WizardStep5Pdf({
           </div>
 
           {/* ── Vorschaubild im Brief: Toggle + 3 Modi + Play-Icon ─── */}
-          <div className="pt-4 border-t border-line-soft">
+          <div>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-ink">
@@ -295,7 +289,7 @@ export function WizardStep5Pdf({
             </div>
 
             {thumbnailEnabled && (
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 rounded-squircle-md bg-surface-soft p-4 space-y-4">
                 {/* ── 3 Modus-Karten (Radio) ─────────────────────────── */}
                 <div
                   role="radiogroup"
@@ -390,7 +384,7 @@ export function WizardStep5Pdf({
 
                 {thumbnailMode === "landingpage_screenshot" && (
                   <div className="pt-2">
-                    <div className="rounded-squircle-sm bg-surface-soft p-4 text-xs text-ink-muted leading-relaxed">
+                    <div className="rounded-squircle-sm bg-surface p-4 text-xs text-ink-muted leading-relaxed">
                       Die Pipeline rendert pro Lead einen Screenshot der
                       personalisierten Landingpage und bettet ihn als
                       Thumbnail in den Brief ein. Kein weiterer Editor
@@ -431,7 +425,7 @@ function ModeCard({
         "text-left rounded-squircle-sm px-3 py-3 transition-all h-full",
         active
           ? "ring-2 ring-brand bg-brand-soft/40"
-          : "bg-surface-soft hover:bg-surface-muted",
+          : "bg-surface hover:bg-surface-muted",
       )}
     >
       <div className="flex items-center gap-2 mb-1.5">
@@ -440,7 +434,7 @@ function ModeCard({
             "inline-flex size-6 items-center justify-center rounded-squircle-sm",
             active
               ? "bg-brand text-white"
-              : "bg-surface text-ink-muted",
+              : "bg-surface-soft text-ink-muted",
           )}
         >
           {icon}

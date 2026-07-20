@@ -12,7 +12,6 @@ import {
   Film,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Dialog,
@@ -253,14 +252,6 @@ export function WizardStep1Webcam({
 
   return (
     <div>
-      <h2 className="text-xl font-bold tracking-tight text-ink mb-1">
-        Webcam-Video wählen
-      </h2>
-      <p className="text-sm text-ink-muted mb-6">
-        Wähle eine vorhandene Webcam-Aufnahme oder ein hochgeladenes Video
-        aus deiner Mediathek — oder nimm jetzt eine neue Aufnahme auf.
-      </p>
-
       {selected ? (
         <SelectedWebcamPreview
           webcam={selected}
@@ -291,6 +282,7 @@ export function WizardStep1Webcam({
               )}
               <Button
                 size="sm"
+                variant="subtle"
                 onClick={() => {
                   setUploadError(null);
                   setRecordOpen(true);
@@ -309,7 +301,7 @@ export function WizardStep1Webcam({
               subtitle="Nimm jetzt deine erste Webcam-Aufnahme auf, um sie hier auswählen zu können."
             />
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               {webcams.map((w) => (
                 <WebcamThumb
                   key={w.id}
@@ -673,8 +665,7 @@ function WebcamThumb({
           : "hover:shadow-card-hover hover:-translate-y-0.5",
       )}
     >
-      <Card className="border-0 shadow-none bg-transparent">
-        <CardContent className="p-3">
+      <div className="p-3">
           <div className="relative aspect-video rounded-squircle-sm bg-ink mb-2 overflow-hidden flex items-center justify-center">
             <video
               ref={videoRef}
@@ -733,8 +724,7 @@ function WebcamThumb({
           <p className="text-xs text-ink-muted">
             {durationLabel(webcam.durationSec)}
           </p>
-        </CardContent>
-      </Card>
+      </div>
     </button>
   );
 }

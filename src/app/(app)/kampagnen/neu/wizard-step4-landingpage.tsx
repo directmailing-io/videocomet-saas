@@ -158,166 +158,12 @@ export function WizardStep4Landingpage({
 
   return (
     <div className="space-y-8">
-      {/* ── 1. Domain-Auswahl ─────────────────────────────────────────────── */}
+      {/* ── 1. Vorlagen-Galerie (primär) ─────────────────────────────────── */}
       <section>
-        <h2 className="text-xl font-bold tracking-tight text-ink mb-1">
-          Domain für die Landingpages
-        </h2>
-        <p className="text-sm text-ink-muted mb-4">
-          Wählen Sie aus, unter welcher Domain die personalisierten
-          Landingpages dieser Kampagne ausgeliefert werden.
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* Default-Option */}
-          <DomainCard
-            active={domainId === null}
-            title="VIDEOCOMET-Subdomain"
-            hostname={DEFAULT_HOST}
-            description="Standard — sofort einsatzbereit."
-            badge={{ label: "Empfohlen", variant: "brand" }}
-            selectable
-            onClick={() => onDomainChange(null)}
-          />
-
-          {availableDomains.map((d) => {
-            const badge = domainStatusBadge(d.status);
-            const isActive = d.status === "active";
-            const isSelected = d.id === domainId;
-            return (
-              <DomainCard
-                key={d.id}
-                active={isSelected}
-                title={d.kind === "apex" ? "Apex-Domain" : "Subdomain"}
-                hostname={d.hostname}
-                description={
-                  isActive
-                    ? "Bereit zur Auslieferung."
-                    : "Noch nicht aktiv — Konfiguration in den Einstellungen abschließen."
-                }
-                badge={badge}
-                selectable={isActive}
-                onClick={() => {
-                  if (isActive) onDomainChange(d.id);
-                }}
-              />
-            );
-          })}
-        </div>
-
-        {availableDomains.length === 0 && (
-          <div className="mt-3 text-xs text-ink-muted">
-            Sie haben noch keine Custom-Domain verbunden. Sie können unter{" "}
-            <span className="font-semibold text-ink">
-              Einstellungen → Domains
-            </span>{" "}
-            eine eigene Domain hinzufügen.
-          </div>
-        )}
-      </section>
-
-      {/* ── 2. Slug-Vorlage ───────────────────────────────────────────────── */}
-      <section>
-        <h2 className="text-xl font-bold tracking-tight text-ink mb-1">Slug-Vorlage</h2>
-        <p className="text-sm text-ink-muted mb-4">
-          Bestimmt den lesbaren Teil der URL pro Lead. Platzhalter wie{" "}
-          <code className="font-mono text-xs">{"{firstName}"}</code> oder{" "}
-          <code className="font-mono text-xs">{"{companyName}"}</code> werden
-          aus den Lead-Daten ersetzt.
-        </p>
-
-        <Card>
-          <CardContent className="p-5 space-y-4">
-            <div>
-              <Label htmlFor="slug-template">Vorlage</Label>
-              <Input
-                id="slug-template"
-                value={slugTemplate ?? ""}
-                placeholder={DEFAULT_SLUG_TEMPLATE}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  onSlugTemplateChange(v.trim() === "" ? null : v);
-                }}
-                spellCheck={false}
-              />
-              <p className="mt-1.5 text-xs text-ink-muted">
-                Leer lassen für den Standard{" "}
-                <code className="font-mono">{DEFAULT_SLUG_TEMPLATE}</code>.
-              </p>
-            </div>
-
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
-                Vorschlaege
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {SLUG_PRESETS.map((preset) => {
-                  const isSelected =
-                    (slugTemplate ?? DEFAULT_SLUG_TEMPLATE) === preset.template;
-                  return (
-                    <button
-                      key={preset.template}
-                      type="button"
-                      onClick={() =>
-                        onSlugTemplateChange(
-                          preset.template === DEFAULT_SLUG_TEMPLATE
-                            ? null
-                            : preset.template,
-                        )
-                      }
-                      className={cn(
-                        "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                        isSelected
-                          ? "bg-brand-soft text-brand-deep ring-1 ring-brand/40"
-                          : "bg-surface-soft text-ink-muted hover:text-ink hover:bg-surface-muted",
-                      )}
-                      title={preset.template}
-                    >
-                      <span className="font-mono">{preset.template}</span>
-                      <span className="text-[10px] opacity-70">
-                        ({preset.label})
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-squircle-sm bg-surface-soft px-4 py-3">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5">
-                <Sparkles className="size-3.5" />
-                Live-Vorschau (mit Test-Lead Peter Mueller)
-              </div>
-              <p className="text-sm font-mono text-ink break-all">
-                {previewUrl}
-              </p>
-              {!hostForPreview && (
-                <p className="mt-1 text-[11px] text-ink-muted">
-                  Hinweis: Bei der VIDEOCOMET-Subdomain wird ein 4-stelliger
-                  Hex-Suffix angehaengt (z.B.{" "}
-                  <span className="font-mono">a3f7</span>).
-                </p>
-              )}
-            </div>
-
-            <div className="flex items-start gap-2 text-xs text-ink-muted">
-              <Globe className="size-4 shrink-0 mt-px text-ink-muted" />
-              <p className="leading-relaxed">
-                Bei Namens-Kollision wird ein 4-stelliger Hex-Suffix angehaengt
-                (z.B. <span className="font-mono">peter-mueller-a3f7</span>).
-                Leere Felder werden übersprungen.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      {/* ── 3. Landingpage-Vorlage ────────────────────────────────────────── */}
-      <section>
-        <div className="flex items-center justify-between gap-3 mb-1">
-          <h2 className="text-xl font-bold tracking-tight text-ink">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <p className="text-sm font-semibold text-ink">
             Landingpage-Vorlage wählen
-          </h2>
+          </p>
           {onReload && (
             <WizardReloadButton
               onReload={onReload}
@@ -327,11 +173,6 @@ export function WizardStep4Landingpage({
             />
           )}
         </div>
-        <p className="text-sm text-ink-muted mb-4">
-          Wählen Sie eine Block-basierte Vorlage ODER Ihre eigene
-          HTML-Vorlage. Beides ist möglich — beim Speichern wird die
-          jeweils gewählte Variante übernommen.
-        </p>
 
         {templates.length === 0 && customTemplates.length === 0 ? (
           // Kein Template vorhanden → klare Anweisung + Direkt-Link in den
@@ -518,6 +359,165 @@ export function WizardStep4Landingpage({
           </div>
         )}
       </section>
+
+      {/* ── 2. Web-Adresse (nachgelagerte Zusatz-Optionen) ───────────────── */}
+      <section className="rounded-squircle-md bg-surface-soft p-5 space-y-6">
+        <p className="text-sm font-semibold text-ink">Web-Adresse</p>
+
+        {/* Domain */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-1">
+            Domain für die Landingpages
+          </p>
+          <p className="text-xs text-ink-muted mb-3">
+            Wählen Sie aus, unter welcher Domain die personalisierten
+            Landingpages dieser Kampagne ausgeliefert werden.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Default-Option */}
+            <DomainCard
+              active={domainId === null}
+              title="VIDEOCOMET-Subdomain"
+              hostname={DEFAULT_HOST}
+              description="Standard — sofort einsatzbereit."
+              badge={{ label: "Empfohlen", variant: "brand" }}
+              selectable
+              onClick={() => onDomainChange(null)}
+            />
+
+            {availableDomains.map((d) => {
+              const badge = domainStatusBadge(d.status);
+              const isActive = d.status === "active";
+              const isSelected = d.id === domainId;
+              return (
+                <DomainCard
+                  key={d.id}
+                  active={isSelected}
+                  title={d.kind === "apex" ? "Apex-Domain" : "Subdomain"}
+                  hostname={d.hostname}
+                  description={
+                    isActive
+                      ? "Bereit zur Auslieferung."
+                      : "Noch nicht aktiv — Konfiguration in den Einstellungen abschließen."
+                  }
+                  badge={badge}
+                  selectable={isActive}
+                  onClick={() => {
+                    if (isActive) onDomainChange(d.id);
+                  }}
+                />
+              );
+            })}
+          </div>
+
+          {availableDomains.length === 0 && (
+            <div className="mt-3 text-xs text-ink-muted">
+              Sie haben noch keine Custom-Domain verbunden. Sie können unter{" "}
+              <span className="font-semibold text-ink">
+                Einstellungen → Domains
+              </span>{" "}
+              eine eigene Domain hinzufügen.
+            </div>
+          )}
+        </div>
+
+        {/* Slug-Vorlage */}
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-1">
+              Slug-Vorlage
+            </p>
+            <p className="text-xs text-ink-muted">
+              Bestimmt den lesbaren Teil der URL pro Lead. Platzhalter wie{" "}
+              <code className="font-mono text-xs">{"{firstName}"}</code> oder{" "}
+              <code className="font-mono text-xs">{"{companyName}"}</code>{" "}
+              werden aus den Lead-Daten ersetzt.
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="slug-template">Vorlage</Label>
+            <Input
+              id="slug-template"
+              value={slugTemplate ?? ""}
+              placeholder={DEFAULT_SLUG_TEMPLATE}
+              onChange={(e) => {
+                const v = e.target.value;
+                onSlugTemplateChange(v.trim() === "" ? null : v);
+              }}
+              spellCheck={false}
+            />
+            <p className="mt-1.5 text-xs text-ink-muted">
+              Leer lassen für den Standard{" "}
+              <code className="font-mono">{DEFAULT_SLUG_TEMPLATE}</code>.
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+              Vorschlaege
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {SLUG_PRESETS.map((preset) => {
+                const isSelected =
+                  (slugTemplate ?? DEFAULT_SLUG_TEMPLATE) === preset.template;
+                return (
+                  <button
+                    key={preset.template}
+                    type="button"
+                    onClick={() =>
+                      onSlugTemplateChange(
+                        preset.template === DEFAULT_SLUG_TEMPLATE
+                          ? null
+                          : preset.template,
+                      )
+                    }
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                      isSelected
+                        ? "bg-brand-soft text-brand-deep ring-1 ring-brand/40"
+                        : "bg-surface text-ink-muted hover:text-ink hover:bg-surface-muted",
+                    )}
+                    title={preset.template}
+                  >
+                    <span className="font-mono">{preset.template}</span>
+                    <span className="text-[10px] opacity-70">
+                      ({preset.label})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-squircle-sm bg-surface px-4 py-3">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5">
+              <Sparkles className="size-3.5" />
+              Live-Vorschau (mit Test-Lead Peter Mueller)
+            </div>
+            <p className="text-sm font-mono text-ink break-all">
+              {previewUrl}
+            </p>
+            {!hostForPreview && (
+              <p className="mt-1 text-[11px] text-ink-muted">
+                Hinweis: Bei der VIDEOCOMET-Subdomain wird ein 4-stelliger
+                Hex-Suffix angehaengt (z.B.{" "}
+                <span className="font-mono">a3f7</span>).
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-start gap-2 text-xs text-ink-muted">
+            <Globe className="size-4 shrink-0 mt-px text-ink-muted" />
+            <p className="leading-relaxed">
+              Bei Namens-Kollision wird ein 4-stelliger Hex-Suffix angehaengt
+              (z.B. <span className="font-mono">peter-mueller-a3f7</span>).
+              Leere Felder werden übersprungen.
+            </p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -553,7 +553,7 @@ function DomainCard({
         selectable && active && "ring-2 ring-brand bg-brand-soft/40",
         selectable && !active && "hover:shadow-card-hover hover:-translate-y-0.5",
         !selectable &&
-          "opacity-60 cursor-not-allowed bg-surface-soft shadow-none",
+          "opacity-60 cursor-not-allowed bg-surface-muted shadow-none",
       )}
     >
       {active && selectable && (
