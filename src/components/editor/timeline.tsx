@@ -116,10 +116,17 @@ export function Timeline({
   }
 
   const trackAreaRef = React.useRef<HTMLDivElement>(null);
+  const blocksWrapRef = React.useRef<HTMLDivElement>(null);
 
   function handleTrackPointerDown(event: React.PointerEvent<HTMLDivElement>) {
     // Nur auf den Track-Hintergrund reagieren, nicht auf Segment-Blöcke.
-    if (event.target !== event.currentTarget) return;
+    // Der Block-Wrapper (inset-2) liegt über dem Track und ist ebenfalls
+    // "Hintergrund" — Klicks darauf zählen als Deselect.
+    if (
+      event.target !== event.currentTarget &&
+      event.target !== blocksWrapRef.current
+    )
+      return;
     onSelectSegment(null);
     seekDragRef.current = true;
     seekFromEvent(event);
@@ -231,7 +238,7 @@ export function Timeline({
           className="relative h-[calc(8rem-1.75rem)] cursor-crosshair"
           style={{ width: `${trackWidth}px` }}
         >
-          <div className="absolute inset-2">
+          <div ref={blocksWrapRef} className="absolute inset-2">
             {blocks.map(({ seg, idx, leftPx, widthPx }) => (
               <TimelineSegmentBlock
                 key={seg.id}
