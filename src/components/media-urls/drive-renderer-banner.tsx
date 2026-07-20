@@ -49,16 +49,13 @@ export function DriveRendererBanner() {
 
   if (!state) return null;
 
-  // 1) Aktiv: kurzer gruener Hinweis
+  // 1) Aktiv: dezente Ein-Zeilen-Bestätigung statt Banner
   if (state.active) {
     return (
-      <div className="mt-3 text-xs flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
-        <CheckCircle2 className="size-3.5" />
-        <span>
-          Layouttreuer Renderer aktiv — Google rendert das PDF, identisch zur
-          Browseransicht.
-        </span>
-      </div>
+      <p className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] text-ink-muted">
+        <CheckCircle2 className="size-3 text-ok shrink-0" />
+        Layouttreues Rendering aktiv — das PDF sieht aus wie im Browser.
+      </p>
     );
   }
 

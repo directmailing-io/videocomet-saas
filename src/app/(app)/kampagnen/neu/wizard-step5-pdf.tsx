@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   Camera,
+  ChevronDown,
   FlaskConical,
   Image as ImageIcon,
   MonitorPlay,
@@ -109,6 +110,8 @@ export function WizardStep5Pdf({
    * Default-Setup an, damit der Editor sofort etwas zeigt. Bestehende
    * Layouts bleiben beim Wechsel weg/zurück erhalten.
    */
+  const [placeholdersOpen, setPlaceholdersOpen] = React.useState(false);
+
   function selectMode(next: ThumbnailMode) {
     if (next === thumbnailMode) return;
     if (next === "custom_image") {
@@ -155,104 +158,68 @@ export function WizardStep5Pdf({
               types={["gdoc"]}
             />
             <p className="text-xs text-ink-muted mt-1.5">
-              Das Dokument muss öffentlich freigegeben sein (mindestens
-              "Jeder mit dem Link kann ansehen"). Aus der Mediathek wählbar
-              oder als neue URL eintippen.
+              Freigabe im Doc: "Jeder mit dem Link kann ansehen".
             </p>
             <DriveRendererBanner />
           </div>
 
-          {/* ── A/B-Test für Brief-Vorlagen ─────────────────────────── */}
+          {/* ── Platzhalter & Bild-Marker (Disclosure) ──────────────── */}
           <div>
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-ink inline-flex items-center gap-1.5">
-                  <FlaskConical className="size-4 text-brand-deep" />
-                  A/B-Test für Brief-Vorlagen
+                <p className="text-sm font-semibold text-ink">
+                  Platzhalter &amp; Bild-Marker
                 </p>
-                <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
-                  Teste zwei Brief-Vorlagen gegeneinander. Die Leads jeder
-                  Runde werden nach Deiner Regel auf Brief A und Brief B
-                  aufgeteilt — die Auswertung siehst Du im Übersicht-Tab der
-                  Kampagne.
+                <p className="text-xs text-ink-muted mt-0.5">
+                  <code className="font-mono text-brand-deep">
+                    {"{{firstName}}"}
+                  </code>{" "}
+                  &amp; Co. werden pro Lead ersetzt — QR und Thumbnail kommen
+                  als Bild-Marker ins Doc.
                 </p>
               </div>
-              <Switch
-                checked={abTestingEnabled}
-                onCheckedChange={(v) => onChange({ abTestingEnabled: v })}
-              />
+              <button
+                type="button"
+                onClick={() => setPlaceholdersOpen((o) => !o)}
+                className="shrink-0 inline-flex items-center gap-1 rounded-full bg-surface-soft px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-muted transition-colors"
+                aria-expanded={placeholdersOpen}
+              >
+                {placeholdersOpen ? "Ausblenden" : "Anzeigen"}
+                <ChevronDown
+                  className={cn(
+                    "size-3.5 transition-transform",
+                    placeholdersOpen && "rotate-180",
+                  )}
+                />
+              </button>
             </div>
 
-            {abTestingEnabled && (
-              <div className="mt-4 rounded-squircle-md bg-surface-soft p-5 space-y-5">
-                <div>
-                  <Label htmlFor="pdf-docs-b">Brief B (Google-Docs-URL)</Label>
-                  <UrlPicker
-                    id="pdf-docs-b"
-                    value={googleDocsUrlB}
-                    onChange={(v) => onChange({ pdfGoogleDocsUrlB: v })}
-                    placeholder="https://docs.google.com/document/d/..."
-                    types={["gdoc"]}
+            {placeholdersOpen && (
+              <div className="mt-3 rounded-squircle-md bg-surface-soft p-4 [&>div]:border-t-0 [&>div]:pt-0">
+                {googleDocsUrl.includes("docs.google.com") ? (
+                  <PlaceholderHelper
+                    googleDocsUrl={googleDocsUrl}
+                    csvColumns={[]}
+                    compact
                   />
-                  <p className="text-xs text-ink-muted mt-1.5">
-                    Brief A ist die URL oben.
+                ) : (
+                  <p className="text-xs text-ink-muted">
+                    Trag zuerst oben Deine Google-Docs-URL ein — dann kannst
+                    Du hier Platzhalter kopieren, das Dokument scannen und
+                    die Bild-Marker herunterladen.
                   </p>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-semibold text-ink">
-                      Standard-Verteilung
-                    </p>
-                    <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
-                      Gilt als Vorgabe für jede Runde — beim Start einer Runde
-                      kannst Du sie jederzeit anpassen.
-                    </p>
-                  </div>
-                  <AbSplitPicker
-                    mode={abSplitMode}
-                    weightA={abSplitWeightA}
-                    onModeChange={(m) => onChange({ abSplitMode: m })}
-                    onWeightChange={(w) => onChange({ abSplitWeightA: w })}
-                  />
-                </div>
+                )}
               </div>
             )}
           </div>
 
-          <div className="space-y-3">
-            <div>
-              <p className="text-sm font-semibold text-ink">
-                Platzhalter & Vorlagen
-              </p>
-              <p className="text-xs text-ink-muted mt-1 leading-relaxed">
-                Im PDF-Brief werden Platzhalter wie{" "}
-                <code className="font-mono text-brand-deep">
-                  {"{{firstName}}"}
-                </code>{" "}
-                oder{" "}
-                <code className="font-mono text-brand-deep">
-                  {"{{firma}}"}
-                </code>{" "}
-                automatisch durch die Daten des jeweiligen Leads ersetzt. Den
-                QR-Code und das Video-Thumbnail kannst du als
-                Bild-Platzhalter in dein Google Docs einfügen — der Worker
-                tauscht sie beim Rendern gegen das echte Lead-spezifische
-                Bild aus.
-              </p>
-            </div>
-            <PlaceholderHelper
-              googleDocsUrl={googleDocsUrl}
-              csvColumns={[]}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm font-semibold text-ink">
                 QR-Code einbetten
               </p>
               <p className="text-xs text-ink-muted mt-0.5">
-                QR für die personalisierte Landingpage.
+                Der Scan öffnet die persönliche Landingpage des Leads.
               </p>
             </div>
             <Switch
@@ -268,10 +235,8 @@ export function WizardStep5Pdf({
                 <p className="text-sm font-semibold text-ink">
                   Thumbnail einbetten
                 </p>
-                <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
-                  Vorschaubild auf der ersten Brief-Seite. Wähle Standbild
-                  aus dem Video, eine personalisierte Folie oder einen
-                  automatischen Screenshot der Landingpage.
+                <p className="text-xs text-ink-muted mt-0.5">
+                  Vorschaubild des Videos auf der ersten Brief-Seite.
                 </p>
               </div>
               <Switch
@@ -344,12 +309,10 @@ export function WizardStep5Pdf({
                       onChange({ thumbnailPlayIcon: e.target.checked })
                     }
                   />
-                  <span className="text-xs text-ink-muted italic leading-snug inline-flex items-center gap-1.5">
+                  <span className="text-xs text-ink-muted leading-snug inline-flex items-center gap-1.5">
                     <Play className="size-3 shrink-0" />
-                    Play-Icon-Overlay einblenden
-                    <span className="text-ink-muted/70 not-italic">
-                      — halbtransparenter Play-Button über dem Thumbnail.
-                    </span>
+                    Halbtransparenten Play-Button über dem Thumbnail
+                    einblenden
                   </span>
                 </label>
 
@@ -385,13 +348,66 @@ export function WizardStep5Pdf({
                 {thumbnailMode === "landingpage_screenshot" && (
                   <div className="pt-2">
                     <div className="rounded-squircle-sm bg-surface p-4 text-xs text-ink-muted leading-relaxed">
-                      Die Pipeline rendert pro Lead einen Screenshot der
-                      personalisierten Landingpage und bettet ihn als
-                      Thumbnail in den Brief ein. Kein weiterer Editor
-                      nötig — die Vorlage ist die LP selbst.
+                      Wird pro Lead automatisch aus der personalisierten
+                      Landingpage erzeugt — kein Editor nötig.
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+
+          {/* ── A/B-Test für Brief-Vorlagen ─────────────────────────── */}
+          <div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink inline-flex items-center gap-1.5">
+                  <FlaskConical className="size-4 text-brand-deep" />
+                  A/B-Test für Brief-Vorlagen
+                </p>
+                <p className="text-xs text-ink-muted mt-0.5">
+                  Leads werden auf Brief A und B aufgeteilt — die Auswertung
+                  siehst Du direkt in der Kampagne.
+                </p>
+              </div>
+              <Switch
+                checked={abTestingEnabled}
+                onCheckedChange={(v) => onChange({ abTestingEnabled: v })}
+              />
+            </div>
+
+            {abTestingEnabled && (
+              <div className="mt-4 rounded-squircle-md bg-surface-soft p-5 space-y-5">
+                <div>
+                  <Label htmlFor="pdf-docs-b">Brief B (Google-Docs-URL)</Label>
+                  <UrlPicker
+                    id="pdf-docs-b"
+                    value={googleDocsUrlB}
+                    onChange={(v) => onChange({ pdfGoogleDocsUrlB: v })}
+                    placeholder="https://docs.google.com/document/d/..."
+                    types={["gdoc"]}
+                  />
+                  <p className="text-xs text-ink-muted mt-1.5">
+                    Brief A ist die URL oben.
+                  </p>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-ink">
+                      Standard-Verteilung
+                    </p>
+                    <p className="text-xs text-ink-muted mt-0.5">
+                      Vorgabe für neue Runden — beim Rundenstart jederzeit
+                      änderbar.
+                    </p>
+                  </div>
+                  <AbSplitPicker
+                    mode={abSplitMode}
+                    weightA={abSplitWeightA}
+                    onModeChange={(m) => onChange({ abSplitMode: m })}
+                    onWeightChange={(w) => onChange({ abSplitWeightA: w })}
+                  />
+                </div>
               </div>
             )}
           </div>
