@@ -8,7 +8,7 @@ export const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "bg-surface border border-line rounded-squircle-md shadow-card",
+      "bg-surface rounded-squircle-md shadow-card",
       hover && "transition-all duration-200 ease-spring hover:shadow-card-hover hover:-translate-y-0.5",
       className
     )}

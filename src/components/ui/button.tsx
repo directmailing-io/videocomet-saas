@@ -21,8 +21,9 @@ const base =
   "inline-flex items-center justify-center gap-2 font-semibold rounded-full transition-all duration-150 ease-spring disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 select-none whitespace-nowrap";
 
 const variantClasses: Record<ButtonVariant, string> = {
+  // Primary = dunkle Pill (Referenz-Look); Lavendel bleibt Akzent für subtle/Chips.
   brand:
-    "bg-brand text-white shadow-brand hover:bg-brand-deep hover:-translate-y-0.5 active:translate-y-0",
+    "bg-ink text-white shadow-ink hover:bg-black hover:-translate-y-0.5 active:translate-y-0",
   ghost:
     "bg-surface border border-line text-ink hover:bg-surface-muted hover:border-line",
   danger:

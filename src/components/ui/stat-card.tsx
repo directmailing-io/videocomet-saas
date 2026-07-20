@@ -26,7 +26,7 @@ export const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(
       <div
         ref={ref}
         className={cn(
-          "bg-surface border border-line rounded-squircle-md shadow-card p-5 flex flex-col gap-3",
+          "bg-surface rounded-squircle-md shadow-card p-5 flex flex-col gap-3",
           className
         )}
         {...props}

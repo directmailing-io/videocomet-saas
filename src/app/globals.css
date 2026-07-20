@@ -29,7 +29,7 @@
 
 @layer base {
   html, body {
-    @apply bg-surface-soft text-ink antialiased;
+    @apply bg-canvas text-ink antialiased;
     font-feature-settings: "ss01", "cv11";
   }
   body {
@@ -41,17 +41,17 @@
 }
 
 @layer components {
-  /* Squircle-Card — AirBNB-Style */
+  /* Schwebende Karte — randlos, weicher Schatten (Referenz-Look 2026) */
   .card {
-    @apply bg-surface border border-line rounded-squircle-md shadow-card;
+    @apply bg-surface rounded-squircle-md shadow-card;
   }
   .card-hover {
     @apply transition-all duration-200 ease-spring hover:shadow-card-hover hover:-translate-y-0.5;
   }
 
-  /* Brand button — voll rund (pill) */
+  /* Primary button — dunkle Pill (Referenz-Look), Brand-Lavendel bleibt Akzentfarbe */
   .btn-brand {
-    @apply inline-flex items-center justify-center gap-2 bg-brand text-white font-semibold text-sm px-6 py-3 rounded-full shadow-brand transition-all duration-150 ease-spring hover:bg-brand-deep hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 bg-ink text-white font-semibold text-sm px-6 py-3 rounded-full shadow-ink transition-all duration-150 ease-spring hover:bg-black hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed;
   }
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-2 bg-surface border border-line text-ink font-medium text-sm px-6 py-3 rounded-full transition-colors duration-150 hover:bg-surface-muted;

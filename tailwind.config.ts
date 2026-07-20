@@ -23,6 +23,11 @@ const config: Config = {
           soft: '#fafafa',
           muted: '#f7f7f7',
         },
+        /* Seitenhintergrund: sanftes Lavendel-Grau, auf dem weiße Karten "schweben". */
+        canvas: {
+          DEFAULT: '#f3f2f9',
+          deep: '#ebe9f4',
+        },
         line: {
           DEFAULT: '#ebebeb',
           soft: '#f3f3f3',
@@ -47,17 +52,18 @@ const config: Config = {
         danger: { DEFAULT: '#ef4444', soft: '#fee2e2' },
       },
       borderRadius: {
-        'squircle-sm': '10px',
-        'squircle': '14px',
-        'squircle-md': '18px',
-        'squircle-lg': '22px',
-        'squircle-xl': '28px',
+        'squircle-sm': '12px',
+        'squircle': '16px',
+        'squircle-md': '20px',
+        'squircle-lg': '26px',
+        'squircle-xl': '32px',
       },
       boxShadow: {
-        'card': '0 2px 8px -3px rgba(20, 20, 30, 0.06)',
-        'card-hover': '0 6px 16px -8px rgba(20, 20, 30, 0.10)',
+        'card': '0 1px 2px rgba(24, 20, 44, 0.03), 0 10px 30px -14px rgba(60, 50, 110, 0.12)',
+        'card-hover': '0 2px 4px rgba(24, 20, 44, 0.04), 0 18px 40px -18px rgba(60, 50, 110, 0.18)',
         'lift': '0 24px 48px -20px rgba(20, 20, 30, 0.18)',
         'brand': '0 8px 20px -8px rgba(170, 140, 245, 0.45)',
+        'ink': '0 10px 24px -10px rgba(24, 20, 44, 0.40)',
       },
       transitionTimingFunction: {
         spring: 'cubic-bezier(0.2, 0.8, 0.2, 1)',

@@ -130,10 +130,10 @@ function NavList({ onSelect }: { onSelect?: () => void }) {
                 href={href}
                 onClick={onSelect}
                 className={cn(
-                  "group flex h-9 items-center gap-3 rounded-squircle-sm px-3 text-sm font-medium transition-colors",
+                  "group flex h-9 items-center gap-3 rounded-full px-3.5 text-sm font-medium transition-all",
                   active
-                    ? "bg-brand-soft text-brand-deep"
-                    : "text-ink-soft hover:bg-line-soft hover:text-ink"
+                    ? "bg-surface text-ink shadow-card"
+                    : "text-ink-soft hover:bg-surface/60 hover:text-ink"
                 )}
               >
                 <Icon
@@ -162,7 +162,7 @@ function UserMenu({ user }: { user: AppShellUser }) {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex w-full items-center gap-3 rounded-squircle-md p-2 text-left transition-colors hover:bg-line-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+          className="flex w-full items-center gap-3 rounded-squircle-md p-2 text-left transition-colors hover:bg-surface/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
         >
           <Avatar size="sm">
             <AvatarFallback>{initials}</AvatarFallback>
@@ -212,8 +212,8 @@ function SidebarInner({
   brand?: React.ReactNode;
 }) {
   return (
-    <div className="flex h-full w-full flex-col bg-surface">
-      <div className="flex h-16 items-center gap-3 px-5 border-b border-line">
+    <div className="flex h-full w-full flex-col">
+      <div className="flex h-16 items-center gap-3 px-5">
         <Logo variant="horizontal" height={36} />
       </div>
       {brand && <div className="px-5 py-3">{brand}</div>}
@@ -221,7 +221,7 @@ function SidebarInner({
         <NavList onSelect={onSelect} />
       </div>
       <CreditBalanceCard />
-      <div className="border-t border-line p-3">
+      <div className="p-3">
         <UserMenu user={user} />
       </div>
     </div>
@@ -241,15 +241,15 @@ export function AppShell({
     NAV.find((n) => isNavActive(n, pathname))?.label ?? "";
 
   return (
-    <div className="flex min-h-screen bg-surface-soft">
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:w-[240px] md:shrink-0 md:border-r md:border-line md:bg-surface md:sticky md:top-0 md:h-screen">
+    <div className="flex min-h-screen bg-canvas">
+      {/* Desktop sidebar — transparent auf dem Canvas, Inhalt "schwebt" daneben */}
+      <aside className="hidden md:flex md:w-[240px] md:shrink-0 md:sticky md:top-0 md:h-screen">
         <SidebarInner user={user} />
       </aside>
 
       <div className="flex flex-1 min-w-0 flex-col">
         {/* Top header */}
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-surface/95 backdrop-blur px-4 sm:px-6">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 bg-canvas/80 backdrop-blur px-4 sm:px-6">
           {/* Mobile menu */}
           <Dialog open={mobileOpen} onOpenChange={setMobileOpen}>
             <DialogTrigger asChild>
@@ -264,7 +264,7 @@ export function AppShell({
             <DialogContent
               size="sm"
               showClose={false}
-              className="left-0 top-0 h-full w-[260px] max-w-[260px] translate-x-0 translate-y-0 rounded-none rounded-r-squircle-xl p-0"
+              className="left-0 top-0 h-full w-[260px] max-w-[260px] translate-x-0 translate-y-0 rounded-none rounded-r-squircle-xl bg-canvas p-0"
             >
               <DialogTitle className="sr-only">Navigation</DialogTitle>
               <SidebarInner
