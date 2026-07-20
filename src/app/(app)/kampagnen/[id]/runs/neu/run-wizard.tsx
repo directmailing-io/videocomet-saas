@@ -562,7 +562,7 @@ export function RunWizard({
       </ol>
 
       {error && (
-        <div className="mb-4 rounded-squircle-sm border border-danger/40 bg-danger-soft px-4 py-2 text-sm text-danger">
+        <div className="mb-4 rounded-squircle-sm bg-danger-soft px-4 py-3 text-sm text-danger">
           {error}
         </div>
       )}
@@ -678,7 +678,7 @@ export function RunWizard({
                 {preview.totalRows} Zeile{preview.totalRows === 1 ? "" : "n"} erkannt
                 {preview.truncated ? " (gekuerzt auf 5000)" : ""}.
               </p>
-              <div className="overflow-x-auto rounded-squircle-md border border-line">
+              <div className="overflow-x-auto rounded-squircle-sm">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -860,7 +860,7 @@ export function RunWizard({
             </CardHeader>
             <CardContent className="space-y-4">
               {bulkMode ? (
-                <div className="rounded-squircle-sm bg-brand-soft/40 border border-brand-soft px-3 py-3 space-y-2">
+                <div className="rounded-squircle-sm bg-brand-soft/50 px-4 py-3 space-y-2">
                   <p className="text-sm text-ink">
                     Du startest{" "}
                     <strong>{selectedTabs.length} Runden</strong> für die
@@ -946,7 +946,7 @@ export function RunWizard({
 
       {/* Footer-Nav ausblenden solange Tab-Picker sichtbar — er hat eigene Buttons. */}
       {tabPickerVisible ? null : (
-      <div className="flex items-center justify-between mt-8 pt-6 border-t border-line">
+      <div className="flex items-center justify-between mt-8 pt-6 border-t border-line-soft">
         <Button
           variant="ghost"
           onClick={() => setStep((s) => Math.max(0, s - 1))}

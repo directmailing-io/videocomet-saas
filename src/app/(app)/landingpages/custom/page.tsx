@@ -159,7 +159,7 @@ export default function CustomLpListPage() {
       />
 
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {[0, 1, 2].map((i) => (
             <Card key={i} className="opacity-60">
               <CardContent className="p-4">
@@ -195,7 +195,7 @@ export default function CustomLpListPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {(items ?? []).map((tpl) => {
             const isPending = pendingId === tpl.id;
             return (
@@ -213,7 +213,7 @@ export default function CustomLpListPage() {
                   aria-label={`Vorlage ${tpl.name} bearbeiten`}
                 >
                   <CardContent className="p-4">
-                    <div className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-center justify-center bg-gradient-to-br from-brand-soft to-surface-muted border border-line text-brand-deep">
+                    <div className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-center justify-center bg-gradient-to-br from-brand-soft to-surface-muted text-brand-deep">
                       {tpl.thumbnailUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -249,7 +249,7 @@ export default function CustomLpListPage() {
                       <button
                         type="button"
                         aria-label="Aktionen"
-                        className="inline-flex size-8 items-center justify-center rounded-full bg-surface/90 backdrop-blur border border-line text-ink-muted hover:text-ink hover:border-brand/40 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                        className="inline-flex size-8 items-center justify-center rounded-full bg-surface/90 backdrop-blur shadow-card text-ink-muted hover:text-ink transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
                       >
                         <MoreVertical className="size-4" />
                       </button>

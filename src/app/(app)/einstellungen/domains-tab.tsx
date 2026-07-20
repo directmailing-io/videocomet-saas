@@ -263,7 +263,7 @@ export function DomainsTab() {
         </div>
 
         {loading ? (
-          <div className="rounded-squircle-md border border-line bg-surface-muted/40 px-4 py-12 text-center text-sm text-ink-muted">
+          <div className="rounded-squircle-sm bg-surface-soft px-4 py-12 text-center text-sm text-ink-muted">
             Lade Domains ...
           </div>
         ) : !domains || domains.length === 0 ? (
@@ -292,7 +292,7 @@ export function DomainsTab() {
         )}
 
         {limitReached && (
-          <div className="mt-4 flex items-start gap-2.5 rounded-squircle-sm border border-line bg-surface-muted px-3 py-2.5 text-xs text-ink-muted">
+          <div className="mt-4 flex items-start gap-2.5 rounded-squircle-sm bg-surface-soft px-3 py-2.5 text-xs text-ink-muted">
             <Info className="size-4 shrink-0 text-ink-muted mt-px" />
             <p>
               Sie haben das Limit von {MAX_DOMAINS} Domains pro Konto erreicht.

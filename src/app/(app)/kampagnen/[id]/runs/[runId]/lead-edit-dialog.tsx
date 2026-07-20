@@ -133,7 +133,7 @@ export function LeadEditDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto rounded-squircle-md border border-line divide-y divide-line">
+        <div className="flex-1 overflow-y-auto rounded-squircle-md bg-surface-soft divide-y divide-line-soft">
           {keys.length === 0 ? (
             <p className="text-sm text-ink-muted p-4">Keine Daten vorhanden.</p>
           ) : (
@@ -172,7 +172,7 @@ export function LeadEditDialog({
           )}
         </div>
 
-        <div className="border-t border-line pt-4 space-y-2">
+        <div className="border-t border-line-soft pt-4 space-y-2">
           <Label className="text-xs">Nach dem Speichern automatisch neu generieren</Label>
           <div className="grid grid-cols-4 gap-1">
             {([
@@ -187,8 +187,8 @@ export function LeadEditDialog({
                 onClick={() => setRegenAfter(o.key)}
                 className={
                   regenAfter === o.key
-                    ? "h-9 rounded-squircle-sm border border-brand bg-brand text-white text-xs font-medium"
-                    : "h-9 rounded-squircle-sm border border-line text-xs font-medium text-ink hover:bg-line-soft"
+                    ? "h-9 rounded-full bg-brand text-white text-xs font-medium"
+                    : "h-9 rounded-full bg-surface-soft text-xs font-medium text-ink hover:bg-canvas-deep"
                 }
               >
                 {o.label}

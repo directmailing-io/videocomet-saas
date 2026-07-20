@@ -142,16 +142,16 @@ export function BillingTab() {
     <div className="space-y-6">
       {/* Payment-Fail-Warnbanner ganz oben (wenn zutreffend) */}
       {(isPastDue || isUnpaid) && (
-        <div className="rounded-squircle-md border-2 border-red-300 bg-red-50 p-5">
+        <div className="rounded-squircle-md bg-danger-soft p-5">
           <div className="flex items-start gap-3">
-            <XCircle className="size-5 text-red-600 shrink-0 mt-0.5" />
+            <XCircle className="size-5 text-danger shrink-0 mt-0.5" />
             <div className="flex-1">
-              <div className="font-semibold text-sm text-red-900 mb-1">
+              <div className="font-semibold text-sm text-ink mb-1">
                 {isPastDue
                   ? "Deine letzte Zahlung konnte nicht eingezogen werden"
                   : "Deine Zahlung ist mehrfach fehlgeschlagen"}
               </div>
-              <p className="text-xs text-red-800 mb-3 leading-relaxed">
+              <p className="text-xs text-ink-soft mb-3 leading-relaxed">
                 {isPastDue
                   ? "Stripe versucht die Zahlung automatisch nochmal. Bis dahin hast du weiter Zugang. Wenn du deine Zahlungsmethode aktualisierst, verhinderst du die Sperre."
                   : "Dein Zugang ist gesperrt. Aktualisiere deine Zahlungsmethode oder starte den Plan neu, um wieder rein zu kommen."}
@@ -164,14 +164,14 @@ export function BillingTab() {
         </div>
       )}
       {isCanceled && (
-        <div className="rounded-squircle-md border-2 border-amber-300 bg-amber-50 p-5">
+        <div className="rounded-squircle-md bg-warn-soft p-5">
           <div className="flex items-start gap-3">
-            <XCircle className="size-5 text-amber-600 shrink-0 mt-0.5" />
+            <XCircle className="size-5 text-warn shrink-0 mt-0.5" />
             <div className="flex-1">
-              <div className="font-semibold text-sm text-amber-900 mb-1">
+              <div className="font-semibold text-sm text-ink mb-1">
                 Dein Zugang ist gekündigt
               </div>
-              <p className="text-xs text-amber-800 mb-3 leading-relaxed">
+              <p className="text-xs text-ink-soft mb-3 leading-relaxed">
                 Alle deine Daten bleiben erhalten. Reaktiviere den Plan
                 jederzeit, dann bist du sofort wieder produktiv. Unverbrauchte
                 Credits laufen nicht ab und stehen dir wieder zur Verfügung.
@@ -185,7 +185,7 @@ export function BillingTab() {
       )}
 
       {/* Subscription-Card */}
-      <div className="rounded-squircle-md border border-line bg-surface p-5">
+      <div className="rounded-squircle-md bg-surface shadow-card p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <h3 className="text-base font-semibold">Plattform-Zugang</h3>
@@ -246,7 +246,7 @@ export function BillingTab() {
       </div>
 
       {/* Credit-Balance-Card */}
-      <div className="rounded-squircle-md border border-line bg-surface p-5">
+      <div className="rounded-squircle-md bg-surface shadow-card p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <h3 className="text-base font-semibold flex items-center gap-2">
@@ -267,7 +267,7 @@ export function BillingTab() {
           </span>
         </div>
         {isUnlimitedCredits(status.creditBalance) ? (
-          <div className="inline-flex items-center gap-2 rounded-full bg-brand-soft border border-brand/20 px-4 py-2 text-sm font-medium text-brand-deep">
+          <div className="inline-flex items-center gap-2 rounded-full bg-brand-soft px-4 py-2 text-sm font-semibold text-brand-deep">
             <Zap className="size-4" />
             Unbegrenzter Account — keine Nachladung nötig.
           </div>

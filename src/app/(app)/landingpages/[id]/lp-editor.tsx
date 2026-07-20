@@ -119,7 +119,7 @@ export function LpEditor({ template }: { template: LpEditorTemplate }) {
       </div>
 
       {s.showMigrationBanner && (
-        <div className="flex items-start gap-3 rounded-squircle-md border border-warn/40 bg-warn-soft/50 px-4 py-3 text-sm mb-4">
+        <div className="flex items-start gap-3 rounded-squircle-md bg-warn-soft/60 px-4 py-3 text-sm mb-6">
           <Sparkles className="size-4 text-warn shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-ink">
@@ -141,9 +141,9 @@ export function LpEditor({ template }: { template: LpEditorTemplate }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[260px,1fr,minmax(0,520px)] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[260px,1fr,minmax(0,520px)] gap-6">
         {/* ── Block-Liste ─────────────────────────────────────────── */}
-        <div className="bg-surface border border-line rounded-squircle-md p-3 max-h-[80vh] overflow-y-auto">
+        <div className="bg-surface rounded-squircle-md shadow-card p-3 max-h-[80vh] overflow-y-auto">
           <BlockList
             blocks={s.blocks}
             activeBlockId={s.activeBlockId}
@@ -156,7 +156,7 @@ export function LpEditor({ template }: { template: LpEditorTemplate }) {
         </div>
 
         {/* ── Inspector ─────────────────────────────────────────── */}
-        <div className="bg-surface border border-line rounded-squircle-md p-5 max-h-[80vh] overflow-y-auto">
+        <div className="bg-surface rounded-squircle-md shadow-card p-5 max-h-[80vh] overflow-y-auto">
           <Tabs defaultValue="content">
             <TabsList>
               <TabsTrigger value="content">Inhalt</TabsTrigger>
@@ -190,7 +190,7 @@ export function LpEditor({ template }: { template: LpEditorTemplate }) {
         </div>
 
         {/* ── Live-Preview ───────────────────────────────────────── */}
-        <div className="bg-surface border border-line rounded-squircle-md overflow-hidden max-h-[80vh] sticky top-4">
+        <div className="bg-surface rounded-squircle-md shadow-card overflow-hidden max-h-[80vh] sticky top-4">
           <LpPreview
             blocks={s.blocks}
             theme={s.theme}
@@ -237,10 +237,10 @@ function BlockList({
           <li
             key={b.id}
             className={cn(
-              "group flex items-center gap-1 rounded-squircle-sm border px-2 py-1.5 transition-colors cursor-pointer",
+              "group flex items-center gap-1 rounded-squircle-sm px-2 py-1.5 transition-colors cursor-pointer",
               active
-                ? "border-brand bg-brand-soft"
-                : "border-line bg-surface-soft hover:border-ink-muted",
+                ? "bg-brand-soft"
+                : "bg-surface-soft hover:bg-surface-muted",
             )}
             onClick={() => onSelect(b.id)}
           >
@@ -375,7 +375,7 @@ function AddBlockMenu({ onAdd }: { onAdd: (type: BlockType) => void }) {
       </Button>
       {open && (
         <div
-          className="absolute left-0 right-0 mt-1 z-20 bg-surface border border-line rounded-squircle-sm shadow-card max-h-64 overflow-y-auto"
+          className="absolute left-0 right-0 mt-1 z-20 bg-surface rounded-squircle-sm shadow-card-hover max-h-64 overflow-y-auto"
           onMouseLeave={() => setOpen(false)}
         >
           {(Object.keys(BLOCK_LABELS) as BlockType[]).map((t) => (
@@ -482,10 +482,10 @@ function BrandPanel({
                   type="button"
                   onClick={() => onChange({ logoAlign: a })}
                   className={cn(
-                    "flex-1 px-3 py-1.5 text-xs font-medium rounded-squircle-sm border transition-colors",
+                    "flex-1 px-3 py-1.5 text-xs font-semibold rounded-full transition-colors",
                     logoAlign === a
-                      ? "border-brand bg-brand-soft text-brand-deep"
-                      : "border-line bg-surface text-ink-muted hover:text-ink",
+                      ? "bg-brand-soft text-brand-deep"
+                      : "bg-surface-soft text-ink-muted hover:text-ink",
                   )}
                 >
                   {a === "left" ? "Links" : "Mitte"}

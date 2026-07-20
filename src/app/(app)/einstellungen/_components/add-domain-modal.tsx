@@ -378,7 +378,7 @@ function DnsInstructions({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3 rounded-squircle-sm border border-line bg-surface-muted px-4 py-3">
+      <div className="flex items-center justify-between gap-3 rounded-squircle-sm bg-surface-soft px-4 py-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
             Hostname
@@ -393,7 +393,7 @@ function DnsInstructions({
       </div>
 
       {!isActive && !isFailed && (
-        <div className="flex items-start gap-3 rounded-squircle-sm border border-warn/30 bg-warn-soft/40 px-4 py-3 text-sm text-ink">
+        <div className="flex items-start gap-3 rounded-squircle-sm bg-warn-soft/50 px-4 py-3 text-sm text-ink">
           <Loader2 className="size-4 text-warn shrink-0 mt-0.5 animate-spin" />
           <div className="flex-1 min-w-0">
             <p className="font-semibold">Wartet auf DNS-Konfiguration</p>
@@ -402,7 +402,7 @@ function DnsInstructions({
               können je nach Provider 5 Minuten bis 24 Stunden brauchen.
             </p>
             {domain.lastError && (
-              <div className="mt-2 rounded-md border border-warn/40 bg-surface px-2.5 py-1.5">
+              <div className="mt-2 rounded-squircle-sm bg-surface px-2.5 py-1.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-warn">
                   Letzte Diagnose
                 </p>
@@ -417,7 +417,7 @@ function DnsInstructions({
       )}
 
       {isActive && (
-        <div className="flex items-start gap-3 rounded-squircle-sm border border-ok/30 bg-ok-soft/50 px-4 py-3 text-sm text-ink">
+        <div className="flex items-start gap-3 rounded-squircle-sm bg-ok-soft/60 px-4 py-3 text-sm text-ink">
           <Check className="size-4 text-ok shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="font-semibold">Domain ist aktiv</p>
@@ -533,8 +533,8 @@ function DiagnosisHint({ message }: { message: string }): React.JSX.Element | nu
 
 function DnsRecord({ label, record }: { label: string; record: DnsRecordRow }) {
   return (
-    <div className="rounded-squircle-sm border border-line bg-surface">
-      <div className="border-b border-line px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+    <div className="rounded-squircle-sm bg-surface-soft">
+      <div className="border-b border-line-soft px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
         {label}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-[80px_1fr] divide-y sm:divide-y-0 sm:divide-x divide-line-soft">
@@ -546,7 +546,7 @@ function DnsRecord({ label, record }: { label: string; record: DnsRecordRow }) {
         </div>
         <CopyField label="Name / Host" value={record.name} />
       </div>
-      <div className="border-t border-line">
+      <div className="border-t border-line-soft">
         <CopyField label="Wert / Ziel" value={record.value} />
       </div>
     </div>
@@ -589,9 +589,9 @@ function CopyField({ label, value }: { label: string; value: string }) {
         type="button"
         onClick={() => void copy()}
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink-muted shrink-0 transition-colors",
-          "hover:text-ink hover:border-ink-muted",
-          copied && "border-ok text-ok hover:text-ok",
+          "inline-flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-semibold text-ink-muted shrink-0 transition-colors",
+          "hover:text-ink",
+          copied && "text-ok hover:text-ok",
         )}
         title="In Zwischenablage kopieren"
       >

@@ -353,7 +353,7 @@ function ConfigureView({
           </p>
           <ul
             className={cn(
-              "rounded-squircle-md border border-line bg-surface-soft px-3 py-2 text-sm",
+              "rounded-squircle-md bg-surface-soft px-3 py-2 text-sm",
               runs.length > 6 ? "max-h-44 overflow-y-auto" : "",
             )}
           >
@@ -384,10 +384,10 @@ function ConfigureView({
                   onClick={() => onApplyPreset(preset)}
                   aria-pressed={active}
                   className={cn(
-                    "h-9 rounded-full px-4 text-sm font-semibold transition-colors border",
+                    "h-9 rounded-full px-4 text-sm font-semibold transition-colors",
                     active
-                      ? "bg-brand text-white border-brand"
-                      : "bg-surface text-ink border-line hover:bg-surface-muted",
+                      ? "bg-brand text-white"
+                      : "bg-surface-soft text-ink hover:bg-canvas-deep",
                   )}
                 >
                   {preset}

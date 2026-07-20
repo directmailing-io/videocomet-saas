@@ -611,7 +611,7 @@ export function ActivityCenter({
           showFunnel={showFunnel}
         />
 
-        <section className="min-w-0 flex flex-col bg-surface border border-line rounded-squircle-md overflow-hidden">
+        <section className="min-w-0 flex flex-col bg-surface rounded-squircle-md shadow-card overflow-hidden">
           <FilterToolbar
             searchQuery={search}
             onSearchChange={setSearch}
@@ -630,7 +630,7 @@ export function ActivityCenter({
 
           {/* Sticky-Header für Scope-Kontext (im Tab-Mode) */}
           {embedded && (
-            <div className="px-4 sm:px-6 py-2 text-xs text-ink-muted bg-surface-muted/40 border-b border-line">
+            <div className="px-4 sm:px-6 py-2 text-xs text-ink-muted bg-surface-soft border-b border-line-soft">
               {scope === "campaign" && campaignName
                 ? `Scope: Kampagne · ${campaignName}`
                 : scope === "run" && runName
@@ -770,10 +770,10 @@ function ActivityTopbar({
   onReconnect: () => void;
 }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-6 mb-2 border-b border-line">
+    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-2">
       <div className="flex flex-col gap-1.5 min-w-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl sm:text-[28px] font-bold tracking-tight text-ink leading-tight">
+          <h1 className="text-3xl font-bold tracking-tight text-ink leading-tight">
             Aktivität
           </h1>
           <StreamPill state={streamState} onReconnect={onReconnect} />
@@ -856,7 +856,7 @@ function StreamPill({
         if (state === "error" || state === "off") onReconnect();
       }}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2 py-0.5",
+        "inline-flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-1 shadow-card",
         "text-[11px] font-semibold text-ink-soft",
         (state === "error" || state === "off") &&
           "cursor-pointer hover:bg-surface-muted",
@@ -904,7 +904,7 @@ function ExportDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-squircle-sm border border-line bg-surface-muted/40 px-4 py-3 text-sm">
+        <div className="rounded-squircle-sm bg-surface-soft px-4 py-3 text-sm">
           <p className="font-semibold text-ink mb-1">
             {counts
               ? `${formatNumber(counts.total)} Events · ${formatNumber(counts.uniqueLeads)} Leads`

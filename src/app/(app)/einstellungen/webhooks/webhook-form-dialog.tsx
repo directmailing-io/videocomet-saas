@@ -495,7 +495,7 @@ export function WebhookFormDialog({
           </div>
 
           {/* 5. Erweitert (Custom-Headers) ─────────────────────────── */}
-          <div className="border-t border-line pt-4">
+          <div className="border-t border-line-soft pt-4">
             <button
               type="button"
               onClick={() => setAdvancedOpen((v) => !v)}
@@ -579,7 +579,7 @@ export function WebhookFormDialog({
 
           {/* 6. Test-Button (nur edit) ─────────────────────────────── */}
           {mode === "edit" && endpoint && (
-            <div className="border-t border-line pt-4">
+            <div className="border-t border-line-soft pt-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-ink">Test-Push</p>
@@ -603,7 +603,7 @@ export function WebhookFormDialog({
           )}
 
           {globalError && (
-            <div className="flex items-start gap-2.5 rounded-squircle-sm border border-danger/30 bg-danger-soft/40 px-3 py-2.5 text-sm text-danger">
+            <div className="flex items-start gap-2.5 rounded-squircle-sm bg-danger-soft px-3 py-2.5 text-sm text-danger">
               <TriangleAlert className="size-4 shrink-0 mt-0.5" />
               <p className="min-w-0 break-words">{globalError}</p>
             </div>
@@ -730,7 +730,7 @@ function TestResultPanel({ result }: { result: TestResult }) {
   const [expanded, setExpanded] = React.useState(false);
   if (result.ok) {
     return (
-      <div className="mt-3 rounded-squircle-sm border border-ok/30 bg-ok-soft/40 p-3 text-sm">
+      <div className="mt-3 rounded-squircle-sm bg-ok-soft/60 p-3 text-sm">
         <div className="flex items-start gap-2.5">
           <CheckCircle2 className="size-4 text-ok shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1">
@@ -756,7 +756,7 @@ function TestResultPanel({ result }: { result: TestResult }) {
               </button>
             )}
             {expanded && result.responseExcerpt && (
-              <pre className="mt-2 rounded-squircle-sm bg-surface border border-line p-2 text-[11px] font-mono text-ink-soft whitespace-pre-wrap break-all max-h-40 overflow-auto">
+              <pre className="mt-2 rounded-squircle-sm bg-surface p-2 text-[11px] font-mono text-ink-soft whitespace-pre-wrap break-all max-h-40 overflow-auto">
                 {result.responseExcerpt}
               </pre>
             )}
@@ -766,7 +766,7 @@ function TestResultPanel({ result }: { result: TestResult }) {
     );
   }
   return (
-    <div className="mt-3 rounded-squircle-sm border border-danger/30 bg-danger-soft/40 p-3 text-sm">
+    <div className="mt-3 rounded-squircle-sm bg-danger-soft/60 p-3 text-sm">
       <div className="flex items-start gap-2.5">
         <XCircle className="size-4 text-danger shrink-0 mt-0.5" />
         <div className="min-w-0 flex-1">
@@ -783,7 +783,7 @@ function TestResultPanel({ result }: { result: TestResult }) {
             </p>
           )}
           {result.responseExcerpt && (
-            <pre className="mt-2 rounded-squircle-sm bg-surface border border-line p-2 text-[11px] font-mono text-ink-soft whitespace-pre-wrap break-all max-h-32 overflow-auto">
+            <pre className="mt-2 rounded-squircle-sm bg-surface p-2 text-[11px] font-mono text-ink-soft whitespace-pre-wrap break-all max-h-32 overflow-auto">
               {result.responseExcerpt}
             </pre>
           )}

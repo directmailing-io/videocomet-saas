@@ -30,11 +30,11 @@ export function Heatmap({ buckets }: HeatmapProps) {
               key={b.hour}
               role="img"
               aria-label={`${b.count} Events um ${formatHour(b.hour)}:00 Uhr`}
-              className="relative aspect-square rounded-squircle-sm border border-line transition-transform duration-150 ease-spring cursor-default"
+              className="relative aspect-square rounded-squircle-sm transition-transform duration-150 ease-spring cursor-default"
               style={{
                 background:
                   b.count === 0
-                    ? "var(--surface-soft, #fafafa)"
+                    ? "var(--surface-soft, #ebe9f4)"
                     : `rgba(170, 140, 245, ${intensity.toFixed(3)})`,
                 transform: isHovered ? "translateY(-2px)" : undefined,
               }}
@@ -43,7 +43,7 @@ export function Heatmap({ buckets }: HeatmapProps) {
             >
               {isHovered && (
                 <div
-                  className="absolute -top-10 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap rounded-squircle-sm bg-surface border border-line px-2.5 py-1.5 shadow-card text-[11px]"
+                  className="absolute -top-10 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap rounded-squircle-sm bg-surface px-2.5 py-1.5 shadow-card-hover text-[11px]"
                 >
                   <div className="font-semibold text-ink">
                     {b.count} {b.count === 1 ? "Event" : "Events"}

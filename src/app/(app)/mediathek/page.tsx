@@ -36,7 +36,7 @@ function MediaGrid({ items }: { items: MediaItem[] }) {
     );
   }
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
       {items.map((m) => (
         <MediaCard key={m.id} item={toCardItem(m)} />
       ))}
@@ -145,7 +145,7 @@ export default async function MediathekPage() {
           <MediaGrid items={logos} />
         </TabsContent>
         <TabsContent value="links">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-4 mb-6">
             <div className="text-sm text-ink-muted">
               Speichere Google Docs, Sheets oder beliebige Links. Wiederverwendbar
               in Kampagnen-Wizards.

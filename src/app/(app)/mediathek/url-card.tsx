@@ -135,7 +135,7 @@ export function UrlCard({ item }: { item: UrlCardItem }) {
           href={item.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="block relative aspect-video rounded-squircle-sm bg-surface-muted mb-3 overflow-hidden border border-line group"
+          className="block relative aspect-video rounded-squircle-sm bg-surface-muted mb-3 overflow-hidden group"
           title="In neuem Tab öffnen"
         >
           {item.previewStatus === "ready" && item.previewUrl ? (
@@ -160,7 +160,7 @@ export function UrlCard({ item }: { item: UrlCardItem }) {
               <ImageOff className="size-6" />
               <span>Vorschau nicht verfügbar</span>
               {item.lastError ? (
-                <span className="text-red-500 text-[10px] line-clamp-2">
+                <span className="text-danger text-[10px] line-clamp-2">
                   {item.lastError}
                 </span>
               ) : null}
@@ -177,7 +177,7 @@ export function UrlCard({ item }: { item: UrlCardItem }) {
           <div className="flex items-center gap-2 flex-wrap">
             <span
               className={cn(
-                "inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium",
+                "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
                 TYPE_BADGE_CLASS[item.type],
               )}
             >
@@ -207,7 +207,7 @@ export function UrlCard({ item }: { item: UrlCardItem }) {
               <button
                 type="button"
                 onClick={handleRefresh}
-                className="rounded-md p-1 hover:bg-surface-muted transition-colors"
+                className="rounded-full p-1 hover:bg-surface-muted transition-colors"
                 title="Vorschau aktualisieren"
                 disabled={busy}
               >
@@ -221,7 +221,7 @@ export function UrlCard({ item }: { item: UrlCardItem }) {
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="rounded-md p-1 hover:bg-surface-muted transition-colors"
+                    className="rounded-full p-1 hover:bg-surface-muted transition-colors"
                     title="Aktionen"
                   >
                     <MoreHorizontal className="size-3.5 text-ink-muted" />
@@ -233,7 +233,7 @@ export function UrlCard({ item }: { item: UrlCardItem }) {
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={handleDelete}
-                    className="text-red-600"
+                    className="text-danger"
                   >
                     <Trash2 className="size-3.5 mr-2" />
                     Löschen

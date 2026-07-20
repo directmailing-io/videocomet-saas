@@ -169,10 +169,10 @@ export function EnvelopesView({ userId: _userId }: { userId: string }) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {templates.map((t) => (
-            <Card key={t.id} className="hover:border-brand/40 transition-colors">
-              <CardContent className="p-4">
+            <Card key={t.id} hover>
+              <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0 flex-1">
                     <Link
@@ -211,7 +211,7 @@ export function EnvelopesView({ userId: _userId }: { userId: string }) {
                     <button
                       type="button"
                       onClick={() => handleDelete(t.id)}
-                      className="text-ink-muted hover:text-red-600"
+                      className="text-ink-muted hover:text-danger"
                       aria-label="Löschen"
                       title="Löschen"
                     >

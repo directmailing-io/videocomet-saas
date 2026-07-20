@@ -44,7 +44,7 @@ export default function MakeDocsPage() {
           Im Pop-up: <strong>„Add"</strong> → vergib einen Namen (z.&nbsp;B.
           „VideoComet"). Make erzeugt jetzt deine eindeutige URL — ähnlich:
         </p>
-        <pre className="rounded-squircle-sm border border-line bg-surface-soft p-3 text-xs font-mono mt-2 overflow-x-auto">
+        <pre className="rounded-squircle-sm bg-surface shadow-card p-3 text-xs font-mono mt-2 overflow-x-auto">
           https://hook.eu2.make.com/abc123def456ghi789
         </pre>
         <p className="mt-2 text-ink-muted text-sm">
@@ -126,7 +126,7 @@ export default function MakeDocsPage() {
         </p>
       </Step>
 
-      <div className="rounded-squircle-md border border-ok/30 bg-ok-soft/40 p-5">
+      <div className="rounded-squircle-md bg-ok-soft/60 p-5">
         <p className="text-sm font-semibold text-ink mb-1 flex items-center gap-2">
           <CheckCircle2 className="size-4 text-ok" /> Fertig!
         </p>
@@ -136,7 +136,7 @@ export default function MakeDocsPage() {
         </p>
       </div>
 
-      <div className="rounded-squircle-md border border-line bg-surface p-5">
+      <div className="rounded-squircle-md bg-surface shadow-card p-5">
         <p className="text-sm font-semibold text-ink mb-2">Troubleshooting</p>
         <ul className="text-xs text-ink-muted space-y-1.5">
           <li>

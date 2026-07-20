@@ -671,7 +671,7 @@ export function LiveTable({
               </button>
               {workerStatsLabel && (
                 <span
-                  className="inline-flex items-center gap-1.5 rounded-squircle-sm border border-line bg-surface-muted px-2 py-0.5 text-xs text-ink-muted"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-0.5 text-xs text-ink-muted"
                   title={
                     workerStats
                       ? `BullMQ active: ${workerStats.active} · waiting: ${workerStats.waiting} · in-flight: ${workerStats.inFlight}`
@@ -726,7 +726,7 @@ export function LiveTable({
             <div
               id="live-log-body"
               ref={logScrollRef}
-              className="mt-3 max-h-72 overflow-y-auto rounded-squircle-sm border border-line bg-surface-muted font-mono text-xs"
+              className="mt-3 max-h-72 overflow-y-auto rounded-squircle-sm bg-surface-muted font-mono text-xs"
             >
               {filteredEvents.length === 0 ? (
                 <div className="px-3 py-6 text-center text-ink-muted">
@@ -816,7 +816,7 @@ export function LiveTable({
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-squircle-md border border-line bg-surface">
+      <div className="overflow-x-auto rounded-squircle-md bg-surface shadow-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -1154,7 +1154,7 @@ function FilterPill({
       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
         active
           ? "bg-brand text-white shadow-brand"
-          : "bg-surface border border-line text-ink-muted hover:bg-surface-muted hover:text-ink"
+          : "bg-surface text-ink-muted shadow-card hover:bg-surface-soft hover:text-ink"
       }`}
     >
       {children}

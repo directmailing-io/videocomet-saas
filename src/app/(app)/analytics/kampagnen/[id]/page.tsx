@@ -12,6 +12,7 @@ import {
 import { requireUser } from "@/lib/auth-guard";
 import { getCampaignDeepDive } from "@/lib/db/queries/analytics-summary";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
@@ -103,7 +104,7 @@ export default async function CampaignAnalyticsPage({
 
   return (
     <>
-      <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-1 pb-4 mb-4 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80 border-b border-line">
+      <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-1 pb-4 mb-4 bg-canvas/95 backdrop-blur supports-[backdrop-filter]:bg-canvas/80">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex flex-col gap-0.5 min-w-0">
             <Link
@@ -113,7 +114,7 @@ export default async function CampaignAnalyticsPage({
               <ArrowLeft className="size-3" />
               Zurück zur Übersicht
             </Link>
-            <h1 className="text-2xl font-bold tracking-tight text-ink leading-tight truncate">
+            <h1 className="text-3xl font-bold tracking-tight text-ink leading-tight truncate">
               {campaign.name}
             </h1>
             <p className="text-xs text-ink-muted leading-relaxed">
@@ -121,14 +122,18 @@ export default async function CampaignAnalyticsPage({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={`/aktivitaet?scope=campaign&campaignId=${campaign.id}`}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-line bg-surface text-xs font-semibold text-ink-muted hover:text-ink"
-              title="Echtzeit-Aktivität dieser Kampagne öffnen"
+            <Button
+              asChild
+              size="sm"
+              iconLeft={<Radio className="size-3.5" />}
             >
-              <Radio className="size-3.5" />
-              Aktivität ansehen
-            </Link>
+              <Link
+                href={`/aktivitaet?scope=campaign&campaignId=${campaign.id}`}
+                title="Echtzeit-Aktivität dieser Kampagne öffnen"
+              >
+                Aktivität ansehen
+              </Link>
+            </Button>
             <RangePicker />
             <ExportButton campaignId={campaign.id} />
             <ShortcutsHelp />
@@ -184,7 +189,7 @@ export default async function CampaignAnalyticsPage({
       </section>
 
       <section className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
-        <div className="lg:col-span-3 bg-surface border border-line rounded-squircle-md flex flex-col">
+        <div className="lg:col-span-3 bg-surface rounded-squircle-md shadow-card flex flex-col">
           <SectionHeader
             title="Aktivität über Zeit"
             subtitle={`Page-Views, Video-Plays und CTA-Klicks im Verlauf. Bucket: ${range.bucket === "hour" ? "stündlich" : "täglich"}.`}
@@ -195,7 +200,7 @@ export default async function CampaignAnalyticsPage({
             showBucketToggle={range.key !== "today"}
           />
         </div>
-        <div className="lg:col-span-2 bg-surface border border-line rounded-squircle-md flex flex-col">
+        <div className="lg:col-span-2 bg-surface rounded-squircle-md shadow-card flex flex-col">
           <SectionHeader
             title="Funnel"
             subtitle="Wo verlieren Sie Empfänger zwischen den Stufen?"
@@ -206,7 +211,7 @@ export default async function CampaignAnalyticsPage({
 
       <section
         aria-label="Top-Leads"
-        className="bg-surface border border-line rounded-squircle-md mb-6"
+        className="bg-surface rounded-squircle-md shadow-card mb-6"
       >
         <SectionHeader
           title="Top-Leads dieser Kampagne"
@@ -217,7 +222,7 @@ export default async function CampaignAnalyticsPage({
 
       <section
         aria-label="Runden"
-        className="bg-surface border border-line rounded-squircle-md mb-10"
+        className="bg-surface rounded-squircle-md shadow-card mb-10"
       >
         <SectionHeader
           title="Runden"

@@ -52,7 +52,7 @@ export function WizardStep6Summary({
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-ink mb-1">Zusammenfassung</h2>
+      <h2 className="text-xl font-bold tracking-tight text-ink mb-1">Zusammenfassung</h2>
       <p className="text-sm text-ink-muted mb-6">
         Prüfe deine Einstellungen und gib der Kampagne einen Namen.
       </p>

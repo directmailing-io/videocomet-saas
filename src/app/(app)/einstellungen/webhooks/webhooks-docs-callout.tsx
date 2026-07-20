@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 
 export function WebhooksDocsCallout() {
   return (
-    <Card className="border-brand/20 bg-brand-soft/40">
+    <Card className="bg-brand-soft/40">
       <CardContent className="p-5 flex flex-col md:flex-row md:items-center gap-4">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-squircle-sm bg-brand text-white shadow-brand">
           <BookOpen className="size-5" />

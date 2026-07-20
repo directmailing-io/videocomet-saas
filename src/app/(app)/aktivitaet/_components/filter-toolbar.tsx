@@ -91,7 +91,7 @@ export function FilterToolbar({
   const kindCounts = counts?.byKind ?? {};
 
   return (
-    <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-surface/95 backdrop-blur border-b border-line">
+    <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-surface/95 backdrop-blur border-b border-line-soft">
       <div className="flex flex-col gap-3">
         {/* Row 1: Kind-Chips + Date + Saved Views */}
         <div className="flex flex-wrap items-center gap-2">
@@ -197,11 +197,11 @@ function Chip({ label, count, active, onClick }: ChipProps) {
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-2 h-8 px-3 rounded-full border text-xs font-semibold transition-all duration-150",
+        "inline-flex items-center gap-2 h-8 px-3 rounded-full text-xs font-semibold transition-all duration-150",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
         active
-          ? "bg-brand-soft text-brand-deep border-brand/40"
-          : "bg-surface text-ink-soft border-line hover:bg-surface-muted",
+          ? "bg-brand-soft text-brand-deep"
+          : "bg-surface-soft text-ink-soft hover:bg-surface-muted",
       )}
     >
       <span>{label}</span>
@@ -231,7 +231,7 @@ function SavedViewsMenu({ views, onApply, onSaveCurrent, onDelete }: SavedViewsM
         <button
           type="button"
           className={cn(
-            "inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-line bg-surface",
+            "inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-surface-soft",
             "text-xs font-semibold text-ink-soft hover:bg-surface-muted transition-colors",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
           )}

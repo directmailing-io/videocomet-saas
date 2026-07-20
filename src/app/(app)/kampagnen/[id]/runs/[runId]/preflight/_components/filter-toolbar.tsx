@@ -223,17 +223,17 @@ interface FilterChipProps {
 }
 
 const variantInactive: Record<FilterChipProps["variant"], string> = {
-  neutral: "bg-surface text-ink-soft border-line hover:bg-surface-muted",
-  warn: "bg-surface text-ink-soft border-warn/30 hover:bg-warn/5",
-  danger: "bg-surface text-ink-soft border-danger/30 hover:bg-danger/5",
-  success: "bg-surface text-ink-soft border-line hover:bg-surface-muted",
+  neutral: "bg-surface-soft text-ink-soft hover:bg-canvas-deep",
+  warn: "bg-surface-soft text-ink-soft hover:bg-warn-soft/60",
+  danger: "bg-surface-soft text-ink-soft hover:bg-danger-soft/60",
+  success: "bg-surface-soft text-ink-soft hover:bg-canvas-deep",
 };
 
 const variantActive: Record<FilterChipProps["variant"], string> = {
-  neutral: "bg-brand-soft text-brand-deep border-brand/40",
-  warn: "bg-warn/10 text-warn border-warn/40",
-  danger: "bg-danger/10 text-danger border-danger/40",
-  success: "bg-ok-soft text-ok border-ok/40",
+  neutral: "bg-brand-soft text-brand-deep",
+  warn: "bg-warn-soft text-warn",
+  danger: "bg-danger-soft text-danger",
+  success: "bg-ok-soft text-ok",
 };
 
 function FilterChip({
@@ -249,7 +249,7 @@ function FilterChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-2 h-8 px-3 rounded-full border text-xs font-semibold transition-all duration-150",
+        "inline-flex items-center gap-2 h-8 px-3 rounded-full text-xs font-semibold transition-all duration-150",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
         active ? variantActive[variant] : variantInactive[variant],
       )}

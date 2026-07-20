@@ -392,7 +392,7 @@ export function WebhooksList({
         </div>
 
         {loading ? (
-          <div className="rounded-squircle-md border border-line bg-surface-muted/40 px-4 py-12 text-center text-sm text-ink-muted">
+          <div className="rounded-squircle-md bg-surface-soft px-4 py-12 text-center text-sm text-ink-muted">
             Lade Webhooks ...
           </div>
         ) : !filteredRows || filteredRows.length === 0 ? (
@@ -536,10 +536,10 @@ function WebhookCard({
   }, [row.campaignId, campaigns]);
 
   return (
-    <div className="rounded-squircle-md border border-line bg-surface p-4 flex flex-col gap-3">
+    <div className="rounded-squircle-md bg-surface-soft p-4 flex flex-col gap-3">
       <div className="flex items-start gap-3 min-w-0">
         <span
-          className="flex items-center justify-center rounded-squircle-sm shrink-0 border border-brand/20 bg-brand-soft text-brand-deep"
+          className="flex items-center justify-center rounded-squircle-sm shrink-0 bg-brand-soft text-brand-deep"
           style={{ width: 48, height: 48 }}
           aria-hidden="true"
         >

@@ -41,27 +41,27 @@ const STATUS_MAP: Record<
   paid: {
     label: "Bezahlt",
     icon: <CheckCircle2 className="size-3" />,
-    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    className: "bg-ok-soft text-ok",
   },
   open: {
     label: "Offen",
     icon: <Clock className="size-3" />,
-    className: "bg-amber-50 text-amber-700 border-amber-200",
+    className: "bg-warn-soft text-warn",
   },
   void: {
     label: "Storniert",
     icon: <AlertCircle className="size-3" />,
-    className: "bg-slate-100 text-slate-700 border-slate-200",
+    className: "bg-surface-muted text-ink-muted",
   },
   uncollectible: {
     label: "Uneinbringlich",
     icon: <AlertCircle className="size-3" />,
-    className: "bg-red-50 text-red-700 border-red-200",
+    className: "bg-danger-soft text-danger",
   },
   draft: {
     label: "Entwurf",
     icon: <FileText className="size-3" />,
-    className: "bg-slate-100 text-slate-700 border-slate-200",
+    className: "bg-surface-muted text-ink-muted",
   },
 };
 
@@ -109,8 +109,8 @@ export function InvoicesList() {
   }
 
   return (
-    <div className="rounded-squircle-md border border-line bg-surface">
-      <div className="p-5 border-b border-line">
+    <div className="rounded-squircle-md bg-surface shadow-card">
+      <div className="p-6 border-b border-line-soft">
         <h3 className="text-base font-semibold flex items-center gap-2">
           <FileText className="size-4" />
           Rechnungen
@@ -146,7 +146,7 @@ export function InvoicesList() {
                         </span>
                         <span
                           className={cn(
-                            "inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border",
+                            "inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full",
                             statusInfo.className,
                           )}
                         >

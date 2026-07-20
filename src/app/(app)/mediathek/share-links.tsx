@@ -268,7 +268,7 @@ function CreateLinkDialog({
                 </div>
               </div>
 
-              <div className="rounded-squircle-md border border-line bg-surface-soft px-4 py-3">
+              <div className="rounded-squircle-sm bg-surface-soft px-4 py-3">
                 <p className="text-xs text-ink-muted">
                   Der Empfänger sieht beim Öffnen:
                 </p>
@@ -373,7 +373,7 @@ function CreatedLinkPanel({
           <Label>Link</Label>
           <div className="flex items-center gap-2">
             <code
-              className="flex-1 min-w-0 truncate rounded-squircle-sm border border-line bg-surface-soft px-3 py-2 text-xs text-ink"
+              className="flex-1 min-w-0 truncate rounded-squircle-sm bg-surface-soft px-3 py-2 text-xs text-ink"
               title={url}
             >
               {url}
@@ -398,7 +398,7 @@ function CreatedLinkPanel({
         {/* QR-Code */}
         <div className="space-y-1.5">
           <Label>QR-Code</Label>
-          <div className="flex flex-col items-center justify-center gap-3 rounded-squircle-sm border border-line bg-surface-soft p-5">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-squircle-sm bg-surface-soft p-5">
             {qrDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -433,7 +433,7 @@ function ShareLinksList({ initial }: { initial: ShareLinkRow[] }) {
 
   if (initial.length === 0) {
     return (
-      <div className="rounded-squircle-md border border-dashed border-line bg-surface-soft px-6 py-8 text-center">
+      <div className="rounded-squircle-md bg-surface shadow-card px-6 py-10 text-center">
         <LinkIcon className="size-6 text-ink-muted mx-auto mb-2" />
         <p className="text-sm font-medium text-ink">Noch keine Aufnahme-Links</p>
         <p className="text-xs text-ink-muted">
@@ -484,10 +484,7 @@ function ShareLinksList({ initial }: { initial: ShareLinkRow[] }) {
       {initial.map((l) => (
         <li
           key={l.id}
-          className={cn(
-            "rounded-squircle-md border bg-surface px-4 py-3 flex items-center gap-3",
-            l.status === "open" ? "border-line" : "border-line-soft",
-          )}
+          className="rounded-squircle-md bg-surface shadow-card px-5 py-4 flex items-center gap-3"
         >
           <span
             className={cn(

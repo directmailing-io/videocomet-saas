@@ -210,8 +210,8 @@ function SummaryStat({
     <div
       className={
         tone === "brand"
-          ? "rounded-squircle-sm border border-brand/30 bg-brand-soft px-3 py-2.5"
-          : "rounded-squircle-sm border border-line bg-surface-soft px-3 py-2.5"
+          ? "rounded-squircle-sm bg-brand-soft px-3 py-2.5"
+          : "rounded-squircle-sm bg-surface-soft px-3 py-2.5"
       }
     >
       <div

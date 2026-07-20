@@ -62,13 +62,13 @@ export function HeroStat({
       : "text-ink-muted";
 
   return (
-    <div className="bg-surface border border-line rounded-squircle-md p-5 flex flex-col gap-3 transition-colors hover:bg-surface-soft">
+    <div className="bg-surface rounded-squircle-md shadow-card p-5 flex flex-col gap-3 transition-shadow hover:shadow-card-hover">
       <div className="flex items-start justify-between gap-3">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
           {label}
         </span>
         {icon && (
-          <span className="flex size-7 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep [&>svg]:size-3.5">
+          <span className="flex size-8 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep [&>svg]:size-4">
             {icon}
           </span>
         )}

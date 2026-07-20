@@ -351,20 +351,20 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
       )}
 
       <div className="flex items-start justify-between gap-3 mb-8">
-        <ol className="flex items-center gap-2 overflow-x-auto pb-2">
+        <ol className="flex items-center gap-1.5 overflow-x-auto pb-2">
         {STEPS.map((label, idx) => {
           const isActive = idx === step;
           const isDone = idx < step;
           const isEditorSkipped = idx === EDITOR_STEP_INDEX && skipEditor;
           return (
-            <li key={label} className="flex items-center gap-2 shrink-0">
+            <li key={label} className="shrink-0">
               <span
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-full text-xs font-semibold border transition-colors",
-                  isActive && "bg-brand text-white border-brand",
-                  isDone && !isEditorSkipped && "bg-brand-soft text-brand-deep border-brand-soft",
-                  !isActive && !isDone && !isEditorSkipped && "bg-surface text-ink-muted border-line",
-                  isEditorSkipped && "bg-surface-soft text-ink-muted border-dashed border-line",
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                  isActive && "bg-ink text-white shadow-ink",
+                  isDone && !isEditorSkipped && "bg-brand-soft text-brand-deep",
+                  !isActive && !isDone && !isEditorSkipped && "bg-surface text-ink-muted shadow-card",
+                  isEditorSkipped && "bg-surface-soft text-ink-muted line-through",
                 )}
                 title={
                   isEditorSkipped
@@ -372,20 +372,15 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
                     : undefined
                 }
               >
-                {isEditorSkipped ? "—" : isDone ? <Check className="size-3.5" /> : idx + 1}
-              </span>
-              <span
-                className={cn(
-                  "text-xs font-medium",
-                  isActive ? "text-ink" : "text-ink-muted",
-                  isEditorSkipped && "line-through",
+                {isEditorSkipped ? (
+                  "—"
+                ) : isDone ? (
+                  <Check className="size-3" />
+                ) : (
+                  <span className="tabular-nums">{idx + 1}</span>
                 )}
-              >
                 {label}
               </span>
-              {idx < STEPS.length - 1 && (
-                <span className="w-6 h-px bg-line ml-1" />
-              )}
             </li>
           );
         })}
@@ -499,7 +494,7 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
         )}
       </div>
 
-      <div className="flex items-center justify-between mt-8 pt-6 border-t border-line gap-3">
+      <div className="flex items-center justify-between mt-8 pt-6 border-t border-line-soft gap-3">
         <Button
           variant="ghost"
           onClick={back}

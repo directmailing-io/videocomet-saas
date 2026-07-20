@@ -426,7 +426,7 @@ export function EnvelopeEditor({ templateId }: { templateId: string }) {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_360px] gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_360px] gap-6">
         {/* Linke Sidebar: nur Bausteine */}
         <aside>
           <Card>
@@ -625,7 +625,7 @@ function FieldInspector({
           <button
             type="button"
             onClick={onDelete}
-            className="text-ink-muted hover:text-red-600 text-xs inline-flex items-center gap-1"
+            className="text-ink-muted hover:text-danger text-xs inline-flex items-center gap-1"
           >
             <Trash2 className="size-3.5" /> Element löschen
           </button>

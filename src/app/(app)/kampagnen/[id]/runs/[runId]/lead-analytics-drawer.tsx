@@ -138,13 +138,13 @@ export function LeadAnalyticsDrawer({
         <DialogPrimitive.Content
           className={cn(
             "fixed right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col overflow-hidden",
-            "border-l border-line bg-surface shadow-lift",
+            "bg-surface shadow-lift",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right",
             "duration-200",
           )}
         >
-          <div className="flex items-start justify-between gap-3 border-b border-line px-6 py-5">
+          <div className="flex items-start justify-between gap-3 border-b border-line-soft px-6 py-5">
             <div className="min-w-0">
               <DialogPrimitive.Title className="text-base font-semibold leading-tight text-ink">
                 {headerName || "Lead-Analytics"}
@@ -173,7 +173,7 @@ export function LeadAnalyticsDrawer({
                   }
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold text-ink-muted hover:border-ink-muted hover:text-ink transition-colors"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-surface-soft px-2.5 py-1 text-[11px] font-semibold text-ink-muted hover:bg-canvas-deep hover:text-ink transition-colors"
                   title={
                     lead.customHostname
                       ? `Auf ${lead.customHostname} im Vorschau-Modus öffnen`
@@ -196,12 +196,12 @@ export function LeadAnalyticsDrawer({
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
             {loading && <DrawerSkeleton />}
             {!loading && error && (
-              <div className="rounded-squircle-md border border-danger-soft bg-danger-soft/40 px-4 py-3 text-sm text-danger">
+              <div className="rounded-squircle-md bg-danger-soft px-4 py-3 text-sm text-danger">
                 Fehler beim Laden: {error}
               </div>
             )}
             {!loading && !error && data && !hasAnyActivity && (
-              <div className="rounded-squircle-md border border-line bg-surface-muted px-4 py-8 text-center text-sm text-ink-muted">
+              <div className="rounded-squircle-md bg-surface-soft px-4 py-8 text-center text-sm text-ink-muted">
                 Noch keine Aktivität — der Lead hat die Landingpage noch nicht
                 geöffnet.
               </div>
@@ -250,7 +250,7 @@ function SummaryTile({
   value: string | number;
 }) {
   return (
-    <div className="rounded-squircle-sm border border-line bg-surface px-3 py-2.5">
+    <div className="rounded-squircle-sm bg-surface-soft px-3 py-2.5">
       <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
         {label}
       </div>
@@ -505,7 +505,7 @@ function EngagementStory({
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">
           Engagement-Verlauf
         </h3>
-        <div className="rounded-squircle-sm border border-line bg-surface-muted px-3 py-6 text-center text-xs text-ink-muted">
+        <div className="rounded-squircle-sm bg-surface-soft px-3 py-6 text-center text-xs text-ink-muted">
           Sobald jemand das Video startet, erscheint hier der visuelle
           Engagement-Verlauf.
         </div>
@@ -610,7 +610,7 @@ function EngagementStory({
         </span>
       </div>
 
-      <div className="rounded-squircle-md border border-line bg-surface p-4">
+      <div className="rounded-squircle-md bg-surface-soft p-4">
         {/* Insight pills — the at-a-glance summary the user actually reads */}
         <div className="mb-4 flex flex-wrap gap-1.5">
           {insights.map((ins, i) => (
@@ -801,7 +801,7 @@ function EngagementStory({
 
         {/* Sessions list — chronological breakdown */}
         {sessions.length > 0 && (
-          <div className="mt-4 border-t border-line pt-3">
+          <div className="mt-4 border-t border-line-soft pt-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted mb-1.5">
               Sessions
             </p>
@@ -917,7 +917,7 @@ function EventTimeline({ events }: { events: AnalyticsEvent[] }) {
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">
         Letzte Events
       </h3>
-      <ul className="divide-y divide-line/60 rounded-squircle-sm border border-line bg-surface">
+      <ul className="divide-y divide-line-soft rounded-squircle-sm bg-surface-soft">
         {events.map((ev) => (
           <li key={ev.id} className="flex items-start gap-3 px-3 py-2.5">
             <span className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-muted text-ink-muted">
@@ -998,16 +998,16 @@ function DrawerSkeleton(): React.JSX.Element {
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="h-16 rounded-squircle-sm border border-line bg-surface-muted animate-pulse"
+            className="h-16 rounded-squircle-sm bg-surface-muted animate-pulse"
           />
         ))}
       </div>
-      <div className="h-32 rounded-squircle-sm border border-line bg-surface-muted animate-pulse" />
+      <div className="h-32 rounded-squircle-sm bg-surface-muted animate-pulse" />
       <div className="space-y-2">
         {Array.from({ length: 5 }).map((_, i) => (
           <div
             key={i}
-            className="h-10 rounded-squircle-sm border border-line bg-surface-muted animate-pulse"
+            className="h-10 rounded-squircle-sm bg-surface-muted animate-pulse"
           />
         ))}
       </div>

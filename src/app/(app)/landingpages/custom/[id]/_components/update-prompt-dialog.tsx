@@ -135,8 +135,8 @@ export function UpdatePromptDialog({
           />
 
           {mode === "select" && (
-            <div className="mt-2 rounded-squircle-md border border-line bg-surface-muted/40">
-              <div className="flex items-center justify-between px-4 py-2 border-b border-line">
+            <div className="mt-2 rounded-squircle-sm bg-surface-soft">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-line-soft">
                 <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
                   Runden ({selected.size} / {affectedRuns.length} gewählt)
                 </p>

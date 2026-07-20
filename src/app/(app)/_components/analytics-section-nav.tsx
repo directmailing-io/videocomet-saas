@@ -14,7 +14,7 @@ const TABS = [
 export function AnalyticsSectionNav() {
   const pathname = usePathname() ?? "";
   return (
-    <div className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-muted p-0.5">
+    <div className="inline-flex items-center gap-1 rounded-full bg-canvas-deep p-1">
       {TABS.map(({ href, label, icon: Icon, match }) => {
         const active = pathname === match || pathname.startsWith(match + "/");
         return (

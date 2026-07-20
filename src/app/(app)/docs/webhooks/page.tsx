@@ -22,8 +22,8 @@ export default function WebhooksDocsPage() {
 
       <section>
         <h2 className="text-lg font-semibold text-ink mb-3">In 3 Minuten startklar</h2>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Card className="hover:border-brand/40 transition-colors">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Card hover>
             <CardContent className="p-5">
               <p className="font-semibold text-ink">Zapier</p>
               <p className="text-xs text-ink-muted mt-1">
@@ -34,7 +34,7 @@ export default function WebhooksDocsPage() {
               </Button>
             </CardContent>
           </Card>
-          <Card className="hover:border-brand/40 transition-colors">
+          <Card hover>
             <CardContent className="p-5">
               <p className="font-semibold text-ink">Make.com</p>
               <p className="text-xs text-ink-muted mt-1">
@@ -74,7 +74,7 @@ export default function WebhooksDocsPage() {
             ["Run abgeschlossen", "run.completed", "Die ganze Versandrunde ist fertig generiert."],
             ["Run fehlgeschlagen", "run.failed", "Run wurde abgebrochen oder lief auf einen Fehler."],
           ].map(([title, key, desc]) => (
-            <li key={key} className="flex items-start gap-3 rounded-squircle-sm border border-line bg-surface p-3">
+            <li key={key} className="flex items-start gap-3 rounded-squircle-sm bg-surface shadow-card p-3">
               <Zap className="size-4 text-brand mt-0.5 shrink-0" />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-ink">{title}</p>
@@ -92,7 +92,7 @@ export default function WebhooksDocsPage() {
           Jede Nachricht ist ein JSON-Objekt mit Lead-Daten (Name, E-Mail,
           Telefon), Run- und Kampagnen-Info plus Event-Details. Beispiel:
         </p>
-        <pre className="rounded-squircle-sm border border-line bg-surface-soft p-4 text-xs font-mono overflow-x-auto leading-relaxed">{`{
+        <pre className="rounded-squircle-sm bg-surface shadow-card p-4 text-xs font-mono overflow-x-auto leading-relaxed">{`{
   "id": "evt_06FE8BVWG5Y6QC9RDY1KPE6SZW",
   "kind": "lead.opened",
   "ts": "2026-06-20T08:39:17.482Z",
@@ -116,7 +116,7 @@ export default function WebhooksDocsPage() {
 }`}</pre>
       </section>
 
-      <section className="grid sm:grid-cols-3 gap-3">
+      <section className="grid sm:grid-cols-3 gap-4">
         <FeatureTile
           icon={<Lock className="size-4" />}
           title="Sicher"
@@ -141,7 +141,7 @@ export default function WebhooksDocsPage() {
           <span className="font-mono text-ink">X-VideoComet-Signature</span>
           -Header. Hier ein Beispiel in Node.js:
         </p>
-        <pre className="rounded-squircle-sm border border-line bg-surface-soft p-4 text-xs font-mono overflow-x-auto leading-relaxed">{`const crypto = require("crypto");
+        <pre className="rounded-squircle-sm bg-surface shadow-card p-4 text-xs font-mono overflow-x-auto leading-relaxed">{`const crypto = require("crypto");
 
 function verify(secret, rawBody, headerValue) {
   // header z.B. "t=1718372537,v1=abc123..."
@@ -161,7 +161,7 @@ function verify(secret, rawBody, headerValue) {
 }`}</pre>
       </section>
 
-      <section className="rounded-squircle-md border border-warn/30 bg-warn-soft/30 p-5">
+      <section className="rounded-squircle-md bg-warn-soft/60 p-5">
         <p className="text-sm font-semibold text-ink mb-1">⚠️ Daten-Hinweis (DSGVO)</p>
         <p className="text-xs text-ink-muted">
           Wir senden Lead-Daten (E-Mail, Telefon, Adresse, alle CSV-Felder)
@@ -183,7 +183,7 @@ function FeatureTile({
   text: string;
 }) {
   return (
-    <div className="rounded-squircle-sm border border-line bg-surface p-4">
+    <div className="rounded-squircle-sm bg-surface shadow-card p-4">
       <div className="flex size-7 items-center justify-center rounded-full bg-brand-soft text-brand-deep mb-2">
         {icon}
       </div>

@@ -182,7 +182,7 @@ export function LeadsTable({ runId }: { runId: string }) {
                   "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors " +
                   (active
                     ? "bg-brand text-white shadow-brand"
-                    : "bg-surface border border-line text-ink-muted hover:text-ink")
+                    : "bg-surface-soft text-ink-muted hover:bg-canvas-deep hover:text-ink")
                 }
               >
                 {t.label}

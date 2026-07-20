@@ -688,7 +688,7 @@ export function PreflightReviewClient({
         <div
           className={cn(
             "sticky top-0 z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3",
-            "bg-surface-soft/95 backdrop-blur-sm border-b border-line",
+            "bg-surface-soft/95 backdrop-blur-sm border-b border-line-soft",
           )}
         >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -828,7 +828,7 @@ export function PreflightReviewClient({
         <div
           className={cn(
             "sticky top-[88px] z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3",
-            "bg-surface-soft/95 backdrop-blur-sm border-b border-line",
+            "bg-surface-soft/95 backdrop-blur-sm border-b border-line-soft",
           )}
           ref={(el) => {
             // Such-Input-Fokus per Shortcut.
@@ -1007,7 +1007,7 @@ function SkeletonGrid() {
       {Array.from({ length: 12 }).map((_, i) => (
         <div
           key={i}
-          className="flex flex-col bg-surface border border-line rounded-squircle-sm overflow-hidden"
+          className="flex flex-col bg-surface rounded-squircle-sm shadow-card overflow-hidden"
         >
           <div className="aspect-video bg-gradient-to-br from-surface-muted via-line-soft to-surface-muted animate-pulse" />
           <div className="px-3 py-2.5 space-y-1.5">

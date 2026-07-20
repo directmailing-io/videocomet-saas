@@ -221,10 +221,10 @@ function LeadCardImpl({
       onContextMenu={onContextMenu}
       onKeyDown={handleKeyDown}
       className={cn(
-        "group relative flex flex-col bg-surface border border-line rounded-squircle-sm overflow-hidden cursor-pointer transition-all duration-150",
+        "group relative flex flex-col bg-surface rounded-squircle-sm shadow-card overflow-hidden cursor-pointer transition-all duration-150",
         "before:absolute before:top-0 before:left-0 before:right-0 before:h-[2px] before:content-['']",
         severityTopBorder[sev],
-        "hover:shadow-card hover:-translate-y-0.5",
+        "hover:shadow-card-hover hover:-translate-y-0.5",
         selected && "ring-2 ring-brand ring-offset-1 ring-offset-surface-soft",
         focused && !selected && "ring-2 ring-brand ring-offset-1 ring-offset-surface-soft outline-none",
         focused && selected && "ring-offset-2",
@@ -295,7 +295,7 @@ function LeadCardImpl({
         >
           <span
             role="presentation"
-            className="flex items-center justify-center size-7 rounded-md bg-surface/95 shadow-card backdrop-blur-sm border border-line/80"
+            className="flex items-center justify-center size-7 rounded-md bg-surface/95 shadow-card backdrop-blur-sm"
           >
             <Checkbox
               checked={selected}

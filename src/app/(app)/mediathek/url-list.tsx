@@ -103,7 +103,7 @@ export function UrlList({ items }: Props) {
           subtitle="Versuche einen anderen Suchbegriff oder Filter."
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {visible.map((u) => (
             <UrlCard key={u.id} item={u} />
           ))}
@@ -129,10 +129,10 @@ function FilterChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
         active
-          ? "border-brand bg-brand text-white"
-          : "border-line bg-surface text-ink-muted hover:bg-surface-muted",
+          ? "bg-brand text-white"
+          : "bg-surface text-ink-muted shadow-card hover:text-ink",
       )}
     >
       <span>{label}</span>

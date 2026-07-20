@@ -246,7 +246,7 @@ export function UploadZone({ onClose }: UploadZoneProps) {
           <span className="text-xs font-medium text-ink-muted">
             Datei-Typ:
           </span>
-          <div className="inline-flex rounded-full border border-line bg-surface p-1 gap-1">
+          <div className="inline-flex rounded-full bg-surface-soft p-1 gap-1">
             <button
               type="button"
               onClick={() => setDefaultKind("auto")}
@@ -339,7 +339,7 @@ export function UploadZone({ onClose }: UploadZoneProps) {
           {files.map((f) => (
             <li
               key={f.id}
-              className="flex items-center gap-3 bg-surface border border-line rounded-squircle-md p-3"
+              className="flex items-center gap-3 bg-surface-soft rounded-squircle-sm p-3"
             >
               <span className="shrink-0">
                 {f.status === "done" && (
@@ -405,7 +405,7 @@ export function UploadZone({ onClose }: UploadZoneProps) {
             </div>
           )}
           {recorderUploading && (
-            <div className="rounded-squircle-md border border-line bg-surface-soft px-4 py-3 text-sm text-ink-muted flex items-center gap-2">
+            <div className="rounded-squircle-sm bg-surface-soft px-4 py-3 text-sm text-ink-muted flex items-center gap-2">
               <span className="inline-block size-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
               Upload läuft ...
             </div>

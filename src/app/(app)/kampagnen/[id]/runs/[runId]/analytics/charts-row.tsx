@@ -52,7 +52,7 @@ function ChartTooltip({
   const name = item?.payload && typeof item.payload.name === "string" ? item.payload.name : item?.name;
   return (
     <div
-      className="rounded-squircle-sm border border-line bg-surface px-3 py-2 shadow-card text-xs"
+      className="rounded-squircle-sm bg-surface px-3 py-2 shadow-card-hover text-xs"
       style={{ minWidth: 100 }}
     >
       {label !== undefined && (

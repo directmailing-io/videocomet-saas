@@ -138,7 +138,7 @@ export function ExportDialog({
           <button
             type="button"
             onClick={downloadCampaigns}
-            className="flex items-start gap-3 rounded-squircle-md border border-line p-4 text-left hover:bg-surface-soft transition-colors"
+            className="flex items-start gap-3 rounded-squircle-md bg-surface-soft p-4 text-left hover:bg-surface-muted transition-colors"
           >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep">
               <FileSpreadsheet className="size-4" />
@@ -160,7 +160,7 @@ export function ExportDialog({
           </button>
           <a
             href={buildLeadsHref()}
-            className="flex items-start gap-3 rounded-squircle-md border border-line p-4 hover:bg-surface-soft transition-colors"
+            className="flex items-start gap-3 rounded-squircle-md bg-surface-soft p-4 hover:bg-surface-muted transition-colors"
           >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep">
               <FileText className="size-4" />

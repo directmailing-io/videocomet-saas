@@ -91,7 +91,7 @@ export function WizardStep2Modus({ value, onChange }: WizardStep2Props) {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-ink mb-1">Modus wählen</h2>
+      <h2 className="text-xl font-bold tracking-tight text-ink mb-1">Modus wählen</h2>
       <p className="text-sm text-ink-muted mb-6">
         Bestimme, wie deine Kampagne aufgebaut ist.
       </p>
@@ -107,10 +107,10 @@ export function WizardStep2Modus({ value, onChange }: WizardStep2Props) {
               onClick={() => onChange(opt.value)}
               aria-pressed={active}
               className={cn(
-                "text-left rounded-squircle-lg border bg-surface p-6 transition-all relative flex flex-col",
+                "text-left rounded-squircle-lg bg-surface shadow-card p-6 transition-all duration-200 ease-spring relative flex flex-col",
                 active
-                  ? "border-brand ring-2 ring-brand/30 shadow-brand"
-                  : "border-line hover:border-brand/50 hover:shadow-card-hover",
+                  ? "ring-2 ring-brand bg-brand-soft/40"
+                  : "hover:shadow-card-hover hover:-translate-y-0.5",
               )}
             >
               {active && (
@@ -118,8 +118,8 @@ export function WizardStep2Modus({ value, onChange }: WizardStep2Props) {
                   <Check className="size-3.5" />
                 </span>
               )}
-              <span className="inline-flex size-12 items-center justify-center rounded-squircle-md bg-brand-soft text-brand-deep mb-4">
-                <Icon className="size-6" />
+              <span className="inline-flex size-9 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep mb-4">
+                <Icon className="size-4" />
               </span>
               <h3 className="text-base font-semibold text-ink mb-1.5">
                 {opt.title}

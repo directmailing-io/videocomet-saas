@@ -55,9 +55,9 @@ export function FunnelOverview({ data }: { data: FunnelData }) {
       </div>
 
       {data.biggestDropoff && (
-        <div className="rounded-squircle-sm border border-line bg-surface-soft p-4 flex gap-3">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-squircle-sm bg-warn-soft text-warn">
-            <TrendingDown className="size-3.5" />
+        <div className="rounded-squircle-sm bg-surface-soft p-4 flex gap-3">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-squircle-sm bg-warn-soft text-warn">
+            <TrendingDown className="size-4" />
           </span>
           <div className="flex flex-col gap-1 min-w-0">
             <div className="text-xs font-semibold uppercase tracking-wider text-ink-muted">

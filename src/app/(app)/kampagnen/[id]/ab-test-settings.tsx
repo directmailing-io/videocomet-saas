@@ -109,7 +109,9 @@ export function AbTestSettings({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <FlaskConical className="size-4 text-brand-deep" />
+          <span className="flex size-8 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep">
+            <FlaskConical className="size-4" />
+          </span>
           A/B-Test für Brief-Vorlagen
           {enabled ? (
             <Badge variant="success" dot>
@@ -131,7 +133,7 @@ export function AbTestSettings({
         </p>
 
         {!pdfEnabled && (
-          <div className="rounded-squircle-sm border border-warn/40 bg-warn-soft px-3 py-2 text-sm text-warn">
+          <div className="rounded-squircle-sm bg-warn-soft px-4 py-3 text-sm text-warn">
             Der PDF-Brief ist für diese Kampagne deaktiviert. Aktivieren Sie
             ihn zuerst, um A/B-Tests zu nutzen.
           </div>
@@ -141,7 +143,7 @@ export function AbTestSettings({
           <div>
             <Label>Brief A (bestehende Vorlage)</Label>
             <p
-              className="truncate rounded-squircle-sm border border-line bg-surface-soft px-3 py-2 text-sm text-ink"
+              className="truncate rounded-squircle-sm bg-surface-soft px-3 py-2 text-sm text-ink"
               title={urlA ?? undefined}
             >
               {urlA || (
@@ -168,7 +170,7 @@ export function AbTestSettings({
           </div>
         </div>
 
-        <div className="rounded-squircle-md border border-line p-4 space-y-4">
+        <div className="rounded-squircle-md bg-surface-soft p-4 space-y-4">
           <div>
             <p className="text-sm font-semibold text-ink">
               Standard-Verteilung
@@ -233,7 +235,7 @@ export function AbTestSettings({
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="rounded-squircle-sm border border-line bg-surface-soft px-3 py-2 text-xs text-ink-muted leading-relaxed">
+            <div className="rounded-squircle-sm bg-surface-soft px-4 py-3 text-xs text-ink-muted leading-relaxed">
               Die Auswertung (Öffnungsrate, Play-Rate, Watch-Time pro Brief)
               finden Sie im <span className="font-medium text-ink">Übersicht-Tab</span>{" "}
               — die Runden-Tabelle zeigt zusätzlich pro Runde die verwendete
@@ -259,7 +261,7 @@ export function AbTestSettings({
                 Brief B speichern
               </Button>
             </div>
-            <div className="border-t border-line pt-3">
+            <div className="border-t border-line-soft pt-4">
               <p className="mb-2 text-sm font-semibold text-ink">
                 Test beenden — Gewinner übernehmen
               </p>

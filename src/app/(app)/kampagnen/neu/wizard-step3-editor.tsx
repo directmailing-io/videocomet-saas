@@ -441,7 +441,7 @@ export function WizardStep3Editor({
 
           {/* Warn-Banner: Webcam ist kürzer als Segmente. */}
           {webcamShorterThanSegments && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-squircle-md border border-warn/40 bg-warn/5 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-squircle-md bg-warn-soft/60 px-4 py-3">
               <div className="flex items-center gap-2.5 text-sm">
                 <AlertTriangle className="size-4 text-warn shrink-0" />
                 <span className="text-ink">

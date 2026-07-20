@@ -160,7 +160,7 @@ export function WizardStep4Landingpage({
     <div className="space-y-8">
       {/* ── 1. Domain-Auswahl ─────────────────────────────────────────────── */}
       <section>
-        <h2 className="text-lg font-semibold text-ink mb-1">
+        <h2 className="text-xl font-bold tracking-tight text-ink mb-1">
           Domain für die Landingpages
         </h2>
         <p className="text-sm text-ink-muted mb-4">
@@ -218,7 +218,7 @@ export function WizardStep4Landingpage({
 
       {/* ── 2. Slug-Vorlage ───────────────────────────────────────────────── */}
       <section>
-        <h2 className="text-lg font-semibold text-ink mb-1">Slug-Vorlage</h2>
+        <h2 className="text-xl font-bold tracking-tight text-ink mb-1">Slug-Vorlage</h2>
         <p className="text-sm text-ink-muted mb-4">
           Bestimmt den lesbaren Teil der URL pro Lead. Platzhalter wie{" "}
           <code className="font-mono text-xs">{"{firstName}"}</code> oder{" "}
@@ -266,10 +266,10 @@ export function WizardStep4Landingpage({
                         )
                       }
                       className={cn(
-                        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                        "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
                         isSelected
-                          ? "border-brand bg-brand-soft text-brand-deep"
-                          : "border-line bg-surface text-ink-muted hover:text-ink hover:border-ink-muted",
+                          ? "bg-brand-soft text-brand-deep ring-1 ring-brand/40"
+                          : "bg-surface-soft text-ink-muted hover:text-ink hover:bg-surface-muted",
                       )}
                       title={preset.template}
                     >
@@ -283,7 +283,7 @@ export function WizardStep4Landingpage({
               </div>
             </div>
 
-            <div className="rounded-squircle-sm border border-line bg-surface-muted/50 px-4 py-3">
+            <div className="rounded-squircle-sm bg-surface-soft px-4 py-3">
               <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5">
                 <Sparkles className="size-3.5" />
                 Live-Vorschau (mit Test-Lead Peter Mueller)
@@ -315,7 +315,7 @@ export function WizardStep4Landingpage({
       {/* ── 3. Landingpage-Vorlage ────────────────────────────────────────── */}
       <section>
         <div className="flex items-center justify-between gap-3 mb-1">
-          <h2 className="text-lg font-semibold text-ink">
+          <h2 className="text-xl font-bold tracking-tight text-ink">
             Landingpage-Vorlage wählen
           </h2>
           {onReload && (
@@ -387,10 +387,10 @@ export function WizardStep4Landingpage({
                         // notwendig (vermeidet Stale-Closure-Bug).
                         onClick={() => onChange(tpl.id)}
                         className={cn(
-                          "text-left rounded-squircle-md border transition-all relative",
+                          "text-left rounded-squircle-md bg-surface shadow-card transition-all duration-200 ease-spring relative",
                           active
-                            ? "border-brand ring-2 ring-brand/30"
-                            : "border-line hover:border-brand/50",
+                            ? "ring-2 ring-brand bg-brand-soft/40"
+                            : "hover:shadow-card-hover hover:-translate-y-0.5",
                         )}
                       >
                         {active && (
@@ -398,7 +398,7 @@ export function WizardStep4Landingpage({
                             <Check className="size-3.5" />
                           </span>
                         )}
-                        <Card className="border-0 shadow-none">
+                        <Card className="border-0 shadow-none bg-transparent">
                           <CardContent className="p-3">
                             <div
                               className={cn(
@@ -443,9 +443,9 @@ export function WizardStep4Landingpage({
                       return (
                         <div
                           key={tpl.id}
-                          className="text-left rounded-squircle-md border border-warn/40 bg-warn/5 p-3 relative"
+                          className="text-left rounded-squircle-md bg-surface shadow-card p-3 relative"
                         >
-                          <div className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-center justify-center bg-gradient-to-br from-warn/10 to-surface-muted border border-warn/20 text-warn">
+                          <div className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-center justify-center bg-gradient-to-br from-warn-soft to-surface-muted text-warn">
                             <AlertTriangle className="size-10 opacity-80" />
                           </div>
                           <div className="flex items-center gap-2 mb-1">
@@ -480,10 +480,10 @@ export function WizardStep4Landingpage({
                         // landingPageTemplateId — kein zusaetzlicher Call hier.
                         onClick={() => onCustomChange(tpl.id)}
                         className={cn(
-                          "text-left rounded-squircle-md border transition-all relative",
+                          "text-left rounded-squircle-md bg-surface shadow-card transition-all duration-200 ease-spring relative",
                           active
-                            ? "border-brand ring-2 ring-brand/30"
-                            : "border-line hover:border-brand/50",
+                            ? "ring-2 ring-brand bg-brand-soft/40"
+                            : "hover:shadow-card-hover hover:-translate-y-0.5",
                         )}
                       >
                         {active && (
@@ -491,9 +491,9 @@ export function WizardStep4Landingpage({
                             <Check className="size-3.5" />
                           </span>
                         )}
-                        <Card className="border-0 shadow-none">
+                        <Card className="border-0 shadow-none bg-transparent">
                           <CardContent className="p-3">
-                            <div className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-center justify-center bg-gradient-to-br from-brand-soft to-surface-muted border border-line text-brand-deep">
+                            <div className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-center justify-center bg-gradient-to-br from-brand-soft to-surface-muted text-brand-deep">
                               <FileArchive className="size-10 opacity-70" />
                             </div>
                             <div className="flex items-center gap-2 mb-1">
@@ -549,11 +549,11 @@ function DomainCard({
       onClick={onClick}
       disabled={!selectable}
       className={cn(
-        "text-left rounded-squircle-md border bg-surface p-4 transition-all relative",
-        selectable && active && "border-brand ring-2 ring-brand/30",
-        selectable && !active && "border-line hover:border-brand/50",
+        "text-left rounded-squircle-md bg-surface shadow-card p-4 transition-all duration-200 ease-spring relative",
+        selectable && active && "ring-2 ring-brand bg-brand-soft/40",
+        selectable && !active && "hover:shadow-card-hover hover:-translate-y-0.5",
         !selectable &&
-          "border-line opacity-60 cursor-not-allowed bg-surface-muted",
+          "opacity-60 cursor-not-allowed bg-surface-soft shadow-none",
       )}
     >
       {active && selectable && (
@@ -563,7 +563,7 @@ function DomainCard({
       )}
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="inline-flex size-8 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep shrink-0">
+          <span className="inline-flex size-9 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep shrink-0">
             <Globe className="size-4" />
           </span>
           <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted truncate">

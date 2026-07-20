@@ -80,7 +80,7 @@ export function WebhookSecretReveal({
           </div>
         </DialogHeader>
 
-        <div className="flex items-start gap-2.5 rounded-squircle-sm border border-warn/30 bg-warn-soft/40 px-3 py-2.5 text-sm text-ink">
+        <div className="flex items-start gap-2.5 rounded-squircle-sm bg-warn-soft/60 px-3 py-2.5 text-sm text-ink">
           <TriangleAlert className="size-4 text-warn shrink-0 mt-0.5" />
           <p className="min-w-0">
             <span className="font-semibold">Nur einmal sichtbar.</span> Bitte
@@ -90,7 +90,7 @@ export function WebhookSecretReveal({
           </p>
         </div>
 
-        <div className="rounded-squircle-sm border border-line bg-surface-muted/40 p-3">
+        <div className="rounded-squircle-sm bg-surface-soft p-3">
           <code className="block text-xs font-mono text-ink break-all select-all">
             {secret ?? ""}
           </code>

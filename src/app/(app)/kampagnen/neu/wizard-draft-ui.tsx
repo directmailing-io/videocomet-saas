@@ -70,7 +70,7 @@ export function DraftRestoreBanner({
   return (
     <div
       role="status"
-      className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-squircle border border-brand/30 bg-brand-soft/40 px-4 py-3"
+      className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-squircle-md bg-surface shadow-card px-5 py-4"
     >
       <div className="flex items-start gap-3">
         <span className="mt-0.5 inline-flex size-7 items-center justify-center rounded-full bg-brand text-white">
@@ -130,7 +130,7 @@ export function DraftStatusPill({
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1 text-xs font-medium text-ink-muted border border-line",
+          "inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1 text-xs font-medium text-ink-muted",
           className,
         )}
       >
@@ -144,7 +144,7 @@ export function DraftStatusPill({
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-2.5 py-1 text-xs font-medium text-danger border border-danger/30",
+          "inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-2.5 py-1 text-xs font-medium text-danger",
           className,
         )}
       >
@@ -158,7 +158,7 @@ export function DraftStatusPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full bg-ok-soft px-2.5 py-1 text-xs font-medium text-ok border border-ok/30",
+        "inline-flex items-center gap-1.5 rounded-full bg-ok-soft px-2.5 py-1 text-xs font-medium text-ok",
         className,
       )}
     >

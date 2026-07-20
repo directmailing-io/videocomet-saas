@@ -134,7 +134,7 @@ export function LeadContextMenu({
       ref={ref}
       role="menu"
       style={{ position: "fixed", left, top, width: MENU_WIDTH, zIndex: 100 }}
-      className="rounded-squircle-sm border border-line bg-surface shadow-lg backdrop-blur-md py-1.5"
+      className="rounded-squircle-sm bg-surface shadow-lg backdrop-blur-md py-1.5"
     >
       <MenuItem
         icon={<Eye className="size-4" />}

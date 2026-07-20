@@ -89,10 +89,10 @@ function KindBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold leading-none",
         isUpload
-          ? "border-line bg-surface text-ink-muted"
-          : "border-brand/30 bg-brand-soft text-brand-deep",
+          ? "bg-surface text-ink-muted"
+          : "bg-brand-soft text-brand-deep",
         className,
       )}
       title={isUpload ? "Aus Mediathek hochgeladen" : "Webcam-Aufnahme"}
@@ -145,7 +145,7 @@ function FormatBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border border-brand/30 bg-brand-soft text-brand-deep px-1.5 py-0.5 text-[10px] font-semibold leading-none tabular-nums",
+        "inline-flex items-center rounded-full bg-brand-soft text-brand-deep px-2 py-0.5 text-[10px] font-semibold leading-none tabular-nums",
         className,
       )}
       title={title}
@@ -253,7 +253,7 @@ export function WizardStep1Webcam({
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-ink mb-1">
+      <h2 className="text-xl font-bold tracking-tight text-ink mb-1">
         Webcam-Video wählen
       </h2>
       <p className="text-sm text-ink-muted mb-6">
@@ -338,7 +338,7 @@ export function WizardStep1Webcam({
               Lade ...
             </div>
           ) : pickerError ? (
-            <div className="rounded-squircle-md border border-danger/30 bg-danger/5 p-6 text-center">
+            <div className="rounded-squircle-md bg-danger-soft/60 p-6 text-center">
               <p className="text-sm font-semibold text-ink mb-1">
                 Mediathek konnte nicht geladen werden
               </p>
@@ -399,12 +399,12 @@ export function WizardStep1Webcam({
             </DialogDescription>
           </DialogHeader>
           {uploadError && (
-            <div className="rounded-squircle-md border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
+            <div className="rounded-squircle-md bg-danger-soft/60 px-4 py-3 text-sm text-danger">
               {uploadError}
             </div>
           )}
           {uploading && (
-            <div className="rounded-squircle-md border border-line bg-surface-soft px-4 py-3 text-sm text-ink-muted flex items-center gap-2">
+            <div className="rounded-squircle-md bg-surface-soft px-4 py-3 text-sm text-ink-muted flex items-center gap-2">
               <span className="inline-block size-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
               Upload läuft ...
             </div>
@@ -492,7 +492,7 @@ function SelectedWebcamPreview({
   }, [streamGuid, reloadKey]);
 
   return (
-    <div className="rounded-squircle-md border border-line bg-surface p-4">
+    <div className="rounded-squircle-md bg-surface shadow-card p-5">
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand-deep">
           <Check className="size-3.5" />
@@ -667,10 +667,10 @@ function WebcamThumb({
       onFocus={startLoad}
       title={`${webcam.name} (${durationLabel(webcam.durationSec)})`}
       className={cn(
-        "text-left rounded-squircle-md border transition-all duration-200 ease-spring",
+        "text-left rounded-squircle-md bg-surface shadow-card transition-all duration-200 ease-spring",
         active
-          ? "border-brand ring-2 ring-brand/30"
-          : "border-line hover:border-brand/50",
+          ? "ring-2 ring-brand bg-brand-soft/40"
+          : "hover:shadow-card-hover hover:-translate-y-0.5",
       )}
     >
       <Card className="border-0 shadow-none bg-transparent">

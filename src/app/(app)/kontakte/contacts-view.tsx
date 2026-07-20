@@ -175,7 +175,7 @@ export function ContactsView({ userId: _userId }: { userId: string }) {
       />
 
       {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-2 mb-4">
+      <div className="flex flex-col sm:flex-row gap-2 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-ink-muted" />
           <Input
@@ -214,10 +214,10 @@ export function ContactsView({ userId: _userId }: { userId: string }) {
           type="button"
           onClick={() => setDuplicatesOnly((v) => !v)}
           className={cn(
-            "px-3 py-2 rounded-squircle-sm text-xs font-semibold border transition-colors whitespace-nowrap",
+            "px-4 py-2 rounded-full text-xs font-semibold transition-colors whitespace-nowrap",
             duplicatesOnly
-              ? "bg-brand-soft border-brand text-brand-deep"
-              : "bg-white border-line text-ink-muted hover:text-ink",
+              ? "bg-brand-soft text-brand-deep"
+              : "bg-surface text-ink-muted shadow-card hover:text-ink",
           )}
         >
           Nur Duplikate
@@ -348,7 +348,7 @@ function ContactRow({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-white border border-line text-ink-muted hover:text-brand-deep hover:border-brand-soft transition-colors"
+              className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-surface-soft text-ink-muted hover:text-brand-deep transition-colors"
               title={o.pageUrl ?? undefined}
             >
               <ExternalLink className="size-2.5" />
@@ -395,7 +395,7 @@ function OccurrenceCard({ occ }: { occ: Occurrence }) {
   };
 
   return (
-    <div className="rounded-squircle-md border border-line p-3 text-sm">
+    <div className="rounded-squircle-sm bg-surface-soft p-4 text-sm">
       {/* Kopf: Kampagne + Runde + Status */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -442,7 +442,7 @@ function OccurrenceCard({ occ }: { occ: Occurrence }) {
             href={occ.videoUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-line text-ink-muted hover:text-ink"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-surface text-ink-muted hover:text-ink"
           >
             <ExternalLink className="size-3" />
             Video
@@ -453,7 +453,7 @@ function OccurrenceCard({ occ }: { occ: Occurrence }) {
             href={occ.pdfUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-line text-ink-muted hover:text-ink"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-surface text-ink-muted hover:text-ink"
           >
             <ExternalLink className="size-3" />
             PDF
@@ -604,7 +604,7 @@ function ContactDetailDrawer({
       onClick={onClose}
     >
       <div
-        className="bg-white w-full sm:max-w-2xl sm:rounded-t-3xl sm:rounded-b-3xl max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-surface w-full sm:max-w-2xl rounded-t-squircle-xl sm:rounded-squircle-xl shadow-card max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 p-5 border-b border-line">
@@ -659,7 +659,7 @@ function ContactDetailDrawer({
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
                   Importierte Daten
                 </h3>
-                <div className="rounded-squircle-md border border-line p-3 bg-surface-muted/40">
+                <div className="rounded-squircle-sm bg-surface-soft p-4">
                   <dl className="text-xs grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
                     {Object.entries(detail.occurrences[0]?.rawData ?? {}).map(
                       ([k, v]) => (
@@ -678,13 +678,13 @@ function ContactDetailDrawer({
           )}
         </div>
 
-        <div className="border-t border-line p-4 bg-red-50/50">
+        <div className="border-t border-line-soft p-4 bg-danger-soft/40">
           {!showDeleteBox ? (
             <Button
               variant="ghost"
               onClick={() => setShowDeleteBox(true)}
               iconLeft={<Trash2 className="size-4" />}
-              className="text-red-600 hover:bg-red-100"
+              className="text-danger hover:bg-danger-soft"
             >
               Kontakt endgültig löschen (DSGVO)
             </Button>

@@ -493,7 +493,7 @@ export function CrmSettingsForm({
   // ── Render ───────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="rounded-squircle-md border border-line bg-surface-muted/40 px-4 py-12 text-center text-sm text-ink-muted">
+      <div className="rounded-squircle-md bg-surface-soft px-4 py-12 text-center text-sm text-ink-muted">
         Lade CRM-Einstellungen ...
       </div>
     );
@@ -501,7 +501,7 @@ export function CrmSettingsForm({
 
   if (integrations.length === 0) {
     return (
-      <div className="rounded-squircle-md border border-line bg-surface p-8 text-center">
+      <div className="rounded-squircle-md p-8 text-center">
         <Info className="mx-auto size-7 text-brand mb-3" />
         <h3 className="text-base font-semibold text-ink mb-2">
           Noch keine CRM-Integration angelegt
@@ -574,7 +574,7 @@ export function CrmSettingsForm({
           </div>
 
           {integrationDisabled && (
-            <div className="mt-3 flex items-start gap-3 rounded-squircle-sm border border-warn/30 bg-warn-soft/40 px-3 py-3 text-sm text-ink">
+            <div className="mt-3 flex items-start gap-3 rounded-squircle-sm bg-warn-soft px-4 py-3 text-sm text-ink">
               <TriangleAlert className="size-4 text-warn shrink-0 mt-0.5" />
               <p className="min-w-0">
                 Diese Integration ist deaktiviert — bitte API-Key im
@@ -672,7 +672,7 @@ export function CrmSettingsForm({
             </Section>
 
             {/* (e) Aktionen */}
-            <div className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-line">
+            <div className="flex items-center justify-between gap-3 flex-wrap pt-4 border-t border-line-soft">
               <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   type="button"
@@ -828,10 +828,10 @@ function LeadMatchPresetPicker({
             aria-checked={active}
             onClick={() => onChange(p.rows)}
             className={cn(
-              "flex items-start gap-3 rounded-squircle-md border p-3 text-left transition-all",
+              "flex items-start gap-3 rounded-squircle-md p-3.5 text-left transition-all",
               active
-                ? "border-brand bg-brand-soft/40 ring-2 ring-brand/20"
-                : "border-line bg-surface hover:border-brand/40",
+                ? "bg-brand-soft/60 ring-2 ring-brand/30"
+                : "bg-surface-soft hover:bg-brand-soft/30",
             )}
           >
             <span
@@ -882,7 +882,7 @@ function EventRowEditor({
 }) {
   const switchId = `crm-event-${eventKey}`;
   return (
-    <div className="rounded-squircle-md border border-line bg-surface p-4">
+    <div className="rounded-squircle-md bg-surface-soft p-4">
       <div className="flex items-center gap-3">
         <Switch
           id={switchId}
@@ -1070,7 +1070,7 @@ function TestResultPanel({
 }) {
   if (result.ok) {
     return (
-      <div className="rounded-squircle-md border border-ok/30 bg-ok-soft/30 px-4 py-3 flex items-start gap-3">
+      <div className="rounded-squircle-md bg-ok-soft px-4 py-3 flex items-start gap-3">
         <CheckCircle2 className="size-5 text-ok shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-ink">
@@ -1097,7 +1097,7 @@ function TestResultPanel({
     );
   }
   return (
-    <div className="rounded-squircle-md border border-danger/30 bg-danger-soft/30 px-4 py-3 flex items-start gap-3">
+    <div className="rounded-squircle-md bg-danger-soft px-4 py-3 flex items-start gap-3">
       <TriangleAlert className="size-5 text-danger shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-ink">Test-Sync fehlgeschlagen</p>

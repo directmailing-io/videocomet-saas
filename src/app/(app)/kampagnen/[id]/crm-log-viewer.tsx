@@ -181,7 +181,7 @@ export function CrmLogViewer({ campaignId, highlightIds }: CrmLogViewerProps) {
     <div className="flex flex-col gap-4">
       {/* Filter + Refresh */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="inline-flex rounded-full border border-line bg-surface p-0.5">
+        <div className="inline-flex rounded-full bg-surface p-1 shadow-card">
           {(["all", "ok", "err"] as const).map((f) => (
             <button
               key={f}
@@ -210,14 +210,14 @@ export function CrmLogViewer({ campaignId, highlightIds }: CrmLogViewerProps) {
       </div>
 
       {error && (
-        <div className="flex items-start gap-2.5 rounded-squircle-sm border border-danger/30 bg-danger-soft/40 px-3 py-2.5 text-sm text-danger">
+        <div className="flex items-start gap-2.5 rounded-squircle-sm bg-danger-soft px-4 py-3 text-sm text-danger">
           <TriangleAlert className="size-4 shrink-0 mt-0.5" />
           <p>{error}</p>
         </div>
       )}
 
       {loadingInitial ? (
-        <div className="rounded-squircle-md border border-line bg-surface-muted/40 px-4 py-12 text-center text-sm text-ink-muted">
+        <div className="rounded-squircle-md bg-surface shadow-card px-4 py-12 text-center text-sm text-ink-muted">
           Lade Log ...
         </div>
       ) : rows.length === 0 ? (
@@ -227,9 +227,9 @@ export function CrmLogViewer({ campaignId, highlightIds }: CrmLogViewerProps) {
           subtitle="Sobald die Kampagne erste Lead-Events ans CRM pusht, erscheinen die Versuche hier."
         />
       ) : (
-        <div className="overflow-hidden rounded-squircle-md border border-line bg-surface">
+        <div className="overflow-hidden rounded-squircle-md bg-surface shadow-card">
           <table className="w-full text-sm border-collapse">
-            <thead className="bg-surface-soft border-b border-line">
+            <thead className="bg-surface-soft">
               <tr>
                 <th className="h-11 px-3 text-left align-middle text-[11px] font-semibold uppercase tracking-wider text-ink-muted w-8" />
                 <th className="h-11 px-3 text-left align-middle text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
@@ -428,7 +428,7 @@ function JsonPanel({ label, data }: { label: string; data: unknown }) {
       <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted mb-1">
         {label}
       </p>
-      <pre className="rounded-squircle-sm border border-line bg-surface p-3 text-[11px] leading-relaxed text-ink whitespace-pre-wrap break-words max-h-[280px] overflow-auto font-mono">
+      <pre className="rounded-squircle-sm bg-canvas p-3 text-[11px] leading-relaxed text-ink whitespace-pre-wrap break-words max-h-[280px] overflow-auto font-mono">
         {pretty}
       </pre>
     </div>

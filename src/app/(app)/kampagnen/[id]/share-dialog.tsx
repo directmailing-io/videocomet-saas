@@ -305,11 +305,11 @@ export function ShareDialog({
                   <Loader2 className="size-5 animate-spin" />
                 </div>
               ) : listError ? (
-                <div className="rounded-squircle-sm border border-danger/30 bg-danger/5 p-4 text-sm text-danger">
+                <div className="rounded-squircle-sm bg-danger-soft p-4 text-sm text-danger">
                   Laden fehlgeschlagen: {listError}
                 </div>
               ) : shares.length === 0 ? (
-                <div className="rounded-squircle-md border border-dashed border-line bg-surface-soft py-10 px-6 text-center">
+                <div className="rounded-squircle-md bg-surface-soft py-10 px-6 text-center">
                   <p className="text-sm font-semibold text-ink">
                     Noch keine Share-Links vorhanden.
                   </p>
@@ -324,7 +324,7 @@ export function ShareDialog({
                     return (
                       <li
                         key={s.id}
-                        className="rounded-squircle-md border border-line bg-surface p-3"
+                        className="rounded-squircle-md bg-surface-soft p-3.5 transition-colors hover:bg-canvas"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
@@ -497,7 +497,7 @@ export function ShareDialog({
               </div>
             </DialogHeader>
 
-            <div className="rounded-squircle-md border border-line bg-surface-soft p-4 space-y-3">
+            <div className="rounded-squircle-md bg-surface-soft p-4 space-y-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-1">
                   Link
@@ -518,7 +518,7 @@ export function ShareDialog({
               </Button>
             </div>
 
-            <div className="flex items-start gap-2 rounded-squircle-sm border border-warn/30 bg-warn/5 p-3 text-sm text-ink">
+            <div className="flex items-start gap-2 rounded-squircle-sm bg-warn-soft p-3 text-sm text-ink">
               <AlertTriangle className="size-4 shrink-0 text-warn mt-0.5" />
               <p>
                 Das Passwort wird nicht erneut angezeigt. Bitte jetzt notieren
@@ -559,7 +559,7 @@ export function ShareDialog({
               </div>
             </DialogHeader>
 
-            <div className="rounded-squircle-md border border-line bg-surface-soft p-3">
+            <div className="rounded-squircle-md bg-surface-soft p-3.5">
               <p className="text-sm font-semibold text-ink">
                 {revokeTarget.label?.trim() || (
                   <span className="text-ink-muted font-normal">

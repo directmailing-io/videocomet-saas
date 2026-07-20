@@ -205,7 +205,7 @@ export function UploadZone({
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
           dragOver
             ? "border-brand bg-brand-soft/40"
-            : "border-line bg-surface hover:border-brand/50",
+            : "border-line bg-surface-soft hover:border-brand/50",
           disabled && "opacity-60 cursor-not-allowed pointer-events-none",
         )}
         aria-disabled={disabled}
@@ -252,7 +252,7 @@ export function UploadZone({
       )}
 
       {status.kind === "validation_error" && (
-        <div className="rounded-squircle-md border border-danger/40 bg-danger-soft p-4 flex items-start gap-3">
+        <div className="rounded-squircle-md bg-danger-soft p-4 flex items-start gap-3">
           <XCircle className="size-5 text-danger shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-danger">
@@ -281,7 +281,7 @@ export function UploadZone({
       )}
 
       {status.kind === "network_error" && (
-        <div className="rounded-squircle-md border border-danger/40 bg-danger-soft p-4 flex items-start gap-3">
+        <div className="rounded-squircle-md bg-danger-soft p-4 flex items-start gap-3">
           <XCircle className="size-5 text-danger shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-danger">Verbindungsfehler</p>
@@ -299,7 +299,7 @@ export function UploadZone({
       )}
 
       {status.kind === "success" && (
-        <div className="rounded-squircle-md border border-ok/40 bg-ok-soft p-4 flex items-start gap-3">
+        <div className="rounded-squircle-md bg-ok-soft p-4 flex items-start gap-3">
           <FileArchive className="size-5 text-ok shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-ok">
@@ -311,7 +311,7 @@ export function UploadZone({
               <code className="font-mono">{status.result.version.entryHtml}</code>
             </p>
             {status.result.warnings && status.result.warnings.length > 0 && (
-              <div className="mt-3 rounded-squircle-sm border border-warn/40 bg-warn-soft p-3 flex items-start gap-2">
+              <div className="mt-3 rounded-squircle-sm bg-warn-soft p-3 flex items-start gap-2">
                 <AlertTriangle className="size-4 text-warn shrink-0 mt-0.5" />
                 <div className="text-xs text-ink">
                   <p className="font-semibold text-warn">Hinweise</p>
@@ -340,7 +340,7 @@ function UploadProgress({
   fileName: string;
 }) {
   return (
-    <div className="rounded-squircle-md border border-line bg-surface p-4">
+    <div className="rounded-squircle-md bg-surface-soft p-4">
       <div className="flex items-center gap-3 mb-2">
         <span className="inline-flex size-8 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep">
           <UploadCloud className="size-4 animate-pulse" />

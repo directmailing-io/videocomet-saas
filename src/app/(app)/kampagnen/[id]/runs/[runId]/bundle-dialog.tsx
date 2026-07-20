@@ -124,10 +124,10 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
                     role="radio"
                     aria-checked={variant === opt.value}
                     onClick={() => setVariant(opt.value)}
-                    className={`flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors ${
+                    className={`flex w-full items-start gap-2.5 rounded-squircle-sm px-3 py-2.5 text-left transition-colors ${
                       variant === opt.value
-                        ? "border-brand bg-brand/5"
-                        : "border-line hover:border-ink-muted/40"
+                        ? "bg-brand-soft/60 ring-2 ring-brand/30"
+                        : "bg-surface-soft hover:bg-brand-soft/30"
                     }`}
                   >
                     <span

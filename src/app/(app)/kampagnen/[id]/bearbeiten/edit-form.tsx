@@ -457,10 +457,10 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
                           {w.durationSec != null && <span>{w.durationSec}s</span>}
                           <span
                             className={cn(
-                              "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
                               w.kind === "video"
-                                ? "border-line text-ink-muted"
-                                : "border-brand/30 bg-brand-soft text-brand-deep",
+                                ? "bg-surface-soft text-ink-muted"
+                                : "bg-brand-soft text-brand-deep",
                             )}
                           >
                             {w.kind === "video" ? "Upload" : "Webcam"}
@@ -749,7 +749,7 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
             </div>
 
             {state.pdfEnabled && (
-              <div className="mt-5 space-y-5 pt-5 border-t border-line">
+              <div className="mt-5 space-y-5 pt-5 border-t border-line-soft">
                 <div>
                   <Label htmlFor="edit-pdf-docs">Google-Docs-URL</Label>
                   <Input
@@ -838,7 +838,7 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
             </div>
 
             {state.pdfThumbnailEnabled && (
-              <div className="mt-5 pt-5 border-t border-line space-y-4">
+              <div className="mt-5 pt-5 border-t border-line-soft space-y-4">
                 {/* 3 Modus-Karten */}
                 <div
                   role="radiogroup"
@@ -1012,7 +1012,7 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
 
                 {state.thumbnailMode === "landingpage_screenshot" && (
                   <div className="pt-2">
-                    <div className="rounded-squircle-sm border border-dashed border-line bg-surface-muted/50 p-4 text-xs text-ink-muted leading-relaxed">
+                    <div className="rounded-squircle-sm bg-surface-soft p-4 text-xs text-ink-muted leading-relaxed">
                       Die Pipeline rendert pro Lead einen Screenshot der
                       personalisierten Landingpage und bettet ihn als
                       Thumbnail in den Brief ein. Kein weiterer Editor
@@ -1300,10 +1300,10 @@ function SlugTemplateField({
                   onCommit(next);
                 }}
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
                   selected
-                    ? "border-brand bg-brand-soft text-brand-deep"
-                    : "border-line bg-surface text-ink-muted hover:text-ink hover:border-ink-muted",
+                    ? "bg-brand-soft text-brand-deep"
+                    : "bg-surface-soft text-ink-muted hover:text-ink hover:bg-canvas-deep",
                 )}
                 title={preset.template}
               >
@@ -1317,7 +1317,7 @@ function SlugTemplateField({
         </div>
       </div>
 
-      <div className="rounded-squircle-sm border border-line bg-surface-muted/50 px-4 py-3">
+      <div className="rounded-squircle-sm bg-surface-soft px-4 py-3">
         <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5">
           <Sparkles className="size-3.5" />
           Live-Vorschau (mit Test-Lead Peter Mueller)

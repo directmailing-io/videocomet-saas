@@ -84,11 +84,11 @@ export function SegmentTypeGrid({
           type="button"
           onClick={() => onSelect(kind)}
           className={cn(
-            "group flex w-full items-center gap-3 rounded-squircle-md border border-line bg-surface p-3 text-left transition",
-            "hover:border-brand-200 hover:bg-brand-soft/40",
+            "group flex w-full items-center gap-3 rounded-squircle-md bg-surface-soft p-3 text-left transition",
+            "hover:bg-brand-soft/40",
           )}
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-squircle-sm bg-surface-soft text-ink transition-colors group-hover:bg-brand group-hover:text-white">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep transition-colors group-hover:bg-brand group-hover:text-white">
             <Icon className="size-4" />
           </span>
           <span className="flex min-w-0 flex-col gap-0.5">

@@ -264,11 +264,11 @@ export function RunWizardDedupeCard({
               Keine Regeln erkannt — du kannst unten eine eigene anlegen.
             </p>
           ) : (
-            <ul className="divide-y divide-line rounded-squircle-md border border-line">
+            <ul className="divide-y divide-line-soft rounded-squircle-md bg-surface-soft">
               {value.rules.map((rule) => (
                 <li
                   key={rule.id}
-                  className="flex items-center gap-3 px-3 py-2.5"
+                  className="flex items-center gap-3 px-4 py-3"
                 >
                   <Checkbox
                     id={`rule-${rule.id}`}
@@ -329,7 +329,7 @@ export function RunWizardDedupeCard({
           </div>
         </section>
 
-        <section className="rounded-squircle-md border border-line bg-surface-muted/40 p-3">
+        <section className="rounded-squircle-md bg-surface-soft p-4">
           <p className="text-sm text-ink">
             <strong>{totalRows}</strong> Lead{totalRows === 1 ? "" : "s"} →{" "}
             <strong className="text-danger">{excluded}</strong> Duplikat
@@ -360,7 +360,7 @@ export function RunWizardDedupeCard({
               {result.groups.slice(0, 10).map((g, idx) => (
                 <li
                   key={`${g.ruleId}-${g.originalRowIndex}-${idx}`}
-                  className="rounded-squircle-sm border border-line bg-surface px-3 py-2 text-xs"
+                  className="rounded-squircle-sm bg-surface px-3 py-2 text-xs"
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <Badge variant="warn" className="text-[10px]">
@@ -418,7 +418,7 @@ function InlineRuleEditor({ headers, onCancel, onSave }: InlineRuleEditorProps) 
   }
 
   return (
-    <div className="rounded-squircle-md border border-line bg-surface p-3 space-y-3">
+    <div className="rounded-squircle-md bg-surface-soft p-4 space-y-3">
       <div>
         <Label htmlFor="rule-label">Name der Regel</Label>
         <Input
@@ -439,10 +439,10 @@ function InlineRuleEditor({ headers, onCancel, onSave }: InlineRuleEditorProps) 
                 type="button"
                 onClick={() => toggleColumn(h)}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors",
+                  "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
                   active
-                    ? "border-brand bg-brand-soft text-brand-deep"
-                    : "border-line bg-surface text-ink-muted hover:border-ink-muted",
+                    ? "bg-brand-soft text-brand-deep"
+                    : "bg-surface text-ink-muted hover:text-ink",
                 )}
               >
                 {h}

@@ -454,7 +454,7 @@ export default async function CampaignDetailPage({
                 </div>
               </dl>
 
-              <div className="mt-6 pt-6 border-t border-line">
+              <div className="mt-6 pt-6 border-t border-line-soft">
                 <h4 className="text-sm font-semibold text-ink mb-3">
                   PDF-Brief
                 </h4>
@@ -615,7 +615,7 @@ function AbVariantComparison({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-line text-left">
+              <tr className="border-b border-line-soft text-left">
                 <th className="py-2 pr-4 text-xs font-semibold uppercase tracking-wider text-ink-muted">
                   Kennzahl
                 </th>
@@ -639,10 +639,13 @@ function AbVariantComparison({
             </thead>
             <tbody>
               {metricRows.map((row) => (
-                <tr key={row.label} className="border-b border-line/60 last:border-0">
-                  <td className="py-2.5 pr-4 text-ink-muted">{row.label}</td>
-                  <td className="py-2.5 pr-4 tabular-nums text-ink">{row.a}</td>
-                  <td className="py-2.5 tabular-nums text-ink">{row.b}</td>
+                <tr
+                  key={row.label}
+                  className="border-b border-line-soft last:border-0 hover:bg-surface-soft transition-colors"
+                >
+                  <td className="py-3 pr-4 text-ink-muted">{row.label}</td>
+                  <td className="py-3 pr-4 tabular-nums font-semibold text-ink">{row.a}</td>
+                  <td className="py-3 tabular-nums font-semibold text-ink">{row.b}</td>
                 </tr>
               ))}
             </tbody>
@@ -679,7 +682,7 @@ function WebcamPreview({
 }) {
   if (!media || !media.publicUrl) {
     return (
-      <div className="aspect-video w-full rounded-squircle-md border border-dashed border-line bg-surface-soft flex flex-col items-center justify-center gap-2 text-center px-6">
+      <div className="aspect-video w-full rounded-squircle-md bg-surface-soft flex flex-col items-center justify-center gap-2 text-center px-6">
         <p className="text-sm font-semibold text-ink">Keine Webcam ausgewählt</p>
         <p className="text-xs text-ink-muted max-w-sm">
           Wählen Sie in den Kampagnen-Einstellungen eine Webcam-Aufnahme aus
@@ -724,7 +727,7 @@ function WebcamPreview({
       src={media.publicUrl}
       controls
       preload="metadata"
-      className={`${aspectClass} rounded-squircle-md bg-ink border border-line object-contain`}
+      className={`${aspectClass} rounded-squircle-md bg-ink object-contain`}
     />
   );
 

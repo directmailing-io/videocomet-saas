@@ -99,8 +99,8 @@ export function CreditHistory() {
   }
 
   return (
-    <div className="rounded-squircle-md border border-line bg-surface">
-      <div className="p-5 border-b border-line">
+    <div className="rounded-squircle-md bg-surface shadow-card">
+      <div className="p-6 border-b border-line-soft">
         <h3 className="text-base font-semibold">Credit-Verlauf</h3>
         <p className="text-xs text-ink-muted mt-1">
           Vollständige Historie aller Aufladungen und Video-Verbrauche mit
@@ -114,10 +114,10 @@ export function CreditHistory() {
               type="button"
               onClick={() => setFilter(f.id)}
               className={cn(
-                "text-xs font-medium rounded-full px-3 py-1 border transition-colors",
+                "text-xs font-semibold rounded-full px-3 py-1.5 transition-colors",
                 filter === f.id
-                  ? "border-brand bg-brand text-white"
-                  : "border-line bg-surface text-ink-muted hover:bg-surface-muted",
+                  ? "bg-brand text-white"
+                  : "bg-surface-soft text-ink-muted hover:text-ink",
               )}
             >
               {f.label}

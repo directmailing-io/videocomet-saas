@@ -210,7 +210,7 @@ export function WebhookDeliveriesLog({
     <div className="flex flex-col gap-4">
       {!isCompact && (
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="inline-flex rounded-full border border-line bg-surface p-0.5">
+          <div className="inline-flex rounded-full bg-surface-soft p-1 gap-1">
             {(["all", "ok", "err", "pending"] as const).map((f) => (
               <button
                 key={f}
@@ -246,14 +246,14 @@ export function WebhookDeliveriesLog({
       )}
 
       {error && (
-        <div className="flex items-start gap-2.5 rounded-squircle-sm border border-danger/30 bg-danger-soft/40 px-3 py-2.5 text-sm text-danger">
+        <div className="flex items-start gap-2.5 rounded-squircle-sm bg-danger-soft px-3 py-2.5 text-sm text-danger">
           <TriangleAlert className="size-4 shrink-0 mt-0.5" />
           <p>{error}</p>
         </div>
       )}
 
       {loadingInitial ? (
-        <div className="rounded-squircle-md border border-line bg-surface-muted/40 px-4 py-8 text-center text-sm text-ink-muted">
+        <div className="rounded-squircle-md bg-surface-soft px-4 py-8 text-center text-sm text-ink-muted">
           Lade Auslieferungen ...
         </div>
       ) : rows.length === 0 ? (
@@ -269,9 +269,9 @@ export function WebhookDeliveriesLog({
           />
         )
       ) : (
-        <div className="overflow-hidden rounded-squircle-md border border-line bg-surface">
+        <div className="overflow-hidden rounded-squircle-md bg-surface">
           <table className="w-full text-sm border-collapse">
-            <thead className="bg-surface-soft border-b border-line">
+            <thead className="bg-surface-soft border-b border-line-soft">
               <tr>
                 <th className="h-11 px-3 text-left align-middle text-[11px] font-semibold uppercase tracking-wider text-ink-muted w-8" />
                 <th className="h-11 px-3 text-left align-middle text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
@@ -457,7 +457,7 @@ function ExpandedDetails({ row }: { row: WebhookDeliveryRow }) {
   return (
     <div className="flex flex-col gap-4">
       {row.errorMessage && (
-        <div className="rounded-squircle-sm border border-danger/30 bg-danger-soft/40 p-3">
+        <div className="rounded-squircle-sm bg-danger-soft p-3">
           <p className="text-xs font-semibold text-danger uppercase tracking-wider mb-1">
             Fehler
           </p>
@@ -483,7 +483,7 @@ function ExpandedDetails({ row }: { row: WebhookDeliveryRow }) {
           <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
             Request-Header
           </p>
-          <pre className="rounded-squircle-sm bg-surface border border-line p-2.5 text-[11px] font-mono text-ink-soft whitespace-pre-wrap break-all max-h-40 overflow-auto">
+          <pre className="rounded-squircle-sm bg-surface-soft p-2.5 text-[11px] font-mono text-ink-soft whitespace-pre-wrap break-all max-h-40 overflow-auto">
             {headers.map(([k, v]) => `${k}: ${v}`).join("\n")}
           </pre>
         </div>
@@ -493,7 +493,7 @@ function ExpandedDetails({ row }: { row: WebhookDeliveryRow }) {
         <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
           Payload
         </p>
-        <pre className="rounded-squircle-sm bg-surface border border-line p-2.5 text-[11px] font-mono text-ink-soft whitespace-pre-wrap break-all max-h-60 overflow-auto">
+        <pre className="rounded-squircle-sm bg-surface-soft p-2.5 text-[11px] font-mono text-ink-soft whitespace-pre-wrap break-all max-h-60 overflow-auto">
           {formatJsonLike(row.requestBody)}
         </pre>
       </div>
@@ -503,7 +503,7 @@ function ExpandedDetails({ row }: { row: WebhookDeliveryRow }) {
           <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-1.5">
             Response-Body
           </p>
-          <pre className="rounded-squircle-sm bg-surface border border-line p-2.5 text-[11px] font-mono text-ink-soft whitespace-pre-wrap break-all max-h-40 overflow-auto">
+          <pre className="rounded-squircle-sm bg-surface-soft p-2.5 text-[11px] font-mono text-ink-soft whitespace-pre-wrap break-all max-h-40 overflow-auto">
             {formatJsonLike(row.responseBody)}
           </pre>
         </div>

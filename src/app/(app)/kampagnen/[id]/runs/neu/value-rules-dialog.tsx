@@ -244,7 +244,7 @@ export function ValueRulesDialog({
               </div>
             )}
 
-            <div className="max-h-[45vh] overflow-y-auto rounded-squircle-sm border border-line divide-y divide-line">
+            <div className="max-h-[45vh] overflow-y-auto rounded-squircle-sm bg-surface-soft divide-y divide-line-soft">
               {filteredValues.map((v) => {
                 const norm = normalizeForRuleMatch(v.value);
                 const out = outputs[norm] ?? "";
@@ -271,7 +271,7 @@ export function ValueRulesDialog({
                       }
                     />
                     {isCleared ? (
-                      <div className="flex h-8 items-center justify-between gap-2 rounded-squircle-sm border border-line bg-surface-soft px-3">
+                      <div className="flex h-8 items-center justify-between gap-2 rounded-squircle-sm bg-canvas px-3">
                         <span className="text-sm italic text-ink-muted">
                           Feld wird geleert
                         </span>
@@ -376,7 +376,7 @@ export function ValueRulesDialog({
             )}
 
             {orphanRules.length > 0 && (
-              <div className="rounded-squircle-sm border border-line bg-surface-soft px-3 py-2 space-y-1.5">
+              <div className="rounded-squircle-sm bg-surface-soft px-4 py-3 space-y-1.5">
                 <p className="text-xs font-medium text-ink-muted">
                   Regeln aus einer früheren Runde — der Wert kommt in dieser
                   Liste nicht vor (bleiben aktiv):

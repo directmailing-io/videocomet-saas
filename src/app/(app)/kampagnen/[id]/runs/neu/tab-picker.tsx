@@ -88,7 +88,7 @@ export function MultiTabPicker({
         <CardTitle>Welche Tabs sollen rein?</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-start gap-2 rounded-squircle-sm border border-brand-soft bg-brand-soft/40 px-3 py-2 text-sm text-brand-deep">
+        <div className="flex items-start gap-2 rounded-squircle-sm bg-brand-soft/50 px-4 py-3 text-sm text-brand-deep">
           <Info className="size-4 shrink-0 mt-0.5" />
           <div>
             <div className="font-medium">Ein Tab = eine Runde.</div>
@@ -116,7 +116,7 @@ export function MultiTabPicker({
           </span>
         </div>
 
-        <div className="rounded-squircle-md border border-line divide-y divide-line">
+        <div className="rounded-squircle-md bg-surface-soft divide-y divide-line-soft overflow-hidden">
           {tabs.map((tab) => {
             const isSelected = selected.has(tab.gid);
             const isEmpty = tab.rowCount === 0;
@@ -173,7 +173,7 @@ export function MultiTabPicker({
         </div>
 
         {selectedCount > 0 && (
-          <div className="rounded-squircle-sm bg-brand/[0.06] border border-brand/20 px-3 py-2 text-sm">
+          <div className="rounded-squircle-sm bg-brand-soft/50 px-4 py-3 text-sm">
             <strong className="text-ink">{selectedCount} Runde{selectedCount === 1 ? "" : "n"}</strong>{" "}
             werden erstellt · zusammen ca.{" "}
             <strong className="text-ink">

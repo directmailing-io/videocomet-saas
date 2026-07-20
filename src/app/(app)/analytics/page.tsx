@@ -182,14 +182,14 @@ export default async function AnalyticsOverviewPage({
 
       {/* Two-column: campaign performance + funnel */}
       <section className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
-        <div className="lg:col-span-3 bg-surface border border-line rounded-squircle-md">
+        <div className="lg:col-span-3 bg-surface rounded-squircle-md shadow-card">
           <SectionHeader
             title="Kampagnen-Performance"
             subtitle="Sortiert nach CTR im gewählten Zeitraum. Klick öffnet das Detail."
           />
           <CampaignPerformanceList items={performance} />
         </div>
-        <div className="lg:col-span-2 bg-surface border border-line rounded-squircle-md flex flex-col">
+        <div className="lg:col-span-2 bg-surface rounded-squircle-md shadow-card flex flex-col">
           <SectionHeader
             title="Global-Funnel"
             subtitle="Aggregiert über alle Kampagnen. Hervorhebung: größte Drop-Off-Stelle."
@@ -201,7 +201,7 @@ export default async function AnalyticsOverviewPage({
       {/* Time-series */}
       <section
         aria-label="Aktivität über Zeit"
-        className="bg-surface border border-line rounded-squircle-md mb-6"
+        className="bg-surface rounded-squircle-md shadow-card mb-6"
       >
         <SectionHeader
           title="Aktivität über Zeit"
@@ -217,7 +217,7 @@ export default async function AnalyticsOverviewPage({
       {/* Top-Leads */}
       <section
         aria-label="Aktivste Leads"
-        className="bg-surface border border-line rounded-squircle-md mb-10"
+        className="bg-surface rounded-squircle-md shadow-card mb-10"
       >
         <SectionHeader
           title="Top-Leads im Zeitraum"
@@ -245,13 +245,13 @@ export default async function AnalyticsOverviewPage({
 
 function Topbar() {
   return (
-    <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-1 pb-4 mb-4 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80 border-b border-line">
+    <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-1 pb-4 mb-4 bg-canvas/95 backdrop-blur supports-[backdrop-filter]:bg-canvas/80">
       <div className="mb-3">
         <AnalyticsSectionNav />
       </div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex flex-col gap-0.5">
-          <h1 className="text-2xl font-bold tracking-tight text-ink leading-tight">
+          <h1 className="text-3xl font-bold tracking-tight text-ink leading-tight">
             Analytics
           </h1>
           <p className="text-xs text-ink-muted leading-relaxed">

@@ -91,7 +91,7 @@ export function InlinePreview({
               mit Demo-Lead Peter Müller
             </span>
             {!isActive && (
-              <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full ml-1">
+              <span className="text-[11px] font-semibold text-warn bg-warn-soft px-2 py-0.5 rounded-full ml-1">
                 inaktive Version
               </span>
             )}

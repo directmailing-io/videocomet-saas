@@ -694,7 +694,7 @@ export function RunsTable({
       {/* Sticky bulk-action bar -------------------------------------- */}
       {selectedCount > 0 && (
         <div
-          className="sticky bottom-4 z-30 mt-4 flex items-center gap-3 rounded-squircle-xl border border-line bg-surface px-4 py-3 shadow-lift"
+          className="sticky bottom-4 z-30 mt-4 flex items-center gap-3 rounded-squircle-xl bg-surface px-4 py-3 shadow-card-hover"
           role="region"
           aria-label="Auswahl-Aktionen"
         >

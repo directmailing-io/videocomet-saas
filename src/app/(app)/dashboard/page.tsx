@@ -4,7 +4,6 @@ import { db } from "@/lib/db";
 import { runs, leads, mediaItems, campaigns } from "@/lib/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { requireUser } from "@/lib/auth-guard";
-import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -105,13 +104,27 @@ export default async function DashboardPage() {
     .limit(5);
 
   const firstName = user.firstName?.trim() || user.email;
+  const runningCount = openRuns?.count ?? 0;
 
   return (
     <>
-      <PageHeader
-        title="Dashboard"
-        subtitle={`Willkommen zurück, ${firstName}!`}
-      />
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-ink">
+            Hallo {firstName}
+          </h1>
+          <p className="mt-1 text-sm text-ink-muted">
+            {runningCount > 0
+              ? `${runningCount} ${runningCount === 1 ? "Runde läuft" : "Runden laufen"} gerade`
+              : "Alles ruhig — keine laufenden Runden"}
+          </p>
+        </div>
+        {userCampaigns.length > 0 && (
+          <Button asChild iconLeft={<Plus className="size-4" />}>
+            <Link href="/kampagnen/neu">Neue Kampagne</Link>
+          </Button>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard

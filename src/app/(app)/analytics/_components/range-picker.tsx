@@ -99,7 +99,7 @@ export function RangePicker({
       <div
         role="tablist"
         aria-label="Zeitraum"
-        className="inline-flex items-center rounded-full border border-line bg-surface p-1 shadow-card"
+        className="inline-flex items-center rounded-full bg-surface p-1 shadow-card"
       >
         {SEGMENTS.map((s) => (
           <button

@@ -241,7 +241,7 @@ function StatTile({
   value: string | number;
 }) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-squircle-sm bg-surface px-2 py-2 border border-line">
+    <div className="flex flex-col gap-0.5 rounded-squircle-sm bg-surface-soft px-2.5 py-2">
       <span className="text-[10px] uppercase tracking-wider text-ink-muted">
         {label}
       </span>

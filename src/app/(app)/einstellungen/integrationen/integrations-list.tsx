@@ -284,7 +284,7 @@ export function IntegrationsList() {
         </div>
 
         {loading ? (
-          <div className="rounded-squircle-md border border-line bg-surface-muted/40 px-4 py-12 text-center text-sm text-ink-muted">
+          <div className="rounded-squircle-md bg-surface-soft px-4 py-12 text-center text-sm text-ink-muted">
             Lade Integrationen ...
           </div>
         ) : !rows || rows.length === 0 ? (
@@ -356,7 +356,7 @@ function IntegrationCard({
 }) {
   const status = computeStatus(row);
   return (
-    <div className="rounded-squircle-md border border-line bg-surface p-4 flex flex-col gap-3">
+    <div className="rounded-squircle-md bg-surface-soft p-4 flex flex-col gap-3">
       <div className="flex items-start gap-3 min-w-0">
         <ProviderLogo provider={row.provider} size={56} />
         <div className="min-w-0 flex-1">
@@ -607,7 +607,7 @@ function AddIntegrationDialog({
           </div>
 
           {error && (
-            <div className="flex items-start gap-2.5 rounded-squircle-sm border border-danger/30 bg-danger-soft/40 px-3 py-2.5 text-sm text-danger">
+            <div className="flex items-start gap-2.5 rounded-squircle-sm bg-danger-soft px-3 py-2.5 text-sm text-danger">
               <TriangleAlert className="size-4 shrink-0 mt-0.5" />
               <p className="min-w-0 break-words">{error}</p>
             </div>
@@ -667,7 +667,7 @@ function DeleteIntegrationDialog({
         </DialogHeader>
 
         {inUse && (
-          <div className="flex items-start gap-3 rounded-squircle-sm border border-warn/30 bg-warn-soft/40 px-3 py-3 text-sm text-ink">
+          <div className="flex items-start gap-3 rounded-squircle-sm bg-warn-soft/60 px-3 py-3 text-sm text-ink">
             <TriangleAlert className="size-4 text-warn shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="font-semibold">

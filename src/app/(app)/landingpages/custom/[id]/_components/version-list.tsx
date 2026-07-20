@@ -87,7 +87,7 @@ export function VersionList({
             key={v.id}
             className={cn(
               "transition-colors",
-              isActive && "border-brand bg-brand-soft/30",
+              isActive && "bg-brand-soft/40",
             )}
           >
             <CardContent className="p-4">

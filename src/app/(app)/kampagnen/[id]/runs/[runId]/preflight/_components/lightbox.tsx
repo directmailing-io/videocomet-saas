@@ -113,7 +113,7 @@ export function Lightbox({
           aria-describedby={undefined}
           className={cn(
             "fixed left-1/2 top-1/2 z-50 w-[min(96vw,1080px)] -translate-x-1/2 -translate-y-1/2",
-            "bg-surface rounded-squircle-xl border border-line shadow-lift overflow-hidden",
+            "bg-surface rounded-squircle-xl shadow-lift overflow-hidden",
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           )}
         >
@@ -177,7 +177,7 @@ function LightboxBody({
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-line">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-line-soft">
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
             {indexLabel}
@@ -223,7 +223,7 @@ function LightboxBody({
       {/* Body */}
       <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] min-h-[440px]">
         {/* Left: Screenshot */}
-        <div className="bg-surface-muted md:border-r border-line flex items-center justify-center p-5 md:p-6 md:min-h-[540px]">
+        <div className="bg-surface-muted md:border-r border-line-soft flex items-center justify-center p-5 md:p-6 md:min-h-[540px]">
           {isPendingOrRunning ? (
             <div className="flex flex-col items-center gap-2 text-ink-muted">
               <Loader2 className="size-6 animate-spin text-brand" />
@@ -234,7 +234,7 @@ function LightboxBody({
             <img
               src={lead.preflightScreenshotUrl ?? undefined}
               alt={`Webseite von ${displayDomain(lead)}`}
-              className="w-full max-w-[640px] aspect-video object-cover rounded-squircle-sm border border-line bg-surface shadow-card"
+              className="w-full max-w-[640px] aspect-video object-cover rounded-squircle-sm bg-surface shadow-card"
             />
           ) : (
             <div className="flex flex-col items-center gap-3 text-center max-w-sm">
@@ -306,7 +306,7 @@ function LightboxBody({
           </MetaList>
 
           {/* Actions */}
-          <div className="mt-auto pt-4 border-t border-line flex flex-col gap-2">
+          <div className="mt-auto pt-4 border-t border-line-soft flex flex-col gap-2">
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="brand"

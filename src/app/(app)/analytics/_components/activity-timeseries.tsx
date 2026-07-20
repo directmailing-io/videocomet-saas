@@ -109,7 +109,7 @@ export function ActivityTimeSeries({
           )}
         </div>
         {showBucketToggle && (
-          <div className="inline-flex items-center rounded-full border border-line bg-surface p-1">
+          <div className="inline-flex items-center rounded-full bg-surface-soft p-1">
             {(["day", "hour"] as const).map((b) => (
               <button
                 key={b}

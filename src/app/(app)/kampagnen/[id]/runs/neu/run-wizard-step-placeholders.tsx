@@ -626,7 +626,7 @@ export function RunWizardStepPlaceholders({
 
           {/* Reuse-Banner */}
           {reusedFromPrevious && (
-            <div className="flex items-start gap-3 rounded-squircle border border-brand/30 bg-brand-soft/40 px-4 py-3">
+            <div className="flex items-start gap-3 rounded-squircle-sm bg-brand-soft/50 px-4 py-3">
               <span className="mt-0.5 inline-flex size-7 items-center justify-center rounded-full bg-brand text-white shrink-0">
                 <History className="size-4" />
               </span>
@@ -644,7 +644,7 @@ export function RunWizardStepPlaceholders({
 
           {/* Validation-Banner */}
           {unmapped.length > 0 && (
-            <div className="flex items-start gap-3 rounded-squircle border border-warn/40 bg-warn-soft px-4 py-3">
+            <div className="flex items-start gap-3 rounded-squircle-sm bg-warn-soft px-4 py-3">
               <span className="mt-0.5 inline-flex size-7 items-center justify-center rounded-full bg-warn text-white shrink-0">
                 <AlertTriangle className="size-4" />
               </span>
@@ -668,7 +668,7 @@ export function RunWizardStepPlaceholders({
                         const el = rowRefs.current[p.key];
                         el?.scrollIntoView({ behavior: "smooth", block: "center" });
                       }}
-                      className="font-mono text-xs px-2 py-0.5 rounded-md bg-surface border border-warn/40 hover:bg-warn-soft transition-colors"
+                      className="font-mono text-xs px-2 py-0.5 rounded-full bg-surface hover:bg-warn-soft transition-colors"
                     >
                       {`{{${p.key}}}`}
                     </button>
@@ -738,7 +738,7 @@ export function RunWizardStepPlaceholders({
             {previewRows.slice(0, 2).map((row, i) => (
               <div
                 key={i}
-                className="rounded-squircle-sm border border-line bg-surface-soft px-4 py-3"
+                className="rounded-squircle-sm bg-surface-soft px-4 py-3"
               >
                 <p className="text-xs text-ink-muted mb-1.5">
                   Lead {i + 1}
@@ -830,7 +830,7 @@ function PlaceholderRow({
     <div
       ref={rowRef}
       className={cn(
-        "rounded-squircle-sm border border-line bg-surface px-4 py-3 transition-shadow",
+        "rounded-squircle-sm bg-surface-soft px-4 py-3 transition-shadow",
         "scroll-mt-6",
       )}
     >
@@ -852,10 +852,10 @@ function PlaceholderRow({
               <span
                 key={`${s.kind}-${idx}`}
                 className={cn(
-                  "inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-md border",
+                  "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full",
                   s.inaccessible
-                    ? "bg-warn-soft border-warn/40 text-warn"
-                    : "bg-line-soft border-line text-ink-muted",
+                    ? "bg-warn-soft text-warn"
+                    : "bg-line-soft text-ink-muted",
                 )}
                 title={s.label}
               >
@@ -864,7 +864,7 @@ function PlaceholderRow({
               </span>
             ))}
             {hasInaccessibleSource && (
-              <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-md border bg-warn-soft border-warn/40 text-warn font-medium">
+              <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-warn-soft text-warn font-medium">
                 Doc nicht lesbar
               </span>
             )}
@@ -1005,7 +1005,7 @@ function SaveStatusPill({ status, lastSavedAt, nowTick }: SaveStatusPillProps) {
 
   if (status === "saving") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1 text-xs font-medium text-ink-muted border border-line">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1 text-xs font-medium text-ink-muted">
         <Loader2 className="size-3 animate-spin" />
         Speichere …
       </span>
@@ -1014,7 +1014,7 @@ function SaveStatusPill({ status, lastSavedAt, nowTick }: SaveStatusPillProps) {
 
   if (status === "error") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-2.5 py-1 text-xs font-medium text-danger border border-danger/30">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-2.5 py-1 text-xs font-medium text-danger">
         <AlertTriangle className="size-3" />
         Speichern fehlgeschlagen
       </span>
@@ -1022,7 +1022,7 @@ function SaveStatusPill({ status, lastSavedAt, nowTick }: SaveStatusPillProps) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-ok-soft px-2.5 py-1 text-xs font-medium text-ok border border-ok/30">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-ok-soft px-2.5 py-1 text-xs font-medium text-ok">
       <Check className="size-3" />
       Gespeichert
       {lastSavedAt && (

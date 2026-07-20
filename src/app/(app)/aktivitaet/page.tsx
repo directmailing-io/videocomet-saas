@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default async function AktivitaetPage() {
   await requireUser();
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <AnalyticsSectionNav />
       <ActivityCenter scope="global" />
     </div>

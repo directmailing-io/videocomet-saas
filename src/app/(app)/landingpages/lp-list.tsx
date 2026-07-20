@@ -275,7 +275,7 @@ export function LpList({
               />
             ))
           : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {items.map((tpl) => {
                 const swatch = THEME_SWATCH[tpl.themeId] ?? THEME_SWATCH.clean!;
                 const bgOverride = asString(tpl.content.bgColor);
@@ -300,7 +300,7 @@ export function LpList({
                     >
                       <CardContent className="p-4">
                         <div
-                          className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-end justify-start p-3 border border-line"
+                          className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-end justify-start p-3 ring-1 ring-inset ring-ink/5"
                           style={{ background: bg }}
                         >
                           <span
@@ -326,7 +326,7 @@ export function LpList({
                           <button
                             type="button"
                             aria-label="Aktionen"
-                            className="inline-flex size-8 items-center justify-center rounded-full bg-surface/90 backdrop-blur border border-line text-ink-muted hover:text-ink hover:border-brand/40 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                            className="inline-flex size-8 items-center justify-center rounded-full bg-surface/90 backdrop-blur shadow-card text-ink-muted hover:text-ink transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
                           >
                             <MoreVertical className="size-4" />
                           </button>
@@ -370,7 +370,7 @@ export function LpList({
       {/* ── Eigene HTML-Vorlagen ─────────────────────────────────────────── */}
       <TabsContent value="custom">
         {customItems === null ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[0, 1, 2].map((i) => (
               <Card key={i} className="opacity-60">
                 <CardContent className="p-4">
@@ -423,7 +423,7 @@ export function LpList({
                 </Link>
               </Button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {customItems.map((tpl) => {
                 const isPending = pendingId === tpl.id;
                 return (
@@ -440,7 +440,7 @@ export function LpList({
                       className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 rounded-squircle-md"
                     >
                       <CardContent className="p-4">
-                        <div className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-center justify-center bg-gradient-to-br from-brand-soft to-surface-muted border border-line text-brand-deep">
+                        <div className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-center justify-center bg-gradient-to-br from-brand-soft to-surface-muted text-brand-deep">
                           {tpl.thumbnailUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -480,7 +480,7 @@ export function LpList({
                           <button
                             type="button"
                             aria-label="Aktionen"
-                            className="inline-flex size-8 items-center justify-center rounded-full bg-surface/90 backdrop-blur border border-line text-ink-muted hover:text-ink hover:border-brand/40 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                            className="inline-flex size-8 items-center justify-center rounded-full bg-surface/90 backdrop-blur shadow-card text-ink-muted hover:text-ink transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
                           >
                             <MoreVertical className="size-4" />
                           </button>
