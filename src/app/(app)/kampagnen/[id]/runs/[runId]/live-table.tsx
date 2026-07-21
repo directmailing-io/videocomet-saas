@@ -644,8 +644,21 @@ export function LiveTable({
         <div className="relative p-6 sm:p-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
-              <Badge variant={statusVariant(runStatus)} dot>
-                {statusLabel(runStatus)}
+              <Badge
+                variant={
+                  runStatus === "completed" && counts.failed > 0
+                    ? counts.completed === 0
+                      ? "danger"
+                      : "warn"
+                    : statusVariant(runStatus)
+                }
+                dot
+              >
+                {runStatus === "completed" && counts.failed > 0
+                  ? counts.completed === 0
+                    ? "Fehlgeschlagen"
+                    : "Fertig mit Fehlern"
+                  : statusLabel(runStatus)}
               </Badge>
               <span className="text-xs text-ink-muted">
                 {startedAtLabel ? `Gestartet ${startedAtLabel}` : null}
@@ -745,7 +758,7 @@ export function LiveTable({
                 <p className="text-sm font-semibold text-ink">
                   {runStatus === "completed" && counts.failed === 0
                     ? `Alle ${counts.completed} Leads fertig`
-                    : `${done} von ${total || initialRun.totalLeads} Leads fertig`}
+                    : `${counts.completed} von ${total || initialRun.totalLeads} Leads fertig`}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-muted">
                   {isTerminal

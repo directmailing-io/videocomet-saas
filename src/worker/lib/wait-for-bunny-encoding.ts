@@ -15,7 +15,7 @@
  *   mp4Url null und der Public-Renderer musste lazy reparieren.
  *
  *   Stattdessen pollen wir jetzt SYNCHRON im Worker (bounded), bis Bunny einen
- *   nutzbaren State erreicht hat. Wenn 60 s nicht reichen, werfen wir einen
+ *   nutzbaren State erreicht hat. Wenn 5 min nicht reichen, werfen wir einen
  *   `BunnyEncodingRetryableError` — BullMQ retried den Job mit Backoff, der
  *   Lead bleibt in `uploading`-Status (für video-upload) bzw. der shared-run-
  *   State bleibt auf `uploading` (Polling-Worker warten weiter).
@@ -27,7 +27,7 @@
  *   - status >= 3 (transcoding hat begonnen und produziert MP4-Renditions), ODER
  *   - availableResolutions non-empty (mind. eine MP4-Variante online).
  *
- * Wichtig: dieser Helper ist BOUNDED. Maximal `POLL_TIMEOUT_MS` (default 60s).
+ * Wichtig: dieser Helper ist BOUNDED. Maximal `POLL_TIMEOUT_MS` (default 5 min).
  * Es kann NIE unendlich laufen — der Caller bekommt entweder ein Result oder
  * einen Throw.
  */
@@ -35,7 +35,10 @@
 import { getVideo } from "@/lib/bunny/stream";
 
 const POLL_INTERVAL_MS = 5_000;
-const POLL_TIMEOUT_MS = 60_000;
+// 5 min: Bunny braucht für längere/1080p-Videos regelmäßig mehrere Minuten
+// Encoding-Zeit. 60s war zu knapp — ganze Runden failten mit lastStatus=2
+// (processing), obwohl Bunny kurz danach fertig geworden wäre.
+const POLL_TIMEOUT_MS = 300_000;
 
 /**
  * Wird vom Worker geworfen wenn Bunnys Encoding nach Timeout immer noch nicht
@@ -72,7 +75,7 @@ export interface BunnyVideoReadyMeta {
 export interface WaitForBunnyEncodingOptions {
   /** override default 5s. Test-Knopf. */
   intervalMs?: number;
-  /** override default 60s. Test-Knopf. */
+  /** override default 5 min. Test-Knopf. */
   timeoutMs?: number;
   /**
    * Optionaler Injection-Punkt für `getVideo` — erlaubt einfaches Mocking

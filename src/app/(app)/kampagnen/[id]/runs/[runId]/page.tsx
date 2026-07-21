@@ -89,7 +89,7 @@ export default async function RunDetailPage({
   return (
     <>
       <PageHeader
-        title={`Runde . ${run.name}`}
+        title={run.name}
         subtitle={`Kampagne ${campaign.name}`}
         actions={
           <Button asChild variant="ghost" iconLeft={<ArrowLeft className="size-4" />}>
