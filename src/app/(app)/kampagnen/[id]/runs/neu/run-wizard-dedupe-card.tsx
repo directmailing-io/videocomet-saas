@@ -217,7 +217,7 @@ export function RunWizardDedupeCard({
     ? `Ausgeschaltet — alle ${totalRows} Leads kommen weiter.`
     : excluded === 0
       ? `Keine Duplikate gefunden — alle ${totalRows} Leads kommen weiter.`
-      : `${excluded} Duplikat${excluded === 1 ? "" : "e"} werden entfernt — ${remaining} von ${totalRows} Leads kommen weiter.`;
+      : `${excluded} Duplikat${excluded === 1 ? " wird" : "e werden"} entfernt — ${remaining} von ${totalRows} Leads kommen weiter.`;
 
   return (
     <Card>
@@ -350,7 +350,8 @@ export function RunWizardDedupeCard({
             <strong className="text-danger">{excluded}</strong> Duplikat
             {excluded === 1 ? "" : "e"} in{" "}
             <strong>{result.stats.groupCount}</strong> Gruppe
-            {result.stats.groupCount === 1 ? "" : "n"} werden entfernt.{" "}
+            {result.stats.groupCount === 1 ? "" : "n"}{" "}
+            {excluded === 1 ? "wird" : "werden"} entfernt.{" "}
             <strong className="text-ok">{remaining}</strong> Lead
             {remaining === 1 ? "" : "s"} kommen weiter.
           </p>
