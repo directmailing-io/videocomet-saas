@@ -34,6 +34,7 @@
  * recovery can find where a job hung.
  */
 
+import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
@@ -65,7 +66,10 @@ import { buildPageUrlShort } from "@/lib/placeholders/page-url";
 import { runDocxToPdf } from "./docx-to-pdf";
 import { runPdfCompress } from "./pdf-compress";
 import { runPdfUpload } from "./pdf-upload";
-import { addBunnyAssetRef } from "@/lib/db/queries/bunny-assets";
+import {
+  addBunnyAssetRef,
+  removeStreamAssetRefsForGuids,
+} from "@/lib/db/queries/bunny-assets";
 import { trackAndRefAsset } from "../lib/bunny-asset-tracking";
 import { runThumbnailGenerate } from "./thumbnail-generate";
 import { runLandingpageScreenshot } from "./landingpage-screenshot";
@@ -565,6 +569,26 @@ export async function pipelineProcessor(
         // `renderedVideoPath` / `renderedDurationSec` bleiben null; die
         // PDF-Stage faellt auf das gespeicherte thumbnailUrl zurueck.
       } else {
+      // Content-Fingerprint über alle render-relevanten Inputs. Wird mit
+      // der GUID persistiert; ein Resume ist nur erlaubt, wenn der Hash
+      // noch passt — sonst würde nach einer zwischenzeitlichen Änderung
+      // (Webcam-Clip, Segments, Lead-Daten, Mapping, PiP) ein veraltetes
+      // Video weiterverwendet (Review-Fund 5).
+      const videoContentHash = createHash("sha256")
+        .update(
+          JSON.stringify({
+            webcamUrl: webcam.publicUrl,
+            webcamDurationSec: webcam.durationSec ?? 30,
+            website: lead.data?.website ?? null,
+            segments: campaign.segments ?? [],
+            leadData: lead.data ?? {},
+            placeholderMapping: placeholderMapping ?? null,
+            pipPosition: campaign.pipPosition ?? null,
+            pipShape: campaign.pipShape ?? null,
+          }),
+        )
+        .digest("hex");
+
       // ── Resume-Pfad (Retry nach Encoding-Timeout) ────────────────
       // Ein früherer Attempt hat schon zu Bunny hochgeladen (GUID am
       // Lead persistiert), nur der Encoding-Wait war zu langsam. Das
@@ -572,6 +596,30 @@ export async function pipelineProcessor(
       // sonst beginnt die Encoding-Wartezeit jedes Mal bei null und die
       // Bunny-Queue füllt sich mit Duplikaten (macht alles langsamer).
       let resumedUpload: VideoUploadOutput | null = null;
+      if (lead.bunnyVideoId && lead.videoContentHash !== videoContentHash) {
+        // Inhalt hat sich seit dem letzten Upload geändert (oder der Alt-
+        // Lead stammt von vor Migration 0037 und hat keinen Hash) — das
+        // alte Video ist nicht weiterverwendbar. Ref lösen + Video löschen,
+        // dann frisch rendern.
+        const staleGuid = lead.bunnyVideoId;
+        await removeStreamAssetRefsForGuids(data.userId, [staleGuid], [
+          { ownerType: "lead", ownerId: data.leadId },
+        ]).catch(() => undefined);
+        const { deleteVideo } = await import("@/lib/bunny/stream");
+        await deleteVideo(staleGuid).catch(() => undefined);
+        await updateLeadStatus(data.leadId, {
+          bunnyVideoId: null,
+          videoContentHash: null,
+        });
+        lead.bunnyVideoId = null;
+        await insertPipelineEvent({
+          runId: data.runId,
+          leadId: data.leadId,
+          level: "info",
+          stage: "upload",
+          message: `${leadLabel}: content changed since previous upload — discarding stale Bunny video (${staleGuid.slice(0, 8)}…) and re-rendering`,
+        });
+      }
       if (lead.bunnyVideoId) {
         await setCurrentStage(data.leadId, "videoUpload");
         await updateLeadStatus(data.leadId, { status: "uploading" });
@@ -580,6 +628,7 @@ export async function pipelineProcessor(
           () =>
             runVideoUploadResume({
               leadId: data.leadId,
+              userId: data.userId,
               bunnyVideoId: lead.bunnyVideoId!,
               onEncodingProgress: makeEncodingHeartbeat(
                 data.runId,
@@ -695,6 +744,7 @@ export async function pipelineProcessor(
             userId: data.userId,
             videoFilePath: compressed.videoFilePath,
             title: `${campaign.name} – Lead ${lead.rowIndex}`,
+            contentHash: videoContentHash,
             onEncodingProgress: makeEncodingHeartbeat(
               data.runId,
               data.leadId,

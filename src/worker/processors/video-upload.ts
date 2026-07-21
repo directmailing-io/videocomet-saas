@@ -28,6 +28,7 @@ import {
   streamUrlsFor,
   uploadVideo,
 } from "@/lib/bunny/stream";
+import { removeStreamAssetRefsForGuids } from "@/lib/db/queries/bunny-assets";
 import { updateLeadStatus } from "@/lib/db/queries/leads";
 import { waitForBunnyEncoding } from "../lib/wait-for-bunny-encoding";
 
@@ -37,6 +38,12 @@ export interface VideoUploadInput {
   title: string;
   /** Optional userId — wird für späteres bunny-asset-tracking gebraucht (Paket B). */
   userId?: string;
+  /**
+   * Content-Fingerprint der Render-Inputs (Review-Fund 5). Wird zusammen mit
+   * der GUID persistiert, damit der Resume-Pfad erkennt, ob das existierende
+   * Bunny-Video noch zu den aktuellen Inputs passt.
+   */
+  contentHash?: string;
   /** Heartbeat während des Encoding-Waits (ca. alle 60s) — für Live-Log-Events. */
   onEncodingProgress?: (info: { elapsedMs: number; lastStatus: number }) => void;
 }
@@ -99,15 +106,27 @@ async function resolvePostUploadMeta(
   const height = ready.height > 0 ? ready.height : null;
   const orientation =
     width != null && height != null ? orientationOf(width, height) : null;
+  // Review-Fund 6: `availableResolutions` kann unmittelbar nach dem
+  // ready-Signal noch leer sein (Bunny schreibt die Metadaten async nach).
+  // Bounded Re-Poll (3 × 8s ≈ 24s) statt sofort mp4=null zu persistieren —
+  // bleibt deutlich unter dem 330s-Stage-Timeout.
   let mp4Url: string | null = null;
-  try {
-    const downloads = await getVideoDownloadUrls(videoId, parsed.cdnHostname);
-    mp4Url = downloads[0]?.url ?? null;
-  } catch (err) {
-    // Sollte selten passieren — Bunny hat eben gerade ready gemeldet. Wir
-    // tolerieren null + lassen Public-LP lazy nachsuchen.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const downloads = await getVideoDownloadUrls(videoId, parsed.cdnHostname);
+      mp4Url = downloads[0]?.url ?? null;
+    } catch (err) {
+      console.warn(
+        `[video-upload] getVideoDownloadUrls failed for ${videoId} (attempt ${attempt}): ${(err as Error).message}`,
+      );
+    }
+    if (mp4Url != null || attempt === 3) break;
+    await new Promise((resolve) => setTimeout(resolve, 8000));
+  }
+  if (mp4Url == null) {
+    // Tolerieren + lassen Public-LP lazy nachsuchen.
     console.warn(
-      `[video-upload] getVideoDownloadUrls failed for ${videoId}: ${(err as Error).message}`,
+      `[video-upload] no mp4 url resolved for ${videoId} after 3 attempts — persisting null`,
     );
   }
   return { width, height, mp4Url, orientation };
@@ -155,7 +174,10 @@ export async function runVideoUpload(
   // `lead.videoUrl != null` bedeutet "Video-Stages komplett fertig" und
   // steuert die Skip-Logik in pipeline.ts). Damit kann ein Retry nach
   // Encoding-Timeout via runVideoUploadResume hier weitermachen.
-  await updateLeadStatus(input.leadId, { bunnyVideoId: result.videoId });
+  await updateLeadStatus(input.leadId, {
+    bunnyVideoId: result.videoId,
+    videoContentHash: input.contentHash ?? null,
+  });
 
   return finishUpload(
     input.leadId,
@@ -178,6 +200,7 @@ export async function runVideoUpload(
 export async function runVideoUploadResume(input: {
   leadId: string;
   bunnyVideoId: string;
+  userId: string;
   onEncodingProgress?: (info: { elapsedMs: number; lastStatus: number }) => void;
 }): Promise<VideoUploadOutput | null> {
   let probe: Record<string, unknown>;
@@ -192,12 +215,17 @@ export async function runVideoUploadResume(input: {
 
   const status = Number(probe.status ?? 0);
   if (status === 5) {
-    // Bunny hat die Quelle verworfen — GUID ist tot: Video löschen und die
+    // Bunny hat die Quelle verworfen — GUID ist tot: Asset-Ref lösen (damit
+    // der Purge-Worker das Register aufräumen kann), Video löschen und die
     // Lead-Referenz nullen, damit kein weiterer Retry sie erneut probed.
+    await removeStreamAssetRefsForGuids(input.userId, [input.bunnyVideoId], [
+      { ownerType: "lead", ownerId: input.leadId },
+    ]).catch(() => {});
     await deleteVideo(input.bunnyVideoId).catch(() => {});
-    await updateLeadStatus(input.leadId, { bunnyVideoId: null }).catch(
-      () => {},
-    );
+    await updateLeadStatus(input.leadId, {
+      bunnyVideoId: null,
+      videoContentHash: null,
+    }).catch(() => {});
     return null;
   }
 

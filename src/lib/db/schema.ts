@@ -488,6 +488,13 @@ export const leads = pgTable("leads", {
 
   // Assets
   bunnyVideoId: text("bunny_video_id"),
+  /**
+   * SHA-256 über die render-relevanten Inputs des Videos (Migration 0037).
+   * Der Resume-Pfad (Retry nach Encoding-Timeout) darf ein existierendes
+   * Bunny-Video nur weiterverwenden, wenn dieser Hash noch zum aktuellen
+   * Kampagnen-/Lead-Stand passt.
+   */
+  videoContentHash: text("video_content_hash"),
   videoUrl: text("video_url"),
   thumbnailUrl: text("thumbnail_url"),
   /**

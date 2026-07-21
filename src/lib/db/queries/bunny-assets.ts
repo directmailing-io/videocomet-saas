@@ -142,6 +142,48 @@ export async function removeBunnyAssetRefsForOwner(
 }
 
 /**
+ * Entfernt gezielt die Refs bestimmter Owner auf bestimmte Stream-GUIDs.
+ *
+ * Anwendungsfall: ein Video wird ERSETZT (Regenerate all/video, Resume-
+ * Content-Mismatch, Bunny status=5). Der Owner (Lead/Run) bekommt gleich
+ * eine NEUE GUID — die Ref auf die ALTE GUID muss weg, sonst hält sie das
+ * alte Bunny-Video für immer am Leben und der Purge-Worker sieht nie einen
+ * Orphan. Wichtig: es werden NUR Refs der übergebenen Owner gelöscht —
+ * Mediathek-Items (`owner_type='media_item'`) oder fremde Leads, die
+ * dieselbe GUID teilen (Shared-Run-Video), bleiben unangetastet.
+ */
+export async function removeStreamAssetRefsForGuids(
+  userId: string,
+  guids: string[],
+  owners: Array<{ ownerType: OwnerType; ownerId: string }>,
+): Promise<void> {
+  if (guids.length === 0 || owners.length === 0) return;
+  const assetRows = await db
+    .select({ id: bunnyAssets.id })
+    .from(bunnyAssets)
+    .where(
+      and(
+        eq(bunnyAssets.userId, userId),
+        eq(bunnyAssets.kind, "stream"),
+        inArray(bunnyAssets.bunnyId, guids),
+      ),
+    );
+  if (assetRows.length === 0) return;
+  const assetIds = assetRows.map((r) => r.id);
+  for (const owner of owners) {
+    await db
+      .delete(bunnyAssetRefs)
+      .where(
+        and(
+          inArray(bunnyAssetRefs.assetId, assetIds),
+          eq(bunnyAssetRefs.ownerType, owner.ownerType),
+          eq(bunnyAssetRefs.ownerId, owner.ownerId),
+        ),
+      );
+  }
+}
+
+/**
  * Listet alle Asset-IDs, die ein Owner referenziert. Convenience für Cascade-
  * Delete-Flows in Paket D/G/H, die den Asset selbst nicht anfassen wollen,
  * aber den Owner aus dem Logs/UI rauswerfen.

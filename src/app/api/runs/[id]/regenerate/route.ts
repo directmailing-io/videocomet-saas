@@ -6,6 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { campaigns, customLpTemplates, leads } from "@/lib/db/schema";
+import { removeStreamAssetRefsForGuids } from "@/lib/db/queries/bunny-assets";
 import { getRun, updateRun } from "@/lib/db/queries/runs";
 import { pipelineQueue } from "@/worker/queue";
 
@@ -103,7 +104,12 @@ export async function POST(
   // status wird mitselektiert, damit der "failed"-Modus die nicht-fehlgeschlagenen
   // Leads ohne Extra-Roundtrip ausfiltern kann.
   const allLeadRows = await db
-    .select({ id: leads.id, rowIndex: leads.rowIndex, status: leads.status })
+    .select({
+      id: leads.id,
+      rowIndex: leads.rowIndex,
+      status: leads.status,
+      bunnyVideoId: leads.bunnyVideoId,
+    })
     .from(leads)
     .where(eq(leads.runId, params.id));
 
@@ -161,6 +167,7 @@ export async function POST(
       ? {
           ...baseReset,
           bunnyVideoId: null,
+          videoContentHash: null,
           videoUrl: null,
           videoMp4Url: null,
           pdfUrl: null,
@@ -170,6 +177,7 @@ export async function POST(
         ? {
             ...baseReset,
             bunnyVideoId: null,
+            videoContentHash: null,
             videoUrl: null,
             videoMp4Url: null,
             thumbnailUrl: null,
@@ -181,6 +189,36 @@ export async function POST(
             }
           : // mode === "failed": keine URLs anfassen, nur Status/Error/Timestamps
             baseReset;
+
+  // Asset-Deref VOR dem Reset: die Modes "all"/"video" nullen gleich die
+  // alten Bunny-GUIDs auf Leads + Run. Ohne das Lösen der bunny_asset_refs
+  // hielte der alte Ref das Video für immer "referenziert" — der Purge-
+  // Worker würde die verwaisten Videos nie aufräumen (Review-Fund 4).
+  // Nur die HIER betroffenen Owner werden dereferenziert; ein evtl. noch
+  // bestehender campaign_webcam-/media_item-Ref auf dieselbe GUID bleibt
+  // stehen und schützt das Video weiterhin vor dem Purge.
+  if (mode === "all" || mode === "video") {
+    const staleGuids = new Set<string>();
+    for (const lr of leadRows) {
+      if (lr.bunnyVideoId) staleGuids.add(lr.bunnyVideoId);
+    }
+    if (run.sharedBunnyVideoId) staleGuids.add(run.sharedBunnyVideoId);
+    const owners: Array<{ ownerType: "lead" | "run"; ownerId: string }> =
+      leadRows.map((lr) => ({ ownerType: "lead" as const, ownerId: lr.id }));
+    if (run.sharedBunnyVideoId) {
+      owners.push({ ownerType: "run", ownerId: params.id });
+    }
+    if (staleGuids.size > 0) {
+      await removeStreamAssetRefsForGuids(
+        auth.user.id,
+        Array.from(staleGuids),
+        owners,
+      ).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn("[runs:regenerate] asset deref failed:", err);
+      });
+    }
+  }
 
   if (mode === "failed") {
     // Nur die ausgewählten failed-Lead-IDs aktualisieren — andere Leads (z.B.

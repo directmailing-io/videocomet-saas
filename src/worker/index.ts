@@ -36,6 +36,7 @@ import { closeBrowserPool } from "./lib/browser-pool";
 import { startDomainVerifier } from "./jobs/domain-verifier";
 import { startDomainMonitor } from "./jobs/domain-monitor";
 import { startBunnyPurger } from "./processors/bunny-purge";
+import { startBunnyLibraryReconciler } from "./processors/bunny-library-reconcile";
 import {
   startHeartbeat,
   stopHeartbeat,
@@ -515,6 +516,12 @@ async function main(): Promise<void> {
   // vor Container-Restart) werden im naechsten Minutenfenster aufgeraeumt.
   const stopBunnyPurger = startBunnyPurger();
 
+  // Bunny-Library-Reconcile: gleicht die KOMPLETTE Stream-Library gegen die
+  // DB ab und loescht nachweislich unreferenzierte Videos (>24h alt).
+  // Faengt die Leichen, die der Purger nie sieht, weil sie nie im
+  // bunny_assets-Register gelandet sind (abgebrochene Pipelines, Alt-Bestand).
+  const stopBunnyReconciler = startBunnyLibraryReconciler();
+
   // Global cap — muss über der Summe der per-stage timeouts in
   // processors/pipeline.ts liegen. Worst case (Docs-native-Kampagne):
   // videoRender 300 + videoCompress 90 + videoUpload 330 (inkl. Bunny-
@@ -790,6 +797,11 @@ async function main(): Promise<void> {
       stopBunnyPurger();
     } catch (err) {
       log("error", "bunny purger stop failed:", err);
+    }
+    try {
+      stopBunnyReconciler();
+    } catch (err) {
+      log("error", "bunny reconciler stop failed:", err);
     }
     if (preflightWorkerShutdown) {
       try {

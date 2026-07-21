@@ -107,6 +107,44 @@ export function streamUrlsFor(videoId: string): {
   };
 }
 
+export interface StreamLibraryVideo {
+  guid: string;
+  /** Bunny status 0..5. */
+  status: number;
+  /** ISO-Datum des Uploads (z.B. "2026-07-21T14:45:07"). */
+  dateUploaded: string;
+  title: string;
+}
+
+/**
+ * Listet eine Seite der Stream-Library (für den Orphan-Reconcile-Sweep).
+ * `orderBy=date` → neueste zuerst.
+ */
+export async function listVideosPage(
+  page: number,
+  itemsPerPage: number,
+): Promise<{ items: StreamLibraryVideo[]; totalItems: number }> {
+  const env = getBunnyStreamEnv();
+  const response = await bunnyFetch(
+    `${STREAM_API_BASE}/library/${env.libraryId}/videos?page=${page}&itemsPerPage=${itemsPerPage}&orderBy=date`,
+    {
+      method: "GET",
+      headers: { AccessKey: env.apiKey, Accept: "application/json" },
+    },
+  );
+  const data = (await response.json()) as {
+    items?: Array<Record<string, unknown>>;
+    totalItems?: number;
+  };
+  const items = (data.items ?? []).map((v) => ({
+    guid: String(v.guid ?? ""),
+    status: Number(v.status ?? 0),
+    dateUploaded: String(v.dateUploaded ?? ""),
+    title: String(v.title ?? ""),
+  }));
+  return { items, totalItems: Number(data.totalItems ?? items.length) };
+}
+
 /**
  * Deletes a video from Bunny Stream.
  */
