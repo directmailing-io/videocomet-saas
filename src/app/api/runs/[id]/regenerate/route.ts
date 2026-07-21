@@ -144,6 +144,10 @@ export async function POST(
     errorMessage: null,
     startedAt: null,
     completedAt: null,
+    // Frischer Zähler: die Stuck-Recovery im Worker requeut nur Leads mit
+    // attempts < 3 — ohne Reset würde ein manuell regenerierter Lead nach
+    // vielen früheren Fehlversuchen sofort wieder als "ausgeschöpft" gelten.
+    attempts: 0,
   };
   // Wichtig: `bunny_video_id` muss synchron zu `video_url` resetted werden.
   // Sonst zeigt die Landingpage spaeter via dem alten Bunny-Stream-GUID auf

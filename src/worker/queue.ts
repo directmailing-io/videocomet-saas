@@ -80,7 +80,10 @@ export function pipelineQueue(): Queue<LeadJobData> {
   _pipelineQueue = new Queue<LeadJobData>(QUEUE_NAME, {
     connection: getConnectionOpts(),
     defaultJobOptions: {
-      attempts: 2,
+      // 3 Attempts: der Resume-Pfad (video-upload.ts) macht Retries billig —
+      // Attempt 2/3 pollt das schon encodierende Bunny-Video weiter statt neu
+      // zu rendern. 3 × 5,5 min Encoding-Wait deckt auch langsame Bunny-Queues.
+      attempts: 3,
       backoff: { type: "exponential", delay: 5_000 },
       removeOnComplete: 100,
       removeOnFail: 500,
@@ -167,7 +170,10 @@ export function preflightQueue(): Queue<PreflightJobData> {
     connection: getConnectionOpts(),
     defaultJobOptions: {
       // 2 attempts mirrors `pipelineQueue`: one transient retry, then fail.
-      attempts: 2,
+      // 3 Attempts: der Resume-Pfad (video-upload.ts) macht Retries billig —
+      // Attempt 2/3 pollt das schon encodierende Bunny-Video weiter statt neu
+      // zu rendern. 3 × 5,5 min Encoding-Wait deckt auch langsame Bunny-Queues.
+      attempts: 3,
       backoff: { type: "exponential", delay: 5_000 },
       removeOnComplete: { count: 200 },
       removeOnFail: { count: 500 },

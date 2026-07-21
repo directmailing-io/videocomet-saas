@@ -90,6 +90,24 @@ export async function uploadVideo(
 }
 
 /**
+ * CDN-URLs für eine existierende Video-GUID (gleiches Format wie
+ * uploadVideo-Result) — für den Resume-Pfad, wenn die GUID schon persistiert
+ * ist, aber die URLs nie in die DB geschrieben wurden.
+ */
+export function streamUrlsFor(videoId: string): {
+  embedUrl: string;
+  hlsUrl: string;
+  thumbnailUrl: string;
+} {
+  const env = getBunnyStreamEnv();
+  return {
+    embedUrl: `${EMBED_BASE}/${env.libraryId}/${videoId}`,
+    hlsUrl: `https://${env.cdnHostname}/${videoId}/playlist.m3u8`,
+    thumbnailUrl: `https://${env.cdnHostname}/${videoId}/thumbnail.jpg`,
+  };
+}
+
+/**
  * Deletes a video from Bunny Stream.
  */
 export async function deleteVideo(videoId: string): Promise<void> {

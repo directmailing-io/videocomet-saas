@@ -7,19 +7,25 @@
  * Upload ist schnell und der Endkonsument bekommt sofort eine kleine MP4-
  * Fallback-Variante.
  *
- * Post-Upload: Bunny encoding ist async (kann Minuten dauern). Wir machen
- * EINEN best-effort `getVideo()`-Poll-Roundtrip um width/height/mp4-Url
- * synchron auf den Lead zu schreiben. Falls Bunny noch nicht durch ist
- * (status<3, encodeProgress<100), bleibt `videoMp4Url` initial NULL und der
- * öffentliche LP-Renderer (Paket C) löst es lazy auf wenn er die LP
- * rendert.
+ * Post-Upload: Bunny encoding ist async (kann Minuten dauern). Wir pollen
+ * SYNCHRON (bounded, siehe wait-for-bunny-encoding.ts) bis Bunny ready ist
+ * und schreiben dann width/height/mp4-Url atomar auf den Lead.
  *
- * Retries sind via BullMQ (3 Attempts, expo backoff) — wir failen hier
- * schnell, damit die Queue übernimmt.
+ * WICHTIG (Resume-Pfad): die Bunny-GUID wird SOFORT nach erfolgreichem
+ * Upload persistiert (lead.bunnyVideoId), noch BEVOR wir auf das Encoding
+ * warten. Wenn der Encoding-Wait timeouted und BullMQ retried, kann der
+ * nächste Attempt via `runVideoUploadResume` das BEREITS encodierende Video
+ * weiterverwenden statt neu zu rendern + hochzuladen. Vorher hat jeder
+ * Retry ein neues Video hochgeladen — die Encoding-Wartezeit begann jedes
+ * Mal bei null und die Library-Encoding-Queue wurde mit Duplikaten
+ * geflutet (Teufelskreis: je mehr Retries, desto langsamer wurde Bunny).
  */
 
 import {
+  deleteVideo,
+  getVideo,
   getVideoDownloadUrls,
+  streamUrlsFor,
   uploadVideo,
 } from "@/lib/bunny/stream";
 import { updateLeadStatus } from "@/lib/db/queries/leads";
@@ -65,7 +71,7 @@ function orientationOf(
 /**
  * Wartet SYNCHRON auf Bunny-Encoding (status>=3 ODER availableResolutions!=""),
  * dann liest mp4Url + width/height. Wirft `BunnyEncodingRetryableError` wenn
- * Bunny nach 60 s noch nicht durch ist — BullMQ retried den Job, der Lead
+ * Bunny nach 5 min noch nicht durch ist — BullMQ retried den Job, der Lead
  * bleibt im `uploading`-Status (wir schreiben in dem Pfad NICHT updateLeadStatus).
  *
  * Bug E1: Vorher haben wir EINEN getVideo()-Call gemacht. Wenn Bunny da noch
@@ -84,7 +90,7 @@ async function resolvePostUploadMeta(
 }> {
   const parsed = parseStreamHlsUrl(hlsUrl);
   if (!parsed) return { width: null, height: null, mp4Url: null, orientation: null };
-  // Bounded-Poll auf Bunny-Encoding. Throws nach 60s (BullMQ-Retry-Pfad).
+  // Bounded-Poll auf Bunny-Encoding. Throws nach 5 min (BullMQ-Retry-Pfad).
   const ready = await waitForBunnyEncoding(videoId);
   const width = ready.width > 0 ? ready.width : null;
   const height = ready.height > 0 ? ready.height : null;
@@ -104,6 +110,35 @@ async function resolvePostUploadMeta(
   return { width, height, mp4Url, orientation };
 }
 
+async function finishUpload(
+  leadId: string,
+  videoId: string,
+  hlsUrl: string,
+  thumbnailUrl: string,
+): Promise<VideoUploadOutput> {
+  const meta = await resolvePostUploadMeta(videoId, hlsUrl);
+
+  await updateLeadStatus(leadId, {
+    bunnyVideoId: videoId,
+    videoUrl: hlsUrl,
+    thumbnailUrl,
+    videoWidth: meta.width,
+    videoHeight: meta.height,
+    videoOrientation: meta.orientation,
+    videoMp4Url: meta.mp4Url,
+  });
+
+  return {
+    bunnyVideoId: videoId,
+    videoUrl: hlsUrl,
+    thumbnailUrl,
+    mp4Url: meta.mp4Url,
+    width: meta.width,
+    height: meta.height,
+    orientation: meta.orientation,
+  };
+}
+
 export async function runVideoUpload(
   input: VideoUploadInput,
 ): Promise<VideoUploadOutput> {
@@ -112,28 +147,55 @@ export async function runVideoUpload(
     title: input.title,
   });
 
-  // Best-effort: Bunny-Meta + MP4-URL holen. Wenn die Encoding-Pipeline noch
-  // nicht durch ist, bleiben width/height/mp4Url null — das ist OK, der
-  // public-LP-Renderer (Paket C) löst es lazy auf.
-  const meta = await resolvePostUploadMeta(result.videoId, result.hlsUrl);
+  // GUID sofort persistieren (nur die GUID — videoUrl bleibt null, denn
+  // `lead.videoUrl != null` bedeutet "Video-Stages komplett fertig" und
+  // steuert die Skip-Logik in pipeline.ts). Damit kann ein Retry nach
+  // Encoding-Timeout via runVideoUploadResume hier weitermachen.
+  await updateLeadStatus(input.leadId, { bunnyVideoId: result.videoId });
 
-  await updateLeadStatus(input.leadId, {
-    bunnyVideoId: result.videoId,
-    videoUrl: result.hlsUrl,
-    thumbnailUrl: result.thumbnailUrl,
-    videoWidth: meta.width,
-    videoHeight: meta.height,
-    videoOrientation: meta.orientation,
-    videoMp4Url: meta.mp4Url,
-  });
+  return finishUpload(
+    input.leadId,
+    result.videoId,
+    result.hlsUrl,
+    result.thumbnailUrl,
+  );
+}
 
-  return {
-    bunnyVideoId: result.videoId,
-    videoUrl: result.hlsUrl,
-    thumbnailUrl: result.thumbnailUrl,
-    mp4Url: meta.mp4Url,
-    width: meta.width,
-    height: meta.height,
-    orientation: meta.orientation,
-  };
+/**
+ * Resume-Pfad für Retries: das Video liegt schon bei Bunny (GUID am Lead),
+ * nur der Encoding-Wait ist beim vorigen Attempt getimeouted. Statt neu zu
+ * rendern + hochzuladen pollen wir das EXISTIERENDE Video weiter.
+ *
+ * Returns null wenn das Video nicht weiterverwendbar ist (gelöscht oder
+ * Bunny-Encode-Error status=5) — der Caller fällt dann auf den normalen
+ * Render+Upload-Pfad zurück.
+ */
+export async function runVideoUploadResume(input: {
+  leadId: string;
+  bunnyVideoId: string;
+}): Promise<VideoUploadOutput | null> {
+  let probe: Record<string, unknown>;
+  try {
+    probe = await getVideo(input.bunnyVideoId);
+  } catch (err) {
+    console.warn(
+      `[video-upload] resume probe failed for ${input.bunnyVideoId}, falling back to fresh upload: ${(err as Error).message}`,
+    );
+    return null;
+  }
+
+  const status = Number(probe.status ?? 0);
+  if (status === 5) {
+    // Bunny hat die Quelle verworfen — GUID ist tot, aufräumen und neu.
+    await deleteVideo(input.bunnyVideoId).catch(() => {});
+    return null;
+  }
+
+  const urls = streamUrlsFor(input.bunnyVideoId);
+  return finishUpload(
+    input.leadId,
+    input.bunnyVideoId,
+    urls.hlsUrl,
+    urls.thumbnailUrl,
+  );
 }

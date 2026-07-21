@@ -48,7 +48,11 @@ import type { LeadJobData } from "../types";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
 import { runVideoRender } from "./video-render";
 import { runVideoCompress } from "./video-compress";
-import { runVideoUpload } from "./video-upload";
+import {
+  runVideoUpload,
+  runVideoUploadResume,
+  type VideoUploadOutput,
+} from "./video-upload";
 import { runThumbnailExtract } from "./thumbnail-extract";
 import { runQrGenerate } from "./qr-generate";
 import {
@@ -530,6 +534,61 @@ export async function pipelineProcessor(
         // `renderedVideoPath` / `renderedDurationSec` bleiben null; die
         // PDF-Stage faellt auf das gespeicherte thumbnailUrl zurueck.
       } else {
+      // ── Resume-Pfad (Retry nach Encoding-Timeout) ────────────────
+      // Ein früherer Attempt hat schon zu Bunny hochgeladen (GUID am
+      // Lead persistiert), nur der Encoding-Wait war zu langsam. Das
+      // existierende Video weiter pollen statt neu rendern + hochladen —
+      // sonst beginnt die Encoding-Wartezeit jedes Mal bei null und die
+      // Bunny-Queue füllt sich mit Duplikaten (macht alles langsamer).
+      let resumedUpload: VideoUploadOutput | null = null;
+      if (lead.bunnyVideoId) {
+        await setCurrentStage(data.leadId, "videoUpload");
+        await updateLeadStatus(data.leadId, { status: "uploading" });
+        const resumeStart = Date.now();
+        resumedUpload = await withStageTimeout(
+          () =>
+            runVideoUploadResume({
+              leadId: data.leadId,
+              bunnyVideoId: lead.bunnyVideoId!,
+            }),
+          STAGE_TIMEOUTS_MS.videoUpload,
+          "videoUpload",
+        );
+        if (resumedUpload) {
+          bunnyVideoId = resumedUpload.bunnyVideoId;
+          videoUrl = resumedUpload.videoUrl;
+          await trackAndRefAsset({
+            trackInput: {
+              userId: data.userId,
+              kind: "stream",
+              bunnyId: resumedUpload.bunnyVideoId,
+              cdnUrl: resumedUpload.videoUrl,
+              width: resumedUpload.width,
+              height: resumedUpload.height,
+            },
+            ownerType: "lead",
+            ownerId: data.leadId,
+          });
+          const resumeMs = Date.now() - resumeStart;
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "info",
+            stage: "upload",
+            message: `${leadLabel}: resumed existing Bunny video in ${(resumeMs / 1000).toFixed(1)}s (bunnyId=${resumedUpload.bunnyVideoId.slice(0, 8)}…, skipped re-render)${resumedUpload.mp4Url ? " (mp4=ready)" : " (mp4=pending)"}`,
+            durationMs: resumeMs,
+          });
+        } else {
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "warn",
+            stage: "upload",
+            message: `${leadLabel}: previous Bunny video unusable, re-rendering from scratch`,
+          });
+        }
+      }
+      if (!resumedUpload) {
       await setCurrentStage(data.leadId, "videoRender");
       const renderStart = Date.now();
       const render = await withStageTimeout(
@@ -639,6 +698,7 @@ export async function pipelineProcessor(
         message: `${leadLabel}: video upload done in ${(uploadMs / 1000).toFixed(1)}s${upload.mp4Url ? " (mp4=ready)" : " (mp4=pending)"}`,
         durationMs: uploadMs,
       });
+      } // ← Ende Fresh-Render-Pfad (!resumedUpload)
       } // ← Ende `else` (with-presentation Pfad)
     } else {
       // Skip reason for the live log.
