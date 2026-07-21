@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   ArrowRight,
   Check,
-  ChevronDown,
   History,
   Loader2,
   Mail,
@@ -27,7 +26,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
-import { findMatchingRule } from "@/lib/placeholders/rules";
 import { ValueRulesDialog } from "./value-rules-dialog";
 import type { PlaceholderRule } from "@/lib/placeholders/types";
 // TODO: Sobald Agent A's `src/lib/placeholders/types.ts` final ist, hier den
@@ -58,11 +56,6 @@ type SaveStatus = "idle" | "saving" | "saved" | "error";
 export interface RunWizardStepPlaceholdersProps {
   runId: string;
   /**
-   * Erste 1–2 Lead-Zeilen aus dem CSV-Upload-Schritt — für die Live-Preview.
-   * Wird vom Wizard durchgereicht, damit wir keinen separaten Fetch brauchen.
-   */
-  previewRows: Record<string, string>[];
-  /**
    * Wird aufgerufen, wenn der User auf „Weiter" klickt UND alle Validations
    * grün sind. Der Wizard übernimmt dann den Step-Wechsel.
    */
@@ -74,10 +67,6 @@ export interface RunWizardStepPlaceholdersProps {
    */
   onFallbackRequested: (reason: string) => void;
 }
-
-/** Beispiel-Text für die Live-Preview — bewusst mit Wiederholung. */
-const PREVIEW_TEMPLATE_DE =
-  "Hallo {{firstName}}, schön dass Sie sich Zeit nehmen, {{firstName}}.";
 
 /**
  * Normalisiert einen Key/Spalten-Namen für Similar-Match:
@@ -91,34 +80,6 @@ function normalize(s: string): string {
     .replace(/ü/g, "ue")
     .replace(/ß/g, "ss")
     .replace(/[^a-z0-9]/g, "");
-}
-
-/**
- * Substitution client-seitig für die Live-Preview.
- * Erwartet `{{key}}`-Format. Für andere Formate (single-brace, Tiptap-Span)
- * macht das später der Worker — die Preview reicht für UX-Gefühl aus.
- */
-function substituteForPreview(
-  template: string,
-  lead: Record<string, string>,
-  mapping: PlaceholderMapping,
-): string {
-  return template.replace(/\{\{\s*([^}|\s]+)(?:\s*\|\s*([^}]*))?\s*\}\}/g, (_, key: string, inlineFallback?: string) => {
-    const entry = mapping[key];
-    if (!entry) return inlineFallback ?? "";
-    const col = entry.column;
-    // Gleiche Semantik wie resolveValue() im Worker: trifft eine Regel,
-    // ist ihr Output FINAL (auch leer = „Feld leeren"); sonst Rohwert,
-    // dann Fallback-Kette (gemeinsame Engine aus rules.ts).
-    const raw = col ? (lead[col] ?? "") : "";
-    if (Array.isArray(entry.rules) && entry.rules.length > 0) {
-      const hit = findMatchingRule(raw, entry.rules);
-      if (hit) return hit.output;
-    }
-    if (raw.trim() !== "") return raw;
-    if (entry.fallback && entry.fallback !== "") return entry.fallback;
-    return inlineFallback ?? "";
-  });
 }
 
 /** Quellen-Tag-Label (deutsch) je Kind. */
@@ -162,7 +123,6 @@ function relativeFromIso(iso: string, nowMs: number): string {
 
 export function RunWizardStepPlaceholders({
   runId,
-  previewRows,
   onContinue,
   onFallbackRequested,
 }: RunWizardStepPlaceholdersProps) {
@@ -463,7 +423,6 @@ export function RunWizardStepPlaceholders({
 
   // ── „Weiter"-Handler ──────────────────────────────────────────────────
   const [advancing, setAdvancing] = React.useState(false);
-  const [livePreviewOpen, setLivePreviewOpen] = React.useState(false);
   async function handleContinue() {
     if (unmapped.length > 0) {
       // Banner ist sichtbar — Sprung zum ersten unmappten Key.
@@ -534,6 +493,17 @@ export function RunWizardStepPlaceholders({
                   Für diese Runde einen personalisierten Umschlag pro Lead
                   drucken lassen — zusätzlich zu den Video-/Brief-Assets.
                 </p>
+                {envelopeOptions.length === 0 && (
+                  <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-warn">
+                    <AlertTriangle className="size-3.5 shrink-0" />
+                    Keine Umschlag-Vorlage vorhanden — erstelle zuerst eine
+                    unter{" "}
+                    <a href="/umschlaege" className="underline">
+                      Umschläge
+                    </a>
+                    .
+                  </p>
+                )}
               </div>
             </div>
             <Switch
@@ -548,16 +518,9 @@ export function RunWizardStepPlaceholders({
             />
           </div>
         </CardHeader>
-        {envelopeEnabled && (
+        {envelopeEnabled && envelopeOptions.length > 0 && (
           <CardContent className="pt-0">
-            {envelopeOptions.length === 0 ? (
-              <p className="text-xs text-ink-muted">
-                Du hast noch keine Umschlag-Vorlage angelegt. Erstelle eine
-                unter <span className="font-mono">/umschlaege</span> und wähle
-                sie hier aus.
-              </p>
-            ) : (
-              <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
                 <Label
                   htmlFor="env-select"
                   className="text-xs whitespace-nowrap"
@@ -579,11 +542,10 @@ export function RunWizardStepPlaceholders({
                     ))}
                   </SelectContent>
                 </Select>
-                {envelopeSaving && (
-                  <Loader2 className="size-3.5 animate-spin text-ink-muted" />
-                )}
-              </div>
-            )}
+              {envelopeSaving && (
+                <Loader2 className="size-3.5 animate-spin text-ink-muted" />
+              )}
+            </div>
           </CardContent>
         )}
       </Card>
@@ -692,81 +654,39 @@ export function RunWizardStepPlaceholders({
               weitergehen.
             </p>
           ) : (
-            placeholders.map((p) => (
-              <PlaceholderRow
-                key={p.key}
-                runId={runId}
-                placeholder={p}
-                entry={mapping[p.key]}
-                csvColumns={csvColumns}
-                similarUnmapped={similarKeys(p.key)}
-                onChangeColumn={(col) => patchEntry(p.key, { column: col })}
-                onChangeFallback={(fb) => patchEntry(p.key, { fallback: fb })}
-                onChangeRules={(rules) =>
-                  patchEntry(p.key, {
-                    rules: rules.length > 0 ? rules : undefined,
-                  })
-                }
-                onApplyToSimilar={(col) => applyToSimilar(p.key, col)}
-                rowRef={(el) => {
-                  rowRefs.current[p.key] = el;
-                }}
-              />
-            ))
+            <div>
+              <div className="hidden md:grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 px-4 pb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                <span>Platzhalter</span>
+                <span>CSV-Spalte</span>
+                <span>Fallback</span>
+              </div>
+              <div className="divide-y divide-line-soft rounded-squircle-sm bg-surface-soft">
+                {placeholders.map((p) => (
+                  <PlaceholderRow
+                    key={p.key}
+                    runId={runId}
+                    placeholder={p}
+                    entry={mapping[p.key]}
+                    csvColumns={csvColumns}
+                    similarUnmapped={similarKeys(p.key)}
+                    onChangeColumn={(col) => patchEntry(p.key, { column: col })}
+                    onChangeFallback={(fb) => patchEntry(p.key, { fallback: fb })}
+                    onChangeRules={(rules) =>
+                      patchEntry(p.key, {
+                        rules: rules.length > 0 ? rules : undefined,
+                      })
+                    }
+                    onApplyToSimilar={(col) => applyToSimilar(p.key, col)}
+                    rowRef={(el) => {
+                      rowRefs.current[p.key] = el;
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
-
-      {/* ── Live-Vorschau (Disclosure, default zu) ────────────────── */}
-      {previewRows.length > 0 && (
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                  <Sparkles className="size-3.5 text-brand shrink-0" />
-                  Live-Vorschau
-                </p>
-                <p className="text-xs text-ink-muted mt-0.5">
-                  So sieht der Text mit dem aktuellen Mapping für die ersten
-                  Leads aus.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setLivePreviewOpen((o) => !o)}
-                className="shrink-0 inline-flex items-center gap-1 rounded-full bg-surface-soft px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-muted transition-colors"
-                aria-expanded={livePreviewOpen}
-              >
-                {livePreviewOpen ? "Ausblenden" : "Anzeigen"}
-                <ChevronDown
-                  className={cn(
-                    "size-3.5 transition-transform",
-                    livePreviewOpen && "rotate-180",
-                  )}
-                />
-              </button>
-            </div>
-            {livePreviewOpen && (
-              <div className="mt-3 space-y-3">
-                {previewRows.slice(0, 2).map((row, i) => (
-                  <div
-                    key={i}
-                    className="rounded-squircle-sm bg-surface-soft px-4 py-3"
-                  >
-                    <p className="text-xs text-ink-muted mb-1.5">
-                      Lead {i + 1}
-                    </p>
-                    <p className="text-sm text-ink leading-relaxed">
-                      {substituteForPreview(PREVIEW_TEMPLATE_DE, row, mapping)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {/* ── Weiter-Button ─────────────────────────────────────────── */}
       <div className="flex items-center justify-end gap-3">
@@ -837,13 +757,7 @@ function PlaceholderRow({
         : NO_COLUMN;
 
   return (
-    <div
-      ref={rowRef}
-      className={cn(
-        "rounded-squircle-sm bg-surface-soft px-4 py-3 transition-shadow",
-        "scroll-mt-6",
-      )}
-    >
+    <div ref={rowRef} className="px-4 py-3 scroll-mt-6">
       <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 items-start">
         {/* Spalte 1: Key + Quellen */}
         <div className="min-w-0">
@@ -857,28 +771,21 @@ function PlaceholderRow({
               </span>
             )}
           </div>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {placeholder.sources.map((s, idx) => (
-              <span
-                key={`${s.kind}-${idx}`}
-                className={cn(
-                  "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full",
-                  s.inaccessible
-                    ? "bg-warn-soft text-warn"
-                    : "bg-line-soft text-ink-muted",
-                )}
-                title={s.label}
-              >
-                {s.label || sourceKindLabel(s.kind)}
-                {s.inaccessible && <AlertTriangle className="size-3" />}
-              </span>
-            ))}
-            {hasInaccessibleSource && (
-              <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-warn-soft text-warn font-medium">
-                Doc nicht lesbar
-              </span>
-            )}
-          </div>
+          <p className="mt-1 text-[11px] text-ink-muted truncate">
+            {Array.from(
+              new Set(
+                placeholder.sources.map(
+                  (s) => s.label || sourceKindLabel(s.kind),
+                ),
+              ),
+            ).join(" · ")}
+          </p>
+          {hasInaccessibleSource && (
+            <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-warn">
+              <AlertTriangle className="size-3" />
+              Doc nicht lesbar
+            </p>
+          )}
           {/* Bulk-Hint */}
           {similarUnmapped.length > 0 && column && (
             <button
@@ -904,7 +811,7 @@ function PlaceholderRow({
         <div>
           <Label
             htmlFor={`col-${placeholder.key}`}
-            className="text-xs font-medium text-ink-muted"
+            className="md:hidden text-xs font-medium text-ink-muted"
           >
             CSV-Spalte
           </Label>
@@ -963,7 +870,7 @@ function PlaceholderRow({
         <div>
           <Label
             htmlFor={`fb-${placeholder.key}`}
-            className="text-xs font-medium text-ink-muted"
+            className="md:hidden text-xs font-medium text-ink-muted"
           >
             Fallback
           </Label>

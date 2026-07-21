@@ -79,7 +79,7 @@ export interface ParsedPreview {
   truncated?: boolean;
 }
 
-const STEPS = ["Adressliste", "Vorschau & Mapping", "Starten"];
+const STEPS = ["Adressliste", "Vorschau & Duplikate", "Mapping", "Starten"];
 
 // Standard placeholders we always offer; campaigns may bring more via the
 // google-docs placeholders, but for v1 we use this baseline.
@@ -493,12 +493,17 @@ export function RunWizard({
       return;
     }
     if (step === 1) {
-      // Validate: at least firstName/lastName/website is mapped (optional v1)
       await persistDedupeConfig();
       setStep(2);
       return;
     }
     if (step === 2) {
+      // Nur Legacy-Mapping nutzt den globalen Weiter-Button — der neue
+      // Placeholder-Step hat seinen eigenen (mit Validation).
+      setStep(3);
+      return;
+    }
+    if (step === 3) {
       await saveMappingAndStart();
     }
   }
@@ -797,9 +802,13 @@ export function RunWizard({
             value={dedupeConfig}
             onChange={setDedupeConfig}
           />
+        </div>
+      )}
 
+      {step === 2 && preview && (
+        <div className="space-y-6">
           {/*
-            Neuer einheitlicher Platzhalter-Mapping-Step (Agent A's Backend).
+            Einheitlicher Platzhalter-Mapping-Step (Agent A's Backend).
             Wenn der GET-Endpoint einen Fehler liefert (z. B. weil das
             Backend noch nicht deployed ist), wechseln wir transparent auf
             den Legacy-1:1-Mapper unten.
@@ -807,10 +816,8 @@ export function RunWizard({
           {mappingMode !== "legacy" && runId && (
             <RunWizardStepPlaceholders
               runId={runId}
-              previewRows={preview.rows}
-              onContinue={async () => {
-                await persistDedupeConfig();
-                setStep(2);
+              onContinue={() => {
+                setStep(3);
               }}
               onFallbackRequested={(reason) => {
                 setMappingMode("legacy");
@@ -874,7 +881,7 @@ export function RunWizard({
         </div>
       )}
 
-      {step === 2 && preview && (() => {
+      {step === 3 && preview && (() => {
         // Lokales Preview der Dedupe-Auswirkung. Das endgültige Soft-Remove
         // läuft Server-side im Start-Endpoint — wir zeigen hier nur das, was
         // der User auch in Step 1 schon gesehen hat, damit es vor dem Klick
@@ -1040,7 +1047,7 @@ export function RunWizard({
           // Im neuen Placeholder-Step rendert die Komponente ihren eigenen
           // „Weiter"-Button (mit Validation). Wir blenden den globalen Footer-
           // Button dann aus, damit die UX nicht doppelt wirkt.
-          step === 1 && mappingMode !== "legacy" ? (
+          step === 2 && mappingMode !== "legacy" ? (
             <span />
           ) : (
             <Button
