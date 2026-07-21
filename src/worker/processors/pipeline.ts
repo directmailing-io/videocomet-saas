@@ -141,6 +141,37 @@ async function withStageTimeout<T>(
   }
 }
 
+const BUNNY_STATUS_LABEL: Record<number, string> = {
+  0: "erstellt",
+  1: "hochgeladen",
+  2: "in Warteschlange",
+  3: "transkodiert",
+  4: "fertig",
+};
+
+/**
+ * Heartbeat-Callback für den Bunny-Encoding-Wait (feuert ca. alle 60s).
+ * Ohne ihn ist das Live-Log während des bis zu 5-minütigen Wartens komplett
+ * stumm und der Run wirkt eingefroren. Fire-and-forget — ein DB-Fehler darf
+ * den Wait nicht stören.
+ */
+function makeEncodingHeartbeat(
+  runId: string,
+  leadId: string,
+  leadLabel: string,
+): (info: { elapsedMs: number; lastStatus: number }) => void {
+  return ({ elapsedMs, lastStatus }) => {
+    const label = BUNNY_STATUS_LABEL[lastStatus] ?? `status=${lastStatus}`;
+    void insertPipelineEvent({
+      runId,
+      leadId,
+      level: "info",
+      stage: "upload",
+      message: `${leadLabel}: warte auf Bunny-Encoding (${Math.round(elapsedMs / 1000)}s, ${label})…`,
+    }).catch(() => {});
+  };
+}
+
 /**
  * Writes `leads.current_stage` so stuck-recovery / observability tooling
  * can see which stage a lead is actively in. Never throws — a logging
@@ -550,6 +581,11 @@ export async function pipelineProcessor(
             runVideoUploadResume({
               leadId: data.leadId,
               bunnyVideoId: lead.bunnyVideoId!,
+              onEncodingProgress: makeEncodingHeartbeat(
+                data.runId,
+                data.leadId,
+                leadLabel,
+              ),
             }),
           STAGE_TIMEOUTS_MS.videoUpload,
           "videoUpload",
@@ -659,6 +695,11 @@ export async function pipelineProcessor(
             userId: data.userId,
             videoFilePath: compressed.videoFilePath,
             title: `${campaign.name} – Lead ${lead.rowIndex}`,
+            onEncodingProgress: makeEncodingHeartbeat(
+              data.runId,
+              data.leadId,
+              leadLabel,
+            ),
           }),
         STAGE_TIMEOUTS_MS.videoUpload,
         "videoUpload",

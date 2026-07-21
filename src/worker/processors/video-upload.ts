@@ -37,6 +37,8 @@ export interface VideoUploadInput {
   title: string;
   /** Optional userId — wird für späteres bunny-asset-tracking gebraucht (Paket B). */
   userId?: string;
+  /** Heartbeat während des Encoding-Waits (ca. alle 60s) — für Live-Log-Events. */
+  onEncodingProgress?: (info: { elapsedMs: number; lastStatus: number }) => void;
 }
 
 export interface VideoUploadOutput {
@@ -82,6 +84,7 @@ function orientationOf(
 async function resolvePostUploadMeta(
   videoId: string,
   hlsUrl: string,
+  onProgress?: (info: { elapsedMs: number; lastStatus: number }) => void,
 ): Promise<{
   width: number | null;
   height: number | null;
@@ -91,7 +94,7 @@ async function resolvePostUploadMeta(
   const parsed = parseStreamHlsUrl(hlsUrl);
   if (!parsed) return { width: null, height: null, mp4Url: null, orientation: null };
   // Bounded-Poll auf Bunny-Encoding. Throws nach 5 min (BullMQ-Retry-Pfad).
-  const ready = await waitForBunnyEncoding(videoId);
+  const ready = await waitForBunnyEncoding(videoId, { onProgress });
   const width = ready.width > 0 ? ready.width : null;
   const height = ready.height > 0 ? ready.height : null;
   const orientation =
@@ -115,8 +118,9 @@ async function finishUpload(
   videoId: string,
   hlsUrl: string,
   thumbnailUrl: string,
+  onProgress?: (info: { elapsedMs: number; lastStatus: number }) => void,
 ): Promise<VideoUploadOutput> {
-  const meta = await resolvePostUploadMeta(videoId, hlsUrl);
+  const meta = await resolvePostUploadMeta(videoId, hlsUrl, onProgress);
 
   await updateLeadStatus(leadId, {
     bunnyVideoId: videoId,
@@ -158,6 +162,7 @@ export async function runVideoUpload(
     result.videoId,
     result.hlsUrl,
     result.thumbnailUrl,
+    input.onEncodingProgress,
   );
 }
 
@@ -173,6 +178,7 @@ export async function runVideoUpload(
 export async function runVideoUploadResume(input: {
   leadId: string;
   bunnyVideoId: string;
+  onEncodingProgress?: (info: { elapsedMs: number; lastStatus: number }) => void;
 }): Promise<VideoUploadOutput | null> {
   let probe: Record<string, unknown>;
   try {
@@ -197,5 +203,6 @@ export async function runVideoUploadResume(input: {
     input.bunnyVideoId,
     urls.hlsUrl,
     urls.thumbnailUrl,
+    input.onEncodingProgress,
   );
 }

@@ -86,7 +86,16 @@ export interface WaitForBunnyEncodingOptions {
   sleepFn?: (ms: number) => Promise<void>;
   /** Optionaler Now-Provider (für deterministische Timeouts im Test). */
   nowFn?: () => number;
+  /**
+   * Heartbeat während des Wartens (ca. alle 60s). Ohne ihn ist das
+   * Pipeline-Log für bis zu 5 min komplett stumm und der User denkt, das
+   * System hängt. Fehler im Callback werden geschluckt.
+   */
+  onProgress?: (info: { elapsedMs: number; lastStatus: number }) => void;
 }
+
+/** Alle wie viele Polls onProgress feuert (12 × 5s ≈ 60s). */
+const PROGRESS_EVERY_ATTEMPTS = 12;
 
 function parseStatus(meta: Record<string, unknown>): number {
   const raw = meta.status;
@@ -174,6 +183,14 @@ export async function waitForBunnyEncoding(
         attempts,
         elapsedMs: nowFn() - startedAt,
       };
+    }
+
+    if (options.onProgress && attempts % PROGRESS_EVERY_ATTEMPTS === 0) {
+      try {
+        options.onProgress({ elapsedMs: nowFn() - startedAt, lastStatus: status });
+      } catch {
+        // Heartbeat darf den Wait nie abbrechen.
+      }
     }
 
     const elapsed = nowFn() - startedAt;
