@@ -28,7 +28,6 @@ const TEMPERATURES: readonly LeadTemperature[] = [
   "cold",
   "warm",
   "hot",
-  "engaged",
   "inactive",
 ] as const;
 

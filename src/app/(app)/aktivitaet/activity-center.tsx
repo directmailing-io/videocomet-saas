@@ -167,7 +167,11 @@ export function ActivityCenter({
   const [kindFilter, setKindFilter] = React.useState<KindFilter>("all");
   const [temperatureFilter, setTemperatureFilter] =
     React.useState<TemperatureFilter>("all");
-  const [dateRange, setDateRange] = React.useState<DateRangeKey>("today");
+  // Embedded (Run-/Kampagnen-Tab): 30 Tage als Default, sonst wäre ältere
+  // Run-Aktivität beim Öffnen unsichtbar.
+  const [dateRange, setDateRange] = React.useState<DateRangeKey>(
+    embedded ? "30d" : "today",
+  );
   const [search, setSearch] = React.useState("");
 
   // ── Data-State ────────────────────────────────────────────────────
@@ -512,10 +516,9 @@ export function ActivityCenter({
       searchInputRef.current?.select();
     },
     "1": () => cycleTemperature("hot"),
-    "2": () => cycleTemperature("engaged"),
-    "3": () => cycleTemperature("warm"),
-    "4": () => cycleTemperature("cold"),
-    "5": () => cycleTemperature("inactive"),
+    "2": () => cycleTemperature("warm"),
+    "3": () => cycleTemperature("cold"),
+    "4": () => cycleTemperature("inactive"),
   });
 
   // ── Saved-Views: persist helper ───────────────────────────────────
@@ -628,17 +631,6 @@ export function ActivityCenter({
             scopeLocked={embedded}
           />
 
-          {/* Sticky-Header für Scope-Kontext (im Tab-Mode) */}
-          {embedded && (
-            <div className="px-4 sm:px-6 py-2 text-xs text-ink-muted bg-surface-soft border-b border-line-soft">
-              {scope === "campaign" && campaignName
-                ? `Scope: Kampagne · ${campaignName}`
-                : scope === "run" && runName
-                  ? `Scope: Runde · ${runName}`
-                  : null}
-            </div>
-          )}
-
           <div
             role="grid"
             aria-label="Aktivitäts-Feed"
@@ -680,6 +672,7 @@ export function ActivityCenter({
                       row={row}
                       focused={idx === focusedIdx}
                       isNew={newRowIds.has(row.eventId)}
+                      hideRunContext={scope === "run"}
                       onSelect={() => {
                         setFocusedIdx(idx);
                         setDrawerOpen(true);
@@ -1052,7 +1045,6 @@ function defaultViewName(filters: {
 }): string {
   const parts: string[] = [];
   if (filters.temperatureFilter === "hot") parts.push("Heiße Leads");
-  else if (filters.temperatureFilter === "engaged") parts.push("Engaged Leads");
   else if (filters.temperatureFilter === "warm") parts.push("Warme Leads");
   else parts.push("Ansicht");
   if (filters.dateRange === "today") parts.push("heute");

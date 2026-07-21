@@ -116,34 +116,34 @@ export function FilterToolbar({
 
           <span className="flex-1" />
 
-          {!scopeLocked && (
-            <div className="flex items-center gap-1 rounded-full bg-surface-muted p-0.5">
-              {DATE_PRESETS.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  onClick={() => onDateRangeChange(p.key)}
-                  aria-pressed={dateRange === p.key}
-                  className={cn(
-                    "h-7 px-3 rounded-full text-xs font-semibold transition-colors",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
-                    dateRange === p.key
-                      ? "bg-surface text-ink shadow-card"
-                      : "text-ink-muted hover:text-ink",
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="flex items-center gap-1 rounded-full bg-surface-muted p-0.5">
+            {DATE_PRESETS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => onDateRangeChange(p.key)}
+                aria-pressed={dateRange === p.key}
+                className={cn(
+                  "h-7 px-3 rounded-full text-xs font-semibold transition-colors",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
+                  dateRange === p.key
+                    ? "bg-surface text-ink shadow-card"
+                    : "text-ink-muted hover:text-ink",
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
 
-          <SavedViewsMenu
-            views={savedViews}
-            onApply={onApplySavedView}
-            onSaveCurrent={onSaveCurrentView}
-            onDelete={onDeleteSavedView}
-          />
+          {!scopeLocked && (
+            <SavedViewsMenu
+              views={savedViews}
+              onApply={onApplySavedView}
+              onSaveCurrent={onSaveCurrentView}
+              onDelete={onDeleteSavedView}
+            />
+          )}
         </div>
 
         {/* Row 2: Search */}

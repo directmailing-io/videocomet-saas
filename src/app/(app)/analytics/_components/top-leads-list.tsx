@@ -5,14 +5,12 @@ import { fmtDurationVerbose, fmtInt, kindLabel } from "./formatters";
 import type { TopLead } from "./analytics-data";
 
 const TEMP_DOT: Record<TopLead["temperature"], string> = {
-  engaged: "bg-ok",
   hot: "bg-danger",
   warm: "bg-warn",
   cold: "bg-ink-muted",
 };
 
 const TEMP_LABEL: Record<TopLead["temperature"], string> = {
-  engaged: "Engaged",
   hot: "Heiß",
   warm: "Warm",
   cold: "Kalt",

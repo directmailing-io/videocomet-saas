@@ -19,12 +19,14 @@ export interface FeedRowProps {
   row: ActivityFeedRow;
   focused?: boolean;
   isNew?: boolean;
+  /** Im Run-Scope ist der Run-Kontext redundant — Suffix unterdrücken. */
+  hideRunContext?: boolean;
   onSelect: () => void;
   onFocus: () => void;
 }
 
 export const FeedRow = React.forwardRef<HTMLButtonElement, FeedRowProps>(
-  ({ row, focused, isNew, onSelect, onFocus }, ref) => {
+  ({ row, focused, isNew, hideRunContext, onSelect, onFocus }, ref) => {
     const time = React.useMemo(() => formatTime(row.ts), [row.ts]);
     const description = React.useMemo(
       () => describeKind(row.kind, row.payload),
@@ -76,8 +78,8 @@ export const FeedRow = React.forwardRef<HTMLButtonElement, FeedRowProps>(
             </div>
             <span className="truncate text-xs text-ink-muted">
               {description}
-              {row.run?.name ? ` · Run ${row.run.name}` : ""}
-              {row.campaign?.name && !row.run?.name
+              {!hideRunContext && row.run?.name ? ` · Run ${row.run.name}` : ""}
+              {!hideRunContext && row.campaign?.name && !row.run?.name
                 ? ` · ${row.campaign.name}`
                 : ""}
             </span>

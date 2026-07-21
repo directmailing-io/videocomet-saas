@@ -480,8 +480,8 @@ export interface CampaignPerf {
   leadsCount: number;
   runsCount: number;
   ctrPct: number;
-  /** Lead-temperature counts in this window (hot/engaged/warm/cold). */
-  temperature: { hot: number; engaged: number; warm: number; cold: number };
+  /** Lead-temperature counts in this window (hot/warm/cold). */
+  temperature: { hot: number; warm: number; cold: number };
 }
 
 export async function listCampaignPerformance(
@@ -572,14 +572,6 @@ export async function listCampaignPerformance(
         AND (COALESCE(NULLIF(${leadEvents.payload} ->> 'atSec', '')::float, 0)
              / NULLIF(NULLIF(${leadEvents.payload} ->> 'duration', '')::float, 0)) * 100 >= 75
         THEN 1 ELSE 0 END)::int`,
-      has25: sql<number>`MAX(CASE WHEN
-        ${leadEvents.kind} IN ('video_progress','video_ended')
-        AND (${leadEvents.payload} ? 'atSec')
-        AND (${leadEvents.payload} ? 'duration')
-        AND COALESCE(NULLIF(${leadEvents.payload} ->> 'duration', '')::float, 0) > 0
-        AND (COALESCE(NULLIF(${leadEvents.payload} ->> 'atSec', '')::float, 0)
-             / NULLIF(NULLIF(${leadEvents.payload} ->> 'duration', '')::float, 0)) * 100 >= 25
-        THEN 1 ELSE 0 END)::int`,
       hasPlay: sql<number>`MAX(CASE WHEN ${leadEvents.kind} = 'video_play' THEN 1 ELSE 0 END)::int`,
       hasPv: sql<number>`MAX(CASE WHEN ${leadEvents.kind} = 'page_view' THEN 1 ELSE 0 END)::int`,
     })
@@ -599,18 +591,16 @@ export async function listCampaignPerformance(
 
   const tempByCampaign = new Map<
     string,
-    { hot: number; engaged: number; warm: number; cold: number }
+    { hot: number; warm: number; cold: number }
   >();
   for (const r of tempAgg) {
     const t = tempByCampaign.get(r.campaignId) ?? {
       hot: 0,
-      engaged: 0,
       warm: 0,
       cold: 0,
     };
-    if ((r.hasCta ?? 0) > 0) t.engaged += 1;
-    else if ((r.has75 ?? 0) > 0) t.hot += 1;
-    else if ((r.hasPlay ?? 0) > 0 && (r.has25 ?? 0) > 0) t.warm += 1;
+    if ((r.hasCta ?? 0) > 0 || (r.has75 ?? 0) > 0) t.hot += 1;
+    else if ((r.hasPlay ?? 0) > 0) t.warm += 1;
     else if ((r.hasPv ?? 0) > 0) t.cold += 1;
     tempByCampaign.set(r.campaignId, t);
   }
@@ -633,7 +623,6 @@ export async function listCampaignPerformance(
       ctrPct: ctr,
       temperature: tempByCampaign.get(c.id) ?? {
         hot: 0,
-        engaged: 0,
         warm: 0,
         cold: 0,
       },
@@ -657,7 +646,7 @@ export interface TopLead {
   watchTimeSec: number;
   lastEventTs: Date | null;
   lastKind: string | null;
-  temperature: "engaged" | "hot" | "warm" | "cold";
+  temperature: "hot" | "warm" | "cold";
 }
 
 export async function getTopLeads(
@@ -748,10 +737,9 @@ export async function getTopLeads(
       d.Firma ||
       "(unbenannt)";
     const company = d.companyName ?? d.company ?? d.Firma ?? "";
-    let temperature: "engaged" | "hot" | "warm" | "cold" = "cold";
-    if (r.ctaClicks > 0) temperature = "engaged";
-    else if ((r.maxProgressPct ?? 0) >= 75) temperature = "hot";
-    else if (r.videoPlays > 0 && (r.maxProgressPct ?? 0) >= 25) temperature = "warm";
+    let temperature: "hot" | "warm" | "cold" = "cold";
+    if (r.ctaClicks > 0 || (r.maxProgressPct ?? 0) >= 75) temperature = "hot";
+    else if (r.videoPlays > 0) temperature = "warm";
     return {
       id: r.leadId,
       name,

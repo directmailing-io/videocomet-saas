@@ -20,7 +20,6 @@ export interface ClassifyEvent {
   payload?: Record<string, unknown> | null;
 }
 
-const WARM_PROGRESS_THRESHOLD = 25;
 const HOT_PROGRESS_THRESHOLD = 75;
 
 function readProgressPct(payload: Record<string, unknown> | null | undefined): number | null {
@@ -47,11 +46,13 @@ function readProgressPct(payload: Record<string, unknown> | null | undefined): n
  * Map an event-history to one of:
  *   inactive — 0 events
  *   cold     — only page_view events
- *   warm     — at least one video_play AND ≥25 % progress reached
- *   hot      — ≥75 % video progress OR a cta_hover event
- *   engaged  — at least one cta_click OR events across ≥2 distinct sessions
+ *   warm     — at least one video_play OR visits across ≥2 distinct sessions
+ *   hot      — at least one cta_click OR ≥75 % video progress
  *
- * Note: `engaged` is the strongest signal and beats `hot` even if both apply.
+ * Only relies on events that EVERY landingpage variant actually emits
+ * (page_view, video_play, video_progress, video_ended, cta_click) — the
+ * block-based landingpages never send cta_hover/scroll_depth etc., so those
+ * must not influence the label.
  */
 export function classifyLead(events: ClassifyEvent[]): LeadTemperature {
   if (events.length === 0) return "inactive";
@@ -59,7 +60,6 @@ export function classifyLead(events: ClassifyEvent[]): LeadTemperature {
   let hasPageView = false;
   let hasVideoPlay = false;
   let maxProgressPct = 0;
-  let hasCtaHover = false;
   let hasCtaClick = false;
   const sessions = new Set<string>();
 
@@ -78,9 +78,6 @@ export function classifyLead(events: ClassifyEvent[]): LeadTemperature {
         if (pct !== null && pct > maxProgressPct) maxProgressPct = pct;
         break;
       }
-      case "cta_hover":
-        hasCtaHover = true;
-        break;
       case "cta_click":
         hasCtaClick = true;
         break;
@@ -91,9 +88,8 @@ export function classifyLead(events: ClassifyEvent[]): LeadTemperature {
     }
   }
 
-  if (hasCtaClick || sessions.size >= 2) return "engaged";
-  if (maxProgressPct >= HOT_PROGRESS_THRESHOLD || hasCtaHover) return "hot";
-  if (hasVideoPlay && maxProgressPct >= WARM_PROGRESS_THRESHOLD) return "warm";
+  if (hasCtaClick || maxProgressPct >= HOT_PROGRESS_THRESHOLD) return "hot";
+  if (hasVideoPlay || sessions.size >= 2) return "warm";
   if (hasPageView) return "cold";
   return "inactive";
 }
@@ -103,16 +99,15 @@ export function classifyLead(events: ClassifyEvent[]): LeadTemperature {
  * already live on the `leads` row. Useful for feed-rendering where we don't
  * want to fetch the entire event history per row.
  *
- * NOTE: this is an APPROXIMATION — it cannot detect cta_hover or session
- * count and treats `watchTimeSec / videoDuration` as max-progress. Callers
- * that need the exact label should fetch events and use `classifyLead`.
+ * NOTE: this is an APPROXIMATION — it cannot detect the session count.
+ * Callers that need the exact label should fetch events and use
+ * `classifyLead`.
  */
 export interface LeadAggregateInput {
   pageViewCount: number;
   playCount: number;
   watchTimeSec: number;
   ctaClickCount: number;
-  ctaHoverCount?: number;
   /** max progress (0..100). If unknown, leave null. */
   maxProgressPct?: number | null;
   /** number of distinct sessions; defaults to 1 if unknown. */
@@ -121,12 +116,9 @@ export interface LeadAggregateInput {
 
 export function classifyLeadFromAggregates(agg: LeadAggregateInput): LeadTemperature {
   const sessions = agg.sessionCount ?? 1;
-  if (agg.ctaClickCount > 0 || sessions >= 2) return "engaged";
   const maxPct = agg.maxProgressPct ?? 0;
-  if (maxPct >= HOT_PROGRESS_THRESHOLD || (agg.ctaHoverCount ?? 0) > 0) {
-    return "hot";
-  }
-  if (agg.playCount > 0 && maxPct >= WARM_PROGRESS_THRESHOLD) return "warm";
+  if (agg.ctaClickCount > 0 || maxPct >= HOT_PROGRESS_THRESHOLD) return "hot";
+  if (agg.playCount > 0 || sessions >= 2) return "warm";
   if (agg.pageViewCount > 0) return "cold";
   return "inactive";
 }

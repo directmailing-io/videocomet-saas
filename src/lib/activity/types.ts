@@ -7,18 +7,12 @@
  * (Agent 3) live here so the three agents share exactly one source of truth.
  */
 
-export type LeadTemperature =
-  | "cold"
-  | "warm"
-  | "hot"
-  | "engaged"
-  | "inactive";
+export type LeadTemperature = "cold" | "warm" | "hot" | "inactive";
 
 export const LEAD_TEMPERATURES: readonly LeadTemperature[] = [
   "cold",
   "warm",
   "hot",
-  "engaged",
   "inactive",
 ] as const;
 

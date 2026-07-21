@@ -15,7 +15,7 @@ export interface CampaignPerfRow {
   leadsCount: number;
   runsCount: number;
   ctrPct: number;
-  temperature: { hot: number; engaged: number; warm: number; cold: number };
+  temperature: { hot: number; warm: number; cold: number };
 }
 
 type SortKey = "ctr" | "views" | "plays" | "leads" | "runs";
@@ -170,16 +170,15 @@ function SortHeader({
 function TemperatureBar({
   t,
 }: {
-  t: { hot: number; engaged: number; warm: number; cold: number };
+  t: { hot: number; warm: number; cold: number };
 }) {
-  const total = t.hot + t.engaged + t.warm + t.cold;
+  const total = t.hot + t.warm + t.cold;
   if (total === 0) {
     return (
       <div className="h-1.5 w-full rounded-full bg-line-soft" aria-hidden />
     );
   }
   const segs: Array<[number, string, string]> = [
-    [t.engaged, "bg-ok", "Engaged"],
     [t.hot, "bg-danger", "Heiß"],
     [t.warm, "bg-warn", "Warm"],
     [t.cold, "bg-ink-muted/60", "Kalt"],
@@ -187,7 +186,7 @@ function TemperatureBar({
   return (
     <div
       role="img"
-      aria-label={`Lead-Verteilung: ${t.engaged} engaged · ${t.hot} heiß · ${t.warm} warm · ${t.cold} kalt`}
+      aria-label={`Lead-Verteilung: ${t.hot} heiß · ${t.warm} warm · ${t.cold} kalt`}
       className="h-1.5 w-full max-w-[280px] flex overflow-hidden rounded-full bg-line-soft"
     >
       {segs.map(([count, color, label]) =>

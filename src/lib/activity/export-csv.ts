@@ -64,7 +64,6 @@ const TEMPERATURE_DE: Record<LeadTemperature, string> = {
   cold: "Kalt",
   warm: "Warm",
   hot: "Heiß",
-  engaged: "Engagiert",
   inactive: "Inaktiv",
 };
 
@@ -250,13 +249,12 @@ export async function getLeadsForExport(
 
   if (rows.length === 0) return [];
 
-  // ── 2. Pro Lead: max-progress + session-count + ctaHoverCount aus
-  //    lead_events. Eine einzige GROUP-BY-Query gegen alle relevanten
-  //    Lead-IDs — kein N+1.
+  // ── 2. Pro Lead: max-progress + session-count aus lead_events.
+  //    Eine einzige GROUP-BY-Query gegen alle relevanten Lead-IDs — kein N+1.
   const leadIds = rows.map((r) => r.leadId);
   const progressMap = new Map<
     string,
-    { maxProgressPct: number; sessionCount: number; ctaHoverCount: number }
+    { maxProgressPct: number; sessionCount: number }
   >();
 
   const progressRows = (await db
@@ -277,7 +275,6 @@ export async function getLeadsForExport(
         END
       )`,
       sessionCount: sql<number>`COUNT(DISTINCT ${leadEvents.sessionId})::int`,
-      ctaHoverCount: sql<number>`COUNT(*) FILTER (WHERE ${leadEvents.kind} = 'cta_hover')::int`,
     })
     .from(leadEvents)
     .where(inArray(leadEvents.leadId, leadIds))
@@ -285,14 +282,12 @@ export async function getLeadsForExport(
       leadId: string;
       maxPct: number | null;
       sessionCount: number;
-      ctaHoverCount: number;
     }>;
 
   for (const p of progressRows) {
     progressMap.set(p.leadId, {
       maxProgressPct: Number(p.maxPct ?? 0),
       sessionCount: Number(p.sessionCount ?? 0),
-      ctaHoverCount: Number(p.ctaHoverCount ?? 0),
     });
   }
 
@@ -303,7 +298,6 @@ export async function getLeadsForExport(
     const agg = progressMap.get(row.leadId) ?? {
       maxProgressPct: 0,
       sessionCount: 0,
-      ctaHoverCount: 0,
     };
 
     const temperature = classifyLeadFromAggregates({
@@ -311,7 +305,6 @@ export async function getLeadsForExport(
       playCount: row.playCount ?? 0,
       watchTimeSec: row.watchTimeSec ?? 0,
       ctaClickCount: row.ctaClickCount ?? 0,
-      ctaHoverCount: agg.ctaHoverCount,
       maxProgressPct: agg.maxProgressPct,
       sessionCount: agg.sessionCount,
     });

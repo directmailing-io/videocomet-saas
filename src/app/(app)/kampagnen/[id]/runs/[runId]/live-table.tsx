@@ -15,6 +15,7 @@ import {
   Mail as MailIcon,
   MoreHorizontal,
   Pencil,
+  Search,
 } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useToast } from "@/components/ui/toaster";
@@ -23,6 +24,7 @@ import { buildLeadPublicUrl } from "@/lib/lead-public-url";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -70,6 +72,8 @@ interface LeadRow {
 }
 
 type FilterKey = "all" | "opened" | "played" | "cta" | "briefA" | "briefB";
+
+const PAGE_SIZE = 50;
 
 function isFilterKey(value: string | null | undefined): value is FilterKey {
   return (
@@ -244,6 +248,13 @@ export function LiveTable({
     [pathname, router, searchParams],
   );
 
+  // Namens-/E-Mail-Suche + Client-Pagination (50/Seite).
+  const [search, setSearch] = React.useState("");
+  const [page, setPage] = React.useState(0);
+  React.useEffect(() => {
+    setPage(0);
+  }, [filter, search]);
+
   // Drawer state for per-lead analytics.
   const [drawerLead, setDrawerLead] = React.useState<LeadRow | null>(null);
   const [editLead, setEditLead] = React.useState<LeadRow | null>(null);
@@ -324,15 +335,48 @@ export function LiveTable({
     [isTerminal, regenerating, runId, router, toast, counts.failed],
   );
 
+  // True while we were live-streaming — the terminal transition then owes the
+  // table one final snapshot, because the live EventSource gets closed by the
+  // effect cleanup before the last lead-status patches arrive.
+  const needFinalSyncRef = React.useRef(false);
+
   React.useEffect(() => {
-    // Skip SSE if the run is already in a terminal state.
     if (
       runStatus === "completed" ||
       runStatus === "failed" ||
       runStatus === "cancelled"
     ) {
-      return;
+      if (!needFinalSyncRef.current) return;
+      needFinalSyncRef.current = false;
+      // One-shot final sync: snapshot anwenden, sofort wieder schließen.
+      const finalEs = new EventSource(`/api/runs/${runId}/stream`, {
+        withCredentials: true,
+      });
+      finalEs.addEventListener("snapshot", (e) => {
+        try {
+          const payload = JSON.parse((e as MessageEvent).data);
+          if (payload.counts) setCounts(payload.counts as Counts);
+          if (Array.isArray(payload.leads)) {
+            setLeads((prev) =>
+              replaceLeadsPreservingTracking(prev, payload.leads as LeadRow[]),
+            );
+          }
+          if (Array.isArray(payload.pipelineEvents)) {
+            setEvents(
+              (payload.pipelineEvents as PipelineEventDTO[]).slice(
+                -MAX_EVENTS_IN_MEMORY,
+              ),
+            );
+          }
+        } catch {
+          // ignore
+        }
+        finalEs.close();
+      });
+      finalEs.addEventListener("error", () => finalEs.close());
+      return () => finalEs.close();
     }
+    needFinalSyncRef.current = true;
     const url = `/api/runs/${runId}/stream`;
     const es = new EventSource(url, { withCredentials: true });
 
@@ -517,21 +561,48 @@ export function LiveTable({
   }, [leads]);
 
   const filteredLeads = React.useMemo(() => {
+    let base: LeadRow[];
     switch (filter) {
       case "opened":
-        return leads.filter((l) => (l.viewCount ?? 0) > 0);
+        base = leads.filter((l) => (l.viewCount ?? 0) > 0);
+        break;
       case "played":
-        return leads.filter((l) => (l.playCount ?? 0) > 0);
+        base = leads.filter((l) => (l.playCount ?? 0) > 0);
+        break;
       case "cta":
-        return leads.filter((l) => (l.ctaClickCount ?? 0) > 0);
+        base = leads.filter((l) => (l.ctaClickCount ?? 0) > 0);
+        break;
       case "briefA":
-        return leads.filter((l) => l.abVariant === "A");
+        base = leads.filter((l) => l.abVariant === "A");
+        break;
       case "briefB":
-        return leads.filter((l) => l.abVariant === "B");
+        base = leads.filter((l) => l.abVariant === "B");
+        break;
       default:
-        return leads;
+        base = leads;
     }
-  }, [leads, filter]);
+    const q = search.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((l) => {
+      const haystack = [
+        prettyName(l.data),
+        prettyLastName(l.data),
+        prettyEmail(l.data),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [leads, filter, search]);
+
+  // Client-Pagination — hält die Tabelle auch bei tausenden Leads flüssig.
+  const pageCount = Math.max(1, Math.ceil(filteredLeads.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pagedLeads = React.useMemo(
+    () =>
+      filteredLeads.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
+    [filteredLeads, safePage],
+  );
 
   const workerStatsLabel = (() => {
     if (!workerStats) return null;
@@ -913,6 +984,20 @@ export function LiveTable({
             </FilterPill>
           </>
         )}
+        <div className="relative ml-auto w-full sm:w-64">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
+            aria-hidden
+          />
+          <Input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Name oder E-Mail suchen…"
+            aria-label="Leads nach Name oder E-Mail durchsuchen"
+            className="pl-9 h-9"
+          />
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-squircle-md bg-surface shadow-card">
@@ -924,11 +1009,7 @@ export function LiveTable({
               <TableHead>E-Mail</TableHead>
               <TableHead>Status</TableHead>
               {abActive && <TableHead>Brief</TableHead>}
-              <TableHead>Aufrufe</TableHead>
-              <TableHead>Wiedergabe</TableHead>
-              <TableHead>Klicks</TableHead>
               <TableHead>Landingpage</TableHead>
-              <TableHead>Video</TableHead>
               <TableHead>PDF</TableHead>
               <TableHead>Umschlag</TableHead>
               <TableHead className="w-14 text-right">Aktion</TableHead>
@@ -938,16 +1019,18 @@ export function LiveTable({
             {filteredLeads.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={abActive ? 13 : 12}
+                  colSpan={abActive ? 9 : 8}
                   className="text-center text-ink-muted py-8"
                 >
                   {leads.length === 0
                     ? "Noch keine Leads."
-                    : "Keine Leads im aktiven Filter."}
+                    : search.trim()
+                      ? "Keine Leads passen zur Suche."
+                      : "Keine Leads im aktiven Filter."}
                 </TableCell>
               </TableRow>
             ) : (
-              filteredLeads.map((l) => (
+              pagedLeads.map((l) => (
                 <TableRow
                   key={l.id}
                   onClick={() => openLeadDrawer(l)}
@@ -980,48 +1063,6 @@ export function LiveTable({
                       )}
                     </TableCell>
                   )}
-                  <TableCell className="text-xs">
-                    {(l.viewCount ?? 0) > 0 ? (
-                      <span className="inline-flex flex-col">
-                        <span className="text-ink font-medium">
-                          <span aria-hidden>👁</span> {l.viewCount}
-                        </span>
-                        <span className="text-ink-muted text-[11px]">
-                          {formatRel(l.lastViewedAt)}
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="text-ink-muted">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {(l.playCount ?? 0) > 0 ? (
-                      <span className="inline-flex flex-col">
-                        <span className="text-ink font-medium">
-                          <span aria-hidden>▶</span> {l.playCount}
-                        </span>
-                        <span className="text-ink-muted text-[11px] tabular-nums">
-                          {formatWatchTime(l.watchTimeSec ?? 0)}
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="text-ink-muted">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {(l.ctaClickCount ?? 0) > 0 ? (
-                      <span className="inline-flex flex-col">
-                        <span className="text-ink font-medium">
-                          <span aria-hidden>✱</span> {l.ctaClickCount}
-                        </span>
-                        <span className="text-ink-muted text-[11px]">
-                          {formatRel(l.lastCtaAt)}
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="text-ink-muted">—</span>
-                    )}
-                  </TableCell>
                   <TableCell onClick={stopRowClick}>
                     {l.slug ? (
                       <a
@@ -1045,21 +1086,6 @@ export function LiveTable({
                       >
                         <ExternalLink className="size-3.5" />
                         Vorschau
-                      </a>
-                    ) : (
-                      <span className="text-ink-muted text-xs">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell onClick={stopRowClick}>
-                    {l.videoUrl ? (
-                      <a
-                        href={l.videoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-brand-deep hover:underline text-xs"
-                      >
-                        <Play className="size-3.5" />
-                        abspielen
                       </a>
                     ) : (
                       <span className="text-ink-muted text-xs">—</span>
@@ -1111,6 +1137,36 @@ export function LiveTable({
             )}
           </TableBody>
         </Table>
+        {filteredLeads.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between gap-3 border-t border-line-soft px-4 py-3">
+            <span className="text-xs text-ink-muted tabular-nums">
+              Zeige {safePage * PAGE_SIZE + 1}–
+              {Math.min((safePage + 1) * PAGE_SIZE, filteredLeads.length)} von{" "}
+              {filteredLeads.length.toLocaleString("de-DE")} Leads
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={safePage === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                Zurück
+              </Button>
+              <span className="text-xs text-ink-muted tabular-nums">
+                Seite {safePage + 1} / {pageCount}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={safePage >= pageCount - 1}
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              >
+                Weiter
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       <LeadAnalyticsDrawer
@@ -1309,33 +1365,6 @@ function FilterPillCount({ children }: { children: React.ReactNode }): React.JSX
  */
 function stopRowClick(e: React.MouseEvent): void {
   e.stopPropagation();
-}
-
-function formatWatchTime(sec: number): string {
-  if (!Number.isFinite(sec) || sec < 0) return "0:00";
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-/**
- * Compact German relative-time formatting for inline use in the table. No
- * external dep; precision rolls up at boundaries that match what users
- * actually want to see (just-now / minutes / hours / days).
- */
-function formatRel(input: string | Date | null | undefined): string {
-  if (!input) return "—";
-  const d = input instanceof Date ? input : new Date(input);
-  const ms = Date.now() - d.getTime();
-  if (!Number.isFinite(ms)) return "—";
-  if (ms < 60_000) return "gerade eben";
-  if (ms < 3_600_000) return `vor ${Math.floor(ms / 60_000)} min`;
-  if (ms < 86_400_000) return `vor ${Math.floor(ms / 3_600_000)} Std`;
-  if (ms < 30 * 86_400_000) return `vor ${Math.floor(ms / 86_400_000)} Tg.`;
-  return d.toLocaleDateString("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-  });
 }
 
 function mergePipelineEvents(

@@ -8,6 +8,7 @@ import type {
   TemperatureFilter,
 } from "../activity-center";
 import {
+  TEMPERATURE_HINT,
   TEMPERATURE_LABEL,
   type LeadTemperature,
 } from "./temperature-badge";
@@ -15,14 +16,13 @@ import { FunnelCard } from "./funnel-card";
 import type { FunnelResult } from "./funnel-card";
 
 /**
- * Links-Rail: 5 Mini-Stat-Cards (Hot/Engaged/Warm/Cold/Inactive) als
+ * Links-Rail: 4 Mini-Stat-Cards (Hot/Warm/Cold/Inactive) als
  * Filter-Toggles und optional eine FunnelCard darunter.
  *
  * Auf < lg fällt die Rail in den normalen Flow oberhalb des Feeds.
  */
 const TEMPERATURE_ORDER: ReadonlyArray<LeadTemperature> = [
   "hot",
-  "engaged",
   "warm",
   "cold",
   "inactive",
@@ -30,7 +30,6 @@ const TEMPERATURE_ORDER: ReadonlyArray<LeadTemperature> = [
 
 const dotBg: Record<LeadTemperature, string> = {
   hot: "bg-danger",
-  engaged: "bg-ok",
   warm: "bg-warn",
   cold: "bg-ink-muted",
   inactive: "bg-line",
@@ -74,6 +73,7 @@ export function StatsRail({
                       onTemperatureChange(active ? "all" : t)
                     }
                     aria-pressed={active}
+                    title={TEMPERATURE_HINT[t]}
                     className={cn(
                       "w-full flex items-center gap-2 h-9 px-2 rounded-squircle-sm text-sm transition-colors",
                       "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",

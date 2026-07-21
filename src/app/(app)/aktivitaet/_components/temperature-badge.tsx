@@ -5,21 +5,25 @@ import { cn } from "@/lib/utils";
 
 /**
  * LeadTemperature aus dem Aktivitäts-API-Vertrag.
- * cold / warm / hot / engaged / inactive.
+ * cold / warm / hot / inactive — bewusst nur auf Basis der Events, die
+ * jede Landingpage-Variante wirklich trackt (Seite geöffnet, Video
+ * gestartet/Fortschritt, CTA geklickt).
  */
-export type LeadTemperature =
-  | "cold"
-  | "warm"
-  | "hot"
-  | "engaged"
-  | "inactive";
+export type LeadTemperature = "cold" | "warm" | "hot" | "inactive";
 
 export const TEMPERATURE_LABEL: Record<LeadTemperature, string> = {
   hot: "Heiß",
-  engaged: "Engaged",
   warm: "Warm",
   cold: "Kalt",
   inactive: "Inaktiv",
+};
+
+/** Kurzbeschreibung pro Stufe — sichtbar als Tooltip/Untertitel. */
+export const TEMPERATURE_HINT: Record<LeadTemperature, string> = {
+  hot: "CTA geklickt oder Video fast komplett gesehen",
+  warm: "Video gestartet oder mehrfach besucht",
+  cold: "Seite geöffnet",
+  inactive: "Noch kein Besuch",
 };
 
 /**
@@ -28,7 +32,6 @@ export const TEMPERATURE_LABEL: Record<LeadTemperature, string> = {
  */
 const dotColor: Record<LeadTemperature, string> = {
   hot: "bg-danger",
-  engaged: "bg-ok",
   warm: "bg-warn",
   cold: "bg-ink-muted",
   inactive: "bg-line",
@@ -36,7 +39,6 @@ const dotColor: Record<LeadTemperature, string> = {
 
 const ringColor: Record<LeadTemperature, string> = {
   hot: "ring-danger/30",
-  engaged: "ring-ok/30",
   warm: "ring-warn/30",
   cold: "ring-line",
   inactive: "ring-line",
@@ -44,7 +46,6 @@ const ringColor: Record<LeadTemperature, string> = {
 
 const textColor: Record<LeadTemperature, string> = {
   hot: "text-danger",
-  engaged: "text-ok",
   warm: "text-warn",
   cold: "text-ink-muted",
   inactive: "text-ink-muted",
