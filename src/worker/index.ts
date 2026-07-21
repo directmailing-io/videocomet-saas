@@ -53,16 +53,16 @@ import type { LeadJobData } from "./types";
 import type { Job } from "bullmq";
 
 /**
- * Findet Leads die seit >16 min in 'rendering'/'uploading' hängen
+ * Findet Leads die seit >21 min in 'rendering'/'uploading' hängen
  * (Worker-Crash, Container-Restart mid-pipeline) und re-enqueued sie.
  * Wird beim Boot + alle 2 min ausgeführt.
  *
- * 16 min = knapp über PIPELINE_HARD_TIMEOUT_MS (15 min): eine legitime
- * Pipeline (Render bis 5 min + Bunny-Encoding-Wait bis 5,5 min) darf
- * NICHT als stuck gelten, sonst requeuen wir gesunde in-flight Leads.
+ * 21 min = knapp über PIPELINE_HARD_TIMEOUT_MS (20 min): eine legitime
+ * Pipeline darf NICHT als stuck gelten, sonst requeuen wir gesunde
+ * in-flight Leads und erzeugen Doppel-Pipelines.
  */
 async function stuckLeadRecovery(): Promise<void> {
-  const stuckThreshold = new Date(Date.now() - 16 * 60 * 1000);
+  const stuckThreshold = new Date(Date.now() - 21 * 60 * 1000);
 
   // ── ZUERST: Orphaned-Pending-Recovery ──────────────────────────────
   // Leads die in "pending" sind aber KEIN Job in der BullMQ-Queue —
@@ -186,7 +186,7 @@ async function stuckLeadRecovery(): Promise<void> {
 
   // eslint-disable-next-line no-console
   console.log(
-    `[worker:${WORKER_ID}] stuck-recovery: found ${stuck.length} leads stuck >16min, requeueing`,
+    `[worker:${WORKER_ID}] stuck-recovery: found ${stuck.length} leads stuck >21min, requeueing`,
   );
 
   // Status zurück auf pending, startedAt = null.
@@ -516,11 +516,12 @@ async function main(): Promise<void> {
   const stopBunnyPurger = startBunnyPurger();
 
   // Global cap — muss über der Summe der per-stage timeouts in
-  // processors/pipeline.ts liegen (videoRender 300 + videoUpload 330 inkl.
-  // Bunny-Encoding-Wait + landingPage 10 + thumb 15 + qr 5 + docxModify 30 +
-  // docxToPdf 60 + pdfCompress 20 + pdfUpload 30 ≈ 800s) plus
-  // Orchestration-Headroom.
-  const PIPELINE_HARD_TIMEOUT_MS = 15 * 60 * 1000;
+  // processors/pipeline.ts liegen. Worst case (Docs-native-Kampagne):
+  // videoRender 300 + videoCompress 90 + videoUpload 330 (inkl. Bunny-
+  // Encoding-Wait) + landingPage 10 + thumb 15 + qr 5 + thumbnailGenerate 30
+  // + lpScreenshot 45 + docsNativeRender 270 + pdfCompress 20 + pdfUpload 30
+  // ≈ 1145s (~19 min) plus Orchestration-Headroom.
+  const PIPELINE_HARD_TIMEOUT_MS = 20 * 60 * 1000;
   const worker = pipelineWorker(async (job: Job<LeadJobData>) => {
     incrementInFlight();
     try {

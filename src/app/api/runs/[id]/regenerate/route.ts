@@ -229,6 +229,24 @@ export async function POST(
   const skipPdf = mode === "video";
   try {
     const queue = pipelineQueue();
+    // Verwaiste Retries aufräumen: von früheren Fehlversuchen können noch
+    // delayed/waiting Jobs für dieselben Leads in der Queue liegen (Backoff-
+    // Retry läuft z.B. noch, während der User schon regeneriert). Ohne
+    // Cleanup laufen dann ZWEI Pipelines pro Lead parallel (Doppel-Upload,
+    // Status-Races). Aktive Jobs können nicht entfernt werden — das fängt
+    // der Lead-Status-Guard ab.
+    try {
+      const stale = await queue.getJobs(["delayed", "waiting", "prioritized", "paused"]);
+      const targetLeadIds = new Set(leadRows.map((lr) => lr.id));
+      await Promise.allSettled(
+        stale
+          .filter((j) => j?.data?.runId === params.id && targetLeadIds.has(j.data.leadId))
+          .map((j) => j.remove()),
+      );
+    } catch (cleanupErr) {
+      // eslint-disable-next-line no-console
+      console.warn("[runs:regenerate] stale-job cleanup failed:", cleanupErr);
+    }
     // BullMQ dedupliziert per jobId. Um sicher zu re-enqueuen verwenden wir
     // einen eindeutigen jobId pro Regenerate (leadId + Timestamp). Der
     // Concurrency-Schutz kommt vom Lead-Status "pending" der weiter oben

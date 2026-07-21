@@ -69,11 +69,10 @@ let _pipelineQueue: Queue<LeadJobData> | null = null;
  * from the Next.js side. Kept as a function so importing the module never
  * touches Redis until actually needed.
  *
- * `attempts: 2` with a 5s exponential backoff means a single transient
- * error (e.g. Bunny CDN 403, a momentary DB blip) gets one retry before
- * the lead is marked failed. We do NOT want too many retries — long-running
- * pipelines that fail for a "real" reason should fail fast rather than tie
- * up worker slots.
+ * `attempts: 3` with a 5s exponential backoff: transiente Fehler (Bunny
+ * CDN 403, DB-Blip) und langsames Bunny-Encoding bekommen zwei Retries.
+ * Retries sind seit dem Resume-Pfad (video-upload.ts) billig — sie pollen
+ * das schon encodierende Video weiter statt neu zu rendern.
  */
 export function pipelineQueue(): Queue<LeadJobData> {
   if (_pipelineQueue) return _pipelineQueue;
@@ -169,11 +168,9 @@ export function preflightQueue(): Queue<PreflightJobData> {
   _preflightQueue = new Queue<PreflightJobData>(PREFLIGHT_QUEUE_NAME, {
     connection: getConnectionOpts(),
     defaultJobOptions: {
-      // 2 attempts mirrors `pipelineQueue`: one transient retry, then fail.
-      // 3 Attempts: der Resume-Pfad (video-upload.ts) macht Retries billig —
-      // Attempt 2/3 pollt das schon encodierende Bunny-Video weiter statt neu
-      // zu rendern. 3 × 5,5 min Encoding-Wait deckt auch langsame Bunny-Queues.
-      attempts: 3,
+      // 2 attempts: one transient retry, then fail — preflight jobs are
+      // cheap to re-trigger and should fail fast.
+      attempts: 2,
       backoff: { type: "exponential", delay: 5_000 },
       removeOnComplete: { count: 200 },
       removeOnFail: { count: 500 },

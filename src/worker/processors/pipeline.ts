@@ -1752,6 +1752,26 @@ export async function pipelineProcessor(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // Retried BullMQ diesen Job gleich nochmal? (shouldRetryJob-Semantik:
+    // `attemptsMade` ist während des Prozessor-Laufs noch NICHT
+    // inkrementiert, daher +1.) Wenn ja, den Lead NICHT auf failed setzen
+    // und den Run NICHT finalisieren — sonst zeigt die UI "Fehler" bzw.
+    // "Fertig", während der Retry (z.B. Resume des Bunny-Encoding-Waits)
+    // noch läuft, und ein User-Regenerate erzeugt Doppel-Pipelines.
+    const willRetry =
+      job.attemptsMade + 1 < (job.opts.attempts ?? 1) &&
+      (err as { name?: string } | null)?.name !== "UnrecoverableError";
+    if (willRetry) {
+      await insertPipelineEvent({
+        runId: data.runId,
+        leadId: data.leadId,
+        level: "warn",
+        stage: "run",
+        message: `${leadLabel}: ${message.slice(0, 300)} — Versuch ${job.attemptsMade + 1}/${job.opts.attempts ?? 1}, wird automatisch wiederholt`,
+        durationMs: Date.now() - pipelineStartedAt,
+      }).catch(() => undefined);
+      throw err;
+    }
     // Clear current_stage so the lead doesn't look "stuck in stage X" after
     // a hard failure. The stage that failed is still discoverable via the
     // last `pipeline_events` row for the lead.

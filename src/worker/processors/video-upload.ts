@@ -192,8 +192,12 @@ export async function runVideoUploadResume(input: {
 
   const status = Number(probe.status ?? 0);
   if (status === 5) {
-    // Bunny hat die Quelle verworfen — GUID ist tot, aufräumen und neu.
+    // Bunny hat die Quelle verworfen — GUID ist tot: Video löschen und die
+    // Lead-Referenz nullen, damit kein weiterer Retry sie erneut probed.
     await deleteVideo(input.bunnyVideoId).catch(() => {});
+    await updateLeadStatus(input.leadId, { bunnyVideoId: null }).catch(
+      () => {},
+    );
     return null;
   }
 
