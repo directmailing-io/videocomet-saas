@@ -26,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { RunWizardStepPlaceholders } from "./run-wizard-step-placeholders";
@@ -901,6 +900,9 @@ export function RunWizard({
           preview.totalRows - (dedupeStats?.excluded ?? 0),
         );
         const abCountA = Math.round((abWeightA / 100) * abLeadCount);
+        const bulkLeadTotal = sheetTabs
+          .filter((t) => selectedTabs.some((s) => s.gid === t.gid))
+          .reduce((sum, t) => sum + t.rowCount, 0);
         return (
           <div className="space-y-6">
           {abTestingActive && (
@@ -942,92 +944,115 @@ export function RunWizard({
               </CardContent>
             </Card>
           )}
-          <Card>
-            <CardHeader>
-              <CardTitle>Zusammenfassung</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {bulkMode ? (
-                <div className="rounded-squircle-sm bg-brand-soft/50 px-4 py-3 space-y-2">
-                  <p className="text-sm text-ink">
-                    Du startest{" "}
-                    <strong>{selectedTabs.length} Runden</strong> für die
-                    Kampagne{" "}
-                    <strong className="text-ink">{campaignName}</strong> —
-                    eine pro Tab.
-                  </p>
-                  <ul className="text-xs text-ink-muted space-y-1">
-                    {selectedTabs.map((t, i) => (
-                      <li key={t.gid} className="flex items-center gap-2">
-                        <span className="inline-flex size-4 items-center justify-center rounded bg-brand text-white text-[10px] font-bold">
-                          {i + 1}
-                        </span>
-                        <span className="font-medium">{t.title}</span>
-                        {i === 0 && (
-                          <span className="text-[10px] uppercase tracking-wider text-brand-deep">
-                            Vorschau oben
-                          </span>
-                        )}
-                      </li>
+          {/* Kassenbon — Credits im Fokus, Rest als Bon-Zeilen. */}
+          <div className="mx-auto w-full max-w-md [filter:drop-shadow(0_14px_30px_rgba(60,50,110,0.16))]">
+            <div className="rounded-t-squircle-md bg-surface px-6 pt-6 pb-5">
+              <p className="text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-ink-muted">
+                VideoComet
+              </p>
+              <p className="mt-1.5 text-center text-sm font-semibold text-ink">
+                {campaignName}
+              </p>
+              <p className="text-center text-xs text-ink-muted">
+                {runName.trim() || "Neue Runde"} ·{" "}
+                {new Date().toLocaleDateString("de-DE")}
+              </p>
+
+              <div className="my-4 border-t border-dashed border-line" />
+
+              <div className="space-y-1.5 font-mono text-sm">
+                {bulkMode ? (
+                  <>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-ink-muted">
+                        Runden (eine pro Tab)
+                      </span>
+                      <span className="font-semibold tabular-nums">
+                        {selectedTabs.length}
+                      </span>
+                    </div>
+                    {selectedTabs.map((t) => (
+                      <div
+                        key={t.gid}
+                        className="flex items-baseline justify-between gap-3 text-xs text-ink-muted"
+                      >
+                        <span className="truncate">· {t.title}</span>
+                      </div>
                     ))}
-                  </ul>
-                  <p className="text-[11px] text-ink-muted pt-1 border-t border-brand-soft">
-                    Mapping und Duplikat-Regeln gelten identisch für alle
-                    Runden. Für Tab 1 zeigen wir dir eine Vorschau — die
-                    anderen Tabs müssen dieselben Spalten haben.
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-ink-muted">
-                  Du startest{" "}
-                  <strong className="text-ink">{preview.totalRows}</strong>{" "}
-                  Lead{preview.totalRows === 1 ? "" : "s"} für die Kampagne{" "}
-                  <strong className="text-ink">{campaignName}</strong>.
-                </p>
-              )}
-              {dedupeStats && dedupeStats.excluded > 0 && (
-                <p className="text-sm text-warn">
-                  <strong>{dedupeStats.excluded}</strong> Duplikat
-                  {dedupeStats.excluded === 1 ? "" : "e"} werden vor dem Start
-                  entfernt.
-                </p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(mapping).map(([k, v]) => (
-                  <Badge key={k} variant="brand">
-                    {k} -&gt; {v}
-                  </Badge>
-                ))}
-                {Object.keys(mapping).length === 0 && (
-                  <Badge variant="warn">Kein Mapping gesetzt</Badge>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-ink-muted">Leads gesamt</span>
+                      <span className="font-semibold tabular-nums">
+                        {bulkLeadTotal}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-ink-muted">Leads in der Liste</span>
+                      <span className="tabular-nums">{preview.totalRows}</span>
+                    </div>
+                    {dedupeStats && dedupeStats.excluded > 0 && (
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-ink-muted">
+                          Duplikate entfernt
+                        </span>
+                        <span className="tabular-nums text-warn">
+                          −{dedupeStats.excluded}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-ink-muted">Zu startende Leads</span>
+                      <span className="font-semibold tabular-nums">
+                        {abLeadCount}
+                      </span>
+                    </div>
+                  </>
                 )}
-                {pdfEnabled && <Badge variant="success">PDF-Brief aktiv</Badge>}
+                {pdfEnabled && (
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-ink-muted">PDF-Brief</span>
+                    <span>inklusive</span>
+                  </div>
+                )}
                 {abTestingActive && (
-                  <Badge variant="brand">
-                    A/B-Test · {abWeightA}/{100 - abWeightA} ·{" "}
-                    {abMode === "sequential" ? "Der Reihe nach" : "Zufällig"}
-                  </Badge>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-ink-muted">A/B-Split</span>
+                    <span className="tabular-nums">
+                      {abWeightA}/{100 - abWeightA} ·{" "}
+                      {abMode === "sequential" ? "Reihe" : "Zufall"}
+                    </span>
+                  </div>
                 )}
               </div>
+
+              <div className="my-4 border-t border-dashed border-line" />
+
               <RunCostEstimate
+                variant="receipt"
                 leadCount={
                   // Bei Multi-Tab: Summe ueber alle Tabs (Estimate aus der
                   // Tab-Metadata). Dedup gilt pro Tab und wird nur fuer
                   // den ersten (Preview-)Tab exakt berechnet — fuer die
                   // anderen nutzen wir totalRows als konservativen Estimate.
-                  bulkMode
-                    ? sheetTabs
-                        .filter((t) => selectedTabs.some((s) => s.gid === t.gid))
-                        .reduce((sum, t) => sum + t.rowCount, 0)
-                    : Math.max(
-                        0,
-                        preview.totalRows - (dedupeStats?.excluded ?? 0),
-                      )
+                  bulkMode ? bulkLeadTotal : abLeadCount
                 }
                 onSufficient={setBillingReady}
               />
-            </CardContent>
-          </Card>
+
+              {bulkMode && (
+                <p className="mt-4 text-center text-[10px] leading-relaxed text-ink-muted">
+                  Mapping und Duplikat-Regeln gelten identisch für alle Runden.
+                </p>
+              )}
+            </div>
+            {/* Zackenkante unten — Kassenbon-Abriss */}
+            <div
+              aria-hidden
+              className="h-3 w-full bg-repeat-x [background-size:12px_12px] [background-image:linear-gradient(-45deg,transparent_6px,#ffffff_0),linear-gradient(45deg,transparent_6px,#ffffff_0)]"
+            />
+          </div>
           </div>
         );
       })()}

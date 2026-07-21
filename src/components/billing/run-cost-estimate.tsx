@@ -20,6 +20,8 @@ import { TopupModal } from "./topup-modal";
 interface Props {
   leadCount: number;
   onSufficient: (sufficient: boolean) => void;
+  /** "receipt": schlanke Bon-Zeilen statt eigener Box (für den Kassenbon im Wizard). */
+  variant?: "card" | "receipt";
 }
 
 interface Status {
@@ -27,7 +29,11 @@ interface Status {
   subscription: { status: string | null };
 }
 
-export function RunCostEstimate({ leadCount, onSufficient }: Props) {
+export function RunCostEstimate({
+  leadCount,
+  onSufficient,
+  variant = "card",
+}: Props) {
   const [status, setStatus] = React.useState<Status | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [topupOpen, setTopupOpen] = React.useState(false);
@@ -62,6 +68,14 @@ export function RunCostEstimate({ leadCount, onSufficient }: Props) {
   }, [sufficient, subActive, onSufficient]);
 
   if (loading) {
+    if (variant === "receipt") {
+      return (
+        <div className="flex items-center gap-2 font-mono text-xs text-ink-muted">
+          <Loader2 className="size-3.5 animate-spin" />
+          Guthaben laden …
+        </div>
+      );
+    }
     return (
       <div className="rounded-squircle-md border border-line bg-surface p-4 flex items-center gap-2 text-sm text-ink-muted">
         <Loader2 className="size-4 animate-spin" />
@@ -102,6 +116,57 @@ export function RunCostEstimate({ leadCount, onSufficient }: Props) {
           </div>
         </div>
       </div>
+    );
+  }
+
+  if (variant === "receipt") {
+    return (
+      <>
+        <div className="space-y-1.5 font-mono text-sm">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-ink-muted">Kosten dieser Runde</span>
+            <span className="font-semibold tabular-nums">
+              −{cost} Credits
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-ink-muted">Aktuelles Guthaben</span>
+            <span className="tabular-nums">{formatCreditBalance(balance)}</span>
+          </div>
+        </div>
+        <div className="my-3 border-t border-dashed border-line" />
+        <div className="flex items-baseline justify-between gap-3 font-mono">
+          <span className="text-sm font-semibold text-ink">Restguthaben</span>
+          <span
+            className={cn(
+              "text-xl font-bold tabular-nums",
+              remaining < 0 && !isUnlimitedCredits(balance)
+                ? "text-danger"
+                : "text-ok",
+            )}
+          >
+            {isUnlimitedCredits(balance)
+              ? "∞"
+              : remaining.toLocaleString("de-DE")}
+          </span>
+        </div>
+        {!sufficient && (
+          <div className="mt-3 border-t border-dashed border-danger/30 pt-3 flex items-center justify-between gap-3">
+            <div className="text-xs text-danger">
+              Es fehlen <strong>{cost - balance} Credits</strong>.
+            </div>
+            <Button
+              type="button"
+              variant="brand"
+              size="sm"
+              onClick={() => setTopupOpen(true)}
+            >
+              Jetzt aufladen
+            </Button>
+          </div>
+        )}
+        <TopupModal open={topupOpen} onOpenChange={setTopupOpen} />
+      </>
     );
   }
 
