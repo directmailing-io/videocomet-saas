@@ -88,7 +88,9 @@ const STAGE_TIMEOUTS_MS = {
   // mehrere Slides pro Lead.
   videoRender: 300_000,
   videoCompress: 90_000, // ffmpeg re-encode + remux (passthrough is fast)
-  videoUpload: 60_000, // Bunny stream upload is fast
+  // Upload selbst ist schnell, aber die Stage enthält waitForBunnyEncoding
+  // (bis 5 min Polling bis Bunny transcodiert). 60s hat ganze Runden gekillt.
+  videoUpload: 330_000,
   landingPageCreate: 10_000, // single DB write
   thumbnailExtract: 15_000, // ffmpeg single-frame extract
   qrGenerate: 5_000, // pure-CPU PNG generation

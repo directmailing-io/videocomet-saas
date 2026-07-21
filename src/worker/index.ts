@@ -53,12 +53,16 @@ import type { LeadJobData } from "./types";
 import type { Job } from "bullmq";
 
 /**
- * Findet Leads die seit >5 min in 'rendering'/'uploading' hängen
+ * Findet Leads die seit >16 min in 'rendering'/'uploading' hängen
  * (Worker-Crash, Container-Restart mid-pipeline) und re-enqueued sie.
  * Wird beim Boot + alle 2 min ausgeführt.
+ *
+ * 16 min = knapp über PIPELINE_HARD_TIMEOUT_MS (15 min): eine legitime
+ * Pipeline (Render bis 5 min + Bunny-Encoding-Wait bis 5,5 min) darf
+ * NICHT als stuck gelten, sonst requeuen wir gesunde in-flight Leads.
  */
 async function stuckLeadRecovery(): Promise<void> {
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+  const stuckThreshold = new Date(Date.now() - 16 * 60 * 1000);
 
   // ── ZUERST: Orphaned-Pending-Recovery ──────────────────────────────
   // Leads die in "pending" sind aber KEIN Job in der BullMQ-Queue —
@@ -141,7 +145,7 @@ async function stuckLeadRecovery(): Promise<void> {
     .where(
       and(
         inArray(leads.status, ["rendering", "uploading"]),
-        lt(leads.startedAt, fiveMinutesAgo),
+        lt(leads.startedAt, stuckThreshold),
         eq(runs.status, "generating"),
         sql`${leads.removedAt} IS NULL`,
         lt(leads.attempts, 3),
@@ -156,7 +160,7 @@ async function stuckLeadRecovery(): Promise<void> {
     .where(
       and(
         inArray(leads.status, ["rendering", "uploading"]),
-        lt(leads.startedAt, fiveMinutesAgo),
+        lt(leads.startedAt, stuckThreshold),
         eq(runs.status, "generating"),
         sql`${leads.removedAt} IS NULL`,
         sql`${leads.attempts} >= 3`,
@@ -182,7 +186,7 @@ async function stuckLeadRecovery(): Promise<void> {
 
   // eslint-disable-next-line no-console
   console.log(
-    `[worker:${WORKER_ID}] stuck-recovery: found ${stuck.length} leads stuck >5min, requeueing`,
+    `[worker:${WORKER_ID}] stuck-recovery: found ${stuck.length} leads stuck >16min, requeueing`,
   );
 
   // Status zurück auf pending, startedAt = null.
@@ -511,13 +515,12 @@ async function main(): Promise<void> {
   // vor Container-Restart) werden im naechsten Minutenfenster aufgeraeumt.
   const stopBunnyPurger = startBunnyPurger();
 
-  // 8 min global cap — sum of per-stage timeouts in processors/pipeline.ts
-  // (videoRender 300 + videoUpload 60 + landingPage 10 + thumb 15 + qr 5 +
-  // docxModify 30 + docxToPdf 60 + pdfCompress 20 + pdfUpload 30 = 530s)
-  // plus ~70s orchestration headroom. videoRender wurde von 120s -> 300s
-  // erhoeht, weil PPTX-Slides (gslide/canva) deutlich teurer sind als
-  // CDP-Screencast.
-  const PIPELINE_HARD_TIMEOUT_MS = 10 * 60 * 1000;
+  // Global cap — muss über der Summe der per-stage timeouts in
+  // processors/pipeline.ts liegen (videoRender 300 + videoUpload 330 inkl.
+  // Bunny-Encoding-Wait + landingPage 10 + thumb 15 + qr 5 + docxModify 30 +
+  // docxToPdf 60 + pdfCompress 20 + pdfUpload 30 ≈ 800s) plus
+  // Orchestration-Headroom.
+  const PIPELINE_HARD_TIMEOUT_MS = 15 * 60 * 1000;
   const worker = pipelineWorker(async (job: Job<LeadJobData>) => {
     incrementInFlight();
     try {
