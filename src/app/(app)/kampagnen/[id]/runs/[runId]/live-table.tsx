@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Download,
@@ -19,9 +20,9 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useToast } from "@/components/ui/toaster";
 import { LeadAnalyticsDrawer } from "./lead-analytics-drawer";
 import { buildLeadPublicUrl } from "@/lib/lead-public-url";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -30,7 +31,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
@@ -209,7 +209,7 @@ export function LiveTable({
 
   // Live-Log state
   const [events, setEvents] = React.useState<PipelineEventDTO[]>([]);
-  const [logOpen, setLogOpen] = React.useState(true);
+  const [logOpen, setLogOpen] = React.useState(false);
   const [autoScroll, setAutoScroll] = React.useState(true);
   const [onlyErrors, setOnlyErrors] = React.useState(false);
   const logScrollRef = React.useRef<HTMLDivElement | null>(null);
@@ -546,23 +546,42 @@ export function LiveTable({
     return `Worker: ${workerCount} aktiv · ${a} laufen`;
   })();
 
+  // Lead-Namen für den freundlichen Event-Ticker (leadId → "Vorname Nachname").
+  const leadNameById = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of leads) {
+      const n = [prettyName(l.data), prettyLastName(l.data)]
+        .filter((part) => part && part !== "—")
+        .join(" ");
+      if (n) m.set(l.id, n);
+    }
+    return m;
+  }, [leads]);
+
+  // Die 3 neuesten Events, neuestes zuerst — der "Erlebnis"-Ticker im Hero.
+  const tickerEvents = React.useMemo(() => events.slice(-3).reverse(), [events]);
+
   return (
     <div className="space-y-6">
-      <Card>
-        <CardContent className="py-5">
+      <section className="relative overflow-hidden rounded-squircle-lg bg-surface shadow-card">
+        {!isTerminal && (
+          <div aria-hidden className="pointer-events-none absolute inset-0">
+            <div className="absolute -right-24 -top-24 size-72 rounded-full bg-brand-soft opacity-70 blur-3xl animate-glow-drift" />
+            <div className="absolute -bottom-32 -left-16 size-80 rounded-full bg-brand-100 opacity-60 blur-3xl animate-glow-drift [animation-delay:2s]" />
+          </div>
+        )}
+        <div className="relative p-6 sm:p-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
               <Badge variant={statusVariant(runStatus)} dot>
                 {statusLabel(runStatus)}
               </Badge>
-              <span className="text-sm text-ink-muted">
-                {done} / {total || initialRun.totalLeads} fertig
+              <span className="text-xs text-ink-muted">
+                {startedAtLabel ? `Gestartet ${startedAtLabel}` : null}
+                {runDurationLabel
+                  ? `${startedAtLabel ? " · " : ""}${isTerminal ? "Dauer" : "Läuft seit"} ${runDurationLabel}`
+                  : null}
               </span>
-              <Badge variant="neutral">Rendert: {counts.rendering}</Badge>
-              <Badge variant="neutral">Wartet: {counts.pending}</Badge>
-              {counts.failed > 0 && (
-                <Badge variant="danger">Fehler: {counts.failed}</Badge>
-              )}
             </div>
             <div className="flex items-center gap-2">
               {isTerminal && (
@@ -638,40 +657,51 @@ export function LiveTable({
               )}
             </div>
           </div>
-          <div className="mt-4">
-            <Progress value={pct} />
-          </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardContent className="py-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setLogOpen((v) => !v)}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-ink hover:text-brand-deep"
-                aria-expanded={logOpen}
-                aria-controls="live-log-body"
-              >
-                {logOpen ? (
-                  <ChevronDown className="size-4" />
-                ) : (
-                  <ChevronRight className="size-4" />
-                )}
-                Live-Log
-                <span className="ml-1 text-xs text-ink-muted">
-                  ({filteredEvents.length}
-                  {onlyErrors && events.length !== filteredEvents.length
-                    ? ` von ${events.length}`
-                    : ""}
-                  )
+          <div className="mt-6 flex flex-wrap items-end justify-between gap-6">
+            <div className="flex items-center gap-5">
+              {runStatus === "completed" && counts.failed === 0 ? (
+                <span className="inline-flex size-16 shrink-0 items-center justify-center rounded-full bg-ok-soft animate-pop">
+                  <CheckCircle2 className="size-8 text-ok" />
                 </span>
-              </button>
-              {workerStatsLabel && (
+              ) : (
+                <span className="text-5xl font-bold tabular-nums tracking-tight text-ink">
+                  {pct}
+                  <span className="text-2xl font-semibold text-ink-muted">%</span>
+                </span>
+              )}
+              <div>
+                <p className="text-sm font-semibold text-ink">
+                  {runStatus === "completed" && counts.failed === 0
+                    ? `Alle ${counts.completed} Leads fertig`
+                    : `${done} von ${total || initialRun.totalLeads} Leads fertig`}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-muted">
+                  {isTerminal
+                    ? counts.failed > 0
+                      ? `${counts.failed} fehlgeschlagen — über „Neu generieren" erneut versuchen.`
+                      : "Videos, Landingpages und Briefe sind bereit."
+                    : etaLabel
+                      ? `Noch ${etaLabel} — Deine persönlichen Videos und Briefe entstehen gerade.`
+                      : "Deine persönlichen Videos und Briefe entstehen gerade."}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatPill tone="ok" label="Fertig" value={counts.completed} />
+              <StatPill
+                tone="brand"
+                label="Rendert"
+                value={counts.rendering + counts.uploading}
+                pulse={!isTerminal && counts.rendering + counts.uploading > 0}
+              />
+              <StatPill tone="neutral" label="Wartet" value={counts.pending} />
+              {counts.failed > 0 && (
+                <StatPill tone="danger" label="Fehler" value={counts.failed} />
+              )}
+              {!isTerminal && workerStatsLabel && (
                 <span
-                  className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-0.5 text-xs text-ink-muted"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-3 py-1 text-xs text-ink-muted"
                   title={
                     workerStats
                       ? `BullMQ active: ${workerStats.active} · waiting: ${workerStats.waiting} · in-flight: ${workerStats.inFlight}`
@@ -683,44 +713,113 @@ export function LiveTable({
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-4 text-xs text-ink-muted">
-              {startedAtLabel && (
-                <span>
-                  <span className="font-medium text-ink">Gestartet:</span>{" "}
-                  {startedAtLabel}
-                </span>
-              )}
-              {runDurationLabel && (
-                <span>
-                  <span className="font-medium text-ink">
-                    {isTerminal ? "Dauer:" : "Läuft seit:"}
-                  </span>{" "}
-                  {runDurationLabel}
-                </span>
-              )}
-              {etaLabel && (
-                <span>
-                  <span className="font-medium text-ink">ETA:</span>{" "}
-                  {etaLabel}
-                </span>
-              )}
-              <label className="inline-flex items-center gap-1.5">
-                <Checkbox
-                  checked={autoScroll}
-                  onCheckedChange={(v) => setAutoScroll(v === true)}
-                  aria-label="Auto-Scroll"
+          </div>
+
+          <div className="mt-5 h-2.5 w-full overflow-hidden rounded-full bg-canvas-deep">
+            <div
+              className="relative h-full overflow-hidden rounded-full bg-gradient-to-r from-brand to-brand-deep transition-all duration-500 ease-spring"
+              style={{ width: `${isTerminal ? pct : Math.max(pct, 2)}%` }}
+            >
+              {!isTerminal && (
+                <span
+                  aria-hidden
+                  className="absolute inset-0 animate-shimmer bg-gradient-to-r from-transparent via-white/40 to-transparent"
                 />
-                <span>Auto-Scroll</span>
-              </label>
-              <label className="inline-flex items-center gap-1.5">
-                <Checkbox
-                  checked={onlyErrors}
-                  onCheckedChange={(v) => setOnlyErrors(v === true)}
-                  aria-label="Nur Fehler"
-                />
-                <span>{onlyErrors ? "Nur Fehler" : "Alle Events"}</span>
-              </label>
+              )}
             </div>
+          </div>
+
+          {!isTerminal && (
+            <div className="mt-5 space-y-1.5" aria-live="polite">
+              {tickerEvents.length === 0 ? (
+                <p className="text-xs text-ink-muted">
+                  Warte auf den ersten Worker — gleich geht&apos;s los.
+                </p>
+              ) : (
+                tickerEvents.map((ev, i) => {
+                  const leadName = ev.leadId
+                    ? leadNameById.get(ev.leadId)
+                    : null;
+                  return (
+                    <div
+                      key={ev.id}
+                      className={cn(
+                        "flex items-center gap-2 text-xs",
+                        i === 0 ? "text-ink animate-slide-up" : "text-ink-muted",
+                        i === 2 && "opacity-60",
+                      )}
+                    >
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "size-1.5 shrink-0 rounded-full",
+                          ev.level === "error"
+                            ? "bg-danger"
+                            : ev.level === "warn"
+                              ? "bg-warn"
+                              : "bg-brand",
+                        )}
+                      />
+                      {leadName && (
+                        <span className="shrink-0 font-medium">{leadName}:</span>
+                      )}
+                      <span className="min-w-0 truncate">{ev.message}</span>
+                      <span className="shrink-0 tabular-nums text-ink-muted/70">
+                        {formatClock(ev.ts)}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-squircle-md bg-surface shadow-card">
+        <div className="px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setLogOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-ink hover:text-brand-deep"
+              aria-expanded={logOpen}
+              aria-controls="live-log-body"
+            >
+              {logOpen ? (
+                <ChevronDown className="size-4" />
+              ) : (
+                <ChevronRight className="size-4" />
+              )}
+              Technisches Log
+              <span className="ml-1 text-xs text-ink-muted">
+                ({filteredEvents.length}
+                {onlyErrors && events.length !== filteredEvents.length
+                  ? ` von ${events.length}`
+                  : ""}
+                )
+              </span>
+            </button>
+            {logOpen && (
+              <div className="flex flex-wrap items-center gap-4 text-xs text-ink-muted">
+                <label className="inline-flex items-center gap-1.5">
+                  <Checkbox
+                    checked={autoScroll}
+                    onCheckedChange={(v) => setAutoScroll(v === true)}
+                    aria-label="Auto-Scroll"
+                  />
+                  <span>Auto-Scroll</span>
+                </label>
+                <label className="inline-flex items-center gap-1.5">
+                  <Checkbox
+                    checked={onlyErrors}
+                    onCheckedChange={(v) => setOnlyErrors(v === true)}
+                    aria-label="Nur Fehler"
+                  />
+                  <span>{onlyErrors ? "Nur Fehler" : "Alle Events"}</span>
+                </label>
+              </div>
+            )}
           </div>
           {logOpen && (
             <div
@@ -768,8 +867,8 @@ export function LiveTable({
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {/* Tracking-Filter (clientseitig, URL-sync'd) */}
       <div className="flex flex-wrap items-center gap-2">
@@ -1134,6 +1233,39 @@ function LeadRowActions({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function StatPill({
+  tone,
+  label,
+  value,
+  pulse,
+}: {
+  tone: "ok" | "brand" | "neutral" | "danger";
+  label: string;
+  value: number;
+  pulse?: boolean;
+}): React.JSX.Element {
+  const toneClass = {
+    ok: "bg-ok-soft text-ok",
+    brand: "bg-brand-soft text-brand-deep",
+    neutral: "bg-surface-muted text-ink-muted",
+    danger: "bg-danger-soft text-danger",
+  }[tone];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold tabular-nums",
+        toneClass,
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn("size-1.5 rounded-full bg-current", pulse && "animate-pulse")}
+      />
+      {label} {value}
+    </span>
   );
 }
 

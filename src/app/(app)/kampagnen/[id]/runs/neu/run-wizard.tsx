@@ -117,6 +117,7 @@ export function RunWizard({
 
   const [uploadKind, setUploadKind] = React.useState<"file" | "google">("file");
   const [file, setFile] = React.useState<File | null>(null);
+  const [dragOver, setDragOver] = React.useState(false);
   const [sheetUrl, setSheetUrl] = React.useState("");
   const [preview, setPreview] = React.useState<ParsedPreview | null>(
     resume?.preview ?? null,
@@ -536,26 +537,35 @@ export function RunWizard({
         subtitle={`Kampagne ${campaignName} . Schritt ${step + 1} von ${STEPS.length}: ${STEPS[step]}`}
       />
 
-      <ol className="flex items-center gap-2 mb-8 overflow-x-auto pb-2">
+      <ol className="mb-8 flex items-center gap-1.5 overflow-x-auto pb-1">
         {STEPS.map((label, idx) => {
           const isActive = idx === step;
           const isDone = idx < step;
           return (
-            <li key={label} className="flex items-center gap-2 shrink-0">
+            <li key={label} className="flex shrink-0 items-center gap-1.5">
               <span
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-full text-xs font-semibold border transition-colors",
-                  isActive && "bg-brand text-white border-brand",
-                  isDone && "bg-brand-soft text-brand-deep border-brand-soft",
-                  !isActive && !isDone && "bg-surface text-ink-muted border-line",
+                  "inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-xs font-medium transition-all",
+                  isActive && "bg-surface text-ink shadow-card",
+                  isDone && !isActive && "text-ink-soft",
+                  !isActive && !isDone && "text-ink-muted opacity-60",
                 )}
               >
-                {isDone ? <Check className="size-3.5" /> : idx + 1}
-              </span>
-              <span className={cn("text-xs font-medium", isActive ? "text-ink" : "text-ink-muted")}>
+                <span
+                  className={cn(
+                    "inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+                    isActive
+                      ? "bg-ink text-white"
+                      : isDone
+                        ? "bg-brand-soft text-brand-deep"
+                        : "bg-canvas-deep text-ink-muted",
+                  )}
+                >
+                  {isDone ? <Check className="size-3" /> : idx + 1}
+                </span>
                 {label}
               </span>
-              {idx < STEPS.length - 1 && <span className="w-6 h-px bg-line ml-1" />}
+              {idx < STEPS.length - 1 && <span className="h-px w-5 bg-line" />}
             </li>
           );
         })}
@@ -604,12 +614,17 @@ export function RunWizard({
                   type="button"
                   onClick={() => setUploadKind("file")}
                   className={cn(
-                    "flex flex-col items-start gap-1 rounded-squircle-md border p-4 text-left transition-colors",
+                    "relative flex flex-col items-start gap-1 rounded-squircle-md p-4 text-left transition-all",
                     uploadKind === "file"
-                      ? "border-brand bg-brand-soft"
-                      : "border-line hover:border-line",
+                      ? "ring-2 ring-brand bg-brand-soft/40"
+                      : "bg-surface-soft hover:bg-surface-muted",
                   )}
                 >
+                  {uploadKind === "file" && (
+                    <span className="absolute right-3 top-3 inline-flex size-5 items-center justify-center rounded-full bg-brand text-white">
+                      <Check className="size-3" />
+                    </span>
+                  )}
                   <FileSpreadsheet className="size-5 text-brand-deep" />
                   <span className="text-sm font-semibold text-ink">XLSX / CSV</span>
                   <span className="text-xs text-ink-muted">Datei vom Rechner hochladen</span>
@@ -618,12 +633,17 @@ export function RunWizard({
                   type="button"
                   onClick={() => setUploadKind("google")}
                   className={cn(
-                    "flex flex-col items-start gap-1 rounded-squircle-md border p-4 text-left transition-colors",
+                    "relative flex flex-col items-start gap-1 rounded-squircle-md p-4 text-left transition-all",
                     uploadKind === "google"
-                      ? "border-brand bg-brand-soft"
-                      : "border-line hover:border-line",
+                      ? "ring-2 ring-brand bg-brand-soft/40"
+                      : "bg-surface-soft hover:bg-surface-muted",
                   )}
                 >
+                  {uploadKind === "google" && (
+                    <span className="absolute right-3 top-3 inline-flex size-5 items-center justify-center rounded-full bg-brand text-white">
+                      <Check className="size-3" />
+                    </span>
+                  )}
                   <Globe className="size-5 text-brand-deep" />
                   <span className="text-sm font-semibold text-ink">Google Sheets</span>
                   <span className="text-xs text-ink-muted">URL einfügen (öffentlich)</span>
@@ -634,18 +654,57 @@ export function RunWizard({
             {uploadKind === "file" ? (
               <div>
                 <Label htmlFor="lead-file">Datei (XLSX oder CSV)</Label>
+                <label
+                  htmlFor="lead-file"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOver(true);
+                  }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    const dropped = e.dataTransfer.files?.[0];
+                    if (dropped) setFile(dropped);
+                  }}
+                  className={cn(
+                    "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-squircle-md px-6 py-8 text-center transition-all",
+                    dragOver
+                      ? "bg-brand-soft/60 ring-2 ring-brand"
+                      : file
+                        ? "bg-brand-soft/40"
+                        : "bg-surface-soft hover:bg-surface-muted",
+                  )}
+                >
+                  {file ? (
+                    <>
+                      <span className="inline-flex size-10 items-center justify-center rounded-full bg-ok-soft">
+                        <Check className="size-5 text-ok" />
+                      </span>
+                      <span className="text-sm font-semibold text-ink">{file.name}</span>
+                      <span className="text-xs text-ink-muted">
+                        {Math.round(file.size / 1024)} KB — klicken zum Ändern
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="inline-flex size-10 items-center justify-center rounded-full bg-surface shadow-card">
+                        <Upload className="size-4 text-brand-deep" />
+                      </span>
+                      <span className="text-sm font-medium text-ink">
+                        Datei hierher ziehen oder klicken
+                      </span>
+                      <span className="text-xs text-ink-muted">XLSX oder CSV</span>
+                    </>
+                  )}
+                </label>
                 <input
                   id="lead-file"
                   type="file"
                   accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  className="block w-full text-sm text-ink file:mr-4 file:rounded-full file:border-0 file:bg-brand file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-brand-deep"
+                  className="sr-only"
                 />
-                {file && (
-                  <p className="text-xs text-ink-muted mt-2">
-                    {file.name} . {Math.round(file.size / 1024)} KB
-                  </p>
-                )}
               </div>
             ) : (
               <div>
@@ -658,8 +717,8 @@ export function RunWizard({
                   types={["gsheet"]}
                 />
                 <p className="text-xs text-ink-muted mt-2">
-                  Hinweis: Die Datei muss in der Freigabe auf &quot;Jeder mit Link&quot; stehen.
-                  Aus der Mediathek wählbar oder als neue URL eintippen.
+                  Freigabe: &quot;Jeder mit dem Link kann ansehen&quot; — aus der
+                  Mediathek wählbar oder neue URL eintippen.
                 </p>
               </div>
             )}
@@ -946,7 +1005,7 @@ export function RunWizard({
 
       {/* Footer-Nav ausblenden solange Tab-Picker sichtbar — er hat eigene Buttons. */}
       {tabPickerVisible ? null : (
-      <div className="flex items-center justify-between mt-8 pt-6 border-t border-line-soft">
+      <div className="flex items-center justify-between mt-8">
         <Button
           variant="ghost"
           onClick={() => setStep((s) => Math.max(0, s - 1))}
@@ -993,11 +1052,6 @@ export function RunWizard({
         )}
       </div>
       )}
-
-      {/* Hidden upload icon to ensure tree-shaking keeps the lucide-react peer */}
-      <span aria-hidden className="hidden">
-        <Upload className="size-0" />
-      </span>
     </>
   );
 }

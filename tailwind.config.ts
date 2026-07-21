@@ -77,10 +77,26 @@ const config: Config = {
           '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        'shimmer': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+        'pop': {
+          '0%': { transform: 'scale(0.4)', opacity: '0' },
+          '60%': { transform: 'scale(1.08)', opacity: '1' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        'glow-drift': {
+          '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
+          '50%': { transform: 'translate(-14px, 12px) scale(1.08)' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1)',
         'slide-up': 'slide-up 250ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+        'shimmer': 'shimmer 1.8s linear infinite',
+        'pop': 'pop 450ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
+        'glow-drift': 'glow-drift 8s ease-in-out infinite',
       },
     },
   },
