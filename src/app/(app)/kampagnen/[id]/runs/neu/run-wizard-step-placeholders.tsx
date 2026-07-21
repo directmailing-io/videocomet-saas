@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Check,
+  ChevronDown,
   History,
   Loader2,
   Mail,
@@ -462,6 +463,7 @@ export function RunWizardStepPlaceholders({
 
   // ── „Weiter"-Handler ──────────────────────────────────────────────────
   const [advancing, setAdvancing] = React.useState(false);
+  const [livePreviewOpen, setLivePreviewOpen] = React.useState(false);
   async function handleContinue() {
     if (unmapped.length > 0) {
       // Banner ist sichtbar — Sprung zum ersten unmappten Key.
@@ -586,7 +588,7 @@ export function RunWizardStepPlaceholders({
         )}
       </Card>
 
-      {/* ── Header-Card mit Progress + Actions ─────────────────────── */}
+      {/* ── Mapping-Card: Progress + Banner + Platzhalter-Liste ────── */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -682,15 +684,8 @@ export function RunWizardStepPlaceholders({
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
 
-      {/* ── Liste der Platzhalter ─────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Platzhalter</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+          {/* Platzhalter-Liste */}
           {placeholders.length === 0 ? (
             <p className="text-sm text-ink-muted">
               Keine Platzhalter in dieser Kampagne gefunden. Du kannst direkt
@@ -722,38 +717,53 @@ export function RunWizardStepPlaceholders({
         </CardContent>
       </Card>
 
-      {/* ── Live-Vorschau ─────────────────────────────────────────── */}
+      {/* ── Live-Vorschau (Disclosure, default zu) ────────────────── */}
       {previewRows.length > 0 && (
         <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Sparkles className="size-4 text-brand-deep" />
-              <CardTitle>Live-Vorschau</CardTitle>
-            </div>
-            <p className="text-sm text-ink-muted mt-1">
-              So sieht der Text mit dem aktuellen Mapping für die ersten Leads aus.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {previewRows.slice(0, 2).map((row, i) => (
-              <div
-                key={i}
-                className="rounded-squircle-sm bg-surface-soft px-4 py-3"
-              >
-                <p className="text-xs text-ink-muted mb-1.5">
-                  Lead {i + 1}
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                  <Sparkles className="size-3.5 text-brand shrink-0" />
+                  Live-Vorschau
                 </p>
-                <p className="text-sm text-ink leading-relaxed">
-                  {substituteForPreview(PREVIEW_TEMPLATE_DE, row, mapping)}
+                <p className="text-xs text-ink-muted mt-0.5">
+                  So sieht der Text mit dem aktuellen Mapping für die ersten
+                  Leads aus.
                 </p>
               </div>
-            ))}
-            <p className="text-xs text-ink-muted">
-              Vorlage:{" "}
-              <code className="font-mono text-xs px-1 py-0.5 rounded bg-line-soft">
-                {PREVIEW_TEMPLATE_DE}
-              </code>
-            </p>
+              <button
+                type="button"
+                onClick={() => setLivePreviewOpen((o) => !o)}
+                className="shrink-0 inline-flex items-center gap-1 rounded-full bg-surface-soft px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-muted transition-colors"
+                aria-expanded={livePreviewOpen}
+              >
+                {livePreviewOpen ? "Ausblenden" : "Anzeigen"}
+                <ChevronDown
+                  className={cn(
+                    "size-3.5 transition-transform",
+                    livePreviewOpen && "rotate-180",
+                  )}
+                />
+              </button>
+            </div>
+            {livePreviewOpen && (
+              <div className="mt-3 space-y-3">
+                {previewRows.slice(0, 2).map((row, i) => (
+                  <div
+                    key={i}
+                    className="rounded-squircle-sm bg-surface-soft px-4 py-3"
+                  >
+                    <p className="text-xs text-ink-muted mb-1.5">
+                      Lead {i + 1}
+                    </p>
+                    <p className="text-sm text-ink leading-relaxed">
+                      {substituteForPreview(PREVIEW_TEMPLATE_DE, row, mapping)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

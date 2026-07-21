@@ -9,7 +9,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -149,6 +149,7 @@ export function RunWizardDedupeCard({
   value,
   onChange,
 }: RunWizardDedupeCardProps) {
+  const [detailOpen, setDetailOpen] = React.useState(false);
   const [editorOpen, setEditorOpen] = React.useState(false);
   const [groupsExpanded, setGroupsExpanded] = React.useState(false);
 
@@ -212,42 +213,56 @@ export function RunWizardDedupeCard({
     });
   }
 
+  const summary = !value.enabled
+    ? `Ausgeschaltet — alle ${totalRows} Leads kommen weiter.`
+    : excluded === 0
+      ? `Keine Duplikate gefunden — alle ${totalRows} Leads kommen weiter.`
+      : `${excluded} Duplikat${excluded === 1 ? "" : "e"} werden entfernt — ${remaining} von ${totalRows} Leads kommen weiter.`;
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-3">
-        <div className="space-y-1">
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="size-4 text-brand" />
-            Duplikate erkennen
-          </CardTitle>
-          <p className="text-xs text-ink-muted">
-            Vor dem Start prüfen wir auf doppelte Leads. Duplikate werden aus
-            der Verarbeitung entfernt, bleiben aber im Run-Audit.
-          </p>
+      <CardContent className="py-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+              <Sparkles className="size-3.5 text-brand shrink-0" />
+              Duplikate erkennen
+            </p>
+            <p className="text-xs text-ink-muted mt-0.5">{summary}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDetailOpen((o) => !o)}
+              className="inline-flex items-center gap-1 rounded-full bg-surface-soft px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-muted transition-colors"
+              aria-expanded={detailOpen}
+            >
+              Regeln
+              <ChevronDown
+                className={cn(
+                  "size-3.5 transition-transform",
+                  detailOpen && "rotate-180",
+                )}
+              />
+            </button>
+            <Switch
+              id="dedupe-master"
+              aria-label="Duplikate ausschließen"
+              checked={value.enabled}
+              onCheckedChange={(checked) =>
+                onChange({ ...value, enabled: checked })
+              }
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-2 pt-0.5">
-          <Label
-            htmlFor="dedupe-master"
-            className="text-xs font-medium text-ink-muted"
-          >
-            Duplikate ausschließen
-          </Label>
-          <Switch
-            id="dedupe-master"
-            checked={value.enabled}
-            onCheckedChange={(checked) =>
-              onChange({ ...value, enabled: checked })
-            }
-          />
-        </div>
-      </CardHeader>
 
-      <CardContent
-        className={cn(
-          "space-y-5",
-          !value.enabled && "opacity-60 pointer-events-none",
-        )}
-      >
+        {detailOpen && (
+        <div
+          className={cn(
+            "mt-4 space-y-5",
+            !value.enabled && "opacity-60 pointer-events-none",
+          )}
+        >
         <section>
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
@@ -396,6 +411,8 @@ export function RunWizardDedupeCard({
             </ul>
           )}
         </section>
+        </div>
+        )}
       </CardContent>
     </Card>
   );

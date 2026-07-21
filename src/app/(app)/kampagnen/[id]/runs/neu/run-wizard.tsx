@@ -10,6 +10,7 @@ import {
   Globe,
   FileSpreadsheet,
   Play,
+  ChevronDown,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -118,6 +119,7 @@ export function RunWizard({
   const [uploadKind, setUploadKind] = React.useState<"file" | "google">("file");
   const [file, setFile] = React.useState<File | null>(null);
   const [dragOver, setDragOver] = React.useState(false);
+  const [previewOpen, setPreviewOpen] = React.useState(false);
   const [sheetUrl, setSheetUrl] = React.useState("");
   const [preview, setPreview] = React.useState<ParsedPreview | null>(
     resume?.preview ?? null,
@@ -729,36 +731,56 @@ export function RunWizard({
       {step === 1 && preview && (
         <div className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Vorschau</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-ink-muted mb-3">
-                {preview.totalRows} Zeile{preview.totalRows === 1 ? "" : "n"} erkannt
-                {preview.truncated ? " (gekuerzt auf 5000)" : ""}.
-              </p>
-              <div className="overflow-x-auto rounded-squircle-sm">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {preview.headers.map((h) => (
-                        <TableHead key={h}>{h}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {preview.rows.map((r, i) => (
-                      <TableRow key={i}>
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-ink">Adressliste</p>
+                  <p className="text-xs text-ink-muted mt-0.5">
+                    {preview.totalRows} Zeile
+                    {preview.totalRows === 1 ? "" : "n"} ·{" "}
+                    {preview.headers.length} Spalten erkannt
+                    {preview.truncated ? " (gekürzt auf 5000)" : ""}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewOpen((o) => !o)}
+                  className="shrink-0 inline-flex items-center gap-1 rounded-full bg-surface-soft px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-muted transition-colors"
+                  aria-expanded={previewOpen}
+                >
+                  {previewOpen ? "Ausblenden" : "Anzeigen"}
+                  <ChevronDown
+                    className={cn(
+                      "size-3.5 transition-transform",
+                      previewOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+              </div>
+              {previewOpen && (
+                <div className="mt-3 overflow-x-auto rounded-squircle-sm">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
                         {preview.headers.map((h) => (
-                          <TableCell key={h} className="text-xs text-ink-muted">
-                            {r[h] ?? ""}
-                          </TableCell>
+                          <TableHead key={h}>{h}</TableHead>
                         ))}
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {preview.rows.map((r, i) => (
+                        <TableRow key={i}>
+                          {preview.headers.map((h) => (
+                            <TableCell key={h} className="text-xs text-ink-muted">
+                              {r[h] ?? ""}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
 
