@@ -28,6 +28,11 @@
 
 import { spawn } from "node:child_process";
 import { copyFile, stat } from "node:fs/promises";
+import {
+  capLibx264Threads,
+  isLibx264Encode,
+  withEncodeSlot,
+} from "./encode-limiter";
 
 const FFPROBE_PATH = process.env.FFPROBE_PATH ?? "ffprobe";
 const FFMPEG_PATH = process.env.FFMPEG_PATH ?? "/usr/bin/ffmpeg";
@@ -134,7 +139,17 @@ async function probeMeta(filePath: string): Promise<ProbedMeta | null> {
  * `console.error` with a `[ffmpeg]` prefix so the worker logs are
  * scannable.
  */
-function runFfmpeg(args: string[]): Promise<void> {
+function runFfmpeg(rawArgs: string[]): Promise<void> {
+  // M2: libx264-Encodes bekommen -threads 3 injiziert und laufen durch die
+  // globale Encode-Semaphore (max 4 parallel). Remux-/Copy-Ops unlimitiert.
+  const args = capLibx264Threads(rawArgs);
+  if (isLibx264Encode(args)) {
+    return withEncodeSlot(() => spawnFfmpeg(args));
+  }
+  return spawnFfmpeg(args);
+}
+
+function spawnFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(FFMPEG_PATH, args, {
       stdio: ["ignore", "pipe", "pipe"],

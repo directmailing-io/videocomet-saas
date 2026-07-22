@@ -16,6 +16,11 @@
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import sharp from "sharp";
+import {
+  capLibx264Threads,
+  isLibx264Encode,
+  withEncodeSlot,
+} from "./encode-limiter";
 
 function ffmpegPath(): string {
   return process.env.FFMPEG_PATH ?? "/usr/bin/ffmpeg";
@@ -86,7 +91,17 @@ async function getRoundedRectMaskPng(opts: {
  *     "Invalid", "Conversion failed" or similar — those are the lines that
  *     actually explain what went wrong; the rest is encoder noise.
  */
-function runFfmpeg(args: string[]): Promise<void> {
+function runFfmpeg(rawArgs: string[]): Promise<void> {
+  // M2: libx264-Encodes bekommen -threads 3 injiziert und laufen durch die
+  // globale Encode-Semaphore (max 4 parallel). Copy-/Remux-Ops unlimitiert.
+  const args = capLibx264Threads(rawArgs);
+  if (isLibx264Encode(args)) {
+    return withEncodeSlot(() => spawnFfmpeg(args));
+  }
+  return spawnFfmpeg(args);
+}
+
+function spawnFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(ffmpegPath(), args, { stdio: ["ignore", "pipe", "pipe"] });
     let stderrTail = "";

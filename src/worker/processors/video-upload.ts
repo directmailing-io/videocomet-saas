@@ -7,9 +7,11 @@
  * Upload ist schnell und der Endkonsument bekommt sofort eine kleine MP4-
  * Fallback-Variante.
  *
- * Post-Upload: Bunny encoding ist async (kann Minuten dauern). Wir pollen
- * SYNCHRON (bounded, siehe wait-for-bunny-encoding.ts) bis Bunny ready ist
- * und schreiben dann width/height/mp4-Url atomar auf den Lead.
+ * Post-Upload: Bunny encoding ist async (kann Minuten dauern). Der bounded
+ * Encoding-Poll (siehe wait-for-bunny-encoding.ts) läuft als DEFERRED
+ * `finalize`-Promise parallel zu den restlichen Pipeline-Stages; erst am
+ * Ende (vor completed) wird awaited und width/height/mp4-Url atomar auf
+ * den Lead geschrieben.
  *
  * WICHTIG (Resume-Pfad): die Bunny-GUID wird SOFORT nach erfolgreichem
  * Upload persistiert (lead.bunnyVideoId), noch BEVOR wir auf das Encoding
@@ -57,6 +59,21 @@ export interface VideoUploadOutput {
   width: number | null;
   height: number | null;
   orientation: "landscape" | "portrait" | "square" | null;
+}
+
+/**
+ * Early-Return der Upload-Stage: Upload + GUID-Persist sind fertig, die
+ * URLs sind deterministisch (CDN-Pfad aus der GUID). Der Encoding-Wait
+ * plus atomarer Meta-Persist (width/height/mp4Url/videoUrl) läuft als
+ * `finalize`-Promise parallel weiter — die Pipeline kann LP/Thumbnail/QR/
+ * PDF-Stages überlappen und MUSS `finalize` vor dem completed-Update
+ * awaiten (sonst wird der Lead completed, bevor videoUrl persistiert ist).
+ */
+export interface DeferredVideoUpload {
+  bunnyVideoId: string;
+  videoUrl: string;
+  thumbnailUrl: string;
+  finalize: Promise<VideoUploadOutput>;
 }
 
 function parseStreamHlsUrl(
@@ -164,7 +181,7 @@ async function finishUpload(
 
 export async function runVideoUpload(
   input: VideoUploadInput,
-): Promise<VideoUploadOutput> {
+): Promise<DeferredVideoUpload> {
   const result = await uploadVideo({
     filePath: input.videoFilePath,
     title: input.title,
@@ -179,13 +196,24 @@ export async function runVideoUpload(
     videoContentHash: input.contentHash ?? null,
   });
 
-  return finishUpload(
+  const finalize = finishUpload(
     input.leadId,
     result.videoId,
     result.hlsUrl,
     result.thumbnailUrl,
     input.onEncodingProgress,
   );
+  // Handled markieren — der echte Fehler kommt beim await in pipeline.ts
+  // wieder hoch. Ohne diesen catch gäbe es eine unhandled rejection, wenn
+  // eine spätere Stage VOR dem finalize-await wirft.
+  finalize.catch(() => {});
+
+  return {
+    bunnyVideoId: result.videoId,
+    videoUrl: result.hlsUrl,
+    thumbnailUrl: result.thumbnailUrl,
+    finalize,
+  };
 }
 
 /**
@@ -202,7 +230,7 @@ export async function runVideoUploadResume(input: {
   bunnyVideoId: string;
   userId: string;
   onEncodingProgress?: (info: { elapsedMs: number; lastStatus: number }) => void;
-}): Promise<VideoUploadOutput | null> {
+}): Promise<DeferredVideoUpload | null> {
   let probe: Record<string, unknown>;
   try {
     probe = await getVideo(input.bunnyVideoId);
@@ -230,11 +258,18 @@ export async function runVideoUploadResume(input: {
   }
 
   const urls = streamUrlsFor(input.bunnyVideoId);
-  return finishUpload(
+  const finalize = finishUpload(
     input.leadId,
     input.bunnyVideoId,
     urls.hlsUrl,
     urls.thumbnailUrl,
     input.onEncodingProgress,
   );
+  finalize.catch(() => {});
+  return {
+    bunnyVideoId: input.bunnyVideoId,
+    videoUrl: urls.hlsUrl,
+    thumbnailUrl: urls.thumbnailUrl,
+    finalize,
+  };
 }

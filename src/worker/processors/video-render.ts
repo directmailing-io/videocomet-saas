@@ -20,7 +20,8 @@
  */
 
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   composePip,
@@ -358,6 +359,119 @@ async function renderPresentationBase(opts: {
 }
 
 /**
+ * Prozessweiter Webcam-Normalize-Cache (M1, Perf-Paket 2026-07-21).
+ *
+ * Problem: bei with-presentation-Kampagnen lädt + re-encodiert JEDER Lead
+ * dieselbe Webcam-Quelle (Browser-Recorder liefert VP8/WebM → libx264-
+ * Re-Encode ~56s unter Contention). Bei 5 parallelen Leads: 5× dieselbe
+ * Arbeit, die Encodes verlangsamen sich gegenseitig.
+ *
+ * Der Cache dedupliziert per URL (neue Aufnahme = neue UUID-CDN-URL, der
+ * Key ist also inhaltsstabil): der erste Caller lädt + normalisiert, alle
+ * anderen teilen die Promise. Downstream (probe/composePip) liest die
+ * Cache-Datei nur — cleanupTempDir räumt nur per-Lead-Dirs, nie den Cache.
+ *
+ * Sicherheit: atomar via .tmp + rename, rejected Promises werden evicted,
+ * Disk-Hits (Worker-Restart) werden per ffprobe validiert, TTL-Sweep >2h
+ * (mtime wird bei jedem Hit getouched). Nur für http(s)-Quellen —
+ * file://-Pfade sind lokale per-Run-Dateien ohne stabile Identität.
+ */
+const WEBCAM_CACHE_DIR = "/tmp/videocomet-webcam-cache";
+const WEBCAM_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+const WEBCAM_NORMALIZE_CACHE = new Map<string, Promise<string>>();
+
+async function sweepWebcamCache(): Promise<void> {
+  try {
+    const entries = await readdir(WEBCAM_CACHE_DIR);
+    const now = Date.now();
+    for (const name of entries) {
+      const p = join(WEBCAM_CACHE_DIR, name);
+      try {
+        const s = await stat(p);
+        if (now - s.mtimeMs > WEBCAM_CACHE_TTL_MS) {
+          await rm(p, { force: true });
+        }
+      } catch {
+        // best-effort — Datei kann parallel verschwunden sein
+      }
+    }
+  } catch {
+    // Cache-Dir existiert noch nicht — ok
+  }
+}
+
+async function normalizeWebcamCached(url: string): Promise<string> {
+  const key = createHash("sha1").update(url).digest("hex");
+  const target = join(WEBCAM_CACHE_DIR, `${key}.mp4`);
+
+  const existing = WEBCAM_NORMALIZE_CACHE.get(key);
+  if (existing) {
+    try {
+      const p = await existing;
+      if (existsSync(p)) {
+        // mtime touchen, damit der TTL-Sweep aktive Einträge nicht killt.
+        const now = new Date();
+        await utimes(p, now, now).catch(() => {});
+        console.log(`[render] webcam normalize cache hit (${key.slice(0, 8)})`);
+        return p;
+      }
+    } catch {
+      // rejected — unten frisch aufbauen
+    }
+    WEBCAM_NORMALIZE_CACHE.delete(key);
+  }
+
+  const job = (async () => {
+    await mkdir(WEBCAM_CACHE_DIR, { recursive: true });
+    void sweepWebcamCache();
+
+    if (existsSync(target)) {
+      // Disk-Hit ohne Memory-Eintrag (z.B. nach Worker-Restart) — nicht
+      // blind vertrauen: könnte ein Torso eines gekillten Prozesses sein.
+      try {
+        const { probeVideoDuration } = await import("../../lib/ffprobe");
+        const d = await probeVideoDuration(target);
+        if (typeof d === "number" && d > 0) {
+          const now = new Date();
+          await utimes(target, now, now).catch(() => {});
+          console.log(
+            `[render] webcam normalize cache hit from disk (${key.slice(0, 8)})`,
+          );
+          return target;
+        }
+      } catch {
+        // invalide — neu aufbauen
+      }
+      await rm(target, { force: true }).catch(() => {});
+    }
+
+    const suffix = `${process.pid}.${Date.now()}`;
+    const rawTmp = join(WEBCAM_CACHE_DIR, `${key}.raw.${suffix}`);
+    const normTmp = `${target}.tmp.${suffix}`;
+    try {
+      await fetchToFile(url, rawTmp);
+      const res = await compressForBunny({
+        inputPath: rawTmp,
+        outputPath: normTmp,
+        reason: "webcam-source-normalize",
+      });
+      await rename(normTmp, target); // atomar (gleiches FS)
+      console.log(
+        `[render] webcam normalised+cached: ${res.skipped ? "passthrough" : "re-encode"} (${res.orientation}, ${(res.bytesIn / 1024 / 1024).toFixed(2)}MB → ${(res.bytesOut / 1024 / 1024).toFixed(2)}MB)`,
+      );
+      return target;
+    } finally {
+      await rm(rawTmp, { force: true }).catch(() => {});
+      await rm(normTmp, { force: true }).catch(() => {});
+    }
+  })();
+
+  WEBCAM_NORMALIZE_CACHE.set(key, job);
+  job.catch(() => WEBCAM_NORMALIZE_CACHE.delete(key));
+  return job;
+}
+
+/**
  * Produces a final MP4 in `outDir` and returns its path and duration.
  */
 export async function runVideoRender(
@@ -365,26 +479,8 @@ export async function runVideoRender(
 ): Promise<VideoRenderOutput> {
   const finalPath = join(input.outDir, "final.mp4");
 
-  // Materialise the webcam source on disk first.
-  const webcamLocal = join(input.outDir, "webcam-src.mp4");
-  const rawPath = (() => {
-    if (input.webcamSourceUrl.startsWith("file://")) {
-      return input.webcamSourceUrl.replace(/^file:\/\//, "");
-    }
-    return null;
-  })();
-  let sourcePath: string;
-  if (rawPath) {
-    if (!existsSync(rawPath)) {
-      throw new Error(`[render] webcam source missing: ${rawPath}`);
-    }
-    sourcePath = rawPath;
-  } else {
-    const raw = join(input.outDir, "webcam-raw");
-    await fetchToFile(input.webcamSourceUrl, raw);
-    sourcePath = raw;
-  }
-
+  // Materialise + normalise the webcam source.
+  //
   // Orientation-aware compress: portrait sources (z. B. 720×1280 Selfie)
   // sollen NICHT auf 1280×720 ge-pillarboxt werden. compressForBunny erkennt
   // die Source-Orientation selbst aus den Pixel-Dimensionen und wählt den
@@ -392,14 +488,27 @@ export async function runVideoRender(
   // KEIN Upscale + KEIN Letterbox — die Scale-Formel ist `min(in,out)`.
   // Bei H.264-Webcams läuft `-c copy` und spart Encode-Zeit; Re-Encode nur
   // wenn nötig (Codec/Profile/Bitrate jenseits der Skip-Heuristik).
-  const compressResult = await compressForBunny({
-    inputPath: sourcePath,
-    outputPath: webcamLocal,
-    reason: "webcam-source-normalize",
-  });
-  console.log(
-    `[render] webcam normalised: ${compressResult.skipped ? "passthrough" : "re-encode"} (${compressResult.orientation}, ${(compressResult.bytesIn / 1024 / 1024).toFixed(2)}MB → ${(compressResult.bytesOut / 1024 / 1024).toFixed(2)}MB)`,
-  );
+  //
+  // http(s)-Quellen laufen über den prozessweiten Normalize-Cache (M1) —
+  // parallele Leads derselben Kampagne teilen Download + Re-Encode.
+  let webcamLocal: string;
+  if (input.webcamSourceUrl.startsWith("file://")) {
+    const rawPath = input.webcamSourceUrl.replace(/^file:\/\//, "");
+    if (!existsSync(rawPath)) {
+      throw new Error(`[render] webcam source missing: ${rawPath}`);
+    }
+    webcamLocal = join(input.outDir, "webcam-src.mp4");
+    const compressResult = await compressForBunny({
+      inputPath: rawPath,
+      outputPath: webcamLocal,
+      reason: "webcam-source-normalize",
+    });
+    console.log(
+      `[render] webcam normalised: ${compressResult.skipped ? "passthrough" : "re-encode"} (${compressResult.orientation}, ${(compressResult.bytesIn / 1024 / 1024).toFixed(2)}MB → ${(compressResult.bytesOut / 1024 / 1024).toFixed(2)}MB)`,
+    );
+  } else {
+    webcamLocal = await normalizeWebcamCached(input.webcamSourceUrl);
+  }
 
   // KRITISCH: die wahre Webcam-Dauer aus der normalisierten Source messen.
   // Wenn `defaultDurationSec` aus der DB NULL ist, fiel der alte Code auf

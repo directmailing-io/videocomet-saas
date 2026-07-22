@@ -52,6 +52,7 @@ import { runVideoCompress } from "./video-compress";
 import {
   runVideoUpload,
   runVideoUploadResume,
+  type DeferredVideoUpload,
   type VideoUploadOutput,
 } from "./video-upload";
 import { runThumbnailExtract } from "./thumbnail-extract";
@@ -464,6 +465,11 @@ export async function pipelineProcessor(
     // unrelated outputs intact.
     let bunnyVideoId: string | null = lead.bunnyVideoId ?? null;
     let videoUrl: string | null = lead.videoUrl ?? null;
+    // Deferred Encoding-Wait (M3): der Bunny-Upload liefert sofort die
+    // deterministischen URLs zurück; waitForBunnyEncoding + Meta-Persist
+    // laufen parallel zu LP/Thumbnail/QR/PDF und werden unmittelbar vor
+    // dem completed-Update awaited. MUSS vor Stage 10 resolved sein.
+    let pendingVideoFinalize: Promise<VideoUploadOutput> | null = null;
     let pageUrl: string | null = null;
     let slug: string | null = lead.slug ?? null;
     // Kann sich im Reuse-Branch durch rehomeLeadDomain ändern — `lead` ist
@@ -595,7 +601,7 @@ export async function pipelineProcessor(
       // existierende Video weiter pollen statt neu rendern + hochladen —
       // sonst beginnt die Encoding-Wartezeit jedes Mal bei null und die
       // Bunny-Queue füllt sich mit Duplikaten (macht alles langsamer).
-      let resumedUpload: VideoUploadOutput | null = null;
+      let resumedUpload: DeferredVideoUpload | null = null;
       if (lead.bunnyVideoId && lead.videoContentHash !== videoContentHash) {
         // Inhalt hat sich seit dem letzten Upload geändert (oder der Alt-
         // Lead stammt von vor Migration 0037 und hat keinen Hash) — das
@@ -642,14 +648,17 @@ export async function pipelineProcessor(
         if (resumedUpload) {
           bunnyVideoId = resumedUpload.bunnyVideoId;
           videoUrl = resumedUpload.videoUrl;
+          pendingVideoFinalize = resumedUpload.finalize;
+          // width/height sind erst nach dem Encoding-Wait bekannt — das
+          // Register braucht sie nur kosmetisch, null ist ok.
           await trackAndRefAsset({
             trackInput: {
               userId: data.userId,
               kind: "stream",
               bunnyId: resumedUpload.bunnyVideoId,
               cdnUrl: resumedUpload.videoUrl,
-              width: resumedUpload.width,
-              height: resumedUpload.height,
+              width: null,
+              height: null,
             },
             ownerType: "lead",
             ownerId: data.leadId,
@@ -660,7 +669,7 @@ export async function pipelineProcessor(
             leadId: data.leadId,
             level: "info",
             stage: "upload",
-            message: `${leadLabel}: resumed existing Bunny video in ${(resumeMs / 1000).toFixed(1)}s (bunnyId=${resumedUpload.bunnyVideoId.slice(0, 8)}…, skipped re-render)${resumedUpload.mp4Url ? " (mp4=ready)" : " (mp4=pending)"}`,
+            message: `${leadLabel}: resumed existing Bunny video in ${(resumeMs / 1000).toFixed(1)}s (bunnyId=${resumedUpload.bunnyVideoId.slice(0, 8)}…, skipped re-render, encoding-wait läuft parallel weiter)`,
             durationMs: resumeMs,
           });
         } else {
@@ -756,25 +765,25 @@ export async function pipelineProcessor(
       );
       bunnyVideoId = upload.bunnyVideoId;
       videoUrl = upload.videoUrl;
-      // KRITISCH: `runVideoUpload` hat in EINEM atomaren UPDATE bereits
-      // bunnyVideoId / videoUrl / thumbnailUrl / videoWidth / videoHeight /
-      // videoOrientation / videoMp4Url auf den Lead geschrieben — analog zum
-      // WO-Pfad oben (line ~419). Hier KEIN weiterer Lead-Update mehr, sonst
-      // entsteht eine Race zwischen den zwei UPDATEs und der Custom-LP-
-      // Renderer kann zwischendurch eine inkonsistente Snapshot-Kombination
-      // sehen (z.B. neue videoUrl + alte videoMp4Url).
+      pendingVideoFinalize = upload.finalize;
+      // KRITISCH: der atomare Lead-Update mit videoUrl / thumbnailUrl /
+      // width / height / mp4Url passiert erst in `upload.finalize` (nach dem
+      // Encoding-Wait) — analog zum WO-Pfad oben (line ~419). Hier KEIN
+      // eigener Lead-Update, sonst entsteht eine Race zwischen zwei UPDATEs
+      // und der Custom-LP-Renderer kann eine inkonsistente Snapshot-
+      // Kombination sehen (z.B. neue videoUrl + alte videoMp4Url).
 
       // Bunny-Asset-Tracking für with-presentation (1 Asset pro Lead-
       // Video). Best-effort via Helper — Fehler werden gelogged, brechen
-      // aber die Pipeline nicht ab.
+      // aber die Pipeline nicht ab. width/height erst nach Encoding bekannt.
       await trackAndRefAsset({
         trackInput: {
           userId: data.userId,
           kind: "stream",
           bunnyId: upload.bunnyVideoId,
           cdnUrl: upload.videoUrl,
-          width: upload.width,
-          height: upload.height,
+          width: null,
+          height: null,
         },
         ownerType: "lead",
         ownerId: data.leadId,
@@ -786,7 +795,7 @@ export async function pipelineProcessor(
         leadId: data.leadId,
         level: "info",
         stage: "upload",
-        message: `${leadLabel}: video upload done in ${(uploadMs / 1000).toFixed(1)}s${upload.mp4Url ? " (mp4=ready)" : " (mp4=pending)"}`,
+        message: `${leadLabel}: video upload done in ${(uploadMs / 1000).toFixed(1)}s (Bunny-Encoding läuft parallel zu den restlichen Stages)`,
         durationMs: uploadMs,
       });
       } // ← Ende Fresh-Render-Pfad (!resumedUpload)
@@ -1713,6 +1722,30 @@ export async function pipelineProcessor(
           message: `${leadLabel}: envelope-render failed (${err instanceof Error ? err.message : "?"}) — Lead completes without envelope`,
         });
       }
+    }
+
+    // ── Stage 9b: Deferred Video-Finalize awaiten (M3) ───────────────
+    // Der Bunny-Encoding-Wait lief seit der Upload-Stage parallel. Erst
+    // JETZT (vor completed) darauf warten — schlägt er fehl oder timeouted
+    // (BunnyEncodingRetryableError nach 5 min), failed der Job und BullMQ
+    // retried; der Resume-Pfad pollt dann das existierende Video weiter.
+    if (pendingVideoFinalize) {
+      await setCurrentStage(data.leadId, "videoUpload");
+      const finalizeWaitStart = Date.now();
+      const finalized = await withStageTimeout(
+        () => pendingVideoFinalize!,
+        STAGE_TIMEOUTS_MS.videoUpload,
+        "videoUpload",
+      );
+      const extraWaitMs = Date.now() - finalizeWaitStart;
+      await insertPipelineEvent({
+        runId: data.runId,
+        leadId: data.leadId,
+        level: "info",
+        stage: "upload",
+        message: `${leadLabel}: Bunny-Encoding fertig (${(extraWaitMs / 1000).toFixed(1)}s zusätzlich gewartet)${finalized.mp4Url ? " (mp4=ready)" : " (mp4=pending)"}`,
+        durationMs: extraWaitMs,
+      });
     }
 
     // ── Stage 10: mark complete ──────────────────────────────────────
