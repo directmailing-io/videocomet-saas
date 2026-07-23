@@ -80,6 +80,8 @@ function buildTransport(config: SmtpImapConfig) {
     host: config.smtpHost,
     port: config.smtpPort,
     secure: config.smtpSecure,
+    // STARTTLS (587) darf nie unverschluesselt zurueckfallen
+    requireTLS: !config.smtpSecure,
     auth: { user: config.username, pass: config.password },
     connectionTimeout: 15_000,
     greetingTimeout: 15_000,

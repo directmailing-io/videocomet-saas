@@ -99,8 +99,8 @@ export function AddMailboxModal({
   // Stufe 2
   const [presetId, setPresetId] = React.useState<string>("manual");
   const [smtpHost, setSmtpHost] = React.useState("");
-  const [smtpPort, setSmtpPort] = React.useState("465");
-  const [smtpSecure, setSmtpSecure] = React.useState(true);
+  const [smtpPort, setSmtpPort] = React.useState("587");
+  const [smtpSecure, setSmtpSecure] = React.useState(false);
   const [imapHost, setImapHost] = React.useState("");
   const [imapPort, setImapPort] = React.useState("993");
   const [username, setUsername] = React.useState("");
@@ -118,8 +118,8 @@ export function AddMailboxModal({
       setDisplayName("");
       setPresetId("manual");
       setSmtpHost("");
-      setSmtpPort("465");
-      setSmtpSecure(true);
+      setSmtpPort("587");
+      setSmtpSecure(false);
       setImapHost("");
       setImapPort("993");
       setUsername("");
