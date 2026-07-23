@@ -87,7 +87,7 @@ async function buildAssetMap(
   for (const f of files) {
     if (f.path === entryHtml) continue;
     const remote = `${storagePath.replace(/\/+$/, "")}/${f.path}`;
-    const { buffer } = await readFile(remote);
+    const { buffer } = await readFile(remote, { retries: 1, timeoutMs: 10_000 });
     const ext = (f.path.split(".").pop() ?? "").toLowerCase();
     if (ext === "css" || ext === "js" || ext === "mjs") {
       // Plain-Text → kein base64, lesbarer + kürzer
@@ -187,7 +187,7 @@ export async function GET(
     // 1) index.html laden
     const entry = version.entryHtml || "index.html";
     const entryRemote = `${version.storagePath.replace(/\/+$/, "")}/${entry}`;
-    const { buffer: entryBuf } = await readFile(entryRemote);
+    const { buffer: entryBuf } = await readFile(entryRemote, { retries: 1, timeoutMs: 10_000 });
     let html = entryBuf.toString("utf-8");
 
     // 2) Alle anderen Assets als Data-URL-Map aufbauen.

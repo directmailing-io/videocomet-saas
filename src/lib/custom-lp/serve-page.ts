@@ -44,7 +44,9 @@ export async function fetchCustomLpObject(remotePath: string): Promise<Buffer> {
         AccessKey: env.readonlyKey || env.accessKey,
       },
     },
-    { retries: 1 }, // fast-fail; the visitor is waiting on this
+    // fast-fail; the visitor is waiting on this. Bunny kann bei kaputten
+    // Objekten 60s bis zum 504 brauchen — deshalb hartes Attempt-Timeout.
+    { retries: 1, timeoutMs: 10_000 },
   );
   const arr = await response.arrayBuffer();
   return Buffer.from(arr);

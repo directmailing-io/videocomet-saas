@@ -177,13 +177,24 @@ async function proxyBunnyAsset(args: {
   // We deliberately bypass `bunnyFetch` here so we can forward `Range`
   // (HTML5 video seeks use it) and avoid the helper's auto-throw on 4xx
   // (we want to translate 404 differently).
-  const upstream = await fetch(url, {
-    method: "GET",
-    headers: {
-      AccessKey: env.readonlyKey || env.accessKey,
-      ...(args.rangeHeader ? { Range: args.rangeHeader } : {}),
-    },
-  });
+  // Timeout gilt NUR bis zum Header-Empfang (Bunny braucht bei kaputten
+  // Objekten 60s bis zum 504) — danach abgebrochen wuerde Video-Streaming
+  // mitten im Body killen, deshalb Timer nach dem await loeschen.
+  const abort = new AbortController();
+  const headerTimer = setTimeout(() => abort.abort(), 10_000);
+  let upstream: Response;
+  try {
+    upstream = await fetch(url, {
+      method: "GET",
+      headers: {
+        AccessKey: env.readonlyKey || env.accessKey,
+        ...(args.rangeHeader ? { Range: args.rangeHeader } : {}),
+      },
+      signal: abort.signal,
+    });
+  } finally {
+    clearTimeout(headerTimer);
+  }
 
   if (upstream.status === 404) return errorResponse(404);
   if (upstream.status >= 400) {
