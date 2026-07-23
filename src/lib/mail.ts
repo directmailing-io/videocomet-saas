@@ -164,6 +164,168 @@ export async function sendPasswordResetMail(input: SendPasswordResetMailInput): 
   });
 }
 
+export interface SendMailboxDisconnectedMailInput {
+  to: string;
+  firstName?: string | null;
+  mailboxEmail: string;
+}
+
+/**
+ * Systemmail bei Postfach-Trennung (status ⇒ token_expired). Wird nur
+ * beim Status-Übergang verschickt (Aufrufer stellt Idempotenz sicher).
+ */
+export async function sendMailboxDisconnectedMail(
+  input: SendMailboxDisconnectedMailInput,
+): Promise<void> {
+  const settingsUrl = `${appUrl()}/einstellungen?tab=postfaecher`;
+  const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
+
+  const body = `
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:${BRAND_INK};line-height:1.25;">
+      Postfach-Verbindung unterbrochen
+    </h1>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${escapeHtml(greeting)}
+    </p>
+    <p style="margin:0 0 20px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      die Verbindung zu deinem Postfach <strong>${escapeHtml(input.mailboxEmail)}</strong> ist abgelaufen. Laufende E-Mail-Versände über dieses Postfach wurden pausiert. Verbinde das Postfach neu, um den Versand fortzusetzen.
+    </p>
+    <p style="margin:0 0 28px 0;">
+      <a href="${settingsUrl}" style="display:inline-block;background:${BRAND_ACCENT};color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;">
+        Postfach neu verbinden
+      </a>
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Funktioniert der Button nicht? Öffne diesen Link in deinem Browser:<br />
+      <a href="${settingsUrl}" style="color:${BRAND_ACCENT};text-decoration:underline;">${escapeHtml(settingsUrl)}</a>
+    </p>
+  `;
+
+  const html = shellHtml({
+    headline: "Postfach-Verbindung unterbrochen",
+    preheader: `Die Verbindung zu ${input.mailboxEmail} ist abgelaufen.`,
+    body,
+  });
+
+  const text = [
+    greeting,
+    "",
+    `die Verbindung zu deinem Postfach ${input.mailboxEmail} ist abgelaufen.`,
+    "Laufende E-Mail-Versände über dieses Postfach wurden pausiert.",
+    "Verbinde das Postfach neu, um den Versand fortzusetzen:",
+    "",
+    settingsUrl,
+    "",
+    "VIDEOCOMET",
+  ].join("\n");
+
+  const subject = "Postfach-Verbindung unterbrochen";
+
+  const resend = getResend();
+  if (!resend) {
+    console.log("[mail:dev] sendMailboxDisconnectedMail -> %s", input.to);
+    console.log("[mail:dev] subject: %s", subject);
+    return;
+  }
+
+  await resend.emails.send({
+    from: fromAddress(),
+    to: input.to,
+    subject,
+    html,
+    text,
+  });
+}
+
+export interface SendBlastCompletedMailInput {
+  to: string;
+  firstName?: string | null;
+  campaignName: string;
+  campaignId: string;
+  blastId: string;
+  sentCount: number;
+  totalCount: number;
+  repliedCount: number;
+  bouncedCount: number;
+}
+
+/** Systemmail nach Blast-Abschluss (running ⇒ completed) mit Kurz-Stats. */
+export async function sendBlastCompletedMail(
+  input: SendBlastCompletedMailInput,
+): Promise<void> {
+  const detailUrl = `${appUrl()}/kampagnen/${input.campaignId}/email/${input.blastId}`;
+  const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
+
+  const body = `
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:${BRAND_INK};line-height:1.25;">
+      Dein E-Mail-Versand ist abgeschlossen
+    </h1>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${escapeHtml(greeting)}
+    </p>
+    <p style="margin:0 0 20px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      der E-Mail-Versand für deine Kampagne <strong>${escapeHtml(input.campaignName)}</strong> ist fertig. Hier die wichtigsten Zahlen:
+    </p>
+    <div style="background:${BRAND_SOFT};border-radius:14px;padding:18px 20px;margin:0 0 24px 0;">
+      <p style="margin:0 0 6px 0;font-size:14px;line-height:1.6;color:${BRAND_INK};">
+        Versendet: <strong>${input.sentCount} von ${input.totalCount}</strong>
+      </p>
+      <p style="margin:0 0 6px 0;font-size:14px;line-height:1.6;color:${BRAND_INK};">
+        Antworten: <strong>${input.repliedCount}</strong>
+      </p>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND_INK};">
+        Bounces: <strong>${input.bouncedCount}</strong>
+      </p>
+    </div>
+    <p style="margin:0 0 28px 0;">
+      <a href="${detailUrl}" style="display:inline-block;background:${BRAND_ACCENT};color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;">
+        Auswertung ansehen
+      </a>
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Funktioniert der Button nicht? Öffne diesen Link in deinem Browser:<br />
+      <a href="${detailUrl}" style="color:${BRAND_ACCENT};text-decoration:underline;">${escapeHtml(detailUrl)}</a>
+    </p>
+  `;
+
+  const html = shellHtml({
+    headline: "Dein E-Mail-Versand ist abgeschlossen",
+    preheader: `${input.sentCount} von ${input.totalCount} E-Mails versendet.`,
+    body,
+  });
+
+  const text = [
+    greeting,
+    "",
+    `der E-Mail-Versand für deine Kampagne „${input.campaignName}" ist fertig.`,
+    "",
+    `Versendet: ${input.sentCount} von ${input.totalCount}`,
+    `Antworten: ${input.repliedCount}`,
+    `Bounces: ${input.bouncedCount}`,
+    "",
+    `Auswertung: ${detailUrl}`,
+    "",
+    "VIDEOCOMET",
+  ].join("\n");
+
+  const subject = "Dein E-Mail-Versand ist abgeschlossen";
+
+  const resend = getResend();
+  if (!resend) {
+    console.log("[mail:dev] sendBlastCompletedMail -> %s", input.to);
+    console.log("[mail:dev] subject: %s", subject);
+    return;
+  }
+
+  await resend.emails.send({
+    from: fromAddress(),
+    to: input.to,
+    subject,
+    html,
+    text,
+  });
+}
+
 export interface SendAdminInviteMailInput {
   to: string;
   firstName?: string | null;

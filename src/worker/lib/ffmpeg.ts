@@ -91,7 +91,7 @@ async function getRoundedRectMaskPng(opts: {
  *     "Invalid", "Conversion failed" or similar — those are the lines that
  *     actually explain what went wrong; the rest is encoder noise.
  */
-function runFfmpeg(rawArgs: string[]): Promise<void> {
+export function runFfmpeg(rawArgs: string[]): Promise<void> {
   // M2: libx264-Encodes bekommen -threads 3 injiziert und laufen durch die
   // globale Encode-Semaphore (max 4 parallel). Copy-/Remux-Ops unlimitiert.
   const args = capLibx264Threads(rawArgs);

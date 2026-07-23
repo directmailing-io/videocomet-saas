@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth-guard";
 import { getCampaign } from "@/lib/db/queries/campaigns";
 import { getRun } from "@/lib/db/queries/runs";
 import { listLeadsByRun, countByStatus } from "@/lib/db/queries/leads";
+import { getLeadEmailStatusMapForRun } from "@/lib/db/queries/email-blasts";
 import { getUserDomain } from "@/lib/db/queries/user-domains";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -43,9 +44,12 @@ export default async function RunDetailPage({
     redirect(`/kampagnen/${id}/runs/neu?resume=${runId}`);
   }
 
-  const [leads, counts] = await Promise.all([
+  const [leads, counts, emailStatusMap] = await Promise.all([
     listLeadsByRun(runId, user.id),
     countByStatus(runId, user.id),
+    getLeadEmailStatusMapForRun(runId, user.id).catch(
+      () => ({}) as Record<string, string>,
+    ),
   ]);
 
   // Custom-Domain-Hostname holen (alle Leads in einer Runde erben dieselbe
@@ -120,6 +124,7 @@ export default async function RunDetailPage({
             }}
             initialCounts={counts}
             initialLeads={initialLeads}
+            emailStatusMap={emailStatusMap}
           />
         </TabsContent>
 

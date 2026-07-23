@@ -1,7 +1,7 @@
 import type * as React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BarChart3, Plus } from "lucide-react";
+import { BarChart3, Mail, Plus, Send } from "lucide-react";
 import { eq } from "drizzle-orm";
 import { requireUser } from "@/lib/auth-guard";
 import { getCampaign } from "@/lib/db/queries/campaigns";
@@ -11,7 +11,9 @@ import {
   listAllCampaignLeads,
 } from "@/lib/db/queries/analytics-summary";
 import { db } from "@/lib/db";
-import { mediaItems } from "@/lib/db/schema";
+import { mediaItems, type EmailBlast } from "@/lib/db/schema";
+import { listCampaignEmailBlasts } from "@/lib/db/queries/email-blasts";
+import { listMailboxConnections } from "@/lib/db/queries/mailboxes";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -79,13 +81,26 @@ function fmtDuration(sec: number): string {
   return `${s}s`;
 }
 
+const CAMPAIGN_TAB_VALUES = new Set([
+  "runden",
+  "leads",
+  "email",
+  "aktivität",
+  "einstellungen",
+]);
+
 export default async function CampaignDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
   const { user } = await requireUser();
+  const sp = await searchParams;
+  const tabParam = typeof sp.tab === "string" ? sp.tab : "";
+  const defaultTab = CAMPAIGN_TAB_VALUES.has(tabParam) ? tabParam : "runden";
 
   let campaign;
   try {
@@ -94,11 +109,20 @@ export default async function CampaignDetailPage({
     notFound();
   }
 
-  // Parallel: Runden-Liste, Aggregate, Lead-Flat-Liste, Webcam-Media
-  const [runsWithCounts, deepDive, allLeads, webcamMedia] = await Promise.all([
+  // Parallel: Runden-Liste, Aggregate, Lead-Flat-Liste, Blasts, Postfächer, Webcam-Media
+  const [
+    runsWithCounts,
+    deepDive,
+    allLeads,
+    emailBlastList,
+    mailboxList,
+    webcamMedia,
+  ] = await Promise.all([
     listCampaignRunsWithCounts(campaign.id, user.id),
     getCampaignDeepDive(campaign.id, user.id).catch(() => null),
     listAllCampaignLeads(campaign.id, user.id),
+    listCampaignEmailBlasts(campaign.id, user.id).catch(() => []),
+    listMailboxConnections(user.id).catch(() => []),
     campaign.webcamMediaId
       ? db
           .select({
@@ -241,13 +265,16 @@ export default async function CampaignDetailPage({
         </div>
       </div>
 
-      <Tabs defaultValue="runden">
+      <Tabs defaultValue={defaultTab}>
         <TabsList>
           <TabsTrigger value="runden">
             Runden {initialRuns.length > 0 && `(${initialRuns.length})`}
           </TabsTrigger>
           <TabsTrigger value="leads">
             Leads {leadsCount > 0 && `(${leadsCount})`}
+          </TabsTrigger>
+          <TabsTrigger value="email">
+            E-Mail {emailBlastList.length > 0 && `(${emailBlastList.length})`}
           </TabsTrigger>
           <TabsTrigger value="aktivität">Aktivität</TabsTrigger>
           <TabsTrigger value="einstellungen">Einstellungen</TabsTrigger>
@@ -303,6 +330,17 @@ export default async function CampaignDetailPage({
               initialRuns={initialRuns}
             />
           )}
+        </TabsContent>
+
+        {/* ── E-Mail ─────────────────────────────────────────────── */}
+        <TabsContent value="email">
+          <EmailBlastsTab
+            campaignId={campaign.id}
+            blasts={emailBlastList}
+            hasConnectedMailbox={mailboxList.some(
+              (m) => m.status === "connected",
+            )}
+          />
         </TabsContent>
 
         {/* ── Aktivität ──────────────────────────────────────────── */}
@@ -469,6 +507,138 @@ export default async function CampaignDetailPage({
           </div>
         </TabsContent>
       </Tabs>
+    </>
+  );
+}
+
+const BLAST_STATUS_LABELS: Record<string, string> = {
+  draft: "Entwurf",
+  running: "Läuft",
+  paused: "Pausiert",
+  completed: "Abgeschlossen",
+  cancelled: "Abgebrochen",
+  failed: "Fehlgeschlagen",
+};
+
+function blastBadgeVariant(
+  status: string,
+): "brand" | "success" | "warn" | "danger" | "neutral" {
+  switch (status) {
+    case "running":
+      return "brand";
+    case "completed":
+      return "success";
+    case "paused":
+      return "warn";
+    case "cancelled":
+    case "failed":
+      return "danger";
+    default:
+      return "neutral";
+  }
+}
+
+/** Blast-Liste im Kampagnen-Tab „E-Mail" (Kontrakt 7.4). */
+function EmailBlastsTab({
+  campaignId,
+  blasts,
+  hasConnectedMailbox,
+}: {
+  campaignId: string;
+  blasts: EmailBlast[];
+  hasConnectedMailbox: boolean;
+}) {
+  if (blasts.length === 0) {
+    return (
+      <EmptyState
+        icon={<Mail />}
+        title="Noch kein E-Mail-Versand"
+        subtitle={
+          hasConnectedMailbox
+            ? "Versenden Sie personalisierte E-Mails mit Video-Vorschau über Ihr eigenes Postfach — schrittweise über mehrere Werktage."
+            : "Verbinden Sie zuerst ein E-Mail-Postfach in den Einstellungen, um personalisierte E-Mails über Ihre eigene Adresse zu versenden."
+        }
+        action={
+          hasConnectedMailbox ? (
+            <Button asChild iconLeft={<Send className="size-4" />}>
+              <Link href={`/kampagnen/${campaignId}/email/neu`}>
+                E-Mail-Versand starten
+              </Link>
+            </Button>
+          ) : (
+            <Button asChild variant="subtle">
+              <Link href="/einstellungen?tab=postfaecher">
+                Postfach verbinden
+              </Link>
+            </Button>
+          )
+        }
+      />
+    );
+  }
+
+  return (
+    <>
+      <div className="flex justify-end mb-4">
+        <Button asChild iconLeft={<Send className="size-4" />}>
+          <Link href={`/kampagnen/${campaignId}/email/neu`}>
+            E-Mail-Versand starten
+          </Link>
+        </Button>
+      </div>
+      <div className="bg-surface rounded-squircle-md shadow-card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-ink-muted">
+              <th className="px-6 py-2.5 font-semibold">Status</th>
+              <th className="px-4 py-2.5 font-semibold">Fortschritt</th>
+              <th className="px-4 py-2.5 font-semibold">Antworten</th>
+              <th className="px-4 py-2.5 font-semibold">Gestartet</th>
+              <th className="px-6 py-2.5" />
+            </tr>
+          </thead>
+          <tbody>
+            {blasts.map((b) => {
+              const sent = b.sentCount ?? 0;
+              const pct =
+                b.totalCount > 0
+                  ? Math.round((sent / b.totalCount) * 100)
+                  : 0;
+              return (
+                <tr
+                  key={b.id}
+                  className="border-b border-line-soft last:border-0 hover:bg-surface-soft transition-colors"
+                >
+                  <td className="px-6 py-3.5">
+                    <Badge variant={blastBadgeVariant(b.status)} dot>
+                      {BLAST_STATUS_LABELS[b.status] ?? b.status}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <span className="tabular-nums font-medium text-ink">
+                      {sent} / {b.totalCount}
+                    </span>
+                    <span className="text-ink-muted"> ({pct} %)</span>
+                  </td>
+                  <td className="px-4 py-3.5 tabular-nums text-ink">
+                    {b.repliedCount ?? 0}
+                  </td>
+                  <td className="px-4 py-3.5 text-ink-muted">
+                    {b.startedAt ? formatDate(b.startedAt) : "—"}
+                  </td>
+                  <td className="px-6 py-3.5 text-right">
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href={`/kampagnen/${campaignId}/email/${b.id}`}>
+                        Details
+                      </Link>
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

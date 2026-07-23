@@ -33,7 +33,12 @@ export type LeadEventKind =
   // ── Section-Visibility (Bridge feuert das schon, war historisch nicht
   //    in der Whitelist). Additive Aufnahme, damit der track-Endpoint
   //    nicht weiterhin 400 zurückgibt.
-  | "section_view";
+  | "section_view"
+  // ── E-Mail-Outreach (nur serverseitig erzeugt — bewusst NICHT in der
+  //    öffentlichen LEAD_EVENT_KINDS-Whitelist des track-Endpoints). ──
+  | "email_click"
+  | "email_unsubscribe"
+  | "email_reply";
 
 export const LEAD_EVENT_KINDS: readonly LeadEventKind[] = [
   "page_view",

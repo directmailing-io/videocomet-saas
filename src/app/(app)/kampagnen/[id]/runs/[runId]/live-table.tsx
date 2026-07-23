@@ -13,9 +13,15 @@ import {
   RotateCcw,
   Loader2,
   Mail as MailIcon,
+  MailCheck,
+  MailWarning,
+  MailX,
   MoreHorizontal,
+  MousePointerClick,
   Pencil,
+  Reply,
   Search,
+  UserX,
 } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useToast } from "@/components/ui/toaster";
@@ -131,6 +137,38 @@ export interface LiveTableProps {
   };
   initialCounts: Record<string, number>;
   initialLeads: LeadRow[];
+  /**
+   * Kompakter E-Mail-Outreach-Status pro Lead-ID. Leer/undefined ⇒ keine
+   * Blast-Messages für diese Runde ⇒ Spalte wird nicht gerendert.
+   */
+  emailStatusMap?: Record<string, string>;
+}
+
+const EMAIL_STATUS_META: Record<
+  string,
+  { label: string; className: string; Icon: React.ComponentType<{ className?: string }> }
+> = {
+  unsubscribed: { label: "Abgemeldet", className: "text-danger", Icon: UserX },
+  replied: { label: "Hat geantwortet", className: "text-ok", Icon: Reply },
+  bounced: { label: "Bounce", className: "text-danger", Icon: MailX },
+  clicked: { label: "Geklickt", className: "text-brand-deep", Icon: MousePointerClick },
+  sent: { label: "E-Mail versendet", className: "text-ok", Icon: MailCheck },
+  failed: { label: "Versand fehlgeschlagen", className: "text-danger", Icon: MailWarning },
+  skipped: { label: "Übersprungen", className: "text-ink-muted", Icon: MailX },
+  scheduled: { label: "E-Mail geplant", className: "text-ink-muted", Icon: MailIcon },
+};
+
+function EmailStatusCell({ status }: { status: string | undefined }) {
+  if (!status) return <span className="text-ink-muted text-xs">—</span>;
+  const meta = EMAIL_STATUS_META[status];
+  if (!meta) return <span className="text-ink-muted text-xs">—</span>;
+  const { Icon } = meta;
+  return (
+    <span title={meta.label} className={cn("inline-flex", meta.className)}>
+      <Icon className="size-4" />
+      <span className="sr-only">{meta.label}</span>
+    </span>
+  );
 }
 
 function statusVariant(s: string): "brand" | "success" | "warn" | "danger" | "neutral" {
@@ -193,7 +231,10 @@ export function LiveTable({
   initialRun,
   initialCounts,
   initialLeads,
+  emailStatusMap,
 }: LiveTableProps) {
+  const emailColumnActive =
+    !!emailStatusMap && Object.keys(emailStatusMap).length > 0;
   const [runStatus, setRunStatus] = React.useState(initialRun.status);
   const [startedAt, setStartedAt] = React.useState<string | null>(
     initialRun.startedAt,
@@ -1022,6 +1063,7 @@ export function LiveTable({
               <TableHead>E-Mail</TableHead>
               <TableHead>Status</TableHead>
               {abActive && <TableHead>Brief</TableHead>}
+              {emailColumnActive && <TableHead>E-Mail-Status</TableHead>}
               <TableHead>Landingpage</TableHead>
               <TableHead>PDF</TableHead>
               <TableHead>Umschlag</TableHead>
@@ -1032,7 +1074,7 @@ export function LiveTable({
             {filteredLeads.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={abActive ? 9 : 8}
+                  colSpan={8 + (abActive ? 1 : 0) + (emailColumnActive ? 1 : 0)}
                   className="text-center text-ink-muted py-8"
                 >
                   {leads.length === 0
@@ -1074,6 +1116,11 @@ export function LiveTable({
                       ) : (
                         <span className="text-ink-muted text-xs">—</span>
                       )}
+                    </TableCell>
+                  )}
+                  {emailColumnActive && (
+                    <TableCell>
+                      <EmailStatusCell status={emailStatusMap?.[l.id]} />
                     </TableCell>
                   )}
                   <TableCell onClick={stopRowClick}>

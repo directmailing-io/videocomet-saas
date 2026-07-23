@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   LayoutDashboard,
   Users,
+  Send,
   ServerCog,
   Settings,
   LogOut,
@@ -35,6 +36,7 @@ export type AdminNavKey =
   | "dashboard"
   | "users"
   | "domains"
+  | "email"
   | "system"
   | "settings";
 
@@ -64,6 +66,7 @@ const NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { key: "users", label: "User-Verwaltung", href: "/admin/users", icon: Users },
   { key: "domains", label: "Domains", href: "/admin/domains", icon: Globe },
+  { key: "email", label: "E-Mail-Outreach", href: "/admin/email-outreach", icon: Send },
   { key: "system", label: "System", href: "/admin/system", icon: ServerCog },
   { key: "settings", label: "Einstellungen", href: "/admin/settings", icon: Settings },
 ];

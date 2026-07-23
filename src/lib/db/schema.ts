@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, smallint, jsonb, pgEnum, index, unique, uniqueIndex, bigserial, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, boolean, integer, smallint, jsonb, pgEnum, index, unique, uniqueIndex, bigserial, date, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
 
@@ -50,6 +50,8 @@ export const creditTxKindEnum = pgEnum("credit_tx_kind", [
   "video_charge",    // Verbrauch fuer Video-Generation (negative Delta)
   "admin_adjust",    // Manuelle Korrektur (Refund/Goodwill, +/-)
   "promo_grant",     // Promo-Code / Welcome-Bonus (positive Delta)
+  "email_charge",    // E-Mail-Blast-Start (Migration 0038): 1 Credit = 10 Mails, aufgerundet
+  "email_refund",    // Anteiliger Refund unversendeter/gebouncter Mails (Migration 0038)
 ]);
 
 // ── Users (Admins + App-Users in einer Tabelle, Rolle bestimmt Zugang) ──────
@@ -258,6 +260,13 @@ export const campaigns = pgTable("campaigns", {
    * erkannt. NULL/leer = nur built-in Aliase aktiv.
    */
   pageUrlAliases: text("page_url_aliases"),
+
+  /**
+   * E-Mail-Outreach (Migration 0038): GIF-Ausschnitt aus dem Lead-Video
+   * fuer die Mail-Vorschau. durationSec 2-4, default 3. NULL = noch nicht
+   * konfiguriert.
+   */
+  emailGifConfig: jsonb("email_gif_config").$type<CampaignEmailGifConfig | null>(),
 
   /**
    * Optional: Umschlag-Vorlage die pro Lead als personalisiertes PDF
@@ -516,6 +525,13 @@ export const leads = pgTable("leads", {
   /** Umschlag-PDF pro Lead (Migration 0031). */
   envelopePdfUrl: text("envelope_pdf_url"),
   envelopePdfExpiresAt: timestamp("envelope_pdf_expires_at", { withTimezone: true }),
+
+  /**
+   * E-Mail-Outreach-GIF (Migration 0038). Hash = sha1(videoContentHash +
+   * JSON(gifConfig)) — identischer Hash beim Re-Encode ⇒ Skip.
+   */
+  emailGifUrl: text("email_gif_url"),
+  emailGifHash: text("email_gif_hash"),
 
   // ── Video-Dimensionen (Migration 0015) ─────────────────────────────────
   // Vom Bunny-Resolver berechnet & gecached, damit Player + PDF-Thumbnail-
@@ -1414,3 +1430,220 @@ export type RemovedDetail =
  *   ohne Paket-A-Abhängigkeit typecheckt.
  */
 export type DedupeConfig = Record<string, unknown>;
+
+// ── E-Mail-Outreach (Migration 0038) ────────────────────────────────────────
+//
+// Versand ausschliesslich ueber das eigene Postfach des Kunden (M365 via
+// Graph API oder generisches SMTP/IMAP). Resend bleibt NUR fuer Systemmails.
+// Kontrakt: docs/email-outreach-implementation.md — Namen sind FIX.
+
+/** GIF-Ausschnitt fuer E-Mail-Vorschau (`campaigns.email_gif_config`). */
+export interface CampaignEmailGifConfig {
+  startSec: number;
+  /** 2–4 Sekunden, default 3. */
+  durationSec: number;
+}
+
+/** Sendefenster in Kundenzeitzone. days: ISO-Wochentage 1 (Mo) – 7 (So). */
+export interface MailboxSendWindow {
+  days: number[];
+  startHour: number;
+  endHour: number;
+}
+
+/** Rueckkanal-Cursor. m365: deltaLink; smtp: uidValidity + lastSeenUid. */
+export interface MailboxSyncState {
+  deltaLink?: string;
+  uidValidity?: number;
+  lastSeenUid?: number;
+  /** Warmup-Zaehler: aktive Sendetage in der aktuellen Stage. */
+  warmup?: { daysInStage: number; lastSendDate: string };
+}
+
+export type MailboxProvider = "m365" | "smtp";
+export type MailboxStatus = "connected" | "token_expired" | "disabled";
+
+export const mailboxConnections = pgTable("mailbox_connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").$type<MailboxProvider>().notNull(),
+  /** Immer lowercase persistiert. */
+  emailAddress: text("email_address").notNull(),
+  displayName: text("display_name"),
+  status: text("status").$type<MailboxStatus>().notNull().default("connected"),
+  /**
+   * m365: MS rotiert Refresh-Tokens — nach JEDEM Refresh muss das neue
+   * Token hier neu persistiert werden (siehe msgraph/client.ts).
+   */
+  refreshTokenEncrypted: text("refresh_token_encrypted"),
+  smtpHost: text("smtp_host"),
+  smtpPort: integer("smtp_port"),
+  /** true = 465 implizit TLS, false = 587 STARTTLS. */
+  smtpSecure: boolean("smtp_secure"),
+  imapHost: text("imap_host"),
+  imapPort: integer("imap_port").default(993),
+  username: text("username"),
+  passwordEncrypted: text("password_encrypted"),
+  /** Explizites Opt-in (UI „Erweitert") — sonst strikte TLS-Pruefung. */
+  allowInvalidTls: boolean("allow_invalid_tls").notNull().default(false),
+  /** Hard-Max 50 — nicht vom User erhoehbar. */
+  dailyCap: integer("daily_cap").notNull().default(50),
+  /** Effektives Tageslimit: Stage 0 ⇒ 20, 1 ⇒ 35, ≥2 ⇒ min(dailyCap, 50). */
+  warmupStage: integer("warmup_stage").notNull().default(0),
+  sentToday: integer("sent_today").notNull().default(0),
+  /** Reset per Datumsvergleich in Kundenzeitzone. */
+  sentTodayDate: date("sent_today_date"),
+  nextEligibleAt: timestamp("next_eligible_at", { withTimezone: true }),
+  timezone: text("timezone").notNull().default("Europe/Berlin"),
+  sendWindow: jsonb("send_window")
+    .$type<MailboxSendWindow>()
+    .notNull()
+    .default(sql`'{"days":[1,2,3,4,5],"startHour":8,"endHour":17}'::jsonb`),
+  syncState: jsonb("sync_state").$type<MailboxSyncState | null>(),
+  lastError: text("last_error"),
+  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("mailbox_connections_user_idx").on(t.userId),
+  userEmailUq: unique("mailbox_connections_user_email_uq").on(t.userId, t.emailAddress),
+}));
+
+export type MailboxConnection = typeof mailboxConnections.$inferSelect;
+export type NewMailboxConnection = typeof mailboxConnections.$inferInsert;
+
+export const emailTemplates = pgTable("email_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  /** Mit Platzhaltern ({{key}}, {{key|fallback}}). */
+  subject: text("subject").notNull(),
+  /** TipTap-Dokument. */
+  bodyJson: jsonb("body_json").$type<unknown>(),
+  bodyHtml: text("body_html").notNull(),
+  ctaLabel: text("cta_label").notNull().default("Video ansehen"),
+  ctaUrl: text("cta_url").notNull().default("@system:pageUrl"),
+  signatureHtml: text("signature_html"),
+  /** Pflichtfeld — ohne Impressum kein Speichern-als-fertig. */
+  impressumHtml: text("impressum_html").notNull(),
+  /** Soft-Delete (Muster envelopeTemplates). */
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("email_templates_user_idx").on(t.userId).where(sql`${t.deletedAt} IS NULL`),
+}));
+
+export type EmailTemplate = typeof emailTemplates.$inferSelect;
+export type NewEmailTemplate = typeof emailTemplates.$inferInsert;
+
+export type EmailBlastStatus =
+  | "draft"
+  | "running"
+  | "paused"
+  | "completed"
+  | "cancelled"
+  | "failed";
+
+/** Beim Start eingefrorene Vorlage — spaetere Template-Edits wirken nicht. */
+export interface EmailBlastContentSnapshot {
+  subject: string;
+  bodyHtml: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  signatureHtml?: string | null;
+  impressumHtml: string;
+  gifConfig?: CampaignEmailGifConfig | null;
+}
+
+/** Protokollierter Selbstbestaetigungs-Screen (Rechts-/Schutzpaket). */
+export interface EmailBlastConfirmationLog {
+  confirmedAt: string;
+  textVersion: string;
+  userId: string;
+}
+
+export const emailBlasts = pgTable("email_blasts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  campaignId: uuid("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  runId: uuid("run_id").references(() => runs.id, { onDelete: "set null" }),
+  mailboxConnectionId: uuid("mailbox_connection_id").notNull().references(() => mailboxConnections.id),
+  templateId: uuid("template_id").notNull().references(() => emailTemplates.id),
+  status: text("status").$type<EmailBlastStatus>().notNull().default("draft"),
+  contentSnapshot: jsonb("content_snapshot").$type<EmailBlastContentSnapshot>().notNull(),
+  totalCount: integer("total_count").notNull().default(0),
+  sentCount: integer("sent_count").default(0),
+  failedCount: integer("failed_count").default(0),
+  skippedCount: integer("skipped_count").default(0),
+  bouncedCount: integer("bounced_count").default(0),
+  repliedCount: integer("replied_count").default(0),
+  /** 1 Credit = 10 Mails, aufgerundet. Charge beim Start. */
+  creditsCharged: integer("credits_charged").notNull().default(0),
+  confirmationLog: jsonb("confirmation_log").$type<EmailBlastConfirmationLog | null>(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("email_blasts_user_idx").on(t.userId),
+  campaignIdx: index("email_blasts_campaign_idx").on(t.campaignId),
+  mailboxStatusIdx: index("email_blasts_mailbox_status_idx").on(t.mailboxConnectionId, t.status),
+}));
+
+export type EmailBlast = typeof emailBlasts.$inferSelect;
+export type NewEmailBlast = typeof emailBlasts.$inferInsert;
+
+export type EmailMessageStatus = "scheduled" | "sent" | "failed" | "skipped" | "bounced";
+
+export const emailMessages = pgTable("email_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  blastId: uuid("blast_id").notNull().references(() => emailBlasts.id, { onDelete: "cascade" }),
+  leadId: uuid("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  mailboxConnectionId: uuid("mailbox_connection_id").notNull().references(() => mailboxConnections.id),
+  toEmail: text("to_email").notNull(),
+  status: text("status").$type<EmailMessageStatus>().notNull().default("scheduled"),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  /**
+   * EIGENE Message-ID (`<uuid@videocomet.de>`), VOR dem Versand generiert —
+   * deterministische NDR-Korrelation auch wenn der Provider die ID nicht
+   * zurueckgibt.
+   */
+  internetMessageId: text("internet_message_id"),
+  graphMessageId: text("graph_message_id"),
+  /** m365 Reply-Match. */
+  conversationId: text("conversation_id"),
+  /** random 32 hex — fuer /abmelden/[token] + List-Unsubscribe. */
+  unsubscribeToken: text("unsubscribe_token").notNull().unique(),
+  repliedAt: timestamp("replied_at", { withTimezone: true }),
+  unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+  skipReason: text("skip_reason"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  blastLeadUq: unique("email_messages_blast_lead_uq").on(t.blastId, t.leadId),
+  blastStatusIdx: index("email_messages_blast_status_idx").on(t.blastId, t.status),
+  leadIdx: index("email_messages_lead_idx").on(t.leadId),
+  internetMessageIdIdx: index("email_messages_internet_message_id_idx").on(t.internetMessageId),
+}));
+
+export type EmailMessage = typeof emailMessages.$inferSelect;
+export type NewEmailMessage = typeof emailMessages.$inferInsert;
+
+export type EmailSuppressionReason = "unsubscribe" | "bounce" | "manual";
+
+export const emailSuppressions = pgTable("email_suppressions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** Immer lowercase persistiert. */
+  email: text("email").notNull(),
+  reason: text("reason").$type<EmailSuppressionReason>().notNull(),
+  sourceMessageId: uuid("source_message_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userEmailUq: unique("email_suppressions_user_email_uq").on(t.userId, t.email),
+}));
+
+export type EmailSuppression = typeof emailSuppressions.$inferSelect;
+export type NewEmailSuppression = typeof emailSuppressions.$inferInsert;

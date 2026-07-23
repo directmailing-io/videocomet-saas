@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { runs } from "@/lib/db/schema";
@@ -130,6 +130,9 @@ export async function PUT(
         { envelopeTemplateId: run.envelopeTemplateId ?? null },
       );
       const allowed = new Set(detected.map((p) => p.key));
+      // Reserviertes Outreach-Feld: `email` ist kein Template-Platzhalter,
+      // sondern speist leads.normalizedEmail — nie als unknown droppen.
+      allowed.add("email");
       const unknown = Object.keys(effective).filter((k) => !allowed.has(k));
       if (unknown.length > 0) {
         // eslint-disable-next-line no-console
@@ -165,6 +168,25 @@ export async function PUT(
       status: "mapping",
     })
     .where(and(eq(runs.id, params.id), eq(runs.userId, auth.user.id)));
+
+  // Backfill fuer bereits materialisierte Leads: die generierte Spalte
+  // `normalizedEmail` liest nur die festen Keys email/Email/E-Mail/eMail.
+  // Ist eine andere CSV-Spalte gemappt, kopieren wir sie nach data.email
+  // (Leads behalten die Original-Spalten in `data`, siehe start-Route).
+  const emailColumn = effective.email?.column;
+  if (
+    emailColumn &&
+    !emailColumn.startsWith("@system:") &&
+    !["email", "Email", "E-Mail", "eMail"].includes(emailColumn)
+  ) {
+    await db.execute(sql`
+      UPDATE leads
+      SET data = jsonb_set(data, '{email}', data -> ${emailColumn})
+      WHERE run_id = ${params.id}
+        AND data ? ${emailColumn}
+        AND COALESCE(data ->> ${emailColumn}, '') <> ''
+    `);
+  }
 
   return NextResponse.json({ ok: true });
 }

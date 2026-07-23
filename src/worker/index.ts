@@ -20,6 +20,8 @@ import { and, eq, lt, inArray, sql } from "drizzle-orm";
 import { pipelineWorker, pipelineQueue, getRedisConnection } from "./queue";
 import { screenshotWorker, type ScreenshotJobData } from "./screenshot-queue";
 import { crmSyncWorker, type CrmSyncJob } from "./crm-queue";
+import { emailGifWorker, type EmailGifJobData } from "./email-gif-queue";
+import { processEmailGifJob } from "./jobs/email-gif";
 import { urlPreviewWorker } from "./url-preview-queue";
 import { processUrlPreviewJob } from "./processors/url-preview";
 import { refreshStalePreviews } from "@/lib/media-urls/stale-refresh";
@@ -37,6 +39,8 @@ import { startDomainVerifier } from "./jobs/domain-verifier";
 import { startDomainMonitor } from "./jobs/domain-monitor";
 import { startBunnyPurger } from "./processors/bunny-purge";
 import { startBunnyLibraryReconciler } from "./processors/bunny-library-reconcile";
+import { recoverStaleEmailClaims, startEmailDrip } from "./jobs/email-drip";
+import { startMailboxSync } from "./jobs/mailbox-sync";
 import {
   startHeartbeat,
   stopHeartbeat,
@@ -522,6 +526,21 @@ async function main(): Promise<void> {
   // bunny_assets-Register gelandet sind (abgebrochene Pipelines, Alt-Bestand).
   const stopBunnyReconciler = startBunnyLibraryReconciler();
 
+  // E-Mail-Outreach: vor dem Start des Drip-Loops verwaiste Claims aus
+  // einem Crash (claimed_at gesetzt, nie versendet) als failed abräumen,
+  // damit die Blast-Zähler stimmen und nichts hängen bleibt.
+  await recoverStaleEmailClaims().catch((err) => {
+    log("error", "initial email stale-claim recovery failed:", err);
+  });
+
+  // Drip-Engine: 60s-Loop, versendet pro Tick max. 1 Mail pro Postfach
+  // (Sendefenster + Warmup + Tageslimit), Claim via SKIP LOCKED.
+  const stopEmailDrip = startEmailDrip();
+
+  // Rückkanal-Sync: 5-min-Loop, pollt verbundene Postfächer (Graph-Delta /
+  // IMAP-UID) auf Bounces und Replies.
+  const stopMailboxSync = startMailboxSync();
+
   // Global cap — muss über der Summe der per-stage timeouts in
   // processors/pipeline.ts liegen. Worst case (Docs-native-Kampagne):
   // videoRender 300 + videoCompress 90 + videoUpload 330 (inkl. Bunny-
@@ -683,6 +702,38 @@ async function main(): Promise<void> {
     log("error", "webhook worker error:", err.message);
   });
 
+  // Outreach-GIF-Worker (E-Mail-Feature, Step 2). Encodiert pro Lead den
+  // GIF-Ausschnitt aus dem Lead-Video (ffmpeg via runFfmpeg-Wrapper) und
+  // laedt ihn nach Bunny Storage. Concurrency default 2
+  // (EMAIL_GIF_WORKER_CONCURRENCY) — palettegen ist CPU-lastig.
+  const emailGifW = emailGifWorker(async (job: Job<EmailGifJobData>) => {
+    incrementInFlight();
+    try {
+      log("info", `email-gif start job=${job.id} lead=${job.data.leadId}`);
+      const result = await processEmailGifJob(job);
+      log(
+        "info",
+        `email-gif done  job=${job.id} lead=${job.data.leadId} status=${result.status}`,
+      );
+      return result;
+    } catch (err) {
+      log(
+        "error",
+        `email-gif fail  job=${job?.id} lead=${job?.data?.leadId}`,
+        err,
+      );
+      throw err;
+    } finally {
+      decrementInFlight();
+    }
+  });
+  emailGifW.on("failed", (job, err) => {
+    log("error", `email-gif job ${job?.id} failed:`, err?.message);
+  });
+  emailGifW.on("error", (err) => {
+    log("error", "email-gif worker error:", err.message);
+  });
+
   // URL-Mediathek-Preview-Worker. Eigene Queue, eigene Concurrency (4 default).
   // Trennt kurzlebige Puppeteer-Screenshots von den langlaufenden Render-Jobs.
   const urlPreviewW = urlPreviewWorker(async (job) => {
@@ -774,6 +825,11 @@ async function main(): Promise<void> {
       log("error", "webhook worker close failed:", err);
     }
     try {
+      await emailGifW.close();
+    } catch (err) {
+      log("error", "email-gif worker close failed:", err);
+    }
+    try {
       await urlPreviewW.close();
     } catch (err) {
       log("error", "url-preview worker close failed:", err);
@@ -802,6 +858,16 @@ async function main(): Promise<void> {
       stopBunnyReconciler();
     } catch (err) {
       log("error", "bunny reconciler stop failed:", err);
+    }
+    try {
+      stopEmailDrip();
+    } catch (err) {
+      log("error", "email drip stop failed:", err);
+    }
+    try {
+      stopMailboxSync();
+    } catch (err) {
+      log("error", "mailbox sync stop failed:", err);
     }
     if (preflightWorkerShutdown) {
       try {

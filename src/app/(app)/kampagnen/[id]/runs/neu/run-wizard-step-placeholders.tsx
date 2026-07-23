@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  AtSign,
   Check,
   History,
   Loader2,
@@ -254,7 +255,17 @@ export function RunWizardStepPlaceholders({
         setSuggestedMapping(data.suggestedMapping ?? {});
         setReusedFromPrevious(Boolean(data.reusedFromPreviousRun));
         // Vorbelegen mit suggestedMapping — der User kann jederzeit überschreiben.
-        setMapping(data.suggestedMapping ?? {});
+        const sm = data.suggestedMapping ?? {};
+        // Auto-Vorschlag für die reservierte E-Mail-Spalte (Outreach):
+        // erste CSV-Spalte, die nach E-Mail aussieht.
+        if (!sm.email?.column) {
+          const guess = (data.csvColumns ?? []).find((c) => /e-?mail/i.test(c));
+          if (guess) {
+            setMapping({ ...sm, email: { column: guess } });
+            return;
+          }
+        }
+        setMapping(sm);
       } catch (err) {
         if (cancelled) return;
         // Bei Netzwerk-/Parse-Fehler → Fallback statt Block.
@@ -548,6 +559,58 @@ export function RunWizardStepPlaceholders({
             </div>
           </CardContent>
         )}
+      </Card>
+
+      {/* ── E-Mail-Spalte (optional, Outreach) ─────────────────────── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className="size-9 rounded-full bg-brand-soft text-brand-deep flex items-center justify-center">
+              <AtSign className="size-4" />
+            </div>
+            <div>
+              <CardTitle className="text-base">
+                E-Mail-Spalte (optional)
+              </CardTitle>
+              <p className="text-xs text-ink-muted mt-0.5">
+                Enthält deine Liste E-Mail-Adressen? Dann kannst Du später
+                E-Mail-Outreach für diese Leads starten.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="flex items-center gap-3">
+            <Label htmlFor="email-col-select" className="text-xs whitespace-nowrap">
+              Spalte
+            </Label>
+            <Select
+              value={mapping.email?.column ?? NO_COLUMN}
+              onValueChange={(v) =>
+                setMapping((m) => {
+                  if (v === NO_COLUMN) {
+                    const next = { ...m };
+                    delete next.email;
+                    return next;
+                  }
+                  return { ...m, email: { column: v } };
+                })
+              }
+            >
+              <SelectTrigger id="email-col-select" className="max-w-[420px]">
+                <SelectValue placeholder="— keine —" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_COLUMN}>— keine —</SelectItem>
+                {csvColumns.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
       </Card>
 
       {/* ── Mapping-Card: Progress + Banner + Platzhalter-Liste ────── */}

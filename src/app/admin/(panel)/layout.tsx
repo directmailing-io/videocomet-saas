@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/toaster";
 function navKeyFromPathname(pathname: string | null): AdminNavKey {
   if (!pathname) return "dashboard";
   if (pathname.startsWith("/admin/domains")) return "domains";
+  if (pathname.startsWith("/admin/email-outreach")) return "email";
   if (pathname.startsWith("/admin/users")) return "users";
   if (pathname.startsWith("/admin/system")) return "system";
   if (pathname.startsWith("/admin/settings") || pathname.startsWith("/admin/einstellungen")) {
