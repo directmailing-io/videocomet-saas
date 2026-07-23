@@ -12,6 +12,8 @@ import { db } from "@/lib/db";
 import {
   emailTemplates,
   type EmailTemplate,
+  type EmailTemplateFooterMode,
+  type EmailTemplateFormat,
 } from "@/lib/db/schema";
 
 function htmlHasText(html: string | null | undefined): boolean {
@@ -24,14 +26,18 @@ function htmlHasText(html: string | null | undefined): boolean {
   );
 }
 
-/** Blast-Fähigkeit: Impressum ist Pflicht, Betreff + Text müssen stehen. */
+/**
+ * Blast-Fähigkeit: Betreff + Text müssen stehen; Impressum ist nur bei
+ * footerMode 'complete' Pflicht (Migration 0039 — bei 'unsubscribe'/'none'
+ * verantwortet der User die rechtliche Einordnung selbst).
+ */
 export function isEmailTemplateComplete(
-  t: Pick<EmailTemplate, "subject" | "bodyHtml" | "impressumHtml">,
+  t: Pick<EmailTemplate, "subject" | "bodyHtml" | "impressumHtml" | "footerMode">,
 ): boolean {
   return (
     t.subject.trim().length > 0 &&
     htmlHasText(t.bodyHtml) &&
-    htmlHasText(t.impressumHtml)
+    (t.footerMode !== "complete" || htmlHasText(t.impressumHtml))
   );
 }
 
@@ -46,6 +52,8 @@ export function serializeEmailTemplate(t: EmailTemplate) {
     ctaUrl: t.ctaUrl,
     signatureHtml: t.signatureHtml,
     impressumHtml: t.impressumHtml,
+    format: t.format,
+    footerMode: t.footerMode,
     isComplete: isEmailTemplateComplete(t),
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
@@ -114,6 +122,8 @@ export interface UpdateEmailTemplateInput {
   ctaUrl?: string;
   signatureHtml?: string | null;
   impressumHtml?: string;
+  format?: EmailTemplateFormat;
+  footerMode?: EmailTemplateFooterMode;
 }
 
 export async function updateEmailTemplate(
@@ -132,6 +142,8 @@ export async function updateEmailTemplate(
     update.signatureHtml = patch.signatureHtml;
   if (patch.impressumHtml !== undefined)
     update.impressumHtml = patch.impressumHtml;
+  if (patch.format !== undefined) update.format = patch.format;
+  if (patch.footerMode !== undefined) update.footerMode = patch.footerMode;
 
   const [row] = await db
     .update(emailTemplates)

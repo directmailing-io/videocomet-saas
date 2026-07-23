@@ -105,7 +105,7 @@ export async function POST(
   }
   if (!isEmailTemplateComplete(template)) {
     return NextResponse.json(
-      { error: "Die Vorlage ist unvollständig (Betreff, Text und Impressum sind Pflicht)." },
+      { error: "Die Vorlage ist unvollständig (Betreff und Text sind Pflicht; Impressum bei kompletter Signatur)." },
       { status: 400 },
     );
   }

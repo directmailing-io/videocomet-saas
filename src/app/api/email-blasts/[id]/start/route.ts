@@ -69,7 +69,7 @@ export async function POST(
       },
       template_incomplete: {
         status: 400,
-        message: "Die Vorlage ist unvollständig (Betreff, Text und Impressum sind Pflicht).",
+        message: "Die Vorlage ist unvollständig (Betreff und Text sind Pflicht; Impressum bei kompletter Signatur).",
       },
       no_recipients: {
         status: 400,

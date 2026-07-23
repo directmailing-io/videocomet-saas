@@ -5,7 +5,10 @@ import { requireUser } from "@/lib/auth-guard";
 import { getCampaign } from "@/lib/db/queries/campaigns";
 import { getRun } from "@/lib/db/queries/runs";
 import { listLeadsByRun, countByStatus } from "@/lib/db/queries/leads";
-import { getLeadEmailStatusMapForRun } from "@/lib/db/queries/email-blasts";
+import {
+  getLeadEmailStatusMapForRun,
+  isValidEmail,
+} from "@/lib/db/queries/email-blasts";
 import { getUserDomain } from "@/lib/db/queries/user-domains";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -61,6 +64,12 @@ export default async function RunDetailPage({
     const d = await getUserDomain(campaign.domainId, user.id).catch(() => null);
     if (d && d.status === "active") customHostname = d.hostname;
   }
+
+  // CTA "E-Mails versenden" nur zeigen, wenn mindestens ein Lead der Runde
+  // eine (valide) E-Mail-Adresse hat — sonst gäbe es nichts zu versenden.
+  const hasEmailLeads = leads.some((l) =>
+    isValidEmail((l.normalizedEmail ?? l.data?.email ?? "").trim().toLowerCase()),
+  );
 
   const initialLeads = leads.map((l) => ({
     id: l.id,
@@ -125,6 +134,7 @@ export default async function RunDetailPage({
             initialCounts={counts}
             initialLeads={initialLeads}
             emailStatusMap={emailStatusMap}
+            hasEmailLeads={hasEmailLeads}
           />
         </TabsContent>
 

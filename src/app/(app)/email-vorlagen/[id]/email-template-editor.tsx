@@ -34,6 +34,9 @@ import {
 import { extractFirstCtaNode, renderOutreachEmail } from "@/lib/email/render";
 import { cn } from "@/lib/utils";
 
+type TemplateFormat = "branded" | "personal";
+type TemplateFooterMode = "complete" | "unsubscribe" | "none";
+
 interface TemplateData {
   id: string;
   name: string;
@@ -44,6 +47,8 @@ interface TemplateData {
   ctaUrl: string | null;
   signatureHtml: string | null;
   impressumHtml: string;
+  format: TemplateFormat;
+  footerMode: TemplateFooterMode;
   isComplete: boolean;
 }
 
@@ -86,6 +91,65 @@ const SPAM_STYLE: Record<
   orange: { badge: "warn", label: "Erhöhtes Spam-Risiko" },
   red: { badge: "danger", label: "Hohes Spam-Risiko" },
 };
+
+const FORMAT_OPTIONS: Array<{
+  value: TemplateFormat;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "branded",
+    label: "Gebrandet",
+    description: "Gestaltete E-Mail mit Button & Layout",
+  },
+  {
+    value: "personal",
+    label: "Persönlich",
+    description: "Wirkt wie eine persönlich getippte E-Mail",
+  },
+];
+
+const FOOTER_OPTIONS: Array<{
+  value: TemplateFooterMode;
+  label: string;
+}> = [
+  { value: "complete", label: "Komplett (Abmelden + Impressum)" },
+  { value: "unsubscribe", label: "Nur Abmelde-Link" },
+  { value: "none", label: "Keine Signatur" },
+];
+
+/** Segmented Radio-Pills im bestehenden Stil (vgl. Platzhalter-Pills). */
+function OptionPills<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<{ value: T; label: string }>;
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" role="radiogroup">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          role="radio"
+          aria-checked={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+            value === o.value
+              ? "bg-ink text-white"
+              : "bg-surface-soft text-ink hover:bg-line",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function EmailTemplateEditor({ templateId }: { templateId: string }) {
   const router = useRouter();
@@ -159,6 +223,8 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
           bodyHtml: tpl.bodyHtml,
           signatureHtml: tpl.signatureHtml,
           impressumHtml: tpl.impressumHtml,
+          format: tpl.format,
+          footerMode: tpl.footerMode,
         },
         leadData: SAMPLE_LEAD,
         pageUrl: SAMPLE_PAGE_URL,
@@ -214,6 +280,8 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
           ...(firstCta ? { ctaLabel: firstCta.label, ctaUrl: firstCta.url } : {}),
           signatureHtml: tpl.signatureHtml,
           impressumHtml: tpl.impressumHtml,
+          format: tpl.format,
+          footerMode: tpl.footerMode,
         }),
       });
       const json = await res.json();
@@ -255,8 +323,10 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
     );
   }
 
-  const impressumMissing =
+  // Impressum ist nur bei „Komplett"-Signatur Pflicht (Migration 0039).
+  const impressumEmpty =
     tpl.impressumHtml.replace(/<[^>]+>/g, "").trim().length === 0;
+  const impressumMissing = tpl.footerMode === "complete" && impressumEmpty;
 
   return (
     <div className="flex flex-col gap-6">
@@ -337,6 +407,44 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
 
           <Card>
             <CardHeader>
+              <CardTitle>Darstellung</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-5">
+              <div className="flex flex-col gap-1.5">
+                <Label>Format</Label>
+                <OptionPills
+                  options={FORMAT_OPTIONS}
+                  value={tpl.format}
+                  onChange={(v) => patch({ format: v })}
+                />
+                <p className="text-[11px] text-ink-muted">
+                  {
+                    FORMAT_OPTIONS.find((o) => o.value === tpl.format)
+                      ?.description
+                  }
+                </p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Signatur</Label>
+                <OptionPills
+                  options={FOOTER_OPTIONS}
+                  value={tpl.footerMode}
+                  onChange={(v) => patch({ footerMode: v })}
+                />
+                {tpl.footerMode === "none" && (
+                  <div className="mt-1 rounded-squircle-sm bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">
+                    Ohne Abmelde-Link und Impressum im Text verantworten Sie
+                    die rechtliche Einordnung selbst (UWG §7). Der unsichtbare
+                    List-Unsubscribe-Header und die Abmelde-Sperrliste bleiben
+                    aktiv.
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle>Inhalt</CardTitle>
             </CardHeader>
             <CardContent>
@@ -374,30 +482,39 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                Impressum{" "}
-                <span className="text-danger" title="Pflichtfeld">
-                  *
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-1.5">
-              <Textarea
-                value={tpl.impressumHtml}
-                onChange={(e) => patch({ impressumHtml: e.target.value })}
-                rows={5}
-                placeholder={
-                  "Muster GmbH · Musterstraße 1 · 10115 Berlin\nGeschäftsführer: Max Mustermann · HRB 12345"
-                }
-              />
-              <p className="text-[11px] text-ink-muted">
-                Pflicht für den Versand: Das Impressum wird zusammen mit dem
-                Abmeldelink automatisch an jede E-Mail angehängt.
-              </p>
-            </CardContent>
-          </Card>
+          {tpl.footerMode !== "none" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Impressum{" "}
+                  {tpl.footerMode === "complete" ? (
+                    <span className="text-danger" title="Pflichtfeld">
+                      *
+                    </span>
+                  ) : (
+                    <span className="text-ink-muted font-normal text-sm">
+                      (optional)
+                    </span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1.5">
+                <Textarea
+                  value={tpl.impressumHtml}
+                  onChange={(e) => patch({ impressumHtml: e.target.value })}
+                  rows={5}
+                  placeholder={
+                    "Muster GmbH · Musterstraße 1 · 10115 Berlin\nGeschäftsführer: Max Mustermann · HRB 12345"
+                  }
+                />
+                <p className="text-[11px] text-ink-muted">
+                  {tpl.footerMode === "complete"
+                    ? "Pflicht für den Versand: Das Impressum wird zusammen mit dem Abmeldelink automatisch an jede E-Mail angehängt."
+                    : "Optional: Bei „Nur Abmelde-Link“ wird das Impressum nicht in die E-Mail gerendert."}
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Rechte Spalte: sticky Live-Vorschau + Spam-Ampel */}

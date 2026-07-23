@@ -84,17 +84,29 @@ Redirect-URI wird aus bestehender App-URL-Env abgeleitet (vorhandene Konstante/E
 - `ctaLabel` text notNull default `'Video ansehen'`
 - `ctaUrl` text notNull default `'@system:pageUrl'`
 - `signatureHtml` text
-- `impressumHtml` text notNull — **Pflichtfeld**, ohne Impressum kein Speichern-als-fertig
+- `impressumHtml` text notNull — Pflicht nur bei `footerMode='complete'` (leerer String sonst erlaubt, Migration 0039)
+- `format` text notNull default `'branded'` — `'branded' | 'personal'` (Migration 0039)
+- `footerMode` text notNull default `'complete'` — `'complete' | 'unsubscribe' | 'none'` (Migration 0039)
 - `deletedAt` timestamptz (Soft-Delete, Muster envelopeTemplates)
 - `createdAt`/`updatedAt`
+
+**Vorlagen-Optionen (Update 2026-07-23, Migration 0039):**
+- `format='personal'`: Minimal-HTML wie handgetippt (System-Font 14px, nur p/br/a/b/i/strong/em),
+  emailCta-Node ⇒ schlichter Textlink statt Button, emailGif-Node bleibt als normales img erlaubt.
+- `footerMode`: `'complete'` = Abmelden-Zeile + Impressum (wie bisher); `'unsubscribe'` = nur
+  Abmelden-Zeile; `'none'` = kein sichtbarer Body-Footer. Plain-Text analog (Abmelden-Zeile nur bei ≠'none').
+- UNVERÄNDERT/IMMER aktiv, egal welcher footerMode: RFC-8058 List-Unsubscribe-Header,
+  Suppression-Liste, Bounce-Handling, Klick-Tracking. Multipart HTML+Text bleibt in beiden Formaten.
+- `isEmailTemplateComplete`: Impressum-Pflicht nur bei `footerMode='complete'`.
+- Alt-Snapshots ohne die Felder ⇒ Renderer-Fallback `'branded'`/`'complete'`.
 
 ### `email_blasts`
 - `id`, `userId`, `campaignId` notNull, `runId` (nullable), `mailboxConnectionId` notNull, `templateId` notNull
 - `status` text notNull default `'draft'` — `'draft' | 'running' | 'paused' | 'completed' | 'cancelled' | 'failed'`
-- `contentSnapshot` jsonb notNull — beim Start eingefrorene Vorlage `{subject, bodyHtml, ctaLabel, ctaUrl, signatureHtml, impressumHtml, gifConfig}`
+- `contentSnapshot` jsonb notNull — beim Start eingefrorene Vorlage `{subject, bodyHtml, ctaLabel, ctaUrl, signatureHtml, impressumHtml, format?, footerMode?, gifConfig}` (format/footerMode ab 0039; fehlen sie ⇒ 'branded'/'complete')
 - `totalCount` int notNull default 0, `sentCount` int default 0, `failedCount` int default 0, `skippedCount` int default 0, `bouncedCount` int default 0, `repliedCount` int default 0
 - `creditsCharged` integer notNull default 0 (1 Credit = 10 Mails, aufgerundet, Charge beim Start)
-- `confirmationLog` jsonb — protokollierter Selbstbestätigungs-Screen `{confirmedAt, textVersion, userId}`
+- `confirmationLog` jsonb — protokollierter Selbstbestätigungs-Screen `{confirmedAt, textVersion, userId, format?, footerMode?}` (format/footerMode ab 0039 mitgeloggt)
 - `startedAt`, `completedAt`, `createdAt`, `updatedAt`
 
 ### `email_messages`

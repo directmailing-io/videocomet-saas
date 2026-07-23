@@ -16,6 +16,7 @@ import {
   Users2,
   Mail as MailIcon,
   AtSign,
+  Send,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -41,6 +42,7 @@ export type AppNavKey =
   | "campaigns"
   | "contacts"
   | "analytics"
+  | "emailBlasts"
   | "media"
   | "landingpages"
   | "envelopes"
@@ -86,6 +88,12 @@ const NAV_GROUPS: Array<{ label: string | null; items: NavItem[] }> = [
         href: "/analytics",
         icon: BarChart3,
         matchPrefixes: ["/aktivitaet"],
+      },
+      {
+        key: "emailBlasts",
+        label: "E-Mail-Versand",
+        href: "/email-versand",
+        icon: Send,
       },
     ],
   },

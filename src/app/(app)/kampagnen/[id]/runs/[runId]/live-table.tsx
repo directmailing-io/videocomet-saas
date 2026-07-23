@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   CheckCircle2,
+  Send,
   ChevronDown,
   ChevronRight,
   Download,
@@ -142,6 +144,11 @@ export interface LiveTableProps {
    * Blast-Messages für diese Runde ⇒ Spalte wird nicht gerendert.
    */
   emailStatusMap?: Record<string, string>;
+  /**
+   * True, wenn mindestens ein Lead dieser Runde eine E-Mail-Adresse hat —
+   * steuert den "E-Mails versenden"-CTA in der Erfolgskarte.
+   */
+  hasEmailLeads?: boolean;
 }
 
 const EMAIL_STATUS_META: Record<
@@ -225,13 +232,14 @@ function prettyEmail(d: Record<string, string>): string {
 
 export function LiveTable({
   runId,
-  campaignId: _campaignId,
+  campaignId,
   pdfEnabled,
   abActive,
   initialRun,
   initialCounts,
   initialLeads,
   emailStatusMap,
+  hasEmailLeads,
 }: LiveTableProps) {
   const emailColumnActive =
     !!emailStatusMap && Object.keys(emailStatusMap).length > 0;
@@ -810,6 +818,27 @@ export function LiveTable({
                       ? `Noch ${etaLabel} — Deine persönlichen Videos und Briefe entstehen gerade.`
                       : "Deine persönlichen Videos und Briefe entstehen gerade."}
                 </p>
+                {runStatus === "completed" &&
+                  counts.failed === 0 &&
+                  hasEmailLeads && (
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <Button
+                        asChild
+                        size="sm"
+                        iconLeft={<Send className="size-4" />}
+                      >
+                        <Link href={`/kampagnen/${campaignId}/email/neu`}>
+                          E-Mails versenden
+                        </Link>
+                      </Button>
+                      <Link
+                        href={`/kampagnen/${campaignId}?tab=email`}
+                        className="text-xs font-medium text-ink-muted underline-offset-2 hover:text-ink hover:underline"
+                      >
+                        Zum E-Mail-Tab
+                      </Link>
+                    </div>
+                  )}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">

@@ -99,6 +99,45 @@ export async function listCampaignEmailBlasts(
     .orderBy(desc(emailBlasts.createdAt));
 }
 
+export interface UserEmailBlastRow {
+  id: string;
+  campaignId: string;
+  campaignName: string;
+  status: EmailBlast["status"];
+  totalCount: number;
+  sentCount: number;
+  repliedCount: number;
+  startedAt: Date | null;
+  createdAt: Date;
+}
+
+/** Alle Blasts eines Users über alle Kampagnen (Seite „E-Mail-Versand"). */
+export async function listUserEmailBlasts(
+  userId: string,
+): Promise<UserEmailBlastRow[]> {
+  const rows = await db
+    .select({
+      id: emailBlasts.id,
+      campaignId: emailBlasts.campaignId,
+      campaignName: campaigns.name,
+      status: emailBlasts.status,
+      totalCount: emailBlasts.totalCount,
+      sentCount: emailBlasts.sentCount,
+      repliedCount: emailBlasts.repliedCount,
+      startedAt: emailBlasts.startedAt,
+      createdAt: emailBlasts.createdAt,
+    })
+    .from(emailBlasts)
+    .innerJoin(campaigns, eq(campaigns.id, emailBlasts.campaignId))
+    .where(eq(emailBlasts.userId, userId))
+    .orderBy(desc(emailBlasts.createdAt));
+  return rows.map((r) => ({
+    ...r,
+    sentCount: r.sentCount ?? 0,
+    repliedCount: r.repliedCount ?? 0,
+  }));
+}
+
 export function buildContentSnapshot(
   template: Pick<
     EmailTemplate,
@@ -109,6 +148,8 @@ export function buildContentSnapshot(
     | "ctaUrl"
     | "signatureHtml"
     | "impressumHtml"
+    | "format"
+    | "footerMode"
   >,
   gifConfig: CampaignEmailGifConfig | null,
 ): EmailBlastContentSnapshot {
@@ -120,6 +161,8 @@ export function buildContentSnapshot(
     ctaUrl: template.ctaUrl,
     signatureHtml: template.signatureHtml,
     impressumHtml: template.impressumHtml,
+    format: template.format,
+    footerMode: template.footerMode,
     gifConfig,
   };
 }
@@ -355,6 +398,8 @@ export async function startEmailBlast(input: {
           confirmedAt: now.toISOString(),
           textVersion: input.confirmationTextVersion,
           userId: input.userId,
+          format: template.format,
+          footerMode: template.footerMode,
         },
         totalCount: scheduled,
         skippedCount: skipped,

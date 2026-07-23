@@ -35,6 +35,8 @@ const PatchBody = z.object({
   ctaUrl: z.string().max(2_000).optional(),
   signatureHtml: z.string().max(20_000).nullable().optional(),
   impressumHtml: z.string().max(20_000).optional(),
+  format: z.enum(["branded", "personal"]).optional(),
+  footerMode: z.enum(["complete", "unsubscribe", "none"]).optional(),
 });
 
 /**
@@ -42,7 +44,9 @@ const PatchBody = z.object({
  *
  * Speichern ist auch OHNE Impressum erlaubt (Draft) — die Blast-Nutzung
  * wird über `isComplete` in der Antwort gesteuert (Step 3 prüft das
- * beim Start serverseitig erneut).
+ * beim Start serverseitig erneut). Impressum ist nur bei footerMode
+ * 'complete' Pflicht (Migration 0039); leerer String ist bei
+ * 'unsubscribe'/'none' zulässig.
  */
 export async function PATCH(
   req: NextRequest,

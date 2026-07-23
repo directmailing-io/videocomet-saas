@@ -1512,6 +1512,11 @@ export const mailboxConnections = pgTable("mailbox_connections", {
 export type MailboxConnection = typeof mailboxConnections.$inferSelect;
 export type NewMailboxConnection = typeof mailboxConnections.$inferInsert;
 
+/** 'branded' = gestaltete Mail (600px-Layout, Button); 'personal' = wie handgetippt. */
+export type EmailTemplateFormat = "branded" | "personal";
+/** Sichtbarer Body-Footer: komplett (Abmelden + Impressum) / nur Abmelden / keiner. */
+export type EmailTemplateFooterMode = "complete" | "unsubscribe" | "none";
+
 export const emailTemplates = pgTable("email_templates", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -1524,8 +1529,15 @@ export const emailTemplates = pgTable("email_templates", {
   ctaLabel: text("cta_label").notNull().default("Video ansehen"),
   ctaUrl: text("cta_url").notNull().default("@system:pageUrl"),
   signatureHtml: text("signature_html"),
-  /** Pflichtfeld — ohne Impressum kein Speichern-als-fertig. */
+  /**
+   * DB-seitig NOT NULL, aber leerer String ist erlaubt, wenn
+   * `footerMode !== 'complete'` (Pflicht nur bei kompletter Signatur).
+   */
   impressumHtml: text("impressum_html").notNull(),
+  /** 'branded' | 'personal' — Rendering-Format (Migration 0039). */
+  format: text("format").$type<EmailTemplateFormat>().notNull().default("branded"),
+  /** 'complete' | 'unsubscribe' | 'none' — sichtbarer Body-Footer (Migration 0039). */
+  footerMode: text("footer_mode").$type<EmailTemplateFooterMode>().notNull().default("complete"),
   /** Soft-Delete (Muster envelopeTemplates). */
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1556,6 +1568,10 @@ export interface EmailBlastContentSnapshot {
   ctaUrl: string;
   signatureHtml?: string | null;
   impressumHtml: string;
+  /** Fehlt bei Alt-Snapshots ⇒ Renderer-Fallback 'branded'. */
+  format?: EmailTemplateFormat;
+  /** Fehlt bei Alt-Snapshots ⇒ Renderer-Fallback 'complete'. */
+  footerMode?: EmailTemplateFooterMode;
   gifConfig?: CampaignEmailGifConfig | null;
 }
 
@@ -1564,6 +1580,9 @@ export interface EmailBlastConfirmationLog {
   confirmedAt: string;
   textVersion: string;
   userId: string;
+  /** Ab Migration 0039 mitgeloggt (Alt-Logs: undefined). */
+  format?: EmailTemplateFormat;
+  footerMode?: EmailTemplateFooterMode;
 }
 
 export const emailBlasts = pgTable("email_blasts", {

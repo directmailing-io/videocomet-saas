@@ -69,6 +69,10 @@ interface WizardTemplate {
   ctaUrl: string | null;
   signatureHtml: string | null;
   impressumHtml: string | null;
+  /** 'branded' | 'personal' — fehlt bei Alt-Daten ⇒ 'branded'. */
+  format?: string | null;
+  /** 'complete' | 'unsubscribe' | 'none' — fehlt bei Alt-Daten ⇒ 'complete'. */
+  footerMode?: string | null;
   isComplete: boolean;
 }
 
@@ -271,6 +275,8 @@ export function EmailBlastWizard({
         bodyHtml: selectedTemplate.bodyHtml ?? "",
         signatureHtml: selectedTemplate.signatureHtml,
         impressumHtml: selectedTemplate.impressumHtml ?? "",
+        format: selectedTemplate.format,
+        footerMode: selectedTemplate.footerMode,
       },
       leadData: exampleLeadData ?? {},
       pageUrl: null,
@@ -784,6 +790,15 @@ export function EmailBlastWizard({
               <CardTitle>Bestätigen & starten</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {selectedTemplate?.footerMode === "none" && (
+                <div className="rounded-squircle-sm bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+                  <p className="flex items-center gap-2 font-medium">
+                    <AlertTriangle className="size-4 shrink-0" /> Diese Vorlage
+                    versendet ohne sichtbare Signatur — Abmelden nur über
+                    E-Mail-Client-Funktion.
+                  </p>
+                </div>
+              )}
               <label className="flex cursor-pointer items-start gap-3">
                 <Checkbox
                   checked={confirmLegal}
