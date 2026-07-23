@@ -32,6 +32,8 @@ export class BunnyApiError extends Error {
 
 export interface BunnyFetchOptions {
   retries?: number;
+  /** Bricht jeden einzelnen Versuch nach X ms ab (zaehlt als Netzwerkfehler). */
+  timeoutMs?: number;
 }
 
 const BACKOFF_MS = [1000, 2000, 4000];
@@ -59,7 +61,10 @@ export async function bunnyFetch(
     let networkError: unknown;
 
     try {
-      response = await fetch(url, init);
+      const perAttemptInit = opts.timeoutMs
+        ? { ...init, signal: AbortSignal.timeout(opts.timeoutMs) }
+        : init;
+      response = await fetch(url, perAttemptInit);
     } catch (err) {
       networkError = err;
     }

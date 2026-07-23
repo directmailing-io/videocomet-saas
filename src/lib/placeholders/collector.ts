@@ -269,7 +269,11 @@ async function fetchGoogleDocText(
     if (!match || !match[1]) return { ok: false, reason: "kein Doc-Id" };
     const id = match[1];
     const exportUrl = `https://docs.google.com/document/d/${id}/export?format=html`;
-    const res = await fetch(exportUrl, { redirect: "follow" });
+    // 10s-Timeout: ein haengendes Google-Backend darf den Wizard nie blockieren.
+    const res = await fetch(exportUrl, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(10_000),
+    });
     if (!res.ok) return { ok: false, reason: `http ${res.status}` };
     const ct = (res.headers.get("content-type") ?? "").toLowerCase();
     if (ct && !ct.startsWith("text/html")) {
@@ -309,7 +313,10 @@ async function scanCustomLpVersion(
 
   // Storage-Reader dynamisch importieren, weil die Bunny-ENV nur im
   // Node-Runtime existiert; in Tests wird der Aufruf evtl. übersprungen.
-  let readFile: (p: string) => Promise<{ buffer: Buffer }>;
+  let readFile: (
+    p: string,
+    opts?: { retries?: number; timeoutMs?: number },
+  ) => Promise<{ buffer: Buffer }>;
   try {
     const mod = await import("@/lib/custom-lp/storage");
     readFile = mod.readFile;
@@ -319,24 +326,37 @@ async function scanCustomLpVersion(
   }
 
   const storageRoot = version.storagePath.replace(/\/+$/, "");
-  for (const file of candidates) {
-    const remote = `${storageRoot}/${file.path.replace(/^\/+/, "")}`;
+  // Parallel + hart begrenzt (1 Retry, 8s/Versuch): Bunny beantwortet kaputte
+  // Objekte teils erst nach 60s mit 504 — ohne Limit friert der Wizard ein.
+  const texts = await Promise.all(
+    candidates.map(async (file) => {
+      const remote = `${storageRoot}/${file.path.replace(/^\/+/, "")}`;
+      try {
+        const { buffer } = await readFile(remote, {
+          retries: 1,
+          timeoutMs: 8_000,
+        });
+        return { file, text: buffer.toString("utf-8") };
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[placeholders/collector] custom-lp file unreadable: ${remote}`,
+          err instanceof Error ? err.message : err,
+        );
+        return { file, text: null };
+      }
+    }),
+  );
+  for (const { file, text } of texts) {
     const label = `Custom-LP: ${file.path}`;
-    try {
-      const { buffer } = await readFile(remote);
-      const text = buffer.toString("utf-8");
+    if (text !== null) {
       scanDoubleBrace(text, acc, { kind: "lp-custom", label });
-    } catch (err) {
+    } else {
       pushHit(acc, "__unreadable__", {
         kind: "lp-custom",
         label,
         inaccessible: true,
       });
-      // eslint-disable-next-line no-console
-      console.warn(
-        `[placeholders/collector] custom-lp file unreadable: ${remote}`,
-        err instanceof Error ? err.message : err,
-      );
       // Wieder rausnehmen — der `__unreadable__`-Key ist nur Tracking
       acc.byKey.delete("__unreadable__");
     }

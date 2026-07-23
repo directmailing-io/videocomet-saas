@@ -258,16 +258,23 @@ export async function deleteVersion(
  * to stream HTML / JS / assets to the customer's visitor. Throws on 4xx/5xx
  * (the underlying BunnyApiError surfaces the status).
  */
-export async function readFile(remotePath: string): Promise<{
+export async function readFile(
+  remotePath: string,
+  opts?: { retries?: number; timeoutMs?: number },
+): Promise<{
   buffer: Buffer;
   contentType: string | null;
 }> {
   const env = getCustomLpStorageEnv();
   const url = `${STORAGE_API_BASE}/${env.zone}/${trimSlashes(remotePath)}`;
-  const response = await bunnyFetch(url, {
-    method: "GET",
-    headers: { AccessKey: env.readonlyKey },
-  });
+  const response = await bunnyFetch(
+    url,
+    {
+      method: "GET",
+      headers: { AccessKey: env.readonlyKey },
+    },
+    opts,
+  );
   const arrayBuffer = await response.arrayBuffer();
   return {
     buffer: Buffer.from(arrayBuffer),
