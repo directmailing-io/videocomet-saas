@@ -132,6 +132,9 @@ export function CreditBalanceCard() {
               {creditsLabel(balance)}
             </span>
           </div>
+          <p className="mb-2 text-[10px] leading-tight text-white/70 drop-shadow">
+            1 Credit = 1 Video oder 10 E-Mails
+          </p>
           {unlimited ? (
             <div className="w-full text-[11px] font-semibold text-center text-white/85 bg-white/10 border border-white/15 rounded-md py-1.5">
               Unbegrenzter Account
