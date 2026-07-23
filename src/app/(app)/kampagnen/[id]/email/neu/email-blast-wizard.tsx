@@ -21,6 +21,7 @@ import {
   Inbox,
   Loader2,
   Play,
+  Search,
   Users,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -175,6 +176,12 @@ export function EmailBlastWizard({
 
   // ① Empfänger: null = ganze Kampagne, sonst runId.
   const [runId, setRunId] = React.useState<string | null>(null);
+  const [runQuery, setRunQuery] = React.useState("");
+  const filteredRuns = React.useMemo(() => {
+    const q = runQuery.trim().toLowerCase();
+    if (!q) return runs;
+    return runs.filter((r) => r.name.toLowerCase().includes(q));
+  }, [runs, runQuery]);
   // ② Postfach / ③ Vorlage
   const [mailboxId, setMailboxId] = React.useState<string | null>(null);
   const [templateId, setTemplateId] = React.useState<string | null>(null);
@@ -429,12 +436,12 @@ export function EmailBlastWizard({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-3">
               <button
                 type="button"
                 onClick={() => setRunId(null)}
                 className={cn(
-                  "flex flex-col items-start gap-1 rounded-squircle-md p-4 text-left transition-all",
+                  "flex w-full flex-col items-start gap-1 rounded-squircle-md p-4 text-left transition-all",
                   runId === null
                     ? "ring-2 ring-brand bg-brand-soft/40"
                     : "bg-surface-soft hover:bg-surface-muted",
@@ -445,24 +452,54 @@ export function EmailBlastWizard({
                   Alle Leads der Kampagne (rundenübergreifend)
                 </span>
               </button>
-              {runs.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() => setRunId(r.id)}
-                  className={cn(
-                    "flex flex-col items-start gap-1 rounded-squircle-md p-4 text-left transition-all",
-                    runId === r.id
-                      ? "ring-2 ring-brand bg-brand-soft/40"
-                      : "bg-surface-soft hover:bg-surface-muted",
+
+              {runs.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                    Oder einzelne Runde wählen
+                  </p>
+                  {runs.length > 6 && (
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
+                      <input
+                        type="text"
+                        value={runQuery}
+                        onChange={(e) => setRunQuery(e.target.value)}
+                        placeholder="Runde suchen …"
+                        className="w-full rounded-squircle-md bg-surface-soft py-2.5 pl-10 pr-3.5 text-sm text-ink placeholder:text-ink-muted outline-none ring-brand/40 transition-shadow focus:ring-2"
+                      />
+                    </div>
                   )}
-                >
-                  <span className="text-sm font-semibold text-ink">{r.name}</span>
-                  <span className="text-xs text-ink-muted">
-                    {r.totalLeads} Leads · Status {r.status}
-                  </span>
-                </button>
-              ))}
+                  {filteredRuns.length === 0 ? (
+                    <p className="py-2 text-sm text-ink-muted">
+                      Keine Runde gefunden.
+                    </p>
+                  ) : (
+                    <div className="flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-1">
+                      {filteredRuns.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => setRunId(r.id)}
+                          className={cn(
+                            "flex w-full items-center justify-between gap-3 rounded-squircle-md px-4 py-2.5 text-left transition-all",
+                            runId === r.id
+                              ? "ring-2 ring-brand bg-brand-soft/40"
+                              : "bg-surface-soft hover:bg-surface-muted",
+                          )}
+                        >
+                          <span className="truncate text-sm font-semibold text-ink">
+                            {r.name}
+                          </span>
+                          <span className="shrink-0 text-xs text-ink-muted">
+                            {r.totalLeads} Leads · Status {r.status}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
