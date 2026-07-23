@@ -16,7 +16,7 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { Loader2 } from "lucide-react";
+import { Clapperboard, Loader2, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   creditsLabel,
@@ -132,9 +132,20 @@ export function CreditBalanceCard() {
               {creditsLabel(balance)}
             </span>
           </div>
-          <p className="mb-2 text-[10px] leading-tight text-white/70 drop-shadow">
-            1 Credit = 1 Video oder 10 E-Mails
-          </p>
+          <div className="mb-2 space-y-1">
+            <div className="flex items-center justify-between rounded-md border border-white/15 bg-white/10 px-2 py-1 text-[10px] text-white/85 backdrop-blur-sm">
+              <span className="flex items-center gap-1.5">
+                <Clapperboard className="size-3" /> 1 Video
+              </span>
+              <span className="font-semibold">1 Credit</span>
+            </div>
+            <div className="flex items-center justify-between rounded-md border border-white/15 bg-white/10 px-2 py-1 text-[10px] text-white/85 backdrop-blur-sm">
+              <span className="flex items-center gap-1.5">
+                <Mail className="size-3" /> 10 E-Mails
+              </span>
+              <span className="font-semibold">1 Credit</span>
+            </div>
+          </div>
           {unlimited ? (
             <div className="w-full text-[11px] font-semibold text-center text-white/85 bg-white/10 border border-white/15 rounded-md py-1.5">
               Unbegrenzter Account
