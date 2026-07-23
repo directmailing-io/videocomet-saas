@@ -3,14 +3,13 @@
 /**
  * Credit-Balance-Card fuer die Sidebar.
  *
- * Neues Design: Foto-Hintergrund („CEO of Tubbyland") mit Dark-Gradient-Overlay.
- * Das Bild transportiert den „Bosse-mit-Cash"-Vibe — Text bleibt minimal.
- * Balance + Aufladen-Button sind unten platziert, oben ist das Bild nur mit
- * weichem Overlay abgedunkelt.
+ * Komet-Himmel als fester Hintergrund (unabhaengig vom Guthaben) mit
+ * Dark-Gradient-Overlay unten fuer Text-Kontrast. Balance, Verbrauchs-Zeilen
+ * (1 Video / 10 E-Mails) und Aufladen-Button sitzen im unteren Bereich.
  *
  * State-Farbe wird als Border-Glow + Button-Farbe kommuniziert:
  *   - Normal: Brand-Purple
- *   - Low (≤10): Amber
+ *   - Low (<25): Amber
  *   - Zero: Red
  */
 
@@ -67,10 +66,8 @@ export function CreditBalanceCard() {
 
   const balance = status.creditBalance;
   const unlimited = isUnlimitedCredits(balance);
-  // Grenzwerte:
-  //   Zero (0):     Zero-Bild (Tubby knockout), roter State
-  //   Low (1-24):   Panic-Bild (Tubby panisch), amber State
-  //   Normal (25+): CEO-Bild (Tubby als Boss), brand State
+  // Grenzwerte fuer den State (Ring + Button-Farbe + Badge):
+  //   Zero (0): rot · Low (1-24): amber · Normal (25+): brand.
   // Unlimited (≥1M): faellt in "Normal" — kein Aufladen-Zwang, brand-Look.
   const isZero = !unlimited && balance === 0;
   const isLow = !unlimited && balance > 0 && balance < 25;
@@ -87,11 +84,7 @@ export function CreditBalanceCard() {
       ? "bg-amber-500 hover:bg-amber-600"
       : "bg-brand hover:bg-brand/90";
 
-  const bgImageSrc = isZero
-    ? "/billing/credit-card-bg-zero.png"
-    : isLow
-      ? "/billing/credit-card-bg-low.png"
-      : "/billing/credit-card-bg.png";
+  const bgImageSrc = "/billing/credit-card-bg-comet.png";
 
   return (
     <>
@@ -102,7 +95,7 @@ export function CreditBalanceCard() {
         )}
       >
         {/* Background image */}
-        <div className="relative w-full aspect-[4/3]">
+        <div className="relative w-full aspect-[4/5]">
           <Image
             src={bgImageSrc}
             alt=""
