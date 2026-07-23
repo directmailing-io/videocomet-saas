@@ -39,6 +39,7 @@ import {
 import { isEmailTemplateComplete } from "@/lib/db/queries/email-templates";
 import { insertLeadEvent } from "@/lib/db/queries/lead-events";
 import { computeEmailGifHash } from "@/lib/email/gif-hash";
+import { tiptapDocContainsNode } from "@/lib/email/render";
 import { sendBlastCompletedMail } from "@/lib/mail";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -101,12 +102,19 @@ export async function listCampaignEmailBlasts(
 export function buildContentSnapshot(
   template: Pick<
     EmailTemplate,
-    "subject" | "bodyHtml" | "ctaLabel" | "ctaUrl" | "signatureHtml" | "impressumHtml"
+    | "subject"
+    | "bodyJson"
+    | "bodyHtml"
+    | "ctaLabel"
+    | "ctaUrl"
+    | "signatureHtml"
+    | "impressumHtml"
   >,
   gifConfig: CampaignEmailGifConfig | null,
 ): EmailBlastContentSnapshot {
   return {
     subject: template.subject,
+    bodyJson: template.bodyJson ?? null,
     bodyHtml: template.bodyHtml,
     ctaLabel: template.ctaLabel,
     ctaUrl: template.ctaUrl,
@@ -249,7 +257,11 @@ export async function startEmailBlast(input: {
       .from(campaigns)
       .where(eq(campaigns.id, blast.campaignId))
       .limit(1);
-    const gifConfig = campaign?.emailGifConfig ?? null;
+    // GIF nur, wenn die Vorlage einen emailGif-Node enthält — sonst weder
+    // Encode-Jobs noch gifConfig im Snapshot (freie Komposition).
+    const gifConfig = tiptapDocContainsNode(template.bodyJson, "emailGif")
+      ? (campaign?.emailGifConfig ?? null)
+      : null;
     const snapshot = buildContentSnapshot(template, gifConfig);
 
     const leadConditions = [

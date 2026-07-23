@@ -6,25 +6,22 @@ import { z } from "zod";
 import { requireUserApi } from "@/lib/auth-guard";
 import {
   createEmailTemplate,
-  isEmailTemplateComplete,
   listEmailTemplates,
   serializeEmailTemplate,
 } from "@/lib/db/queries/email-templates";
 
-/** GET /api/email-templates — Liste aller E-Mail-Vorlagen des Users. */
+/**
+ * GET /api/email-templates — Liste aller E-Mail-Vorlagen des Users.
+ * Voll serialisiert (inkl. bodyJson/bodyHtml) — der Blast-Wizard braucht
+ * den Inhalt für GIF-Node-Erkennung + Beispiel-Vorschau.
+ */
 export async function GET() {
   const auth = await requireUserApi();
   if (!auth.ok) return auth.response;
 
   const rows = await listEmailTemplates(auth.user.id);
   return NextResponse.json({
-    templates: rows.map((t) => ({
-      id: t.id,
-      name: t.name,
-      subject: t.subject,
-      isComplete: isEmailTemplateComplete(t),
-      updatedAt: t.updatedAt,
-    })),
+    templates: rows.map(serializeEmailTemplate),
   });
 }
 

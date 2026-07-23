@@ -33,7 +33,11 @@ import {
   GifRangeEditor,
   type GifRangeValue,
 } from "@/components/email/gif-range-editor";
-import { renderOutreachEmail } from "@/lib/email/render";
+import { EMAIL_GIF_PREVIEW_URL } from "@/components/email/email-body-editor";
+import {
+  renderOutreachEmail,
+  tiptapDocContainsNode,
+} from "@/lib/email/render";
 
 export interface WizardRunOption {
   id: string;
@@ -59,6 +63,7 @@ interface WizardTemplate {
   id: string;
   name: string;
   subject: string;
+  bodyJson: unknown;
   bodyHtml: string | null;
   ctaLabel: string | null;
   ctaUrl: string | null;
@@ -237,6 +242,11 @@ export function EmailBlastWizard({
   const selectedMailbox = mailboxes?.find((m) => m.id === mailboxId) ?? null;
   const selectedTemplate = templates?.find((t) => t.id === templateId) ?? null;
 
+  // GIF-Schritt nur relevant, wenn die Vorlage einen emailGif-Node enthält.
+  const templateHasGif = selectedTemplate
+    ? tiptapDocContainsNode(selectedTemplate.bodyJson, "emailGif")
+    : false;
+
   // Platzhalter-Kompatibilitätscheck gegen die Lead-Daten des Beispiel-Leads.
   const unresolvedKeys = React.useMemo(() => {
     if (!selectedTemplate) return [];
@@ -257,32 +267,35 @@ export function EmailBlastWizard({
     return renderOutreachEmail({
       content: {
         subject: selectedTemplate.subject,
+        bodyJson: selectedTemplate.bodyJson,
         bodyHtml: selectedTemplate.bodyHtml ?? "",
-        ctaLabel: selectedTemplate.ctaLabel ?? "",
-        ctaUrl: selectedTemplate.ctaUrl ?? "",
         signatureHtml: selectedTemplate.signatureHtml,
         impressumHtml: selectedTemplate.impressumHtml ?? "",
       },
       leadData: exampleLeadData ?? {},
       pageUrl: null,
-      emailGifUrl: null,
+      emailGifUrl:
+        templateHasGif && !gifSkipped && gifValue
+          ? EMAIL_GIF_PREVIEW_URL
+          : null,
       unsubscribeToken: "00000000000000000000000000000000",
       appUrl:
         typeof window === "undefined"
           ? undefined
           : window.location.origin,
     });
-  }, [selectedTemplate, exampleLeadData]);
+  }, [selectedTemplate, exampleLeadData, templateHasGif, gifSkipped, gifValue]);
 
   /** Schritt 4 → 5: GIF-Konfiguration an der Kampagne persistieren. */
   async function saveGifAndContinue(): Promise<void> {
     setError(null);
     setGifSaving(true);
     try {
-      if (gifSkipped || !gifValue || !exampleVideoUrl) {
-        // „Ohne GIF fortfahren": evtl. vorhandene Config entfernen, damit
-        // der Start-Snapshot ohne gifConfig eingefroren wird.
-        if (initialGifConfig || gifSkipped) {
+      if (!templateHasGif || gifSkipped || !gifValue || !exampleVideoUrl) {
+        // „Ohne GIF fortfahren" / kein GIF-Node in der Vorlage: evtl.
+        // vorhandene Config entfernen, damit der Start-Snapshot ohne
+        // gifConfig eingefroren wird.
+        if (initialGifConfig || gifSkipped || !templateHasGif) {
           await fetch(`/api/campaigns/${campaignId}/email-gif`, {
             method: "DELETE",
           }).catch(() => undefined);
@@ -622,11 +635,35 @@ export function EmailBlastWizard({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {exampleVideoUrl ? (
+            {!templateHasGif ? (
+              <div className="rounded-squircle-sm bg-surface-soft px-4 py-4">
+                <p className="text-sm font-medium text-ink">
+                  Kein GIF in der Vorlage — Schritt übersprungen
+                </p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  Die gewählte Vorlage enthält keinen Video-GIF-Block. Einfach
+                  auf „Weiter" klicken — oder{" "}
+                  <a
+                    href={
+                      selectedTemplate
+                        ? `/email-vorlagen/${selectedTemplate.id}`
+                        : "/email-vorlagen"
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-brand underline"
+                  >
+                    GIF in Vorlage einfügen
+                  </a>
+                  .
+                </p>
+              </div>
+            ) : exampleVideoUrl ? (
               <>
                 <p className="text-sm text-ink-soft">
-                  Wählen Sie den Video-Ausschnitt, der als animiertes GIF in
-                  jeder Mail erscheint (Vorschau am Beispiel-Lead).
+                  Wählen Sie den Video-Ausschnitt, der als animiertes GIF an
+                  der GIF-Position der Vorlage erscheint (Vorschau am
+                  Beispiel-Lead).
                 </p>
                 <GifRangeEditor
                   videoUrl={exampleVideoUrl}
@@ -729,9 +766,11 @@ export function EmailBlastWizard({
                   />
                   <p className="mt-2 text-[11px] text-ink-muted">
                     Gerendert mit den Daten des Beispiel-Leads.{" "}
-                    {gifSkipped || !gifValue
-                      ? "Ohne GIF."
-                      : "Das GIF wird im Versand an dieser Stelle eingefügt."}
+                    {!templateHasGif
+                      ? "Die Vorlage enthält keinen GIF-Block."
+                      : gifSkipped || !gifValue
+                        ? "Ohne GIF."
+                        : "Im Versand wird an der GIF-Position das persönliche Video-GIF eingesetzt."}
                   </p>
                 </>
               ) : (
@@ -790,7 +829,7 @@ export function EmailBlastWizard({
         </Button>
 
         <div className="flex items-center gap-2">
-          {step === 3 && exampleVideoUrl && !gifSkipped && (
+          {step === 3 && templateHasGif && exampleVideoUrl && !gifSkipped && (
             <Button
               variant="ghost"
               disabled={gifSaving}

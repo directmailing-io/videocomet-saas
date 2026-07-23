@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * Editor für E-Mail-Vorlagen: links Zonen-Formular (Betreff, Body via
- * TipTap, CTA, Signatur, Pflicht-Impressum), rechts sticky Live-Vorschau
+ * Editor für E-Mail-Vorlagen (freie Komposition): links Name/Betreff +
+ * Body als einzige Leinwand (TipTap mit optionalen emailGif-/emailCta-
+ * Nodes), Signatur, Pflicht-Impressum — rechts sticky Live-Vorschau
  * (renderOutreachEmail mit Beispiel-Lead) + Spam-Ampel (debounced gegen
  * POST /api/email/spam-score).
  */
@@ -26,14 +27,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toaster";
-import { RichTextEditor } from "@/components/editor/slide/rich-text-editor";
-import { renderOutreachEmail } from "@/lib/email/render";
+import {
+  EMAIL_GIF_PREVIEW_URL,
+  EmailBodyEditor,
+} from "@/components/email/email-body-editor";
+import { extractFirstCtaNode, renderOutreachEmail } from "@/lib/email/render";
 import { cn } from "@/lib/utils";
 
 interface TemplateData {
   id: string;
   name: string;
   subject: string;
+  bodyJson: unknown;
   bodyHtml: string;
   ctaLabel: string | null;
   ctaUrl: string | null;
@@ -71,12 +76,7 @@ const SAMPLE_LEAD: Record<string, string> = {
 
 const SAMPLE_PAGE_URL = "https://app.videocomet.de/v/beispiel";
 
-// Statischer GIF-Platzhalter für die Vorschau (16:9, Play-Button).
-const PREVIEW_GIF_URL =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="338" viewBox="0 0 600 338"><rect width="600" height="338" rx="14" fill="#1f1d2b"/><circle cx="300" cy="169" r="46" fill="rgba(255,255,255,0.18)"/><path d="M288 145l42 24-42 24z" fill="#ffffff"/><text x="300" y="300" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="15" fill="#a8a3bd">Video-GIF (Vorschau)</text></svg>`,
-  );
+const PREVIEW_GIF_URL = EMAIL_GIF_PREVIEW_URL;
 
 const SPAM_STYLE: Record<
   SpamResult["level"],
@@ -155,9 +155,8 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
       return renderOutreachEmail({
         content: {
           subject: tpl.subject,
+          bodyJson: tpl.bodyJson,
           bodyHtml: tpl.bodyHtml,
-          ctaLabel: tpl.ctaLabel ?? "",
-          ctaUrl: tpl.ctaUrl ?? "",
           signatureHtml: tpl.signatureHtml,
           impressumHtml: tpl.impressumHtml,
         },
@@ -201,15 +200,18 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
     if (!tpl) return;
     setSaving(true);
     try {
+      // ctaLabel/ctaUrl dienen nur noch als Insert-Defaults — aus dem
+      // ERSTEN CTA-Node zurückspiegeln, damit Alt-Daten konsistent bleiben.
+      const firstCta = extractFirstCtaNode(tpl.bodyJson);
       const res = await fetch(`/api/email-templates/${tpl.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: tpl.name,
           subject: tpl.subject,
+          bodyJson: tpl.bodyJson,
           bodyHtml: tpl.bodyHtml,
-          ctaLabel: tpl.ctaLabel ?? "",
-          ctaUrl: tpl.ctaUrl ?? "",
+          ...(firstCta ? { ctaLabel: firstCta.label, ctaUrl: firstCta.url } : {}),
           signatureHtml: tpl.signatureHtml,
           impressumHtml: tpl.impressumHtml,
         }),
@@ -335,33 +337,21 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
 
           <Card>
             <CardHeader>
-              <CardTitle>Text</CardTitle>
+              <CardTitle>Inhalt</CardTitle>
             </CardHeader>
             <CardContent>
-              <RichTextEditor
-                contentHtml={tpl.bodyHtml}
-                onChange={(html) => patch({ bodyHtml: html })}
+              <EmailBodyEditor
+                initialJson={tpl.bodyJson}
+                initialHtml={tpl.bodyHtml}
+                onChange={({ json, html }) =>
+                  patch({ bodyJson: json, bodyHtml: html })
+                }
                 placeholderSuggestions={PLACEHOLDER_SUGGESTIONS}
+                ctaDefaults={{
+                  label: tpl.ctaLabel || "Video ansehen",
+                  url: tpl.ctaUrl || "@system:pageUrl",
+                }}
               />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Call-to-Action</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-1.5">
-              <Label htmlFor="tpl-cta">Button-Beschriftung</Label>
-              <Input
-                id="tpl-cta"
-                value={tpl.ctaLabel ?? ""}
-                onChange={(e) => patch({ ctaLabel: e.target.value })}
-                placeholder="z. B. Video ansehen"
-              />
-              <p className="text-[11px] text-ink-muted">
-                Der Button verlinkt beim Versand automatisch auf die
-                persönliche Landingpage des Empfängers.
-              </p>
             </CardContent>
           </Card>
 
@@ -487,8 +477,8 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
               </div>
               <p className="text-[11px] text-ink-muted">
                 Vorschau mit Beispiel-Daten (Max Mustermann, Muster GmbH).
-                Die Video-Vorschau wird beim Versand pro Empfänger als
-                animiertes GIF eingesetzt.
+                Falls ein GIF-Block eingefügt ist, wird er beim Versand pro
+                Empfänger durch das persönliche Video-GIF ersetzt.
               </p>
             </CardContent>
           </Card>

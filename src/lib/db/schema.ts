@@ -1548,7 +1548,10 @@ export type EmailBlastStatus =
 /** Beim Start eingefrorene Vorlage — spaetere Template-Edits wirken nicht. */
 export interface EmailBlastContentSnapshot {
   subject: string;
+  /** Cache/Fallback — gerendert nur, wenn bodyJson fehlt (Alt-Snapshots). */
   bodyHtml: string;
+  /** TipTap-Dokument (freie Komposition, inkl. emailGif-/emailCta-Nodes). */
+  bodyJson?: unknown;
   ctaLabel: string;
   ctaUrl: string;
   signatureHtml?: string | null;
