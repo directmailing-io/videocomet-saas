@@ -22,7 +22,13 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-type Kind = "topup" | "video_charge" | "admin_adjust" | "promo_grant";
+type Kind =
+  | "topup"
+  | "video_charge"
+  | "admin_adjust"
+  | "promo_grant"
+  | "email_charge"
+  | "email_refund";
 
 interface HistoryItem {
   id: string;
@@ -42,6 +48,11 @@ interface HistoryItem {
         campaignName: string | null;
       }
     | { adminEmail: string | null }
+    | {
+        blastId: string;
+        campaignId: string | null;
+        campaignName: string | null;
+      }
     | null;
 }
 
@@ -50,25 +61,38 @@ const KIND_LABEL: Record<Kind, string> = {
   video_charge: "Video generiert",
   admin_adjust: "Admin-Korrektur",
   promo_grant: "Bonus",
+  email_charge: "E-Mail-Versand gestartet",
+  email_refund: "E-Mail-Credits erstattet",
 };
 
-const FILTERS: Array<{ id: Kind | "all"; label: string }> = [
+type FilterId = Kind | "all" | "email";
+
+const FILTERS: Array<{ id: FilterId; label: string }> = [
   { id: "all", label: "Alle" },
-  { id: "video_charge", label: "Verbrauch" },
+  { id: "video_charge", label: "Videos" },
+  { id: "email", label: "E-Mail" },
   { id: "topup", label: "Käufe" },
   { id: "admin_adjust", label: "Korrekturen" },
   { id: "promo_grant", label: "Boni" },
 ];
 
+/** Refund-Grund aus dem Reason-Suffix ("…:cancel" | "…:failures"). */
+function emailRefundLabel(reason: string | null): string {
+  if (reason?.endsWith(":cancel")) return "Erstattung nach Abbruch des Versands";
+  if (reason?.endsWith(":failures"))
+    return "Erstattung für nicht zustellbare E-Mails";
+  return "Erstattung nicht versendeter E-Mails";
+}
+
 export function CreditHistory() {
   const [items, setItems] = React.useState<HistoryItem[]>([]);
   const [cursor, setCursor] = React.useState<string | null>(null);
-  const [filter, setFilter] = React.useState<Kind | "all">("all");
+  const [filter, setFilter] = React.useState<FilterId>("all");
   const [loading, setLoading] = React.useState(true);
   const [loadingMore, setLoadingMore] = React.useState(false);
 
   const load = React.useCallback(
-    async (nextCursor: string | null, reset: boolean, kindFilter: Kind | "all") => {
+    async (nextCursor: string | null, reset: boolean, kindFilter: FilterId) => {
       const params = new URLSearchParams({ limit: "25" });
       if (nextCursor) params.set("cursor", nextCursor);
       if (kindFilter !== "all") params.set("kind", kindFilter);
@@ -103,8 +127,8 @@ export function CreditHistory() {
       <div className="p-6 border-b border-line-soft">
         <h3 className="text-base font-semibold">Credit-Verlauf</h3>
         <p className="text-xs text-ink-muted mt-1">
-          Vollständige Historie aller Aufladungen und Video-Verbrauche mit
-          Klartext-Kontext.
+          Vollständige Historie aller Aufladungen, Video- und E-Mail-Verbräuche
+          mit Klartext-Kontext.
         </p>
         <div className="flex items-center gap-1.5 mt-4 flex-wrap">
           <Filter className="size-3.5 text-ink-muted" />
@@ -191,6 +215,37 @@ export function CreditHistory() {
                       Runde/Kampagne wurde gelöscht
                     </div>
                   ) : null}
+
+                  {/* E-Mail-Charge/-Refund: verlinkt zum Versand */}
+                  {(tx.kind === "email_charge" || tx.kind === "email_refund") && (
+                    <div className="text-xs text-ink-muted mt-0.5">
+                      {tx.context && "blastId" in tx.context && tx.context.campaignId ? (
+                        <>
+                          Kampagne{" "}
+                          <Link
+                            href={`/kampagnen/${tx.context.campaignId}`}
+                            className="text-brand hover:underline"
+                          >
+                            {tx.context.campaignName ?? "Kampagne"}
+                          </Link>
+                          {" · "}
+                          <Link
+                            href={`/kampagnen/${tx.context.campaignId}/email/${tx.context.blastId}`}
+                            className="text-brand hover:underline inline-flex items-center gap-0.5"
+                          >
+                            Versand öffnen
+                            <ExternalLink className="size-3" />
+                          </Link>
+                          {" · "}
+                        </>
+                      ) : (
+                        <>Versand wurde gelöscht · </>
+                      )}
+                      {tx.kind === "email_charge"
+                        ? "1 Credit = 10 E-Mails (aufgerundet)"
+                        : emailRefundLabel(tx.reason)}
+                    </div>
+                  )}
 
                   {/* Topup: Stripe-Ref */}
                   {tx.kind === "topup" && (

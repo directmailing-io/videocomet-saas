@@ -2,12 +2,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import {
   campaigns,
   creditTransactions,
+  emailBlasts,
   leads,
   runs,
   users,
@@ -43,6 +44,10 @@ export async function GET(req: NextRequest) {
     kindFilter === "promo_grant"
   ) {
     conds.push(eq(creditTransactions.kind, kindFilter));
+  } else if (kindFilter === "email") {
+    conds.push(
+      inArray(creditTransactions.kind, ["email_charge", "email_refund"]),
+    );
   }
 
   // LEFT-JOIN mit runs + campaigns + admin-users, um Kontext direkt
@@ -82,6 +87,43 @@ export async function GET(req: NextRequest) {
     .limit(limit + 1);
 
   const hasMore = rows.length > limit;
+
+  // E-Mail-Kinds tragen die Blast-ID im Reason ("email_blast:<id>[:suffix]").
+  // Kontext (Kampagne + Link) in einem Rutsch nachladen.
+  const blastIds = new Set<string>();
+  for (const r of rows) {
+    if (r.kind === "email_charge" || r.kind === "email_refund") {
+      const m = /^email_blast:([^:]+)/.exec(r.reason ?? "");
+      if (m) blastIds.add(m[1]!);
+    }
+  }
+  const blastMap = new Map<
+    string,
+    { campaignId: string; campaignName: string | null }
+  >();
+  if (blastIds.size > 0) {
+    const blastRows = await db
+      .select({
+        id: emailBlasts.id,
+        campaignId: emailBlasts.campaignId,
+        campaignName: campaigns.name,
+      })
+      .from(emailBlasts)
+      .leftJoin(campaigns, eq(campaigns.id, emailBlasts.campaignId))
+      .where(
+        and(
+          eq(emailBlasts.userId, auth.user.id),
+          inArray(emailBlasts.id, Array.from(blastIds)),
+        ),
+      );
+    for (const b of blastRows) {
+      blastMap.set(b.id, {
+        campaignId: b.campaignId,
+        campaignName: b.campaignName,
+      });
+    }
+  }
+
   const items = rows.slice(0, limit).map((r) => ({
     id: String(r.id),
     kind: r.kind,
@@ -101,9 +143,21 @@ export async function GET(req: NextRequest) {
             campaignId: r.runCampaignId,
             campaignName: r.campaignName,
           }
-        : r.kind === "admin_adjust"
-          ? { adminEmail: r.adminUserEmail }
-          : null,
+        : r.kind === "email_charge" || r.kind === "email_refund"
+          ? (() => {
+              const m = /^email_blast:([^:]+)/.exec(r.reason ?? "");
+              const b = m ? blastMap.get(m[1]!) : undefined;
+              return b
+                ? {
+                    blastId: m![1]!,
+                    campaignId: b.campaignId,
+                    campaignName: b.campaignName,
+                  }
+                : null;
+            })()
+          : r.kind === "admin_adjust"
+            ? { adminEmail: r.adminUserEmail }
+            : null,
   }));
 
   return NextResponse.json({
