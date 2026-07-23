@@ -254,7 +254,28 @@ export function BillingTab() {
               Credit-Guthaben
             </h3>
             <p className="text-xs text-ink-muted mt-1">
-              1 Credit = 1 € netto = 1 Video. Credits verfallen nicht.
+              1 Credit = 1 € netto. Credits verfallen nicht.
+            </p>
+          </div>
+        </div>
+        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="rounded-squircle-sm bg-surface-soft px-4 py-3">
+            <p className="text-sm font-semibold text-ink">
+              1 Credit <span className="font-normal text-ink-muted">=</span> 1
+              Video
+            </p>
+            <p className="mt-0.5 text-[11px] text-ink-muted">
+              Wird pro erfolgreich generiertem Video abgebucht.
+            </p>
+          </div>
+          <div className="rounded-squircle-sm bg-surface-soft px-4 py-3">
+            <p className="text-sm font-semibold text-ink">
+              1 Credit <span className="font-normal text-ink-muted">=</span> 10
+              E-Mails
+            </p>
+            <p className="mt-0.5 text-[11px] text-ink-muted">
+              Beim Start eines Versands aufgerundet abgebucht — nicht
+              versendete Mails werden anteilig erstattet.
             </p>
           </div>
         </div>

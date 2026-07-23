@@ -116,7 +116,8 @@ export function TopupModal({
         <DialogHeader>
           <DialogTitle>Credits aufladen</DialogTitle>
           <DialogDescription className="text-xs">
-            1 Credit = 1 Video. Kein Verfall. Preise netto, zzgl. MwSt.
+            1 Credit = 1 Video oder 10 E-Mails. Kein Verfall. Preise netto,
+            zzgl. MwSt.
           </DialogDescription>
         </DialogHeader>
 
