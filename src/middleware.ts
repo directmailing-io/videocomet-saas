@@ -116,7 +116,8 @@ function isPassthroughPath(pathname: string): boolean {
     pathname === "/c" ||
     pathname === "/favicon.ico" ||
     pathname === "/robots.txt" ||
-    pathname === "/sitemap.xml"
+    pathname === "/sitemap.xml" ||
+    pathname.startsWith("/opengraph-image")
   );
 }
 
