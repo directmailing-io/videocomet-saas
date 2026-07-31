@@ -1,7 +1,7 @@
 export const metadata = { title: "AGB — VIDEOCOMET" };
 
 /**
- * AGB fuer B2B-only SaaS mit monatlichem Abo + Credit-Verbrauch.
+ * AGB fuer B2B-only SaaS mit 3-Monats-Abo (120 € netto im Voraus) + Credit-Verbrauch.
  * Diese Basis-Version ist als Template gedacht — vor Live-Rollout durch
  * einen Fachanwalt pruefen lassen (insb. §307 BGB Inhaltskontrolle bei
  * Klauseln zur Preisanpassung, Haftungsbegrenzung, Kuendigung).
@@ -62,9 +62,12 @@ export default function AgbPage() {
         gemäß der Preisliste auf der Website. Credits verfallen nicht.
       </p>
       <p>
-        Die monatliche Abrechnung des Plattform-Zugangs erfolgt jeweils zum
-        Beginn des Nutzungsmonats über den Zahlungsdienstleister Stripe.
-        Credit-Käufe werden bei Bestellung sofort in Rechnung gestellt.
+        Die Abrechnung des Plattform-Zugangs erfolgt im Voraus für die
+        jeweilige Vertragslaufzeit von 3 (drei) Monaten (120,00 € netto,
+        entsprechend 3 × 40,00 € netto) über den Zahlungsdienstleister
+        Stripe, erstmals bei Vertragsschluss und danach jeweils zu Beginn
+        jeder Verlängerungsperiode. Credit-Käufe werden bei Bestellung sofort
+        in Rechnung gestellt.
       </p>
 
       <h2>§ 5 Vertragslaufzeit und Kündigung</h2>

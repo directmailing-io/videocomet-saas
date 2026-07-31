@@ -10,7 +10,7 @@ type FAQItem = { q: string; a: string };
 const FAQ: ReadonlyArray<FAQItem> = [
   {
     q: "Wie wird der Grundtarif abgerechnet?",
-    a: "Der Grundtarif von 40 € netto pro Monat wird einmal jährlich im Voraus abgerechnet, also 480 € netto für die 12 Monate. Für jedes Video lädst du dann Credits nach, die taggenau verrechnet werden. So bleibt deine Buchhaltung übersichtlich und du zahlst nur, was du wirklich versendest.",
+    a: "Der Grundtarif von 40 € netto pro Monat wird alle 3 Monate im Voraus abgerechnet, also 120 € netto pro Laufzeit. Für jedes Video lädst du dann Credits nach, die taggenau verrechnet werden. So bleibt deine Buchhaltung übersichtlich und du zahlst nur, was du wirklich versendest.",
   },
   {
     q: "Was passiert mit Credits, die ich nicht verbrauche?",
@@ -18,7 +18,7 @@ const FAQ: ReadonlyArray<FAQItem> = [
   },
   {
     q: "Wie lange läuft der Vertrag und wie kündige ich?",
-    a: "12 Monate Mindestlaufzeit. Danach läuft der Vertrag monatlich weiter und du kannst jederzeit zum Monatsende kündigen. Kein Versteckspiel mit Fristen.",
+    a: "3 Monate Mindestlaufzeit. Danach verlängert sich der Vertrag automatisch um jeweils 3 Monate. Kündigen kannst du mit einem Monat Vorlauf zum Ende der Laufzeit, direkt in deinen Kontoeinstellungen. Kein Versteckspiel mit Fristen.",
   },
   {
     q: "Brauche ich technische Kenntnisse, um VIDEOCOMET zu nutzen?",

@@ -94,7 +94,7 @@ export function RunCostEstimate({
               Keine aktive Subscription
             </div>
             <p className="text-xs text-amber-800 mt-1">
-              Aktiviere den 40€/Monat-Plan um Runden zu starten. Bestehende
+              Aktiviere deinen Zugang (120 € / 3 Monate) um Runden zu starten. Bestehende
               Daten bleiben sichtbar.
             </p>
             <Button

@@ -40,8 +40,8 @@ const REASON_COPY: Record<
   no_subscription: {
     title: "Willkommen — noch kein aktiver Zugang",
     desc:
-      "Um die Plattform zu nutzen, aktiviere den 40€/Monat-Plan. Nach der Zahlung bist du sofort drin.",
-    primaryLabel: "Zugang aktivieren — 40 € / Monat",
+      "Um die Plattform zu nutzen, aktiviere deinen Zugang: 120 € für 3 Monate (3 × 40 €). Nach der Zahlung bist du sofort drin.",
+    primaryLabel: "Zugang aktivieren — 120 € / 3 Monate",
   },
   canceled: {
     title: "Dein Zugang ist pausiert",
@@ -149,7 +149,7 @@ export function PaywallScreen({ reason, periodEnd }: Props) {
             <ul className="space-y-2 mb-6 text-sm">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Plattform-Zugang für <strong>40 € / Monat</strong> netto zzgl. MwSt.</span>
+                <span>Plattform-Zugang für <strong>120 € pro 3 Monate</strong> (3 × 40 €) netto zzgl. MwSt., abgebucht im Voraus</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />

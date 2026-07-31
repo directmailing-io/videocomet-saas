@@ -211,8 +211,8 @@ export function DemoPlayer() {
               className={cn(
                 "flex items-center gap-2.5 shrink-0 pl-1.5 pr-4 py-1.5 rounded-full text-[13px] font-medium transition-all",
                 active
-                  ? "bg-ink text-white shadow-ink"
-                  : "bg-white/70 border border-white/80 text-ink-soft shadow-[0_2px_10px_-4px_rgba(80,60,150,0.2)] hover:bg-white hover:text-ink",
+                  ? "bg-ink text-white"
+                  : "bg-white/70 border border-white/80 text-ink-soft hover:bg-white hover:text-ink",
               )}
             >
               <span
@@ -249,12 +249,7 @@ export function DemoPlayer() {
               VIDEOCOMET Editor · Kampagne „Neukunden Q3“
             </span>
           </div>
-          <span
-            className="hidden sm:inline-flex items-center rounded-full bg-ink text-white text-[11px] font-semibold px-3 py-1.5"
-            aria-hidden
-          >
-            Videos generieren
-          </span>
+          <span className="w-12 shrink-0" aria-hidden />
         </div>
 
         <div className="p-4 md:p-6 flex flex-col gap-4 md:gap-5">

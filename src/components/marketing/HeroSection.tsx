@@ -59,7 +59,7 @@ export function HeroSection() {
       {/* Hero content */}
       <div className="relative z-10 w-full h-full max-w-6xl mx-auto px-6 md:px-10 flex flex-col justify-center gap-5 pt-16">
         <div className="vc-hero-eyebrow inline-flex items-center gap-3 text-[10px] tracking-[0.22em] uppercase opacity-0">
-          <span className="text-ink/80">Die geheime Strategie der Marktführer</span>
+          <span className="text-ink/80">Personalisierte Video-Akquise</span>
           <span className="hidden sm:block w-3 h-px bg-ink/25" />
           <span className="hidden sm:inline text-ink/40">VIDEOCOMET</span>
         </div>
@@ -84,17 +84,13 @@ export function HeroSection() {
         </h1>
 
         <p className="vc-hero-sub max-w-[480px] text-[16px] leading-[1.6] text-ink-soft opacity-0">
-          Einmal ein Video aufnehmen, danach{" "}
+          Du nimmst <strong className="font-semibold text-ink">ein einziges Video</strong>{" "}
+          auf. VIDEOCOMET macht daraus{" "}
           <strong className="font-semibold text-ink">
-            tausendfach personalisiert an deine Zielgruppe verschicken
+            für jeden Lead eine persönliche Version
           </strong>
-          . Persönlich, authentisch und überzeugend. So bleibst du{" "}
-          <strong className="font-semibold text-ink">in Erinnerung</strong>{" "}
-          und wirst von{" "}
-          <strong className="font-semibold text-ink">
-            neuen Kunden kontaktiert
-          </strong>
-          .
+          . So bleibst du im Kopf, und neue Kunden{" "}
+          <strong className="font-semibold text-ink">melden sich von selbst</strong>.
         </p>
 
         <div className="vc-hero-channels flex flex-wrap items-center gap-x-3 gap-y-2 opacity-0">
@@ -114,10 +110,10 @@ export function HeroSection() {
 
         <div className="vc-hero-cta flex flex-wrap items-center gap-4 mt-2 opacity-0">
           <Link
-            href="#demo"
+            href="/signup"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-ink text-white text-sm font-semibold hover:bg-ink/90 transition-colors shadow-ink"
           >
-            Live-Demo ansehen
+            Jetzt direkt loslegen
             <svg
               width="14"
               height="14"
@@ -133,10 +129,10 @@ export function HeroSection() {
             </svg>
           </Link>
           <Link
-            href="/login"
+            href="#features"
             className="inline-flex items-center gap-1.5 px-2 py-3 text-ink/75 text-sm font-medium hover:text-ink transition-colors"
           >
-            Anmelden
+            Features entdecken
             <svg
               width="12"
               height="12"

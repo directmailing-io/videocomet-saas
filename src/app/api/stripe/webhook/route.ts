@@ -75,7 +75,11 @@ export async function POST(req: NextRequest) {
   try {
     switch (event.type) {
       case "checkout.session.completed":
+      case "checkout.session.async_payment_succeeded":
         await handleCheckoutCompleted(event);
+        break;
+      case "checkout.session.async_payment_failed":
+        await handleAsyncPaymentFailed(event);
         break;
       case "customer.subscription.created":
       case "customer.subscription.updated":
@@ -123,6 +127,16 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
   }
 
   if (kind === "topup") {
+    // SEPA & Co. sind asynchron: checkout.session.completed feuert dann mit
+    // payment_status="unpaid" BEVOR das Geld da ist. Credits gibt es erst,
+    // wenn die Zahlung wirklich durch ist — bei async Methoden via
+    // checkout.session.async_payment_succeeded (payment_status="paid").
+    if (session.payment_status !== "paid") {
+      console.log(
+        `[stripe:webhook] topup ${session.id} noch nicht bezahlt (${session.payment_status}) — warte auf async_payment_succeeded`,
+      );
+      return;
+    }
     const credits = Number(meta.credits ?? 0);
     if (!Number.isFinite(credits) || credits < 1) {
       console.warn(`[stripe:webhook] topup mit ungueltigen credits: ${meta.credits}`);
@@ -147,6 +161,35 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
     const sub = await stripe.subscriptions.retrieve(subId);
     await syncSubscriptionToUser(userId, sub);
     return;
+  }
+}
+
+/**
+ * checkout.session.async_payment_failed — die asynchrone Zahlung (z. B.
+ * SEPA) ist endgueltig fehlgeschlagen.
+ *
+ * Topup: Credits wurden nie gutgeschrieben (Guard oben), also nur loggen.
+ * Subscription: Status aus Stripe nachziehen, damit das Access-Gate den
+ * fehlgeschlagenen Zustand (incomplete/past_due) korrekt widerspiegelt.
+ */
+async function handleAsyncPaymentFailed(event: Stripe.Event) {
+  const session = event.data.object as Stripe.Checkout.Session;
+  const meta = session.metadata ?? {};
+  const userId = meta.userId;
+
+  if (meta.kind === "topup") {
+    console.warn(
+      `[stripe:webhook] async payment failed fuer topup ${session.id} (user ${userId ?? "?"}) — keine Credits vergeben, nichts zu tun`,
+    );
+    return;
+  }
+
+  if (meta.kind === "subscription" && userId) {
+    const subId = session.subscription;
+    if (!subId || typeof subId !== "string") return;
+    const stripe = getStripe();
+    const sub = await stripe.subscriptions.retrieve(subId);
+    await syncSubscriptionToUser(userId, sub);
   }
 }
 

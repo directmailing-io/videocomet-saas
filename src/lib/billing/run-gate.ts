@@ -64,7 +64,7 @@ export async function assertBillingReadyForRun(input: {
   if (!isActiveNow) {
     throw new BillingGateError(
       "no_subscription",
-      "Keine aktive Subscription. Bitte 40€/Monat-Plan aktivieren um Runden zu starten.",
+      "Keine aktive Subscription. Bitte Plattform-Zugang aktivieren um Runden zu starten.",
     );
   }
 

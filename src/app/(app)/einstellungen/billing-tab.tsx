@@ -190,7 +190,7 @@ export function BillingTab() {
           <div>
             <h3 className="text-base font-semibold">Plattform-Zugang</h3>
             <p className="text-xs text-ink-muted mt-1">
-              40 € / Monat netto — Voraussetzung für die Video-Generierung
+              120 € / 3 Monate netto (3 × 40 €) — Voraussetzung für die Video-Generierung
             </p>
           </div>
           {status.subscription.status ? (

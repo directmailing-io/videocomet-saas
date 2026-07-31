@@ -266,7 +266,8 @@ export function PricingSection() {
               </Link>
               <div className="text-[12px] text-ink-muted mt-4">
                 3 Monate Mindestlaufzeit · nur für Unternehmen (B2B) · Videos
-                erfordern zusätzlich Credits
+                erfordern zusätzlich Credits: 1 Credit = 1 € = 1 Video,
+                10 E-Mails = 1 Credit
               </div>
             </div>
             </Squircle>

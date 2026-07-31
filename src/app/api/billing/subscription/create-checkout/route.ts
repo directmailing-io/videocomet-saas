@@ -15,7 +15,7 @@ import {
 /**
  * POST /api/billing/subscription/create-checkout
  *
- * Erstellt eine Stripe-Checkout-Session fuer die 40€/Monat-Subscription.
+ * Erstellt eine Stripe-Checkout-Session fuer die Plattform-Subscription (120 € / 3 Monate).
  * Redirect-URL wird zurueckgegeben — Client leitet direkt zu Stripe weiter.
  *
  * Bereits aktive Subscription → 409 Conflict.
