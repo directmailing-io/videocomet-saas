@@ -88,6 +88,9 @@ export default async function NewRunPage({
       campaignId={campaign.id}
       campaignName={campaign.name}
       pdfEnabled={campaign.pdfEnabled}
+      campaignMode={
+        campaign.mode === "webcam-only" ? "webcam-only" : "with-presentation"
+      }
       abTestingActive={abTestingActive}
       abDefaultMode={campaign.abSplitMode}
       abDefaultWeightA={campaign.abSplitWeightA}

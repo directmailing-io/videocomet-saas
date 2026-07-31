@@ -27,7 +27,6 @@ import {
   FilterToolbar,
   pickProblematicIds,
   type FilterKey,
-  type SortKey,
 } from "./_components/filter-toolbar";
 import { Lightbox } from "./_components/lightbox";
 import { LeadContextMenu } from "./_components/lead-context-menu";
@@ -81,10 +80,6 @@ export interface PreflightReviewClientProps {
   runName: string;
 }
 
-const DEFAULT_FILTERS: ReadonlySet<FilterKey> = new Set<FilterKey>([
-  "problematic",
-]);
-
 export function PreflightReviewClient({
   campaignId,
   campaignName,
@@ -109,11 +104,8 @@ export function PreflightReviewClient({
   const [loadingState, setLoadingState] = React.useState<
     "initial" | "ready" | "error"
   >("initial");
-  const [activeFilters, setActiveFilters] = React.useState<Set<FilterKey>>(
-    () => new Set<FilterKey>(DEFAULT_FILTERS),
-  );
+  const [view, setView] = React.useState<FilterKey>("problematic");
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [sort, setSort] = React.useState<SortKey>("problems_first");
   const [ctxMenu, setCtxMenu] = React.useState<{
     leadId: string;
     x: number;
@@ -323,8 +315,14 @@ export function PreflightReviewClient({
 
   // ── Derived: gefilterte & sortierte Liste ───────────────────────
   const visibleLeads = React.useMemo(
-    () => applyFilterAndSort(leads, activeFilters, searchQuery, sort),
-    [leads, activeFilters, searchQuery, sort],
+    () =>
+      applyFilterAndSort(
+        leads,
+        new Set<FilterKey>([view]),
+        searchQuery,
+        "problems_first",
+      ),
+    [leads, view, searchQuery],
   );
   const visibleIds = React.useMemo(
     () => visibleLeads.map((l) => l.id),
@@ -476,24 +474,6 @@ export function PreflightReviewClient({
       setConfirmOpen(false);
     }
   }, [runId, campaignId, router, selection, toast]);
-
-  // ── Filter-Handling ─────────────────────────────────────────────
-  const toggleFilter = React.useCallback((key: FilterKey) => {
-    setActiveFilters((prev) => {
-      const next = new Set<FilterKey>(prev);
-      // "all" und gezielte Filter schließen sich aus
-      if (key === "all") {
-        return next.has("all")
-          ? new Set<FilterKey>()
-          : new Set<FilterKey>(["all"]);
-      }
-      next.delete("all");
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      if (next.size === 0) next.add("all");
-      return next;
-    });
-  }, []);
 
   // ── Card-Selection-Layer ───────────────────────────────────────
   const onSelectToggle = React.useCallback(
@@ -741,15 +721,6 @@ export function PreflightReviewClient({
             </div>
 
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                iconLeft={<RefreshCcw className="size-4" />}
-                onClick={() => void Promise.all([loadLeads(), loadStatus()])}
-                title="Status & Leads neu laden"
-              >
-                Aktualisieren
-              </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -841,12 +812,10 @@ export function PreflightReviewClient({
         >
           <FilterToolbar
             leads={leads}
-            activeFilters={activeFilters}
+            view={view}
             searchQuery={searchQuery}
-            sort={sort}
-            onToggleFilter={toggleFilter}
+            onViewChange={setView}
             onSearchChange={setSearchQuery}
-            onSortChange={setSort}
           />
         </div>
 
@@ -903,7 +872,7 @@ export function PreflightReviewClient({
                 <Button
                   variant="ghost"
                   onClick={() => {
-                    setActiveFilters(new Set<FilterKey>(["all"]));
+                    setView("all");
                     setSearchQuery("");
                   }}
                 >
@@ -930,15 +899,9 @@ export function PreflightReviewClient({
         <div className="text-[11px] text-ink-muted flex items-center gap-2 pb-4">
           <Keyboard className="size-3.5" />
           <span>
-            <span className="font-mono font-semibold">←↑↓→</span> navigieren ·{" "}
-            <span className="font-mono font-semibold">Space</span> auswählen ·{" "}
+            <span className="font-mono font-semibold">←→</span> navigieren ·{" "}
             <span className="font-mono font-semibold">Enter</span> Details ·{" "}
-            <span className="font-mono font-semibold">Klick</span> Auswahl ·{" "}
-            <span className="font-mono font-semibold">Rechtsklick</span> Menü ·{" "}
             <span className="font-mono font-semibold">R</span> entfernen ·{" "}
-            <span className="font-mono font-semibold">K</span> behalten ·{" "}
-            <span className="font-mono font-semibold">⌘A</span> alles ·{" "}
-            <span className="font-mono font-semibold">F</span> Problematische ·{" "}
             <span className="font-mono font-semibold">/</span> Suche
           </span>
         </div>

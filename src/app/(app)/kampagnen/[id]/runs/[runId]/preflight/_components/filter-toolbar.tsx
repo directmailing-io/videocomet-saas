@@ -3,31 +3,21 @@
 import * as React from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
   STATUS_LABEL,
   isProblematic,
-  severityOf,
   type PreflightLead,
   type PreflightStatus,
 } from "./lead-card";
 
 /**
- * Filter-Modell:
- *   activeFilters ist eine Set-ähnliche Liste von Filter-Keys.
- *   Spezielle Keys:
- *     "all"          → kein Filter
- *     "problematic"  → alle Karten mit !ok && !pending && !running
- *     <PreflightStatus> → exakt dieser Status
- *
- * Mehrfach-Filter sind kombinierbar (Multi-Select), die OR-Semantik gilt.
+ * Filter-Modell (vereinfacht): genau EINE aktive Sicht.
+ *   "problematic"  → alle Karten mit !ok && !pending && !running
+ *   "ok"           → nur geprüfte, unauffällige Leads
+ *   "all"          → kein Filter
+ * Die Status-Detail-Keys bleiben im Typ erhalten, damit
+ * `applyFilterAndSort` abwärtskompatibel bleibt.
  */
 export type FilterKey = "all" | "problematic" | PreflightStatus;
 
@@ -37,84 +27,40 @@ export type SortKey =
   | "domain_asc"
   | "upload_order";
 
-const SORT_LABEL: Record<SortKey, string> = {
-  problems_first: "Probleme zuerst",
-  duration_desc: "Ladezeit absteigend",
-  domain_asc: "Domain A–Z",
-  upload_order: "Upload-Reihenfolge",
-};
-
-const PRIMARY_FILTERS: ReadonlyArray<{ key: FilterKey; label: string }> = [
-  { key: "problematic", label: "Problematisch" },
-  { key: "all", label: "Alle" },
+const VIEWS: ReadonlyArray<{ key: FilterKey; label: string }> = [
+  { key: "problematic", label: "Auffällig" },
   { key: "ok", label: "OK" },
-];
-
-const STATUS_FILTERS: ReadonlyArray<{ key: PreflightStatus; label: string }> = [
-  { key: "url_dead", label: "Tote URLs" },
-  { key: "tls_error", label: "TLS-Fehler" },
-  { key: "url_redirect", label: "Umleitungen" },
-  { key: "slow", label: "Langsam" },
-  { key: "bot_block", label: "Bot-Block" },
-  { key: "missing_field", label: "Daten unvollständig" },
-  { key: "duplicate", label: "Duplikate" },
-  { key: "screenshot_unavailable", label: "Screenshot fehlt" },
-  { key: "unknown_error", label: "Fehler" },
+  { key: "all", label: "Alle" },
 ];
 
 export interface FilterToolbarProps {
-  /** Volle Lead-Liste — wir berechnen daraus die Chip-Counts. */
+  /** Volle Lead-Liste — wir berechnen daraus die Counts pro Sicht. */
   leads: ReadonlyArray<PreflightLead>;
-  activeFilters: ReadonlySet<FilterKey>;
+  view: FilterKey;
   searchQuery: string;
-  sort: SortKey;
-  onToggleFilter: (key: FilterKey) => void;
+  onViewChange: (key: FilterKey) => void;
   onSearchChange: (q: string) => void;
-  onSortChange: (s: SortKey) => void;
 }
 
 export function FilterToolbar({
   leads,
-  activeFilters,
+  view,
   searchQuery,
-  sort,
-  onToggleFilter,
+  onViewChange,
   onSearchChange,
-  onSortChange,
 }: FilterToolbarProps) {
-  // Counts cachen — bei 500 Leads ist das eine schnelle Reduce-Schleife,
-  // aber wir vermeiden das pro Render mit useMemo.
   const counts = React.useMemo(() => {
-    const c = {
-      all: 0,
-      problematic: 0,
-      ok: 0,
-      pending: 0,
-      running: 0,
-      url_dead: 0,
-      tls_error: 0,
-      url_redirect: 0,
-      slow: 0,
-      bot_block: 0,
-      missing_field: 0,
-      duplicate: 0,
-      screenshot_unavailable: 0,
-      unknown_error: 0,
-    } satisfies Record<string, number>;
+    let all = 0;
+    let problematic = 0;
+    let ok = 0;
     for (const lead of leads) {
-      if (lead.removedAt) continue; // entfernte Leads zählen nicht
-      c.all += 1;
+      if (lead.removedAt) continue;
+      all += 1;
       const s = lead.preflightStatus;
-      if (s === "ok") c.ok += 1;
-      else if (s === "pending") c.pending += 1;
-      else if (s === "running") c.running += 1;
-      else {
-        // alle terminalen Nicht-OK-Status sind problematisch
-        c.problematic += 1;
-        if (s in c) (c as Record<string, number>)[s] += 1;
-      }
+      if (s === "ok") ok += 1;
+      else if (s !== "pending" && s !== "running") problematic += 1;
     }
-    return c;
+    return { all, problematic, ok };
   }, [leads]);
 
   // Lokales Search-Input mit Debounce nach 200ms an Parent.
@@ -128,144 +74,64 @@ export function FilterToolbar({
   }, [localSearch]);
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Primary Filter-Row */}
-      <div className="flex flex-wrap items-center gap-2">
-        {PRIMARY_FILTERS.map(({ key, label }) => {
+    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+      {/* Segment-Schalter: eine Sicht, klare Wahl */}
+      <div
+        role="tablist"
+        aria-label="Leads filtern"
+        className="inline-flex items-center rounded-full bg-surface-soft p-1 self-start"
+      >
+        {VIEWS.map(({ key, label }) => {
           const count =
             key === "all"
               ? counts.all
               : key === "problematic"
                 ? counts.problematic
                 : counts.ok;
+          const active = view === key;
           return (
-            <FilterChip
+            <button
               key={key}
-              label={label}
-              count={count}
-              active={activeFilters.has(key)}
-              variant={
-                key === "problematic"
-                  ? "warn"
-                  : key === "ok"
-                    ? "success"
-                    : "neutral"
-              }
-              onClick={() => onToggleFilter(key)}
-            />
-          );
-        })}
-        <span className="hidden sm:inline-block h-5 w-px bg-line mx-1" />
-        {STATUS_FILTERS.map(({ key, label }) => {
-          const count = (counts as Record<string, number>)[key] ?? 0;
-          if (count === 0 && !activeFilters.has(key)) return null;
-          const sev = severityOf(key);
-          return (
-            <FilterChip
-              key={key}
-              label={label}
-              count={count}
-              active={activeFilters.has(key)}
-              variant={
-                sev === "danger"
-                  ? "danger"
-                  : sev === "warn"
-                    ? "warn"
-                    : "neutral"
-              }
-              onClick={() => onToggleFilter(key)}
-            />
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onViewChange(key)}
+              className={cn(
+                "inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-xs font-semibold transition-all duration-150",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
+                active
+                  ? "bg-surface text-ink shadow-sm"
+                  : "text-ink-muted hover:text-ink",
+              )}
+            >
+              <span>{label}</span>
+              <span
+                className={cn(
+                  "tabular-nums text-[11px] font-bold",
+                  active && key === "problematic" && count > 0
+                    ? "text-warn"
+                    : "text-ink-muted",
+                )}
+              >
+                {count}
+              </span>
+            </button>
           );
         })}
       </div>
 
-      {/* Search + Sort */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-        <div className="flex-1 max-w-md">
-          <Input
-            type="search"
-            placeholder="Name, Firma oder Domain…"
-            value={localSearch}
-            onChange={(e) => setLocalSearch(e.target.value)}
-            icon={<Search />}
-            aria-label="Leads durchsuchen"
-            className="h-9 py-2"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-ink-muted uppercase tracking-wider">
-            Sortieren
-          </span>
-          <Select value={sort} onValueChange={(v) => onSortChange(v as SortKey)}>
-            <SelectTrigger className="h-9 min-w-[180px] text-sm">
-              <SelectValue placeholder="Sortieren" />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
-                <SelectItem key={k} value={k}>
-                  {SORT_LABEL[k]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="flex-1 max-w-sm">
+        <Input
+          type="search"
+          placeholder="Name, Firma oder Domain…"
+          value={localSearch}
+          onChange={(e) => setLocalSearch(e.target.value)}
+          icon={<Search />}
+          aria-label="Leads durchsuchen"
+          className="h-9 py-2"
+        />
       </div>
     </div>
-  );
-}
-
-interface FilterChipProps {
-  label: string;
-  count: number;
-  active: boolean;
-  variant: "neutral" | "warn" | "danger" | "success";
-  onClick: () => void;
-}
-
-const variantInactive: Record<FilterChipProps["variant"], string> = {
-  neutral: "bg-surface-soft text-ink-soft hover:bg-canvas-deep",
-  warn: "bg-surface-soft text-ink-soft hover:bg-warn-soft/60",
-  danger: "bg-surface-soft text-ink-soft hover:bg-danger-soft/60",
-  success: "bg-surface-soft text-ink-soft hover:bg-canvas-deep",
-};
-
-const variantActive: Record<FilterChipProps["variant"], string> = {
-  neutral: "bg-brand-soft text-brand-deep",
-  warn: "bg-warn-soft text-warn",
-  danger: "bg-danger-soft text-danger",
-  success: "bg-ok-soft text-ok",
-};
-
-function FilterChip({
-  label,
-  count,
-  active,
-  variant,
-  onClick,
-}: FilterChipProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "inline-flex items-center gap-2 h-8 px-3 rounded-full text-xs font-semibold transition-all duration-150",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
-        active ? variantActive[variant] : variantInactive[variant],
-      )}
-    >
-      <span>{label}</span>
-      <span
-        className={cn(
-          "tabular-nums text-[11px] font-bold rounded-full px-1.5 min-w-[20px] text-center",
-          active
-            ? "bg-white/60 text-current"
-            : "bg-surface-muted text-ink-muted",
-        )}
-      >
-        {count}
-      </span>
-    </button>
   );
 }
 

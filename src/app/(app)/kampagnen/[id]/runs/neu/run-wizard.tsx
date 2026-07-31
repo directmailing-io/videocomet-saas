@@ -36,12 +36,18 @@ import {
 import { detectDuplicates } from "@/lib/dedupe/engine";
 import type { DedupeConfig } from "@/lib/dedupe/types";
 import { MultiTabPicker, type SelectedTab, type SheetTabInfo } from "./tab-picker";
+import { Switch } from "@/components/ui/switch";
 import { AbSplitPicker, type AbSplitMode } from "@/components/ab/ab-split-picker";
 
 export interface RunWizardProps {
   campaignId: string;
   campaignName: string;
   pdfEnabled: boolean;
+  /**
+   * Kampagnen-Modus. Nur bei `with-presentation` gibt es eine Screenshot-
+   * Vorprüfung — und damit den Opt-out-Toggle im letzten Step.
+   */
+  campaignMode: "webcam-only" | "with-presentation";
   /**
    * true wenn der Brief-A/B-Test der Kampagne startklar ist (aktiviert +
    * beide Google-Docs-URLs hinterlegt). Dann zeigt Step 3 die Split-Regel
@@ -94,6 +100,7 @@ export function RunWizard({
   campaignId,
   campaignName,
   pdfEnabled,
+  campaignMode,
   abTestingActive,
   abDefaultMode,
   abDefaultWeightA,
@@ -146,17 +153,26 @@ export function RunWizard({
   );
   const [abWeightA, setAbWeightA] = React.useState(abDefaultWeightA);
 
+  // Screenshot-Vorprüfung (Phase 1): Default an. Bei Opt-out gehen alle
+  // Leads direkt in die Produktion. Nur relevant bei `with-presentation`.
+  const [preflightCheck, setPreflightCheck] = React.useState(true);
+  const preflightToggleVisible = campaignMode === "with-presentation";
+
   /**
    * Request-Init für POST /api/runs/[id]/start. Bei aktivem A/B-Test wird
    * die Split-Regel mitgeschickt — das Backend friert sie zusammen mit
-   * beiden Brief-URLs als Snapshot in `runs.ab_config` ein.
+   * beiden Brief-URLs als Snapshot in `runs.ab_config` ein. Ohne
+   * Vorprüfung geht zusätzlich `skipPreflight` mit.
    */
   function startRequestInit(): RequestInit {
-    if (!abTestingActive) return { method: "POST" };
+    const body: Record<string, unknown> = {};
+    if (abTestingActive) body.ab = { mode: abMode, weightA: abWeightA };
+    if (preflightToggleVisible && !preflightCheck) body.skipPreflight = true;
+    if (Object.keys(body).length === 0) return { method: "POST" };
     return {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ab: { mode: abMode, weightA: abWeightA } }),
+      body: JSON.stringify(body),
     };
   }
 
@@ -940,6 +956,27 @@ export function RunWizard({
                       </>
                     )
                   }
+                />
+              </CardContent>
+            </Card>
+          )}
+          {preflightToggleVisible && (
+            <Card>
+              <CardContent className="flex items-center justify-between gap-6 pt-6">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-ink">
+                    Webseiten vorab prüfen
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+                    {preflightCheck
+                      ? "Wir machen zuerst einen Screenshot von jeder Webseite. Du sortierst problematische Leads aus, danach startet die Produktion."
+                      : "Ohne Vorprüfung. Alle Leads gehen direkt in die Produktion."}
+                  </p>
+                </div>
+                <Switch
+                  checked={preflightCheck}
+                  onCheckedChange={setPreflightCheck}
+                  aria-label="Webseiten vorab prüfen"
                 />
               </CardContent>
             </Card>

@@ -99,8 +99,15 @@ export async function POST(
   // wurde historisch ohne Body aufgerufen — ein fehlender/leerer Body ist
   // weiterhin gültig.
   let abRequest: { mode: "random" | "sequential"; weightA: number } | null = null;
+  // Opt-out der Screenshot-Vorprüfung (Phase 1) für diese Runde. Der User
+  // entscheidet im Runden-Wizard per Toggle — ohne Vorprüfung gehen alle
+  // Leads direkt in die Produktion (Auto-Approve-Pfad wie bei webcam-only).
+  let skipPreflightRequested = false;
   try {
     const body = await req.json();
+    if (body && typeof body === "object" && body.skipPreflight === true) {
+      skipPreflightRequested = true;
+    }
     if (body && typeof body === "object" && body.ab) {
       const mode = body.ab.mode;
       const weightA = Number(body.ab.weightA);
@@ -434,7 +441,8 @@ export async function POST(
     .from(campaigns)
     .where(eq(campaigns.id, run.campaignId))
     .limit(1);
-  const skipPreflight = campaignRow?.mode === "webcam-only";
+  const skipPreflight =
+    campaignRow?.mode === "webcam-only" || skipPreflightRequested;
 
   // ── A/B-Test: Varianten-Zuteilung ────────────────────────────────────────
   //
