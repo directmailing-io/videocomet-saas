@@ -235,7 +235,7 @@ export function DemoPlayer() {
       </div>
 
       {/* Editor-Fenster — hell, minimal */}
-      <div className="rounded-3xl bg-white border border-line overflow-hidden shadow-[0_30px_80px_-30px_rgba(60,40,130,0.35),0_8px_28px_-14px_rgba(60,40,130,0.2)]">
+      <div className="rounded-3xl vc-squircle bg-white border border-line overflow-hidden shadow-[0_30px_80px_-30px_rgba(60,40,130,0.35),0_8px_28px_-14px_rgba(60,40,130,0.2)]">
         {/* Titelleiste */}
         <div className="flex items-center gap-3 px-4 md:px-5 py-3 border-b border-line bg-surface-soft">
           <div className="flex items-center gap-1.5" aria-hidden>
@@ -245,7 +245,7 @@ export function DemoPlayer() {
           </div>
           <div className="flex-1 flex justify-center min-w-0">
             <span className="text-[12px] text-ink-muted truncate">
-              VIDEOCOMET Editor — Kampagne „Neukunden Q3“
+              VIDEOCOMET Editor · Kampagne „Neukunden Q3“
             </span>
           </div>
           <span

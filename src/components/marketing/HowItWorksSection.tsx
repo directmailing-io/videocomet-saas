@@ -1,13 +1,5 @@
 import * as React from "react";
-import {
-  ArrowDown,
-  ArrowRight,
-  AtSign,
-  Check,
-  Eye,
-  Linkedin,
-  Mail,
-} from "lucide-react";
+import { ArrowDown, ArrowRight, Eye } from "lucide-react";
 import { RevealOnScroll } from "./RevealOnScroll";
 
 export function HowItWorksSection() {
@@ -34,11 +26,11 @@ export function HowItWorksSection() {
           </RevealOnScroll>
           <RevealOnScroll delay={200}>
             <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-2xl mx-auto">
-              Drei Schritte, einmalig ungefähr 30 Minuten. Danach erreichst du{" "}
+              Drei Schritte, einmal ungefähr 30 Minuten. Danach kriegt{" "}
               <strong className="font-semibold text-ink">
-                beliebig viele Leads
-              </strong>{" "}
-              — jeder mit seinem eigenen Video.
+                jeder Lead sein eigenes Video
+              </strong>
+              , egal ob 50 oder 5.000.
             </p>
           </RevealOnScroll>
         </div>
@@ -49,7 +41,7 @@ export function HowItWorksSection() {
             <StepCard
               number={1}
               title="Einmal aufnehmen"
-              text="Nimm ein einziges Video mit deiner Webcam auf. Ganz normal, wie eine Sprachnachricht mit Bild."
+              text="Nimm ein Video mit deiner Webcam auf. Ganz locker, so wie du auch eine Sprachnachricht schicken würdest."
             >
               <RecordVisual />
             </StepCard>
@@ -61,7 +53,7 @@ export function HowItWorksSection() {
             <StepCard
               number={2}
               title="Leads hochladen"
-              text="Lade deine Leadliste hoch. Für jeden Empfänger entsteht automatisch ein persönliches Video mit eigener Landingpage."
+              text="Wirf deine Leadliste rein. Den Rest macht VIDEOCOMET: Jeder Lead bekommt automatisch sein eigenes Video samt Landingpage."
             >
               <LeadsVisual />
             </StepCard>
@@ -73,7 +65,7 @@ export function HowItWorksSection() {
             <StepCard
               number={3}
               title="Verschicken & zuschauen"
-              text="Verschicke per E-Mail, LinkedIn oder Brief — und sieh live, wer dein Video gerade ansieht."
+              text="Verschick alles per E-Mail, LinkedIn oder Brief. Danach siehst du live, wer sich dein Video gerade anschaut."
             >
               <TrackingVisual />
             </StepCard>
@@ -87,11 +79,6 @@ export function HowItWorksSection() {
           50% { opacity: 0.35; }
         }
         .vc-rec-dot { animation: vc-rec-pulse 1.4s ease-in-out infinite; }
-        @keyframes vc-live-pulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.35); opacity: 0.5; }
-        }
-        .vc-live-dot { animation: vc-live-pulse 1.6s ease-in-out infinite; }
       `}</style>
     </section>
   );
@@ -109,7 +96,7 @@ function StepCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="h-full rounded-3xl bg-[#f8f7fd] p-5 md:p-6 flex flex-col">
+    <div className="h-full rounded-[28px] vc-squircle vc-shadow-pretty bg-[#f8f7fd] p-5 md:p-6 flex flex-col">
       {children}
       <div className="flex items-center gap-2.5 mt-5 mb-2">
         <span
@@ -142,111 +129,101 @@ function StepArrow({ delay }: { delay: number }) {
 }
 
 // ---------------------------------------------------------------------------
-// Mini-Visuals — bewusst simpel, ein Blick genügt
+// Mini-Visuals: Sky-Hintergrund + genau ein weißes UI-Element, apple-like
 // ---------------------------------------------------------------------------
 
-function RecordVisual() {
+function Visual({
+  position,
+  children,
+}: {
+  position: string;
+  children: React.ReactNode;
+}) {
   return (
     <div
-      className="relative h-40 rounded-2xl overflow-hidden"
-      style={{ background: "linear-gradient(135deg, #7C5CE8, #9573EE)" }}
+      className="relative h-40 rounded-2xl vc-squircle overflow-hidden bg-cover"
+      style={{
+        backgroundImage: "url(/visual-sky.jpg)",
+        backgroundPosition: position,
+      }}
       aria-hidden
     >
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="size-16 rounded-full bg-white/95 flex items-center justify-center text-brand-deep font-bold text-lg shadow-lg">
-          DU
-        </div>
+      <div className="absolute inset-0 flex items-center justify-center p-4">
+        {children}
       </div>
-      <span className="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-black/35 backdrop-blur px-2.5 py-1 text-[10px] font-semibold text-white">
-        <span className="vc-rec-dot size-1.5 rounded-full bg-red-400" />
-        REC
-      </span>
-      <span className="absolute bottom-3 right-3 rounded-full bg-black/35 backdrop-blur px-2.5 py-1 text-[10px] font-medium text-white tabular-nums">
-        0:48
-      </span>
     </div>
   );
 }
 
-const LEAD_ROWS = [
-  { initials: "MM", name: "Max Mustermann", grad: "linear-gradient(135deg, #7C5CE8, #5232C7)" },
-  { initials: "LL", name: "Lisa Lust", grad: "linear-gradient(135deg, #EC4899, #BE185D)" },
-  { initials: "FF", name: "Franz Friedrich", grad: "linear-gradient(135deg, #F97316, #C2410C)" },
+const GLASS_CARD =
+  "rounded-2xl vc-squircle bg-white/95 backdrop-blur-md shadow-[0_16px_40px_-12px_rgba(20,10,60,0.45)]";
+
+function RecordVisual() {
+  return (
+    <Visual position="50% 18%">
+      <div className={`${GLASS_CARD} px-4 py-3 flex items-center gap-2.5`}>
+        <span className="vc-rec-dot size-2 rounded-full bg-red-500 shrink-0" />
+        <span className="text-[13px] font-semibold text-ink">
+          Aufnahme läuft
+        </span>
+        <span className="text-[12px] text-ink-muted tabular-nums">0:48</span>
+      </div>
+    </Visual>
+  );
+}
+
+const AVATARS = [
+  { initials: "MM", grad: "linear-gradient(135deg, #7C5CE8, #5232C7)" },
+  { initials: "LL", grad: "linear-gradient(135deg, #EC4899, #BE185D)" },
+  { initials: "FF", grad: "linear-gradient(135deg, #F97316, #C2410C)" },
 ];
 
 function LeadsVisual() {
   return (
-    <div className="h-40 rounded-2xl bg-white p-3 flex flex-col justify-center gap-1.5" aria-hidden>
-      {LEAD_ROWS.map((l) => (
-        <div key={l.initials} className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
-          <span
-            className="size-7 shrink-0 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
-            style={{ background: l.grad }}
-          >
-            {l.initials}
-          </span>
-          <span className="flex-1 text-[12.5px] font-medium text-ink truncate">
-            {l.name}
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-semibold px-2 py-0.5">
-            <Check className="size-3" />
-            Video fertig
-          </span>
+    <Visual position="50% 50%">
+      <div className={`${GLASS_CARD} px-4 py-3 flex items-center gap-3`}>
+        <div className="flex -space-x-2">
+          {AVATARS.map((a) => (
+            <span
+              key={a.initials}
+              className="size-7 rounded-full ring-2 ring-white flex items-center justify-center text-white text-[9px] font-bold"
+              style={{ background: a.grad }}
+            >
+              {a.initials}
+            </span>
+          ))}
         </div>
-      ))}
-      <span className="px-2 text-[11px] text-ink-muted">+ 214 weitere …</span>
-    </div>
+        <div className="leading-tight">
+          <div className="text-[13px] font-semibold text-ink">217 Videos</div>
+          <div className="text-[11px] text-ink-muted">eins pro Lead, fertig</div>
+        </div>
+      </div>
+    </Visual>
   );
 }
 
 function TrackingVisual() {
   return (
-    <div className="h-40 rounded-2xl bg-white p-3 flex flex-col justify-center gap-2" aria-hidden>
-      <div className="flex items-center gap-1.5">
-        <ChannelPill icon={<AtSign className="size-3" />} label="E-Mail" />
-        <ChannelPill icon={<Linkedin className="size-3" />} label="LinkedIn" />
-        <ChannelPill icon={<Mail className="size-3" />} label="Brief" />
-      </div>
-      <div className="rounded-xl bg-[#f8f7fd] px-3 py-2.5 flex items-center gap-2.5">
-        <span className="relative flex size-2 shrink-0">
-          <span className="vc-live-dot absolute inline-flex h-full w-full rounded-full bg-emerald-400" />
-          <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+    <Visual position="50% 88%">
+      <div className={`${GLASS_CARD} px-3.5 py-3 flex items-start gap-3 w-full max-w-[250px]`}>
+        <span
+          className="size-9 shrink-0 rounded-[10px] flex items-center justify-center text-white"
+          style={{ background: "linear-gradient(135deg, #7C5CE8, #5232C7)" }}
+        >
+          <Eye className="size-4" />
         </span>
-        <span className="text-[12px] text-ink leading-snug">
-          <strong className="font-semibold">Max Mustermann</strong> schaut
-          gerade dein Video
-        </span>
-      </div>
-      <div className="flex items-center gap-2 px-1">
-        <Eye className="size-3.5 text-brand-deep shrink-0" />
-        <div className="flex-1 h-1.5 rounded-full bg-ink/[0.07] overflow-hidden">
-          <div
-            className="h-full rounded-full"
-            style={{
-              width: "78%",
-              background: "linear-gradient(90deg, #7C5CE8, #9573EE)",
-            }}
-          />
+        <div className="flex-1 min-w-0 leading-tight">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[13px] font-semibold text-ink truncate">
+              Max Mustermann
+            </span>
+            <span className="text-[10px] text-ink-muted shrink-0">Jetzt</span>
+          </div>
+          <div className="text-[12px] text-ink-muted mt-0.5">
+            schaut gerade dein Video an
+          </div>
         </div>
-        <span className="text-[11px] font-semibold text-ink tabular-nums">
-          78&nbsp;% gesehen
-        </span>
       </div>
-    </div>
-  );
-}
-
-function ChannelPill({
-  icon,
-  label,
-}: {
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-[#f8f7fd] text-ink-soft text-[10.5px] font-medium px-2 py-1">
-      {icon}
-      {label}
-    </span>
+    </Visual>
   );
 }
