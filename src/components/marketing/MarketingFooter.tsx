@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, Linkedin, Mail } from "lucide-react";
+import { CookieSettingsLink } from "@/components/consent/CookieSettingsLink";
 import { Logo } from "@/components/ui/logo";
 
 type FooterLink = { label: string; href: string; external?: boolean };
@@ -123,6 +124,17 @@ export function MarketingFooter({ variant = "light" }: { variant?: "light" | "da
                     </Link>
                   </li>
                 ))}
+                {col.title === "Rechtliches" ? (
+                  <li>
+                    <CookieSettingsLink
+                      className={
+                        dark
+                          ? "text-[14.5px] text-white/60 hover:text-white transition-colors"
+                          : "text-[14.5px] text-ink-muted hover:text-brand-deep transition-colors"
+                      }
+                    />
+                  </li>
+                ) : null}
               </ul>
             </div>
           ))}

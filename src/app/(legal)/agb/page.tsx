@@ -1,4 +1,11 @@
-export const metadata = { title: "AGB — VIDEOCOMET" };
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "AGB",
+  description:
+    "Allgemeine Geschäftsbedingungen der VIDEOCOMET GmbH für den Plattform-Zugang und Credits. B2B, 3 Monate Mindestlaufzeit.",
+  alternates: { canonical: "/agb" },
+};
 
 /**
  * AGB fuer B2B-only SaaS mit 3-Monats-Abo (120 € netto im Voraus) + Credit-Verbrauch.
@@ -9,7 +16,7 @@ export const metadata = { title: "AGB — VIDEOCOMET" };
 
 export default function AgbPage() {
   return (
-    <main className="max-w-3xl mx-auto px-4 py-16 prose prose-sm">
+    <main className="max-w-3xl mx-auto px-4 py-16 prose prose-sm md:prose-base prose-headings:text-ink prose-p:text-ink-muted prose-li:text-ink-muted">
       <h1>Allgemeine Geschäftsbedingungen</h1>
       <p className="text-ink-muted text-xs">Stand: Juli 2026</p>
 

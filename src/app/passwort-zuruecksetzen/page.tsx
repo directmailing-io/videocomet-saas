@@ -3,7 +3,8 @@ import { AuthShell } from "@/components/layouts/AuthShell";
 import { ResetForm } from "./reset-form";
 
 export const metadata = {
-  title: "Passwort zurücksetzen | VIDEOCOMET",
+  title: "Passwort zurücksetzen",
+  robots: { index: false, follow: false },
 };
 
 interface PageProps {

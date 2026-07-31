@@ -657,7 +657,7 @@ function LandingPageVisual() {
           }}
         >
           <img
-            src="https://cdn.simpleicons.org/anthropic/D97757"
+            src="/brand-logos/anthropic.svg"
             alt="Claude"
             className="size-6"
           />
@@ -1091,12 +1091,12 @@ function ABVisual() {
 function IntegrationsVisual() {
   // Tatsaechliche Anbindungen — 6 Tools, kein Mehr-Show-Off
   const TARGETS: { name: string; src: string }[] = [
-    { name: "HubSpot", src: "https://cdn.simpleicons.org/hubspot" },
+    { name: "HubSpot", src: "/brand-logos/hubspot.svg" },
     { name: "Salessuite", src: "/brand-logos/salessuite.svg" },
     { name: "Close", src: "/brand-logos/close-mark.svg" },
-    { name: "Zapier", src: "https://cdn.simpleicons.org/zapier" },
-    { name: "Make", src: "https://cdn.simpleicons.org/make" },
-    { name: "n8n", src: "https://cdn.simpleicons.org/n8n" },
+    { name: "Zapier", src: "/brand-logos/zapier.svg" },
+    { name: "Make", src: "/brand-logos/make.svg" },
+    { name: "n8n", src: "/brand-logos/n8n.svg" },
   ];
   return (
     <div className="relative w-full max-w-[560px] mx-auto py-2">

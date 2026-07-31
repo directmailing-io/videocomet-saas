@@ -1,4 +1,12 @@
-export const metadata = { title: "Datenschutz — VIDEOCOMET" };
+import type { Metadata } from "next";
+import { CookieSettingsLink } from "@/components/consent/CookieSettingsLink";
+
+export const metadata: Metadata = {
+  title: "Datenschutzerklärung",
+  description:
+    "Datenschutzerklärung der VIDEOCOMET GmbH: Welche Daten wir verarbeiten, auf welcher Rechtsgrundlage, und welche Rechte du hast. Hosting in Deutschland.",
+  alternates: { canonical: "/datenschutz" },
+};
 
 /**
  * Datenschutz-Erklaerung Basis-Template.
@@ -7,7 +15,7 @@ export const metadata = { title: "Datenschutz — VIDEOCOMET" };
  */
 export default function DatenschutzPage() {
   return (
-    <main className="max-w-3xl mx-auto px-4 py-16 prose prose-sm">
+    <main className="max-w-3xl mx-auto px-4 py-16 prose prose-sm md:prose-base prose-headings:text-ink prose-p:text-ink-muted prose-li:text-ink-muted">
       <h1>Datenschutzerklärung</h1>
       <p className="text-ink-muted text-xs">Stand: Juli 2026</p>
 
@@ -66,6 +74,7 @@ export default function DatenschutzPage() {
         <li><strong>Bunny.net</strong> (Slowenien) — CDN + Media-Streaming</li>
         <li><strong>Google LLC</strong> (USA) — Google Docs API für Brief-Rendering (nur bei aktiviertem Feature; EU-Standardvertragsklauseln)</li>
         <li><strong>Resend, Inc.</strong> (USA) — Transaktions-E-Mail-Versand (Login-Links, Rechnungen)</li>
+        <li><strong>Cloudflare, Inc.</strong> (USA) — Bot-Schutz (Turnstile) auf dem Registrierungsformular; dabei wird die IP-Adresse an Cloudflare übermittelt (EU-US Data Privacy Framework + EU-Standardvertragsklauseln)</li>
       </ul>
       <p>
         Mit allen Auftragsverarbeitern bestehen Verträge gemäß Art. 28 DSGVO.
@@ -94,12 +103,29 @@ export default function DatenschutzPage() {
         <a href="mailto:info@videocomet.de">info@videocomet.de</a>.
       </p>
 
-      <h2>7. Cookies</h2>
+      <h2>7. Cookies und Einwilligungsverwaltung</h2>
       <p>
-        Wir setzen ausschließlich technisch notwendige Cookies ein
-        (Login-Session-Cookie, Sicherheits-Cookies). Diese Cookies sind
-        für den Betrieb der Plattform erforderlich und benötigen nach
-        § 25 Abs. 2 Nr. 2 TTDSG keine Einwilligung.
+        Wir setzen ausschließlich technisch notwendige Cookies ein. Diese
+        sind für den Betrieb der Plattform erforderlich und benötigen nach
+        § 25 Abs. 2 Nr. 2 TDDDG keine Einwilligung:
+      </p>
+      <ul>
+        <li><strong>videocomet_session</strong> — Login-Session (wird beim
+          Logout bzw. nach Ablauf der Sitzung gelöscht)</li>
+        <li><strong>vc_consent</strong> — speichert deine
+          Cookie-Einstellungen (Laufzeit: 6 Monate)</li>
+      </ul>
+      <p>
+        Cookies zu Statistik- oder Marketing-Zwecken setzen wir derzeit
+        nicht ein. Sollten wir solche Dienste künftig einführen, werden sie
+        erst nach deiner ausdrücklichen Einwilligung geladen (Art. 6 Abs. 1
+        lit. a DSGVO, § 25 Abs. 1 TDDDG). Deine Auswahl kannst du jederzeit
+        ändern oder widerrufen: <CookieSettingsLink className="underline" />
+      </p>
+      <p>
+        Schriftarten laden wir ausschließlich von unseren eigenen Servern
+        (kein Google-Fonts-CDN), es findet dabei keine Übermittlung an
+        Dritte statt.
       </p>
 
       <h2>8. Sicherheit</h2>

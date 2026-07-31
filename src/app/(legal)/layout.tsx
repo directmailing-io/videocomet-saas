@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CookieSettingsLink } from "@/components/consent/CookieSettingsLink";
 import { Logo } from "@/components/ui/logo";
 
 /**
@@ -8,8 +9,8 @@ import { Logo } from "@/components/ui/logo";
  */
 export default function LegalLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-white">
-      <header className="border-b border-line">
+    <div className="min-h-screen bg-[#f7f5fd]">
+      <header className="border-b border-line/70 bg-white/70 backdrop-blur">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/">
             <Logo variant="horizontal" height={32} />
@@ -24,7 +25,8 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
       {children}
       <footer className="border-t border-line mt-24 py-6">
         <div className="max-w-3xl mx-auto px-4 text-xs text-ink-muted text-center">
-          © {new Date().getFullYear()} VIDEOCOMET GmbH · Alle Rechte vorbehalten
+          © {new Date().getFullYear()} VIDEOCOMET GmbH · Alle Rechte vorbehalten ·{" "}
+          <CookieSettingsLink className="hover:text-ink underline" />
         </div>
       </footer>
     </div>

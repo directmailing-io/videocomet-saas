@@ -56,7 +56,7 @@ const LEADS: ReadonlyArray<DemoLead> = [
     company: "Mustermann Industrie GmbH",
     location: "München",
     domain: "mustermann-industrie.de",
-    screenshot: "/demo-assets/website-max.png",
+    screenshot: "/demo-assets/website-max.webp",
     industryLabel: "Maschinenbau",
     errors: [
       {
@@ -82,7 +82,7 @@ const LEADS: ReadonlyArray<DemoLead> = [
     company: "Lust Cosmetics GmbH",
     location: "Hamburg",
     domain: "lust-cosmetics.de",
-    screenshot: "/demo-assets/website-lisa.png",
+    screenshot: "/demo-assets/website-lisa.webp",
     industryLabel: "Naturkosmetik",
     errors: [
       {
@@ -108,7 +108,7 @@ const LEADS: ReadonlyArray<DemoLead> = [
     company: "Friedrich Manufaktur",
     location: "Köln",
     domain: "friedrich-manufaktur.de",
-    screenshot: "/demo-assets/website-franz.png",
+    screenshot: "/demo-assets/website-franz.webp",
     industryLabel: "Manufaktur",
     errors: [
       {
@@ -142,9 +142,9 @@ const AVATAR_GRADIENTS: Record<string, string> = {
 
 const PRELOAD_IMAGES = [
   ...LEADS.map((l) => l.screenshot),
-  "/demo-assets/slide-2.png",
-  "/demo-assets/slide-3.png",
-  "/demo-assets/slide-4.png",
+  "/demo-assets/slide-2.webp",
+  "/demo-assets/slide-3.webp",
+  "/demo-assets/slide-4.webp",
 ];
 
 export function DemoPlayer() {

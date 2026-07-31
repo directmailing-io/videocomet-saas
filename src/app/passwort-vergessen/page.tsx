@@ -3,7 +3,8 @@ import { AuthShell } from "@/components/layouts/AuthShell";
 import { RequestForm } from "./request-form";
 
 export const metadata = {
-  title: "Passwort vergessen | VIDEOCOMET",
+  title: "Passwort vergessen",
+  robots: { index: false, follow: false },
 };
 
 export default function PasswortVergessenPage() {

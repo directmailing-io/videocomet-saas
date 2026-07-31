@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
 import { LoginForm } from "./login-form";
+
+export const metadata: Metadata = {
+  title: "Einloggen",
+  description: "Melde dich bei VIDEOCOMET an.",
+  alternates: { canonical: "/login" },
+};
 
 export default function LoginPage() {
   return (

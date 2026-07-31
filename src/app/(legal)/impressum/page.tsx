@@ -1,88 +1,160 @@
-export const metadata = { title: "Impressum — VIDEOCOMET" };
+import type { Metadata } from "next";
+import { Building2, Mail, Phone, ScrollText, Scale, User } from "lucide-react";
 
-/**
- * Impressum gemäß § 5 TMG.
- */
+export const metadata: Metadata = {
+  title: "Impressum",
+  description:
+    "Impressum der VIDEOCOMET GmbH, Herrleinstr. 39, 97437 Haßfurt. Anbieterkennzeichnung gemäß § 5 DDG.",
+  alternates: { canonical: "/impressum" },
+};
+
+function InfoCard({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: typeof Building2;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl bg-white border border-line shadow-[0_10px_30px_-18px_rgba(50,35,110,0.18)] p-6">
+      <div className="flex items-center gap-2.5 mb-3">
+        <div className="size-8 rounded-lg bg-brand-soft flex items-center justify-center">
+          <Icon className="size-4 text-brand-deep" strokeWidth={2.2} />
+        </div>
+        <h2 className="text-[13px] font-semibold tracking-[0.14em] uppercase text-ink-muted">
+          {title}
+        </h2>
+      </div>
+      <div className="text-[15px] leading-relaxed text-ink">{children}</div>
+    </div>
+  );
+}
+
 export default function ImpressumPage() {
   return (
-    <main className="max-w-3xl mx-auto px-4 py-16 prose prose-sm">
-      <h1>Impressum</h1>
-
-      <h2>Anbieter</h2>
-      <p>
-        VIDEOCOMET GmbH
-        <br />
-        Herrleinstr. 39
-        <br />
-        97437 Haßfurt
-        <br />
-        Deutschland
+    <main className="max-w-3xl mx-auto px-4 py-14 md:py-20">
+      <h1 className="text-3xl md:text-4xl font-light tracking-[-0.03em] text-ink mb-2">
+        Impressum
+      </h1>
+      <p className="text-sm text-ink-muted mb-10">
+        Anbieterkennzeichnung gemäß § 5 DDG
       </p>
 
-      <h2>Vertreten durch</h2>
-      <p>Geschäftsführer: Daniel Kurzeja</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <InfoCard icon={Building2} title="Anbieter">
+          <p className="font-semibold">VIDEOCOMET GmbH</p>
+          <p>
+            Herrleinstr. 39
+            <br />
+            97437 Haßfurt
+            <br />
+            Deutschland
+          </p>
+        </InfoCard>
 
-      <h2>Kontakt</h2>
-      <p>
-        Telefon: <a href="tel:+4915151005561">+49 151 51005561</a>
-        <br />
-        E-Mail:{" "}
-        <a href="mailto:info@videocomet.de">info@videocomet.de</a>
-      </p>
+        <InfoCard icon={User} title="Vertreten durch">
+          <p>
+            Geschäftsführer:
+            <br />
+            <span className="font-semibold">Daniel Kurzeja</span>
+          </p>
+        </InfoCard>
 
-      <h2>Registereintrag</h2>
-      <p>
-        Eintragung im Handelsregister
-        <br />
-        Registergericht: Amtsgericht Schweinfurt
-        <br />
-        Registernummer: <strong>HRB 9217</strong>
-      </p>
+        <InfoCard icon={Phone} title="Kontakt">
+          <p>
+            Telefon:{" "}
+            <a
+              href="tel:+4915151005561"
+              className="text-brand-deep hover:underline"
+            >
+              +49 151 51005561
+            </a>
+          </p>
+          <p>
+            E-Mail:{" "}
+            <a
+              href="mailto:info@videocomet.de"
+              className="text-brand-deep hover:underline"
+            >
+              info@videocomet.de
+            </a>
+          </p>
+        </InfoCard>
 
-      <h2>Umsatzsteuer</h2>
-      <p>
-        Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG:
-        <br />
-        <strong>DE362734064</strong>
-      </p>
-      <p>
-        Steuernummer: 249/141/40389
-      </p>
+        <InfoCard icon={ScrollText} title="Registereintrag">
+          <p>
+            Amtsgericht Schweinfurt
+            <br />
+            Registernummer: <span className="font-semibold">HRB 9217</span>
+          </p>
+        </InfoCard>
 
-      <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
-      <p>
-        Daniel Kurzeja
-        <br />
-        Herrleinstr. 39, 97437 Haßfurt
-      </p>
+        <InfoCard icon={Mail} title="Umsatzsteuer">
+          <p>
+            USt-IdNr. gemäß § 27a UStG:
+            <br />
+            <span className="font-semibold">DE362734064</span>
+          </p>
+          <p className="text-ink-muted text-sm mt-1">
+            Steuernummer: 249/141/40389
+          </p>
+        </InfoCard>
 
-      <h2>Streitbeilegung</h2>
-      <p>
-        Die Europäische Kommission stellt eine Plattform zur
-        Online-Streitbeilegung (OS) bereit:{" "}
-        <a
-          href="https://ec.europa.eu/consumers/odr/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          ec.europa.eu/consumers/odr
-        </a>
-      </p>
-      <p>
-        Wir sind nicht bereit oder verpflichtet, an einem
-        Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle
-        teilzunehmen.
-      </p>
+        <InfoCard icon={User} title="Inhaltlich verantwortlich">
+          <p className="text-sm text-ink-muted mb-1">§ 18 Abs. 2 MStV</p>
+          <p>
+            <span className="font-semibold">Daniel Kurzeja</span>
+            <br />
+            Herrleinstr. 39, 97437 Haßfurt
+          </p>
+        </InfoCard>
+      </div>
 
-      <h2>Haftungsausschluss</h2>
-      <p>
-        Die Inhalte dieser Website wurden mit größtmöglicher Sorgfalt
-        erstellt. Für die Richtigkeit, Vollständigkeit und Aktualität der
-        Inhalte kann jedoch keine Gewähr übernommen werden. Externe Links
-        wurden zum Zeitpunkt der Verlinkung auf mögliche Rechtsverstöße
-        überprüft. Auf spätere Änderungen der verlinkten Inhalte haben
-        wir keinen Einfluss.
-      </p>
+      <div className="mt-4 rounded-2xl bg-white border border-line shadow-[0_10px_30px_-18px_rgba(50,35,110,0.18)] p-6">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="size-8 rounded-lg bg-brand-soft flex items-center justify-center">
+            <Scale className="size-4 text-brand-deep" strokeWidth={2.2} />
+          </div>
+          <h2 className="text-[13px] font-semibold tracking-[0.14em] uppercase text-ink-muted">
+            Streitbeilegung
+          </h2>
+        </div>
+        <div className="text-[15px] leading-relaxed text-ink space-y-3">
+          <p>
+            Die Europäische Kommission stellt eine Plattform zur
+            Online-Streitbeilegung (OS) bereit:{" "}
+            <a
+              href="https://ec.europa.eu/consumers/odr/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-brand-deep hover:underline"
+            >
+              ec.europa.eu/consumers/odr
+            </a>
+          </p>
+          <p className="text-ink-muted text-sm">
+            Wir sind nicht bereit oder verpflichtet, an einem
+            Streitbeilegungsverfahren vor einer
+            Verbraucherschlichtungsstelle teilzunehmen.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-8 text-[13px] leading-relaxed text-ink-muted">
+        <h2 className="text-[13px] font-semibold tracking-[0.14em] uppercase mb-2">
+          Haftungsausschluss
+        </h2>
+        <p>
+          Die Inhalte dieser Website wurden mit größtmöglicher Sorgfalt
+          erstellt. Für die Richtigkeit, Vollständigkeit und Aktualität der
+          Inhalte kann jedoch keine Gewähr übernommen werden. Externe Links
+          wurden zum Zeitpunkt der Verlinkung auf mögliche Rechtsverstöße
+          überprüft. Auf spätere Änderungen der verlinkten Inhalte haben wir
+          keinen Einfluss.
+        </p>
+      </div>
     </main>
   );
 }
