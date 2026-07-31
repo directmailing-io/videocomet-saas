@@ -3,9 +3,9 @@
 import * as React from "react";
 
 /**
- * Cinematic Reveal-on-Scroll: laenger als ein normales Fade-up, mit
- * dezentem Scale + Blur → wirkt wie ein Apple-Keynote-Crossfade.
- * Stagger via `delay`-Prop.
+ * Reveal-on-Scroll: kurzes Fade-up mit dezentem Scale + Blur.
+ * Stagger via `delay`-Prop — wird intern gestaucht und gekappt, damit
+ * auch bei schnellem Scrollen nichts nachhinkt.
  */
 export function RevealOnScroll({
   children,
@@ -31,11 +31,15 @@ export function RevealOnScroll({
           obs.unobserve(el);
         }
       },
-      { threshold: 0.12, rootMargin: "0px 0px -6% 0px" },
+      // Positive Bottom-Margin: Elemente starten kurz bevor sie im
+      // Viewport sind — bei schnellem Scrollen wirkt nichts verspätet.
+      { threshold: 0, rootMargin: "0px 0px 10% 0px" },
     );
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
+
+  const effectiveDelay = Math.min(delay * 0.35, 320);
 
   return (
     <Tag
@@ -45,9 +49,9 @@ export function RevealOnScroll({
         opacity: visible ? 1 : 0,
         transform: visible
           ? "translateY(0) scale(1)"
-          : "translateY(40px) scale(0.96)",
-        filter: visible ? "blur(0px)" : "blur(8px)",
-        transition: `opacity 1400ms cubic-bezier(0.2,0.8,0.2,1) ${delay}ms, transform 1400ms cubic-bezier(0.2,0.8,0.2,1) ${delay}ms, filter 1100ms cubic-bezier(0.2,0.8,0.2,1) ${delay}ms`,
+          : "translateY(24px) scale(0.98)",
+        filter: visible ? "blur(0px)" : "blur(5px)",
+        transition: `opacity 600ms cubic-bezier(0.2,0.8,0.2,1) ${effectiveDelay}ms, transform 600ms cubic-bezier(0.2,0.8,0.2,1) ${effectiveDelay}ms, filter 450ms cubic-bezier(0.2,0.8,0.2,1) ${effectiveDelay}ms`,
         willChange: "opacity, transform, filter",
       }}
     >

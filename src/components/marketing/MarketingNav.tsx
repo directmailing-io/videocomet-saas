@@ -268,7 +268,7 @@ function FeaturesMegaMenu({ onClose }: { onClose: () => void }) {
           <div>
             <div className="text-sm font-semibold">Wie alles zusammenspielt</div>
             <div className="text-xs mt-0.5 text-ink-muted">
-              Sechs Schritte vom Take zur Antwort
+              Drei Schritte vom Take zur Antwort
             </div>
           </div>
           <ArrowRight
