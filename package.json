@@ -58,6 +58,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
+    "figma-squircle": "^1.1.0",
     "fix-webm-duration": "^1.0.6",
     "fontkit": "^2.0.4",
     "framer-motion": "^12.40.0",

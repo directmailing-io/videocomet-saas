@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ArrowDown, ArrowRight, Eye } from "lucide-react";
 import { RevealOnScroll } from "./RevealOnScroll";
+import { Squircle } from "./Squircle";
 
 export function HowItWorksSection() {
   return (
@@ -96,7 +97,12 @@ function StepCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="h-full rounded-[28px] vc-squircle vc-shadow-pretty bg-[#f8f7fd] p-5 md:p-6 flex flex-col">
+    <Squircle
+      radius={28}
+      shadow="pretty"
+      wrapperClassName="h-full"
+      className="bg-[#f8f7fd] p-5 md:p-6 flex flex-col"
+    >
       {children}
       <div className="flex items-center gap-2.5 mt-5 mb-2">
         <span
@@ -110,7 +116,7 @@ function StepCard({
         </h3>
       </div>
       <p className="text-[14.5px] leading-relaxed text-ink-soft">{text}</p>
-    </div>
+    </Squircle>
   );
 }
 
@@ -140,34 +146,40 @@ function Visual({
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className="relative h-40 rounded-2xl vc-squircle overflow-hidden bg-cover"
+    <Squircle
+      radius={18}
+      className="relative h-40 bg-cover"
       style={{
         backgroundImage: "url(/visual-sky.jpg)",
         backgroundPosition: position,
       }}
-      aria-hidden
     >
-      <div className="absolute inset-0 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 flex items-center justify-center p-4"
+        aria-hidden
+      >
         {children}
       </div>
-    </div>
+    </Squircle>
   );
 }
 
-const GLASS_CARD =
-  "rounded-2xl vc-squircle bg-white/95 backdrop-blur-md shadow-[0_16px_40px_-12px_rgba(20,10,60,0.45)]";
+const GLASS_CARD = "bg-white/95 backdrop-blur-md";
 
 function RecordVisual() {
   return (
     <Visual position="50% 18%">
-      <div className={`${GLASS_CARD} px-4 py-3 flex items-center gap-2.5`}>
+      <Squircle
+        radius={16}
+        shadow="float"
+        className={`${GLASS_CARD} px-4 py-3 flex items-center gap-2.5`}
+      >
         <span className="vc-rec-dot size-2 rounded-full bg-red-500 shrink-0" />
         <span className="text-[13px] font-semibold text-ink">
           Aufnahme läuft
         </span>
         <span className="text-[12px] text-ink-muted tabular-nums">0:48</span>
-      </div>
+      </Squircle>
     </Visual>
   );
 }
@@ -181,7 +193,11 @@ const AVATARS = [
 function LeadsVisual() {
   return (
     <Visual position="50% 50%">
-      <div className={`${GLASS_CARD} px-4 py-3 flex items-center gap-3`}>
+      <Squircle
+        radius={16}
+        shadow="float"
+        className={`${GLASS_CARD} px-4 py-3 flex items-center gap-3`}
+      >
         <div className="flex -space-x-2">
           {AVATARS.map((a) => (
             <span
@@ -197,7 +213,7 @@ function LeadsVisual() {
           <div className="text-[13px] font-semibold text-ink">217 Videos</div>
           <div className="text-[11px] text-ink-muted">eins pro Lead, fertig</div>
         </div>
-      </div>
+      </Squircle>
     </Visual>
   );
 }
@@ -205,7 +221,12 @@ function LeadsVisual() {
 function TrackingVisual() {
   return (
     <Visual position="50% 88%">
-      <div className={`${GLASS_CARD} px-3.5 py-3 flex items-start gap-3 w-full max-w-[250px]`}>
+      <Squircle
+        radius={16}
+        shadow="float"
+        wrapperClassName="w-full max-w-[250px]"
+        className={`${GLASS_CARD} px-3.5 py-3 flex items-start gap-3`}
+      >
         <span
           className="size-9 shrink-0 rounded-[10px] flex items-center justify-center text-white"
           style={{ background: "linear-gradient(135deg, #7C5CE8, #5232C7)" }}
@@ -223,7 +244,7 @@ function TrackingVisual() {
             schaut gerade dein Video an
           </div>
         </div>
-      </div>
+      </Squircle>
     </Visual>
   );
 }

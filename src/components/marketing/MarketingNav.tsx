@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
+import { Squircle } from "./Squircle";
 import { cn } from "@/lib/utils";
 
 /**
@@ -253,8 +254,9 @@ function FeaturesMegaMenu({ onClose }: { onClose: () => void }) {
   return (
     <div
       role="menu"
-      className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-[680px] rounded-2xl border shadow-2xl overflow-hidden vc-mega-fade-in bg-white backdrop-blur-xl border-line"
+      className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-[680px] vc-mega-fade-in"
     >
+      <Squircle radius={22} shadow="float" className="bg-white">
       <div className="p-3 grid grid-cols-2 gap-1">
         {FEATURES.map((f) => (
           <FeatureItem key={f.id} feature={f} />
@@ -285,6 +287,7 @@ function FeaturesMegaMenu({ onClose }: { onClose: () => void }) {
         }
         .vc-mega-fade-in { animation: vc-mega-fade-in 220ms cubic-bezier(0.2,0.8,0.2,1) forwards; }
       `}</style>
+      </Squircle>
     </div>
   );
 }

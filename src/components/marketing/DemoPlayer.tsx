@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { Player as PlayerType, PlayerRef } from "@remotion/player";
 import { cn } from "@/lib/utils";
+import { Squircle } from "./Squircle";
 import MarketingDemoComposition, {
   DEMO_FPS,
   DEMO_DURATION_IN_FRAMES,
@@ -235,7 +236,7 @@ export function DemoPlayer() {
       </div>
 
       {/* Editor-Fenster — hell, minimal */}
-      <div className="rounded-3xl vc-squircle bg-white border border-line overflow-hidden shadow-[0_30px_80px_-30px_rgba(60,40,130,0.35),0_8px_28px_-14px_rgba(60,40,130,0.2)]">
+      <Squircle radius={26} shadow="float" className="bg-white">
         {/* Titelleiste */}
         <div className="flex items-center gap-3 px-4 md:px-5 py-3 border-b border-line bg-surface-soft">
           <div className="flex items-center gap-1.5" aria-hidden>
@@ -344,7 +345,7 @@ export function DemoPlayer() {
             durationSeconds={DEMO_DURATION_IN_FRAMES / DEMO_FPS}
           />
         </div>
-      </div>
+      </Squircle>
 
       {canScroll && scrollEnabled ? (
         <div className="mx-auto max-w-2xl rounded-squircle-md border border-warn/30 bg-warn-soft px-4 py-3 text-xs text-ink-soft flex items-start gap-2.5">

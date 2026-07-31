@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { ArrowRight, Check, Plus } from "lucide-react";
 import { RevealOnScroll } from "./RevealOnScroll";
+import { Squircle } from "./Squircle";
 
 const NUTZEN: ReadonlyArray<{ title: string; body: string }> = [
   {
@@ -93,13 +94,8 @@ export function PricingSection() {
 
         {/* Big Pricing Card */}
         <RevealOnScroll delay={400}>
-          <div
-            className="relative rounded-3xl bg-white border-2 border-brand p-8 md:p-12"
-            style={{
-              boxShadow:
-                "0 30px 60px -20px rgba(124,92,232,0.4), 0 8px 22px -8px rgba(15,23,42,0.18)",
-            }}
-          >
+          <Squircle radius={30} shadow="float" className="bg-brand p-[2px]">
+            <Squircle radius={28} className="relative bg-white p-8 md:p-12">
             {/* Preis-Formel: Grundtarif + Per-Versand */}
             <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-6 md:gap-8 items-center pb-8 md:pb-10 border-b border-line">
               {/* Grundtarif */}
@@ -273,7 +269,8 @@ export function PricingSection() {
                 erfordern zusätzlich Credits
               </div>
             </div>
-          </div>
+            </Squircle>
+          </Squircle>
         </RevealOnScroll>
 
         {/* Footer note */}

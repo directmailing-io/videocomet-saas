@@ -1,6 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="15" fill="#111014"/>
-  <g transform="translate(16.8, 12) scale(0.95)" fill="#ffffff">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 42.08 42.08">
+  <style>
+    g { fill: #111014; }
+    @media (prefers-color-scheme: dark) { g { fill: #ffffff; } }
+  </style>
+  <g transform="translate(4.99, 0)">
     <polygon points="10.16 21.53 21.48 28.22 10.16 34.93 10.16 21.53"/>
     <rect x="22.26" y="-.99" width="3.09" height="24.95" transform="translate(9.32 -10.62) rotate(31.01)"/>
     <rect x="16.87" y="8.11" width="3.09" height="7.99" transform="translate(8.78 -7.71) rotate(30.75)"/>

@@ -13,6 +13,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { RevealOnScroll } from "./RevealOnScroll";
+import { Squircle } from "./Squircle";
 
 /**
  * Features-Bento — Polished Edition
@@ -176,15 +177,12 @@ function FeatureCard({
   sub: string;
 }) {
   return (
-    <div className="relative h-full overflow-hidden rounded-3xl border border-line bg-gradient-to-b from-white to-[#FAFAFE] p-8 md:p-10 flex flex-col shadow-[0_4px_22px_-12px_rgba(15,23,42,0.12)] transition-shadow hover:shadow-[0_8px_30px_-12px_rgba(15,23,42,0.18)]">
-      <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-px"
-        style={{
-          background:
-            "linear-gradient(90deg, transparent, rgba(255,255,255,0.9), transparent)",
-        }}
-      />
+    <Squircle
+      radius={28}
+      shadow="pretty"
+      wrapperClassName="h-full"
+      className="relative bg-gradient-to-b from-white to-[#FAFAFE] p-8 md:p-10 flex flex-col"
+    >
       <div className="relative flex-1 flex items-center justify-center min-h-[320px] mb-8">
         {children}
       </div>
@@ -196,7 +194,7 @@ function FeatureCard({
           {sub}
         </p>
       </div>
-    </div>
+    </Squircle>
   );
 }
 
@@ -210,7 +208,12 @@ function FeatureCardMesh({
   sub: string;
 }) {
   return (
-    <div className="relative h-full overflow-hidden rounded-3xl border border-line p-8 md:p-12 flex flex-col lg:flex-row gap-10 lg:gap-14 items-center shadow-[0_4px_22px_-12px_rgba(15,23,42,0.12)]">
+    <Squircle
+      radius={28}
+      shadow="pretty"
+      wrapperClassName="h-full"
+      className="relative p-8 md:p-12 flex flex-col lg:flex-row gap-10 lg:gap-14 items-center"
+    >
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
@@ -241,7 +244,7 @@ function FeatureCardMesh({
           {sub}
         </p>
       </div>
-    </div>
+    </Squircle>
   );
 }
 
@@ -253,7 +256,7 @@ function EmailOutreachVisual() {
   return (
     <div className="relative mx-auto w-full max-w-[440px]" style={{ height: 300 }}>
       {/* Postfach-Verbindung */}
-      <div className="absolute top-0 left-0 right-10 flex items-center gap-2.5 rounded-2xl bg-white border border-line shadow-[0_10px_28px_-14px_rgba(15,23,42,0.25)] px-3.5 py-2.5">
+      <div className="absolute top-0 left-0 right-10 flex items-center gap-2.5 rounded-2xl bg-white border border-line shadow-[0_10px_28px_-14px_rgba(50,35,110,0.25)] px-3.5 py-2.5">
         <div
           className="size-8 shrink-0 rounded-lg flex items-center justify-center text-white"
           style={{
@@ -277,7 +280,7 @@ function EmailOutreachVisual() {
       </div>
 
       {/* E-Mail mit Video */}
-      <div className="absolute top-[70px] left-4 right-0 rounded-2xl bg-white border border-line shadow-[0_14px_36px_-16px_rgba(15,23,42,0.28)] overflow-hidden">
+      <div className="absolute top-[70px] left-4 right-0 rounded-2xl bg-white border border-line shadow-[0_14px_36px_-16px_rgba(50,35,110,0.28)] overflow-hidden">
         <div className="px-3.5 py-2.5 border-b border-line bg-[#F8F8F8]">
           <div className="text-[10px] text-ink-muted leading-tight">
             An: <span className="text-ink font-semibold">Max Mustermann</span>
@@ -312,7 +315,7 @@ function EmailOutreachVisual() {
       </div>
 
       {/* Warm-up-Karte */}
-      <div className="absolute bottom-0 right-2 w-[210px] rounded-2xl bg-white border border-line shadow-[0_14px_36px_-16px_rgba(15,23,42,0.28)] px-3.5 py-3">
+      <div className="absolute bottom-0 right-2 w-[210px] rounded-2xl bg-white border border-line shadow-[0_14px_36px_-16px_rgba(50,35,110,0.28)] px-3.5 py-3">
         <div className="flex items-center gap-1.5 mb-2">
           <TrendingUp className="size-3.5 text-brand-deep" aria-hidden />
           <span className="text-[11px] font-bold text-ink">
@@ -386,7 +389,7 @@ function ScrollAnimationVisual() {
         className="absolute inset-0 rounded-2xl border border-line bg-white overflow-hidden"
         style={{
           boxShadow:
-            "0 30px 60px -20px rgba(15,23,42,0.4), 0 8px 22px -8px rgba(15,23,42,0.18)",
+            "0 30px 60px -20px rgba(50,35,110,0.4), 0 8px 22px -8px rgba(50,35,110,0.18)",
         }}
       >
         {/* Browser chrome — sticky on top */}
@@ -483,7 +486,7 @@ function ScrollAnimationVisual() {
           className="size-12 rounded-full bg-white flex items-center justify-center"
           style={{
             border: "1.5px solid #E2E2EE",
-            boxShadow: "0 14px 28px -6px rgba(15,23,42,0.3)",
+            boxShadow: "0 14px 28px -6px rgba(50,35,110,0.3)",
             animation: "vc-mouse-pulse 6.5s ease-in-out infinite",
           }}
         >
@@ -542,7 +545,7 @@ function LandingPageVisual() {
         className="absolute inset-0 rounded-2xl border border-line bg-white overflow-hidden"
         style={{
           boxShadow:
-            "0 20px 40px -16px rgba(15,23,42,0.22), 0 6px 14px -6px rgba(15,23,42,0.12)",
+            "0 20px 40px -16px rgba(50,35,110,0.22), 0 6px 14px -6px rgba(50,35,110,0.12)",
           WebkitMaskImage:
             "linear-gradient(to right, black 0%, black 50%, rgba(0,0,0,0.6) 72%, transparent 92%)",
           maskImage:
@@ -641,7 +644,7 @@ function LandingPageVisual() {
           top: 185,
           transform: "translateY(-50%)",
           boxShadow:
-            "0 18px 40px -10px rgba(15,23,42,0.32), 0 6px 18px -6px rgba(15,23,42,0.16)",
+            "0 18px 40px -10px rgba(50,35,110,0.32), 0 6px 18px -6px rgba(50,35,110,0.16)",
         }}
       >
         {/* 1:1 Claude icon */}
@@ -863,7 +866,7 @@ function SlackPushVisual() {
   return (
     <div className="relative w-full max-w-[320px] mx-auto">
       <div
-        className="relative rounded-2xl overflow-hidden bg-white border border-line shadow-[0_14px_36px_-16px_rgba(15,23,42,0.28)]"
+        className="relative rounded-2xl overflow-hidden bg-white border border-line shadow-[0_14px_36px_-16px_rgba(50,35,110,0.28)]"
       >
         {/* Slack-Channel-Header */}
         <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-line bg-[#F8F8F8]">
@@ -947,7 +950,7 @@ function SlackPushVisual() {
 function AnalyticsVisual() {
   return (
     <div className="relative w-full max-w-[300px] mx-auto">
-      <div className="rounded-2xl bg-white border border-line p-5 shadow-[0_14px_36px_-16px_rgba(15,23,42,0.25)]">
+      <div className="rounded-2xl bg-white border border-line p-5 shadow-[0_14px_36px_-16px_rgba(50,35,110,0.25)]">
         <div className="flex items-end justify-between mb-4">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
@@ -1026,7 +1029,7 @@ function ABVisual() {
   return (
     <div className="relative w-full max-w-[340px] mx-auto flex items-end gap-3">
       <div
-        className="flex-1 rounded-2xl bg-white border border-line p-3.5 shadow-[0_10px_24px_-14px_rgba(15,23,42,0.22)] relative"
+        className="flex-1 rounded-2xl bg-white border border-line p-3.5 shadow-[0_10px_24px_-14px_rgba(50,35,110,0.22)] relative"
         style={{ minHeight: 200 }}
       >
         <div className="flex items-center justify-between mb-3">
@@ -1098,7 +1101,7 @@ function IntegrationsVisual() {
   return (
     <div className="relative w-full max-w-[560px] mx-auto py-2">
       <div className="flex justify-center mb-3">
-        <div className="inline-flex items-center gap-2.5 pr-3.5 pl-1.5 py-1.5 rounded-full bg-white shadow-[0_12px_28px_-14px_rgba(15,23,42,0.3)] border border-line">
+        <div className="inline-flex items-center gap-2.5 pr-3.5 pl-1.5 py-1.5 rounded-full bg-white shadow-[0_12px_28px_-14px_rgba(50,35,110,0.3)] border border-line">
           <div
             className="size-7 rounded-full flex items-center justify-center text-white shadow-md"
             style={{ background: "linear-gradient(135deg, #AA8CF5, #5232C7)" }}
@@ -1140,7 +1143,7 @@ function IntegrationsVisual() {
         {TARGETS.map((t) => (
           <div
             key={t.name}
-            className="rounded-xl bg-white border border-line shadow-[0_8px_18px_-14px_rgba(15,23,42,0.2)] px-2 py-3 flex flex-col items-center gap-2 relative"
+            className="rounded-xl bg-white border border-line shadow-[0_8px_18px_-14px_rgba(50,35,110,0.2)] px-2 py-3 flex flex-col items-center gap-2 relative"
           >
             <div className="h-8 w-full flex items-center justify-center">
               <img
@@ -1185,7 +1188,7 @@ function DomainVisual() {
   ];
   return (
     <div className="relative w-full max-w-[420px] mx-auto">
-      <div className="rounded-2xl bg-white border border-line shadow-[0_18px_40px_-18px_rgba(15,23,42,0.32)] overflow-hidden">
+      <div className="rounded-2xl bg-white border border-line shadow-[0_18px_40px_-18px_rgba(50,35,110,0.32)] overflow-hidden">
         {/* Card-Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-line bg-[#FAFAFE]">
           <div className="flex items-center gap-2">

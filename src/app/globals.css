@@ -41,19 +41,6 @@
 }
 
 @layer components {
-  /* Apple-Squircle: kontinuierliche Ecken (corner-shape, Chromium 139+);
-     Browser ohne Support fallen sauber auf den normalen border-radius zurück. */
-  .vc-squircle {
-    corner-shape: squircle;
-  }
-  /* Mehrschichtiger, weicher Schatten für Marketing-Cards */
-  .vc-shadow-pretty {
-    box-shadow:
-      0 1px 2px rgba(30, 20, 70, 0.04),
-      0 8px 20px -8px rgba(60, 40, 130, 0.12),
-      0 28px 56px -24px rgba(60, 40, 130, 0.18);
-  }
-
   /* Schwebende Karte — randlos, weicher Schatten (Referenz-Look 2026) */
   .card {
     @apply bg-surface rounded-squircle-md shadow-card;
