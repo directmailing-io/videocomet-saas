@@ -7,6 +7,8 @@ import {
   ChevronDown,
   Globe,
   Lock,
+  Mail,
+  Play,
   TrendingUp,
   UploadCloud,
 } from "lucide-react";
@@ -54,17 +56,17 @@ export function FeaturesBento() {
           </RevealOnScroll>
           <RevealOnScroll delay={150}>
             <h2 className="font-light tracking-[-0.035em] text-ink leading-[1.05] text-[clamp(32px,4.2vw,56px)] mb-5 text-balance">
-              Alles drin.
+              Alles, was du brauchst.
               <br />
               <span className="font-semibold text-brand-deep">
-                Nichts halb.
+                Ohne Technik-Stress.
               </span>
             </h2>
           </RevealOnScroll>
           <RevealOnScroll delay={300}>
             <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-xl mx-auto">
-              Von der Webcam-Aufnahme bis ins CRM. Alles, was du
-              brauchst, um Akquise wirklich persönlich zu machen.
+              Video aufnehmen, verschicken und live sehen, wer reagiert.
+              Alles an einem Ort, ohne zehn verschiedene Tools.
             </p>
           </RevealOnScroll>
         </div>
@@ -135,8 +137,18 @@ export function FeaturesBento() {
             </FeatureCard>
           </RevealOnScroll>
 
-          {/* Wide closer: Anbindungen */}
+          {/* Wide: E-Mail-Versand aus dem eigenen Postfach */}
           <RevealOnScroll delay={1100} className="md:col-span-2">
+            <FeatureCardMesh
+              title="Verschicke deine Videos per E-Mail. Aus deinem eigenen Postfach."
+              sub="Verbinde Microsoft 365, Gmail oder jedes andere Postfach und versende deine Videos direkt daraus. Das automatische Warm-up steigert dein Sendevolumen Schritt für Schritt und hält deine Zustellbarkeit stabil."
+            >
+              <EmailOutreachVisual />
+            </FeatureCardMesh>
+          </RevealOnScroll>
+
+          {/* Wide closer: Anbindungen */}
+          <RevealOnScroll delay={1200} className="md:col-span-2">
             <FeatureCardMesh
               title="Eingebunden in deine Tools."
               sub="Jedes Tracking-Event landet automatisch in deinem CRM oder Automation-Tool. Per Webhook, ohne Umweg."
@@ -228,6 +240,111 @@ function FeatureCardMesh({
         <p className="mt-4 text-[15px] md:text-base text-ink-soft leading-relaxed text-balance">
           {sub}
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// E-Mail-Outreach — eigenes Postfach + Video-Mail + Warm-up
+// ===========================================================================
+
+function EmailOutreachVisual() {
+  return (
+    <div className="relative mx-auto w-full max-w-[440px]" style={{ height: 300 }}>
+      {/* Postfach-Verbindung */}
+      <div className="absolute top-0 left-0 right-10 flex items-center gap-2.5 rounded-2xl bg-white border border-line shadow-[0_10px_28px_-14px_rgba(15,23,42,0.25)] px-3.5 py-2.5">
+        <div
+          className="size-8 shrink-0 rounded-lg flex items-center justify-center text-white"
+          style={{
+            background: "linear-gradient(135deg, #5232C7 0%, #7C5CE8 100%)",
+          }}
+        >
+          <Mail className="size-4" aria-hidden />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[12px] font-bold text-ink leading-tight truncate">
+            info@deinefirma.de
+          </div>
+          <div className="text-[10px] text-ink-muted leading-tight">
+            Microsoft 365 · Gmail · SMTP
+          </div>
+        </div>
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1">
+          <CheckCircle2 className="size-3" aria-hidden />
+          Verbunden
+        </span>
+      </div>
+
+      {/* E-Mail mit Video */}
+      <div className="absolute top-[70px] left-4 right-0 rounded-2xl bg-white border border-line shadow-[0_14px_36px_-16px_rgba(15,23,42,0.28)] overflow-hidden">
+        <div className="px-3.5 py-2.5 border-b border-line bg-[#F8F8F8]">
+          <div className="text-[10px] text-ink-muted leading-tight">
+            An: <span className="text-ink font-semibold">Max Mustermann</span>
+          </div>
+          <div className="text-[12px] font-bold text-ink leading-tight mt-0.5 truncate">
+            Herr Mustermann, ein kurzes Video für Sie
+          </div>
+        </div>
+        <div className="p-3.5 flex items-center gap-3">
+          {/* Video-Thumbnail */}
+          <div
+            className="relative shrink-0 rounded-lg overflow-hidden flex items-center justify-center"
+            style={{
+              width: 96,
+              height: 58,
+              background:
+                "linear-gradient(135deg, #1A0E3A 0%, #2A1656 60%, #5232C7 100%)",
+            }}
+          >
+            <div className="size-7 rounded-full bg-white/25 backdrop-blur border border-white/40 flex items-center justify-center">
+              <Play className="size-3 text-white fill-white ml-px" aria-hidden />
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="h-1.5 w-full bg-ink/15 rounded mb-1.5" />
+            <div className="h-1.5 w-3/4 bg-ink/10 rounded mb-1.5" />
+            <div className="inline-flex items-center rounded-full bg-brand-soft text-brand-deep text-[9px] font-bold px-2 py-0.5">
+              Video ansehen →
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Warm-up-Karte */}
+      <div className="absolute bottom-0 right-2 w-[210px] rounded-2xl bg-white border border-line shadow-[0_14px_36px_-16px_rgba(15,23,42,0.28)] px-3.5 py-3">
+        <div className="flex items-center gap-1.5 mb-2">
+          <TrendingUp className="size-3.5 text-brand-deep" aria-hidden />
+          <span className="text-[11px] font-bold text-ink">
+            Automatisches Warm-up
+          </span>
+        </div>
+        <div className="flex items-end gap-1.5 h-[46px]">
+          {[
+            { label: "W1", pct: 40 },
+            { label: "W2", pct: 62 },
+            { label: "W3", pct: 82 },
+            { label: "W4", pct: 100 },
+          ].map((w) => (
+            <div key={w.label} className="flex-1 flex flex-col items-center gap-1">
+              <div
+                className="w-full rounded-t-md"
+                style={{
+                  height: `${w.pct * 0.38}px`,
+                  background:
+                    "linear-gradient(180deg, #9573EE 0%, #7C5CE8 100%)",
+                  opacity: 0.45 + (w.pct / 100) * 0.55,
+                }}
+              />
+              <span className="text-[8px] font-semibold text-ink-muted leading-none">
+                {w.label}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 text-[9px] text-ink-muted leading-tight">
+          20 → 50 E-Mails pro Tag, automatisch gesteigert
+        </div>
       </div>
     </div>
   );

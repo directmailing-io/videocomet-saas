@@ -6,7 +6,6 @@ import { HowItWorksSection } from "@/components/marketing/HowItWorksSection";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { PricingSection } from "@/components/marketing/PricingSection";
-import { WhyItWorksSection } from "@/components/marketing/WhyItWorksSection";
 
 export default function HomePage() {
   return (
@@ -16,7 +15,6 @@ export default function HomePage() {
       <DemoSection />
       <HowItWorksSection />
       <FeaturesBento />
-      <WhyItWorksSection />
       <PricingSection />
       <FAQSection />
       <MarketingFooter />

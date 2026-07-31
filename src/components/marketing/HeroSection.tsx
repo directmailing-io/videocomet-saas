@@ -11,7 +11,7 @@ function ChannelChip({
   label: string;
 }) {
   return (
-    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.08] border border-white/15 text-white/90 text-xs font-medium backdrop-blur-md">
+    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/55 border border-white/70 text-ink text-xs font-medium backdrop-blur-md shadow-[0_2px_10px_-4px_rgba(80,60,150,0.25)]">
       {icon}
       {label}
     </span>
@@ -22,36 +22,49 @@ export function HeroSection() {
   return (
     <section
       aria-label="Einleitung"
-      className="relative w-full h-screen overflow-hidden bg-black"
+      className="relative w-full h-screen overflow-hidden bg-[#cfc2f2]"
     >
       <Image
-        src="/hero.webp"
+        src="/hero-sky.webp"
         alt=""
         fill
         priority
         sizes="100vw"
-        className="object-cover object-[70%_center]"
+        className="object-cover object-[center_35%]"
       />
-      {/* Lesbarkeits-Veil: stark dunkel auf der linken Seite (wo Text sitzt),
-          faded zum rechten Rand hin transparent → das Motiv rechts bleibt
-          voll sichtbar. Plus dezenter Top- und Bottom-Fade. */}
+      {/* Lesbarkeits-Veil: heller Schleier links (wo der Text sitzt), faded
+          nach rechts transparent → Himmel + Komet bleiben voll sichtbar.
+          Per Maske nach unten ausgeblendet, damit er den Bottom-Fade nicht
+          aufhellt und der Übergang zur Folge-Sektion nahtlos bleibt. */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "linear-gradient(105deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.65) 22%, rgba(0,0,0,0.30) 48%, rgba(0,0,0,0) 72%), linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 18%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.75) 100%)",
+            "linear-gradient(105deg, rgba(250,248,255,0.88) 0%, rgba(250,248,255,0.68) 24%, rgba(250,248,255,0.32) 50%, rgba(250,248,255,0) 72%), linear-gradient(180deg, rgba(250,248,255,0.45) 0%, rgba(250,248,255,0) 18%)",
+          WebkitMaskImage:
+            "linear-gradient(180deg, black 0%, black 55%, transparent 88%)",
+          maskImage:
+            "linear-gradient(180deg, black 0%, black 55%, transparent 88%)",
+        }}
+      />
+      {/* Bottom-Fade: verläuft durchgehend in die Farbe der Demo-Sektion */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(247,245,253,0) 55%, rgba(247,245,253,0.45) 75%, rgba(247,245,253,0.85) 88%, #f7f5fd 100%)",
         }}
       />
 
       {/* Hero content */}
       <div className="relative z-10 w-full h-full max-w-6xl mx-auto px-6 md:px-10 flex flex-col justify-center gap-5 pt-16">
         <div className="vc-hero-eyebrow inline-flex items-center gap-3 text-[10px] tracking-[0.22em] uppercase opacity-0">
-          <span className="text-white/95">Die geheime Strategie der Marktführer</span>
-          <span className="hidden sm:block w-3 h-px bg-white/30" />
-          <span className="hidden sm:inline text-white/45">VIDEOCOMET</span>
+          <span className="text-ink/80">Die geheime Strategie der Marktführer</span>
+          <span className="hidden sm:block w-3 h-px bg-ink/25" />
+          <span className="hidden sm:inline text-ink/40">VIDEOCOMET</span>
         </div>
 
-        <h1 className="vc-hero-title font-light tracking-[-0.04em] leading-[1.04] text-white text-[clamp(36px,4.8vw,68px)] max-w-[14ch] text-balance">
+        <h1 className="vc-hero-title font-light tracking-[-0.04em] leading-[1.04] text-ink text-[clamp(36px,4.8vw,68px)] max-w-[14ch] text-balance">
           <span className="block overflow-hidden">
             <span className="vc-hero-line block">Werde unvergesslich.</span>
           </span>
@@ -61,7 +74,7 @@ export function HeroSection() {
                 className="vc-hero-accent block bg-clip-text text-transparent"
                 style={{
                   backgroundImage:
-                    "linear-gradient(96deg, #C7B6FE 0%, #AA8CF5 35%, #7C5CE8 70%, #5232C7 100%)",
+                    "linear-gradient(96deg, #9573EE 0%, #7C5CE8 45%, #5E44C2 75%, #3F2D8A 100%)",
                 }}
               >
                 Bei jedem Kontakt.
@@ -70,22 +83,22 @@ export function HeroSection() {
           </span>
         </h1>
 
-        <p className="vc-hero-sub max-w-[480px] text-[16px] leading-[1.6] text-white/70 opacity-0">
+        <p className="vc-hero-sub max-w-[480px] text-[16px] leading-[1.6] text-ink-soft opacity-0">
           Einmal ein Video aufnehmen, danach{" "}
-          <strong className="font-semibold text-white">
+          <strong className="font-semibold text-ink">
             tausendfach personalisiert an deine Zielgruppe verschicken
           </strong>
           . Persönlich, authentisch und überzeugend. So bleibst du{" "}
-          <strong className="font-semibold text-white">in Erinnerung</strong>{" "}
+          <strong className="font-semibold text-ink">in Erinnerung</strong>{" "}
           und wirst von{" "}
-          <strong className="font-semibold text-white">
+          <strong className="font-semibold text-ink">
             neuen Kunden kontaktiert
           </strong>
           .
         </p>
 
         <div className="vc-hero-channels flex flex-wrap items-center gap-x-3 gap-y-2 opacity-0">
-          <span className="text-[11px] tracking-[0.18em] uppercase text-white/55 mr-1">
+          <span className="text-[11px] tracking-[0.18em] uppercase text-ink/50 mr-1">
             Verschicke Videos per:
           </span>
           <ChannelChip icon={<AtSign className="size-3.5" />} label="E-Mail" />
@@ -102,7 +115,7 @@ export function HeroSection() {
         <div className="vc-hero-cta flex flex-wrap items-center gap-4 mt-2 opacity-0">
           <Link
             href="#demo"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white text-black text-sm font-semibold hover:bg-white/90 transition-colors"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-ink text-white text-sm font-semibold hover:bg-ink/90 transition-colors shadow-ink"
           >
             Live-Demo ansehen
             <svg
@@ -121,7 +134,7 @@ export function HeroSection() {
           </Link>
           <Link
             href="/login"
-            className="inline-flex items-center gap-1.5 px-2 py-3 text-white/80 text-sm font-medium hover:text-white transition-colors"
+            className="inline-flex items-center gap-1.5 px-2 py-3 text-ink/75 text-sm font-medium hover:text-ink transition-colors"
           >
             Anmelden
             <svg
@@ -143,11 +156,11 @@ export function HeroSection() {
 
       {/* Scroll hint */}
       <div
-        className="vc-hero-hint absolute bottom-8 left-1/2 -translate-x-1/2 text-white/45 text-[10px] tracking-[0.3em] uppercase flex flex-col items-center gap-2 opacity-0"
+        className="vc-hero-hint absolute bottom-8 left-1/2 -translate-x-1/2 text-ink/40 text-[10px] tracking-[0.3em] uppercase flex flex-col items-center gap-2 opacity-0"
         aria-hidden
       >
         <span>Scroll</span>
-        <span className="block w-px h-8 bg-gradient-to-b from-white/40 to-transparent" />
+        <span className="block w-px h-8 bg-gradient-to-b from-ink/35 to-transparent" />
       </div>
 
       <style>{`
@@ -163,17 +176,17 @@ export function HeroSection() {
         @keyframes vc-hero-accent-drift {
           0%, 100% {
             transform: translateY(0px) translateZ(0);
-            filter: drop-shadow(0 0 18px rgba(170,140,245,0.22)) drop-shadow(0 0 4px rgba(170,140,245,0.14));
+            filter: drop-shadow(0 0 14px rgba(124,92,232,0.16)) drop-shadow(0 0 4px rgba(124,92,232,0.10));
           }
           50% {
             transform: translateY(-4px) translateZ(0);
-            filter: drop-shadow(0 0 42px rgba(170,140,245,0.55)) drop-shadow(0 0 10px rgba(199,182,254,0.30));
+            filter: drop-shadow(0 0 30px rgba(124,92,232,0.35)) drop-shadow(0 0 8px rgba(149,115,238,0.22));
           }
         }
         .vc-hero-eyebrow { animation: vc-hero-fade-up 0.9s cubic-bezier(0.2,0.8,0.2,1) 0.15s forwards; }
         .vc-hero-line { transform: translateY(110%); will-change: transform; }
         .vc-hero-title .vc-hero-line:nth-child(1) { animation: vc-hero-line-rise 1.15s cubic-bezier(0.16,1,0.3,1) 0.3s forwards; }
-        .vc-hero-title > span:nth-child(2) .vc-hero-line { animation: vc-hero-line-rise 1.15s cubic-bezier(0.16,1,0.3,1) 0.4s forwards; }
+        .vc-hero-title .vc-hero-line.vc-hero-accent-wrap { animation: vc-hero-line-rise 1.15s cubic-bezier(0.16,1,0.3,1) 0.4s forwards; }
         .vc-hero-accent {
           display: block;
           will-change: transform, filter;

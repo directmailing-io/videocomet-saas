@@ -1,11 +1,19 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import * as React from "react";
-import { Info } from "lucide-react";
+import {
+  Check,
+  FileText,
+  Image as ImageIcon,
+  Info,
+  MonitorPlay,
+  Presentation,
+  Users,
+  Video as VideoIcon,
+  type LucideIcon,
+} from "lucide-react";
 import type { Player as PlayerType, PlayerRef } from "@remotion/player";
 import { cn } from "@/lib/utils";
-import { DemoToggleGroup } from "./DemoToggleGroup";
 import MarketingDemoComposition, {
   DEMO_FPS,
   DEMO_DURATION_IN_FRAMES,
@@ -20,17 +28,24 @@ function PlayerSkeleton() {
   return <div className="absolute inset-0 bg-black animate-pulse" />;
 }
 
-// `next/dynamic` widens the generic Player signature to a non-generic one,
-// which loses the link between `component` and `inputProps`. We cast back to
-// the original Player type so TS can still infer the prop type from the
-// composition component.
-const Player = dynamic(
-  () => import("@remotion/player").then((m) => m.Player),
-  {
-    ssr: false,
-    loading: () => <PlayerSkeleton />,
-  },
-) as unknown as typeof PlayerType;
+// Manuell client-seitig geladen statt via next/dynamic: dessen Loadable-
+// Wrapper ist eine Function-Component ohne forwardRef, wodurch `playerRef`
+// nie attached und der Force-Play-Effekt ins Leere läuft.
+function usePlayerComponent() {
+  const [PlayerComp, setPlayerComp] = React.useState<typeof PlayerType | null>(
+    null,
+  );
+  React.useEffect(() => {
+    let cancelled = false;
+    import("@remotion/player").then((m) => {
+      if (!cancelled) setPlayerComp(() => m.Player);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return PlayerComp;
+}
 
 const LEADS: ReadonlyArray<DemoLead> = [
   {
@@ -113,25 +128,23 @@ const LEADS: ReadonlyArray<DemoLead> = [
   },
 ];
 
-function GhostLeadPill({
-  name,
-  industry,
-}: {
-  name: string;
-  industry: string;
-}) {
-  return (
-    <div
-      aria-hidden
-      className="hidden md:inline-flex flex-col items-center justify-center px-3 py-2 rounded-full pointer-events-none select-none w-[136px] grayscale whitespace-nowrap leading-tight"
-    >
-      <span className="text-xs font-semibold text-white/40">An {name}</span>
-      <span className="text-[10px] font-normal text-white/25 mt-0.5">
-        {industry}
-      </span>
-    </div>
-  );
-}
+const GHOST_LEADS: ReadonlyArray<{ name: string; industry: string; initials: string }> = [
+  { name: "Stefan Berger", industry: "SaaS-Agentur", initials: "SB" },
+  { name: "Sofia Krause", industry: "Coaching", initials: "SK" },
+];
+
+const MODES: ReadonlyArray<{ value: DemoMode; label: string; icon: LucideIcon }> = [
+  { value: "screenshot", label: "Website-Screenshot", icon: ImageIcon },
+  { value: "slides", label: "Folienpräsentation", icon: Presentation },
+  { value: "gdocs", label: "Google Docs", icon: FileText },
+  { value: "solo", label: "Webcam-Solo", icon: VideoIcon },
+];
+
+const AVATAR_GRADIENTS: Record<string, string> = {
+  max: "linear-gradient(135deg, #7C5CE8, #5232C7)",
+  lisa: "linear-gradient(135deg, #EC4899, #BE185D)",
+  franz: "linear-gradient(135deg, #F97316, #C2410C)",
+};
 
 const PRELOAD_IMAGES = [
   ...LEADS.map((l) => l.screenshot),
@@ -145,6 +158,7 @@ export function DemoPlayer() {
   const [leadId, setLeadId] = React.useState<string>(LEADS[0].id);
   const [scrollEnabled, setScrollEnabled] = React.useState(false);
   const playerRef = React.useRef<PlayerRef>(null);
+  const Player = usePlayerComponent();
 
   const lead = React.useMemo(
     () => LEADS.find((l) => l.id === leadId) ?? LEADS[0],
@@ -181,108 +195,235 @@ export function DemoPlayer() {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
-  }, []);
+  }, [Player]);
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Lead-Picker — full width with edge fade suggesting "infinite leads" */}
-      <div className="relative w-full max-w-4xl mx-auto">
-        <div
-          role="radiogroup"
-          aria-label="Lead auswählen"
-          className="flex items-center justify-center gap-1 rounded-full bg-white/[0.06] border border-white/10 backdrop-blur-md p-1 overflow-hidden md:[mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)] md:[-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_14%,black_86%,transparent_100%)]"
-        >
-          {/* Ghost leads left — non-clickable, faded into transparency */}
-          <GhostLeadPill name="Stefan" industry="SaaS-Agentur" />
-          <GhostLeadPill name="Sofia" industry="Coaching" />
-
-          {LEADS.map((l) => {
-            const active = l.id === leadId;
-            return (
-              <button
-                key={l.id}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setLeadId(l.id)}
-                className={cn(
-                  "inline-flex flex-col items-center justify-center px-3 py-2 rounded-full transition-colors w-[136px] whitespace-nowrap leading-tight",
-                  active
-                    ? "bg-brand text-white shadow-brand"
-                    : "text-white/85 hover:bg-white/10",
-                )}
-              >
-                <span className="text-xs font-semibold">An {l.firstName}</span>
-                <span
-                  className={cn(
-                    "text-[10px] font-normal mt-0.5",
-                    active ? "text-white/80" : "text-white/50",
-                  )}
-                >
-                  {l.industryLabel}
-                </span>
-              </button>
-            );
-          })}
-
-          {/* Ghost leads right */}
-          <GhostLeadPill name="Tobias" industry="Hotellerie" />
-          <GhostLeadPill name="Nadine" industry="Immobilien" />
-        </div>
-        <p className="mt-2 text-center text-[11px] text-white/50">
-          Demo zeigt 3 Beispiel-Leads. In deinem Account beliebig viele.
-        </p>
-      </div>
-
-      <DemoToggleGroup value={mode} onChange={setMode} />
-      <div className="relative w-full max-w-4xl mx-auto aspect-video rounded-2xl overflow-hidden shadow-2xl bg-black">
-        <Player
-          ref={playerRef}
-          component={MarketingDemoComposition}
-          inputProps={{ mode, scrollEnabled, lead }}
-          durationInFrames={DEMO_DURATION_IN_FRAMES}
-          fps={DEMO_FPS}
-          compositionWidth={DEMO_WIDTH}
-          compositionHeight={DEMO_HEIGHT}
-          autoPlay
-          loop
-          controls={false}
-          style={{ width: "100%", height: "100%" }}
-        />
-        {canScroll ? (
-          <button
-            type="button"
-            onClick={() => setScrollEnabled((v) => !v)}
-            className={cn(
-              "absolute bottom-3 left-3 z-10 inline-flex items-center gap-2 rounded-full backdrop-blur px-3.5 py-1.5 text-xs font-medium transition-colors",
-              scrollEnabled
-                ? "bg-brand text-white hover:bg-brand-deep"
-                : "bg-black/60 text-white hover:bg-black/80",
-            )}
-            aria-pressed={scrollEnabled}
+      {/* Editor-Fenster */}
+      <div className="rounded-3xl bg-white border border-line overflow-hidden shadow-[0_30px_80px_-30px_rgba(60,40,130,0.35),0_8px_28px_-14px_rgba(60,40,130,0.2)]">
+        {/* Titelleiste */}
+        <div className="flex items-center gap-3 px-4 md:px-5 py-3 border-b border-line bg-surface-soft">
+          <div className="flex items-center gap-1.5" aria-hidden>
+            <span className="size-3 rounded-full bg-[#FF5F57]" />
+            <span className="size-3 rounded-full bg-[#FEBC2E]" />
+            <span className="size-3 rounded-full bg-[#28C840]" />
+          </div>
+          <div className="flex-1 flex justify-center min-w-0">
+            <div className="inline-flex items-center gap-2 rounded-lg bg-white border border-line px-3 py-1 text-[12px] text-ink-muted truncate">
+              <MonitorPlay className="size-3.5 text-brand-deep shrink-0" aria-hidden />
+              <span className="truncate">
+                VideoComet Editor — Kampagne „Neukunden Q3“
+              </span>
+            </div>
+          </div>
+          <span
+            className="hidden sm:inline-flex items-center rounded-full bg-ink text-white text-[11px] font-semibold px-3 py-1.5"
+            aria-hidden
           >
-            <span
-              className={cn(
-                "relative inline-flex h-3.5 w-6 rounded-full transition-colors",
-                scrollEnabled ? "bg-white/40" : "bg-white/25",
+            Videos generieren
+          </span>
+        </div>
+
+        <div className="flex flex-col lg:flex-row">
+          {/* Sidebar */}
+          <aside className="lg:w-[264px] shrink-0 border-b lg:border-b-0 lg:border-r border-line bg-white p-4 flex flex-col gap-5">
+            {/* Empfänger */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <Users className="size-3.5 text-ink-muted" aria-hidden />
+                <span className="text-[11px] font-bold tracking-[0.14em] uppercase text-ink-muted">
+                  Empfänger
+                </span>
+              </div>
+              <div
+                role="radiogroup"
+                aria-label="Lead auswählen"
+                className="flex flex-col gap-1"
+              >
+                {LEADS.map((l) => {
+                  const active = l.id === leadId;
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setLeadId(l.id)}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors",
+                        active
+                          ? "bg-brand-soft ring-1 ring-brand/40"
+                          : "hover:bg-surface-soft",
+                      )}
+                    >
+                      <span
+                        className="size-8 shrink-0 rounded-full flex items-center justify-center text-white text-[11px] font-bold"
+                        style={{ background: AVATAR_GRADIENTS[l.id] }}
+                        aria-hidden
+                      >
+                        {l.initials}
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[13px] font-semibold text-ink leading-tight truncate">
+                          {l.fullName}
+                        </span>
+                        <span className="block text-[11px] text-ink-muted leading-tight truncate">
+                          {l.industryLabel} · {l.location}
+                        </span>
+                      </span>
+                      {active ? (
+                        <Check className="size-4 text-brand-deep shrink-0" aria-hidden />
+                      ) : null}
+                    </button>
+                  );
+                })}
+
+                {/* Ghost-Leads — deuten „beliebig viele“ an */}
+                {GHOST_LEADS.map((g) => (
+                  <div
+                    key={g.name}
+                    aria-hidden
+                    className="flex items-center gap-2.5 rounded-xl px-2.5 py-2 opacity-40 select-none"
+                  >
+                    <span className="size-8 shrink-0 rounded-full bg-ink/10 flex items-center justify-center text-ink-muted text-[11px] font-bold">
+                      {g.initials}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[13px] font-semibold text-ink leading-tight truncate">
+                        {g.name}
+                      </span>
+                      <span className="block text-[11px] text-ink-muted leading-tight truncate">
+                        {g.industry}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-1.5 px-2.5 text-[11px] text-ink-muted leading-snug">
+                Demo mit 3 Beispiel-Leads. In deinem Account: beliebig viele.
+              </p>
+            </div>
+
+            {/* Video-Inhalt */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <MonitorPlay className="size-3.5 text-ink-muted" aria-hidden />
+                <span className="text-[11px] font-bold tracking-[0.14em] uppercase text-ink-muted">
+                  Video-Inhalt
+                </span>
+              </div>
+              <div
+                role="radiogroup"
+                aria-label="Demo-Modus auswählen"
+                className="grid grid-cols-2 lg:grid-cols-1 gap-1"
+              >
+                {MODES.map((m) => {
+                  const Icon = m.icon;
+                  const active = mode === m.value;
+                  return (
+                    <button
+                      key={m.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setMode(m.value)}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors",
+                        active
+                          ? "bg-brand-soft ring-1 ring-brand/40"
+                          : "hover:bg-surface-soft",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "size-7 shrink-0 rounded-lg flex items-center justify-center",
+                          active
+                            ? "bg-brand text-white"
+                            : "bg-surface-muted text-ink-muted",
+                        )}
+                        aria-hidden
+                      >
+                        <Icon className="size-4" />
+                      </span>
+                      <span
+                        className={cn(
+                          "text-[13px] font-medium leading-tight",
+                          active ? "text-ink" : "text-ink-soft",
+                        )}
+                      >
+                        {m.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Scroll-Toggle */}
+              {canScroll ? (
+                <button
+                  type="button"
+                  onClick={() => setScrollEnabled((v) => !v)}
+                  aria-pressed={scrollEnabled}
+                  className="mt-2 w-full flex items-center justify-between gap-2 rounded-xl px-2.5 py-2 hover:bg-surface-soft transition-colors"
+                >
+                  <span className="text-[13px] font-medium text-ink-soft">
+                    Scrollen aktivieren
+                  </span>
+                  <span
+                    className={cn(
+                      "relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors",
+                      scrollEnabled ? "bg-brand" : "bg-ink/15",
+                    )}
+                    aria-hidden
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 size-4 rounded-full bg-white shadow transition-all",
+                        scrollEnabled ? "left-[18px]" : "left-0.5",
+                      )}
+                    />
+                  </span>
+                </button>
+              ) : null}
+            </div>
+          </aside>
+
+          {/* Canvas + Timeline */}
+          <div className="flex-1 min-w-0 bg-[#12121A] p-4 md:p-6 flex flex-col gap-4">
+            <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black ring-1 ring-white/10">
+              {Player ? (
+                <Player
+                  ref={playerRef}
+                  component={MarketingDemoComposition}
+                  inputProps={{ mode, scrollEnabled, lead }}
+                  durationInFrames={DEMO_DURATION_IN_FRAMES}
+                  fps={DEMO_FPS}
+                  compositionWidth={DEMO_WIDTH}
+                  compositionHeight={DEMO_HEIGHT}
+                  autoPlay
+                  loop
+                  controls={false}
+                  acknowledgeRemotionLicense
+                  style={{ width: "100%", height: "100%" }}
+                />
+              ) : (
+                <PlayerSkeleton />
               )}
-            >
-              <span
-                className={cn(
-                  "absolute top-0.5 size-2.5 rounded-full bg-white transition-all",
-                  scrollEnabled ? "left-3" : "left-0.5",
-                )}
-              />
-            </span>
-            Scrollen aktivieren
-          </button>
-        ) : null}
+            </div>
+
+            <EditorTimeline
+              mode={mode}
+              durationSeconds={DEMO_DURATION_IN_FRAMES / DEMO_FPS}
+            />
+          </div>
+        </div>
       </div>
+
       {canScroll && scrollEnabled ? (
-        <div className="mx-auto max-w-2xl rounded-squircle-md border border-warn/30 bg-warn/[0.10] backdrop-blur-md px-4 py-3 text-xs text-white/75 flex items-start gap-2.5">
+        <div className="mx-auto max-w-2xl rounded-squircle-md border border-warn/30 bg-warn-soft px-4 py-3 text-xs text-ink-soft flex items-start gap-2.5">
           <Info className="size-4 text-warn shrink-0 mt-0.5" aria-hidden />
           <span>
-            <strong className="text-white font-semibold">
+            <strong className="text-ink font-semibold">
               Hinweis zur Demo:
             </strong>{" "}
             Das Scroll-Verhalten hier ist generiert und wirkt etwas
@@ -291,12 +432,126 @@ export function DemoPlayer() {
           </span>
         </div>
       ) : (
-        <p className="text-center text-xs text-white/55 max-w-2xl mx-auto leading-relaxed">
+        <p className="text-center text-xs text-ink-muted max-w-2xl mx-auto leading-relaxed">
           Für jeden Lead ein eigenes, persönliches Video. Du kannst auch
           mehrere Ansichten in einem Video kombinieren: erst die Webseite,
           dann ein Google Doc, dann eine Folie.
         </p>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Editor-Timeline — dekorativ, Playhead läuft synchron zur Loop-Dauer
+// ---------------------------------------------------------------------------
+
+const MODE_TRACK_LABEL: Record<DemoMode, string> = {
+  screenshot: "Webseite",
+  slides: "Folie",
+  gdocs: "Google Doc",
+  solo: "Webcam",
+};
+
+function EditorTimeline({
+  mode,
+  durationSeconds,
+}: {
+  mode: DemoMode;
+  durationSeconds: number;
+}) {
+  const rulerMarks = [0, 5, 10, 15, 20];
+
+  return (
+    <div aria-hidden className="select-none">
+      {/* Zeitleiste */}
+      <div className="relative ml-[88px] mb-1 flex justify-between text-[9px] font-medium text-white/35 tabular-nums">
+        {rulerMarks.map((s) => (
+          <span key={s}>{s}s</span>
+        ))}
+      </div>
+
+      <div className="relative">
+        <div className="flex flex-col gap-1.5">
+          <TimelineTrack label="Webcam">
+            <div
+              className="h-full rounded-md"
+              style={{
+                width: "100%",
+                background: "linear-gradient(90deg, #7C5CE8, #9573EE)",
+              }}
+            />
+          </TimelineTrack>
+
+          {mode !== "solo" ? (
+            <TimelineTrack label={MODE_TRACK_LABEL[mode]}>
+              <div
+                className="h-full rounded-md ml-[14%]"
+                style={{
+                  width: "72%",
+                  background: "linear-gradient(90deg, #0EA5E9, #38BDF8)",
+                }}
+              />
+            </TimelineTrack>
+          ) : null}
+
+          <TimelineTrack label="Musik">
+            <div
+              className="h-full rounded-md flex items-center gap-px px-1.5 overflow-hidden"
+              style={{ width: "100%", background: "rgba(16,185,129,0.25)" }}
+            >
+              {Array.from({ length: 64 }).map((_, i) => (
+                <span
+                  key={i}
+                  className="w-[3px] shrink-0 rounded-full bg-emerald-400/80"
+                  style={{
+                    height: `${Math.round(28 + 52 * Math.abs(Math.sin(i * 1.7)))}%`,
+                  }}
+                />
+              ))}
+            </div>
+          </TimelineTrack>
+        </div>
+
+        {/* Playhead: läuft synchron zur Videodauer über die Track-Fläche */}
+        <div className="absolute top-[-14px] bottom-0 left-[88px] right-0 pointer-events-none">
+          <div
+            key={`${mode}-${durationSeconds}`}
+            className="vc-playhead absolute top-0 bottom-0 left-0 w-px bg-white/70"
+            style={{
+              animation: `vc-playhead-run ${durationSeconds}s linear infinite`,
+            }}
+          >
+            <span className="absolute -top-[3px] left-1/2 -translate-x-1/2 size-2 rounded-full bg-white" />
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes vc-playhead-run {
+          0%   { left: 0%; }
+          100% { left: 100%; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function TimelineTrack({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-[76px] shrink-0 text-right text-[10px] font-medium text-white/45 truncate">
+        {label}
+      </span>
+      <div className="flex-1 h-7 rounded-md bg-white/[0.06] overflow-hidden">
+        {children}
+      </div>
     </div>
   );
 }
