@@ -212,7 +212,8 @@ export function SignupForm() {
               <p className="text-[13px] sm:text-sm text-ink-soft leading-relaxed">
                 Versand per E-Mail über VIDEOCOMET:{" "}
                 <strong className="font-semibold text-ink">10 E-Mails = 1 Credit</strong>.
-                Credits verfallen nie, du lädst nur auf, wenn du sie brauchst.
+                Deine Credits bleiben dir die gesamte Laufzeit erhalten, du
+                lädst nur auf, wenn du sie brauchst.
               </p>
             </Squircle>
 

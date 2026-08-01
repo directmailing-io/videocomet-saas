@@ -66,7 +66,10 @@ export default function AgbPage() {
         zusätzlich <strong>1 Credit</strong> vom Guthaben des Kunden verbraucht.
         Credits müssen separat erworben werden. Der Standardpreis beträgt 1,00 €
         netto pro Credit; bei Erwerb größerer Pakete gelten Mengenrabatte
-        gemäß der Preisliste auf der Website. Credits verfallen nicht.
+        gemäß der Preisliste auf der Website. Erworbene Credits verfallen
+        während der Laufzeit des Vertrags nicht und können jederzeit
+        eingesetzt werden; ihre Nutzung setzt einen aktiven Plattform-Zugang
+        voraus.
       </p>
       <p>
         Die Abrechnung des Plattform-Zugangs erfolgt im Voraus für die

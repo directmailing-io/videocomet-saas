@@ -254,7 +254,8 @@ export function BillingTab() {
               Credit-Guthaben
             </h3>
             <p className="text-xs text-ink-muted mt-1">
-              1 Credit = 1 € netto. Credits verfallen nicht.
+              1 Credit = 1 € netto. Deine Credits bleiben dir die gesamte
+              Laufzeit erhalten.
             </p>
           </div>
         </div>
