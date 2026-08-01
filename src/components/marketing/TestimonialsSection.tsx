@@ -7,14 +7,14 @@ import { Squircle } from "./Squircle";
 
 const TESTIMONIALS: ReadonlyArray<{
   vimeoSrc: string;
-  skyPosition: string;
+  thumb: string;
   quote: string;
   name: string;
   role: string;
 }> = [
   {
     vimeoSrc: "https://player.vimeo.com/video/848457306?h=9e9f00c1a6&dnt=1&autoplay=1",
-    skyPosition: "50% 20%",
+    thumb: "/testimonials/matthias.jpg",
     quote:
       "Es wird einfach alles generiert. Wir müssen nur noch ausdrucken und zur Post bringen. So testen wir ganz schnell neue Zielgruppen und finden die Botschaft, die am besten zündet.",
     name: "Matthias Schäfer",
@@ -22,7 +22,7 @@ const TESTIMONIALS: ReadonlyArray<{
   },
   {
     vimeoSrc: "https://player.vimeo.com/video/756176209?dnt=1&autoplay=1",
-    skyPosition: "50% 50%",
+    thumb: "/testimonials/sebastian.jpg",
     quote:
       "Ich habe neue Kunden gewonnen und kann meine Bestandskunden besser betreuen. VIDEOCOMET nimmt mir die Arbeit in der Neukundengewinnung einfach ab.",
     name: "Sebastian Dittmar",
@@ -30,11 +30,11 @@ const TESTIMONIALS: ReadonlyArray<{
   },
   {
     vimeoSrc: "https://player.vimeo.com/video/746107405?dnt=1&autoplay=1",
-    skyPosition: "50% 80%",
+    thumb: "/testimonials/wladimir.jpg",
     quote:
       "Wenn ich so ein Mailing bekommen würde, würde mich brennend interessieren: Wie haben die das gemacht? Man lädt die Daten hoch, um den Rest kümmert sich das Team. Null Stress.",
-    name: "Vladimir Semenov",
-    role: "Coach für Finanzdienstleister",
+    name: "Wladimir Simonov",
+    role: "Geschäftsführer, Simonov Consulting GmbH",
   },
 ];
 
@@ -56,7 +56,7 @@ export function TestimonialsSection() {
               Wir betreuen Kunden seit 2022.
               <br />
               <span className="font-semibold text-brand-deep">
-                Drei erzählen es dir selbst.
+                Drei von ihnen erzählen dir, warum.
               </span>
             </h2>
           </RevealOnScroll>
@@ -106,17 +106,21 @@ function TestimonialCard({
           <button
             type="button"
             onClick={() => setPlaying(true)}
-            className="group absolute inset-0 size-full bg-cover flex flex-col items-center justify-center gap-3"
-            style={{
-              backgroundImage: "url(/visual-sky.jpg)",
-              backgroundPosition: testimonial.skyPosition,
-            }}
+            className="group absolute inset-0 size-full flex items-center justify-center"
             aria-label={`Video von ${testimonial.name} abspielen`}
           >
-            <span className="size-14 rounded-full bg-white/95 backdrop-blur-md flex items-center justify-center shadow-[0_10px_28px_-8px_rgba(15,23,42,0.45)] transition-transform group-hover:scale-105">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={testimonial.thumb}
+              alt=""
+              className="absolute inset-0 size-full object-cover"
+              loading="lazy"
+            />
+            <span className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/55 to-transparent" />
+            <span className="relative size-14 rounded-full bg-white/95 backdrop-blur-md flex items-center justify-center shadow-[0_10px_28px_-8px_rgba(15,23,42,0.45)] transition-transform group-hover:scale-105">
               <Play className="size-5 text-ink translate-x-[1px]" fill="currentColor" />
             </span>
-            <span className="text-[11px] font-medium text-white/90 drop-shadow">
+            <span className="absolute bottom-2.5 inset-x-0 text-center text-[11px] font-medium text-white/90 drop-shadow">
               Klick lädt das Video von Vimeo
             </span>
           </button>
