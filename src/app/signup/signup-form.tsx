@@ -3,7 +3,7 @@
 import * as React from "react";
 import Script from "next/script";
 import Link from "next/link";
-import { Loader2, Check, Plus } from "lucide-react";
+import { Loader2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -162,125 +162,65 @@ export function SignupForm() {
 
             {/* Preis-Card */}
             <Squircle radius={22} shadow="pretty" wrapperClassName="mb-3" className="bg-white p-5">
-              <div className="flex items-baseline gap-2 mb-1">
+              <div className="flex items-baseline gap-2 mb-2">
                 <span className="text-[32px] sm:text-4xl font-bold leading-none text-ink">40 €</span>
                 <span className="text-sm text-ink-muted">im Monat, netto</span>
               </div>
-              <p className="text-xs text-ink-muted mb-4">
-                Zugang zur Plattform. Zzgl. gesetzl. MwSt.
+              <p className="text-[13px] sm:text-sm text-ink-soft leading-relaxed">
+                Heute zahlst du 120 € für deine ersten 3 Monate. Danach immer
+                3 Monate weiter, kündbar mit einem Monat Vorlauf. Zzgl. MwSt.
               </p>
-
-              <div className="space-y-3 text-sm">
-                <div className="flex items-start gap-3">
-                  <Check className="size-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-ink">
-                      Heute zahlst du 120 €. Das sind deine ersten 3 Monate.
-                    </div>
-                    <div className="text-xs text-ink-muted leading-relaxed mt-0.5">
-                      Einmal abgebucht, 3 Monate Ruhe.
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Check className="size-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-ink">
-                      Danach immer 3 Monate weiter.
-                    </div>
-                    <div className="text-xs text-ink-muted leading-relaxed mt-0.5">
-                      Kündbar mit einem Monat Vorlauf zum Ende der Laufzeit.
-                    </div>
-                  </div>
-                </div>
-              </div>
             </Squircle>
 
             {/* Credits-Card — bewusst simpel */}
-            <Squircle radius={22} shadow="pretty" wrapperClassName="mb-3" className="bg-brand-soft/70 p-5">
-              <h3 className="font-semibold text-[15px] text-ink mb-2">
-                Videos bezahlst du mit Credits. So einfach:
+            <Squircle radius={22} shadow="pretty" wrapperClassName="mb-4" className="bg-brand-soft/70 p-5">
+              <h3 className="font-semibold text-[15px] text-ink mb-2.5">
+                1 Credit = 1 €. Dafür bekommst du pro Lead:
               </h3>
-              <ul className="text-[13px] sm:text-sm text-ink-soft mb-4 space-y-1 leading-relaxed">
-                <li>
-                  <strong className="font-semibold text-ink">1 Credit = 1 €</strong>
+              <ul className="text-[13px] sm:text-sm text-ink-soft mb-3 space-y-1.5 leading-snug">
+                <li className="flex items-start gap-2">
+                  <Check className="size-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="font-semibold text-ink">Persönliches Video</strong> mit
+                    seiner Webseite und seinem Namen
+                  </span>
                 </li>
-                <li>
-                  <strong className="font-semibold text-ink">1 Video = 1 Credit</strong>
+                <li className="flex items-start gap-2">
+                  <Check className="size-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="font-semibold text-ink">Landingpage</strong>, auf der
+                    das Video läuft
+                  </span>
                 </li>
-                <li>
-                  <strong className="font-semibold text-ink">10 E-Mails = 1 Credit</strong>
+                <li className="flex items-start gap-2">
+                  <Check className="size-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="font-semibold text-ink">Brief</strong> mit Link und
+                    QR-Code zum Video
+                  </span>
                 </li>
-                <li>Credits verfallen nie. Du lädst nur auf, wenn du sie brauchst.</li>
+                <li className="flex items-start gap-2">
+                  <Check className="size-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="font-semibold text-ink">
+                      Handschriftlicher Umschlag
+                    </strong>{" "}
+                    zum Ausdrucken
+                  </span>
+                </li>
               </ul>
-              <div className="grid grid-cols-3 gap-2 text-center items-end pt-3">
-                {/* 100 — Einstieg (kein Anker) */}
-                <div className="rounded-lg bg-white border border-line py-2.5 px-1.5">
-                  <div className="text-[15px] font-bold text-ink leading-tight">
-                    100 €
-                  </div>
-                  <div className="text-[10px] text-ink-muted mt-0.5">100 Videos</div>
-                  <div className="text-[9px] text-ink-muted/80 mt-0.5">1,00 €/Video</div>
-                </div>
-
-                {/* 500 — Sweet-Spot: Anker + Beliebt-Badge + Glow */}
-                <div
-                  className="rounded-lg bg-white border-2 border-brand py-3 px-1.5 relative"
-                  style={{
-                    boxShadow: "0 12px 32px -10px rgba(124,92,232,0.45)",
-                  }}
-                >
-                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-white bg-brand px-2 py-0.5 rounded-full whitespace-nowrap uppercase tracking-wider">
-                    ★ Beliebt
-                  </div>
-                  <div className="text-[10px] text-ink-muted/80 line-through decoration-red-400 leading-none tabular-nums">
-                    500 €
-                  </div>
-                  <div className="text-[17px] font-bold text-ink leading-tight mt-0.5 tabular-nums">
-                    450 €
-                  </div>
-                  <div className="text-[10px] text-ink-muted mt-0.5">500 Videos</div>
-                  <div className="text-[9px] font-semibold text-emerald-600 mt-0.5">
-                    −50 € · 0,90 €/Video
-                  </div>
-                </div>
-
-                {/* 1000 — Volume-Play mit Anker */}
-                <div className="rounded-lg bg-white border border-line py-2.5 px-1.5">
-                  <div className="text-[10px] text-ink-muted/80 line-through decoration-red-400 leading-none tabular-nums">
-                    1.000 €
-                  </div>
-                  <div className="text-[15px] font-bold text-ink leading-tight mt-0.5 tabular-nums">
-                    850 €
-                  </div>
-                  <div className="text-[10px] text-ink-muted mt-0.5">1000 Videos</div>
-                  <div className="text-[9px] font-semibold text-emerald-600 mt-0.5">
-                    −150 € · 0,85 €/Video
-                  </div>
-                </div>
-              </div>
-              <p className="text-[11px] text-ink-muted mt-4 text-center">
-                Bis zu <strong className="text-ink">20 % Rabatt</strong> ab
-                5.000 Credits.
+              <p className="text-[13px] sm:text-sm text-ink-soft leading-relaxed">
+                Versand per E-Mail über VIDEOCOMET:{" "}
+                <strong className="font-semibold text-ink">10 E-Mails = 1 Credit</strong>.
+                Credits verfallen nie, du lädst nur auf, wenn du sie brauchst.
               </p>
             </Squircle>
 
             {/* Trust-Elemente */}
-            <ul className="space-y-2 text-sm">
-              <li className="flex items-center gap-2 text-ink-soft">
-                <Check className="size-4 text-emerald-600 shrink-0" />
-                <span>Nur für Unternehmen (B2B)</span>
-              </li>
-              <li className="flex items-center gap-2 text-ink-soft">
-                <Check className="size-4 text-emerald-600 shrink-0" />
-                <span>Reverse-Charge bei EU-USt-IdNr.</span>
-              </li>
-              <li className="flex items-center gap-2 text-ink-soft">
-                <Check className="size-4 text-emerald-600 shrink-0" />
-                <span>Kreditkarte oder SEPA-Lastschrift, sicher über Stripe</span>
-              </li>
-            </ul>
+            <p className="text-[13px] text-ink-muted">
+              Nur für Unternehmen (B2B) · Reverse-Charge bei EU-USt-IdNr. ·
+              Sichere Zahlung über Stripe
+            </p>
           </div>
 
           {/* ═══════ RECHTS: Formular ═══════ */}
@@ -430,50 +370,14 @@ export function SignupForm() {
                 </span>
               </label>
 
-              {/* Deal-Reminder: Plus-Visualisierung Zugang + Credits */}
-              <div className="rounded-xl bg-surface-soft border border-line p-4 sm:p-5">
-                <div className="relative">
-                  {/* Zugang */}
-                  <div className="rounded-lg bg-white border border-line p-3.5">
-                    <div className="text-[10px] font-semibold tracking-[0.14em] uppercase text-ink-muted mb-1.5">
-                      Du bestellst jetzt
-                    </div>
-                    <div className="flex items-baseline gap-1.5 mb-1">
-                      <span className="text-lg font-bold text-ink">Plattform-Zugang</span>
-                      <span className="text-sm text-ink-muted">·</span>
-                      <span className="text-sm font-semibold text-ink-soft">120 € für 3 Monate</span>
-                    </div>
-                    <div className="text-[12px] text-ink-muted leading-snug">
-                      Wir buchen einmalig 120 € ab (3 × 40 €). Danach immer
-                      3 Monate weiter, kündbar mit einem Monat Vorlauf.
-                    </div>
-                  </div>
-
-                  {/* Plus-Trenner */}
-                  <div className="flex items-center justify-center my-3">
-                    <div
-                      className="size-10 rounded-full bg-brand-soft flex items-center justify-center shadow-[0_6px_16px_-4px_rgba(124,92,232,0.35)]"
-                    >
-                      <Plus className="size-5 text-brand-deep" strokeWidth={2.5} />
-                    </div>
-                  </div>
-
-                  {/* Credits */}
-                  <div className="rounded-lg bg-white border border-line p-3.5">
-                    <div className="text-[10px] font-semibold tracking-[0.14em] uppercase text-ink-muted mb-1.5">
-                      Credits (nach Bedarf)
-                    </div>
-                    <div className="flex items-baseline gap-1.5 mb-1">
-                      <span className="text-lg font-bold text-ink">Videos aufladen</span>
-                      <span className="text-sm text-ink-muted">·</span>
-                      <span className="text-sm font-semibold text-ink-soft">1 €/Video</span>
-                    </div>
-                    <div className="text-[12px] text-ink-muted leading-snug">
-                      1 Credit = 1 € = 1 Video, 10 E-Mails = 1 Credit.
-                      Verfallen nie. Kaufst du erst, wenn du sie brauchst.
-                    </div>
-                  </div>
-                </div>
+              {/* Deal-Reminder kurz */}
+              <div className="rounded-xl bg-surface-soft border border-line p-4 text-[12px] text-ink-muted leading-relaxed">
+                Du bestellst jetzt den{" "}
+                <strong className="font-semibold text-ink">
+                  Plattform-Zugang für 120 €
+                </strong>{" "}
+                (3 × 40 €, deine ersten 3 Monate). Credits für Videos lädst du
+                später nach Bedarf auf.
               </div>
 
               {errorMessage && (
