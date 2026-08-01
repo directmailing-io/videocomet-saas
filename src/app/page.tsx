@@ -3,6 +3,7 @@ import { DemoSection } from "@/components/marketing/DemoSection";
 import { FAQSection } from "@/components/marketing/FAQSection";
 import { FAQ } from "@/components/marketing/faq-data";
 import { FeaturesBento } from "@/components/marketing/FeaturesBento";
+import { FinalCtaSection } from "@/components/marketing/FinalCtaSection";
 import { HeroSection } from "@/components/marketing/HeroSection";
 import { HowItWorksSection } from "@/components/marketing/HowItWorksSection";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
@@ -71,10 +72,11 @@ export default function HomePage() {
       <HeroSection />
       <DemoSection />
       <HowItWorksSection />
-      <FeaturesBento />
       <TestimonialsSection />
+      <FeaturesBento />
       <PricingSection />
       <FAQSection />
+      <FinalCtaSection />
       <MarketingFooter />
     </div>
   );

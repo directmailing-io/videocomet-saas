@@ -32,10 +32,6 @@ export function HeroSection() {
         sizes="100vw"
         className="object-cover object-[center_35%]"
       />
-      {/* Lesbarkeits-Veil: heller Schleier links (wo der Text sitzt), faded
-          nach rechts transparent → Himmel + Komet bleiben voll sichtbar.
-          Per Maske nach unten ausgeblendet, damit er den Bottom-Fade nicht
-          aufhellt und der Übergang zur Folge-Sektion nahtlos bleibt. */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -47,7 +43,6 @@ export function HeroSection() {
             "linear-gradient(180deg, black 0%, black 55%, transparent 88%)",
         }}
       />
-      {/* Bottom-Fade: verläuft durchgehend in die Farbe der Demo-Sektion */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -56,7 +51,6 @@ export function HeroSection() {
         }}
       />
 
-      {/* Hero content */}
       <div className="relative z-10 w-full h-full max-w-6xl mx-auto px-6 md:px-10 flex flex-col justify-center gap-5 pt-16">
         <div className="vc-hero-eyebrow inline-flex items-center gap-3 text-[10px] tracking-[0.22em] uppercase opacity-0">
           <span className="text-ink/80">Personalisierte Video-Akquise</span>
@@ -64,9 +58,9 @@ export function HeroSection() {
           <span className="hidden sm:inline text-ink/40">VIDEOCOMET</span>
         </div>
 
-        <h1 className="vc-hero-title font-light tracking-[-0.04em] leading-[1.04] text-ink text-[clamp(36px,4.8vw,68px)] max-w-[14ch] text-balance">
+        <h1 className="vc-hero-title font-light tracking-[-0.04em] leading-[1.04] text-ink text-[clamp(34px,4.6vw,64px)] max-w-[16ch] text-balance">
           <span className="block overflow-hidden">
-            <span className="vc-hero-line block">Werde unvergesslich.</span>
+            <span className="vc-hero-line block">Nimm ein Video auf.</span>
           </span>
           <span className="block overflow-hidden">
             <span className="vc-hero-line vc-hero-accent-wrap block">
@@ -77,20 +71,22 @@ export function HeroSection() {
                     "linear-gradient(96deg, #9573EE 0%, #7C5CE8 45%, #5E44C2 75%, #3F2D8A 100%)",
                 }}
               >
-                Bei jedem Kontakt.
+                Erreiche hunderte Leads persönlich.
               </span>
             </span>
           </span>
         </h1>
 
-        <p className="vc-hero-sub max-w-[480px] text-[16px] leading-[1.6] text-ink-soft opacity-0">
-          Du nimmst <strong className="font-semibold text-ink">ein einziges Video</strong>{" "}
-          auf. VIDEOCOMET macht daraus{" "}
+        <p className="vc-hero-sub max-w-[500px] text-[16px] leading-[1.6] text-ink-soft opacity-0">
+          VIDEOCOMET macht aus deiner{" "}
+          <strong className="font-semibold text-ink">einen Aufnahme</strong> für
+          jeden Lead ein persönliches Video{" "}
+          <strong className="font-semibold text-ink">mit seiner Webseite</strong>
+          . Das Ergebnis:{" "}
           <strong className="font-semibold text-ink">
-            für jeden Lead eine persönliche Version
+            mehr Antworten, mehr Termine, mehr Kunden
           </strong>
-          . So bleibst du im Kopf, und neue Kunden{" "}
-          <strong className="font-semibold text-ink">melden sich von selbst</strong>.
+          .
         </p>
 
         <div className="vc-hero-channels flex flex-wrap items-center gap-x-3 gap-y-2 opacity-0">
@@ -102,10 +98,7 @@ export function HeroSection() {
             icon={<Linkedin className="size-3.5" />}
             label="LinkedIn"
           />
-          <ChannelChip
-            icon={<Mail className="size-3.5" />}
-            label="Brief"
-          />
+          <ChannelChip icon={<Mail className="size-3.5" />} label="Brief" />
         </div>
 
         <div className="vc-hero-cta flex flex-wrap items-center gap-4 mt-2 opacity-0">
@@ -129,10 +122,10 @@ export function HeroSection() {
             </svg>
           </Link>
           <Link
-            href="#features"
+            href="#demo"
             className="inline-flex items-center gap-1.5 px-2 py-3 text-ink/75 text-sm font-medium hover:text-ink transition-colors"
           >
-            Features entdecken
+            Beispiel-Video ansehen
             <svg
               width="12"
               height="12"
@@ -148,9 +141,14 @@ export function HeroSection() {
             </svg>
           </Link>
         </div>
+
+        <div className="vc-hero-trust flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-1 text-[12px] text-ink/60 opacity-0">
+          <span>Kunden seit 2022</span>
+          <span className="size-1 rounded-full bg-ink/25" aria-hidden />
+          <span>Von Agenturen bis Handwerk</span>
+        </div>
       </div>
 
-      {/* Scroll hint */}
       <div
         className="vc-hero-hint absolute bottom-8 left-1/2 -translate-x-1/2 text-ink/40 text-[10px] tracking-[0.3em] uppercase flex flex-col items-center gap-2 opacity-0"
         aria-hidden
@@ -168,7 +166,6 @@ export function HeroSection() {
           0%   { transform: translateY(110%); }
           100% { transform: translateY(0%); }
         }
-        /* Akzent driftet leicht hoch/runter + atmender Glow */
         @keyframes vc-hero-accent-drift {
           0%, 100% {
             transform: translateY(0px) translateZ(0);
@@ -191,7 +188,8 @@ export function HeroSection() {
         .vc-hero-sub { animation: vc-hero-fade-up 0.95s cubic-bezier(0.2,0.8,0.2,1) 0.85s forwards; }
         .vc-hero-channels { animation: vc-hero-fade-up 0.9s cubic-bezier(0.2,0.8,0.2,1) 1.05s forwards; }
         .vc-hero-cta { animation: vc-hero-fade-up 0.95s cubic-bezier(0.2,0.8,0.2,1) 1.25s forwards; }
-        .vc-hero-hint { animation: vc-hero-fade-up 0.8s cubic-bezier(0.2,0.8,0.2,1) 1.6s forwards; }
+        .vc-hero-trust { animation: vc-hero-fade-up 0.9s cubic-bezier(0.2,0.8,0.2,1) 1.45s forwards; }
+        .vc-hero-hint { animation: vc-hero-fade-up 0.8s cubic-bezier(0.2,0.8,0.2,1) 1.7s forwards; }
       `}</style>
     </section>
   );
