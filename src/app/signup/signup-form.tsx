@@ -182,7 +182,7 @@ export function SignupForm() {
                   <Check className="size-4 text-emerald-600 shrink-0 mt-0.5" />
                   <span>
                     <strong className="font-semibold text-ink">Persönliches Video</strong> mit
-                    seiner Webseite und seinem Namen
+                    seiner Webseite und personalisierter Präsentation
                   </span>
                 </li>
                 <li className="flex items-start gap-2">

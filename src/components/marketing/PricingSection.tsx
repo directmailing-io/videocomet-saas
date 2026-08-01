@@ -52,7 +52,7 @@ const EXAMPLES: ReadonlyArray<{ count: number; label: string }> = [
 ];
 
 const PAKET: ReadonlyArray<string> = [
-  "Persönliches Video mit seiner Webseite und seinem Namen",
+  "Persönliches Video mit seiner Webseite und personalisierter Präsentation",
   "Landingpage, auf der das Video läuft",
   "Brief mit Link und QR-Code zum Video",
   "Handschriftlicher Umschlag zum Ausdrucken",
