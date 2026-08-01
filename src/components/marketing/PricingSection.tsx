@@ -103,44 +103,62 @@ export function PricingSection() {
         <RevealOnScroll delay={400}>
           <Squircle radius={30} shadow="float" className="bg-brand p-[2px]">
             <Squircle radius={28} className="relative bg-white p-8 md:p-12">
-            {/* Preis-Formel: Grundtarif + Pro Lead als ruhige Boxen */}
-            <div className="relative grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-6 pb-8 md:pb-10 border-b border-line">
+            {/* Preis-Formel: zwei Karten im Ablauf-Stil, Preis als Glas-Karte auf Sky */}
+            <div className="flex flex-col md:flex-row md:items-stretch gap-3 md:gap-0 pb-8 md:pb-10 border-b border-line">
               {/* Grundtarif */}
-              <div className="rounded-2xl bg-surface-soft p-6 md:p-8 text-center">
-                <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted mb-4">
-                  Grundtarif
-                </div>
-                <div className="flex items-baseline gap-1 justify-center">
-                  <span
-                    className="font-light tracking-[-0.04em] leading-none text-brand-deep"
-                    style={{ fontSize: "clamp(52px, 5.5vw, 76px)" }}
+              <div className="flex-1 min-w-0">
+                <Squircle
+                  radius={28}
+                  shadow="pretty"
+                  wrapperClassName="h-full"
+                  className="bg-[#f8f7fd] p-5 md:p-6 flex flex-col h-full"
+                >
+                  <Squircle
+                    radius={18}
+                    className="relative h-44 bg-cover"
+                    style={{
+                      backgroundImage: "url(/visual-sky.jpg)",
+                      backgroundPosition: "50% 26%",
+                    }}
                   >
-                    40
-                  </span>
-                  <span
-                    className="font-light tracking-[-0.04em] leading-none text-brand-deep"
-                    style={{ fontSize: "clamp(28px, 3vw, 40px)" }}
-                  >
-                    €
-                  </span>
-                </div>
-                <div className="text-sm text-ink-muted mt-2">
-                  netto / Monat
-                </div>
-                <div className="flex items-center justify-center gap-2 mt-3">
-                  <span className="text-[13px] font-medium text-ink-muted line-through decoration-[1.5px] decoration-red-400 tabular-nums">
-                    375 €
-                  </span>
-                  <span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider">
-                    −89 %
-                  </span>
-                </div>
+                    <div className="absolute inset-0 flex items-center justify-center p-4">
+                      <Squircle
+                        radius={16}
+                        shadow="float"
+                        className="bg-white/95 backdrop-blur-md px-7 py-4 text-center"
+                      >
+                        <div className="flex items-baseline gap-1 justify-center">
+                          <span className="font-light tracking-[-0.04em] leading-none text-[44px] bg-clip-text text-transparent bg-[linear-gradient(96deg,#9573EE_0%,#7C5CE8_45%,#5E44C2_75%,#3F2D8A_100%)]">
+                            40 €
+                          </span>
+                        </div>
+                        <div className="text-[12px] text-ink-muted mt-1.5">
+                          netto / Monat
+                          <span className="mx-1.5 text-ink-muted/50">·</span>
+                          <span className="line-through decoration-[1.5px] tabular-nums">
+                            375 €
+                          </span>{" "}
+                          <span className="font-semibold text-emerald-600">
+                            −89 %
+                          </span>
+                        </div>
+                      </Squircle>
+                    </div>
+                  </Squircle>
+                  <h3 className="text-lg font-semibold text-ink leading-tight mt-5 mb-2">
+                    Dein Zugang zur Plattform
+                  </h3>
+                  <p className="text-[14.5px] leading-relaxed text-ink-soft">
+                    Alles offen: Editor, Landingpages, Briefe, Tracking,
+                    Integrationen. Neue Features kommen automatisch dazu.
+                  </p>
+                </Squircle>
               </div>
 
-              {/* Plus-Trenner, schwebt zwischen den Boxen */}
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:flex">
+              {/* Plus-Trenner */}
+              <div className="flex items-center justify-center md:px-3 shrink-0 py-1 md:py-0">
                 <div
-                  className="size-12 rounded-full bg-white border border-line flex items-center justify-center"
+                  className="size-11 rounded-full bg-white border border-line flex items-center justify-center"
                   style={{
                     boxShadow: "0 6px 16px -4px rgba(124,92,232,0.35)",
                   }}
@@ -148,48 +166,58 @@ export function PricingSection() {
                   <Plus className="size-5 text-brand-deep" strokeWidth={2.5} />
                 </div>
               </div>
-              <div className="md:hidden flex items-center justify-center -my-6 relative z-[1]">
-                <div className="size-10 rounded-full bg-white border border-line flex items-center justify-center shadow-sm">
-                  <Plus className="size-5 text-brand-deep" strokeWidth={2.5} />
-                </div>
-              </div>
 
               {/* Pro Lead */}
-              <div className="rounded-2xl bg-surface-soft p-6 md:p-8 text-center">
-                <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted mb-4">
-                  Pro Lead
-                </div>
-                <div className="flex items-baseline gap-1 justify-center">
-                  <span
-                    className="font-light tracking-[-0.04em] leading-none text-ink"
-                    style={{ fontSize: "clamp(52px, 5.5vw, 76px)" }}
+              <div className="flex-1 min-w-0">
+                <Squircle
+                  radius={28}
+                  shadow="pretty"
+                  wrapperClassName="h-full"
+                  className="bg-[#f8f7fd] p-5 md:p-6 flex flex-col h-full"
+                >
+                  <Squircle
+                    radius={18}
+                    className="relative h-44 bg-cover"
+                    style={{
+                      backgroundImage: "url(/visual-sky.jpg)",
+                      backgroundPosition: "50% 74%",
+                    }}
                   >
-                    1
-                  </span>
-                  <span
-                    className="font-light tracking-[-0.04em] leading-none text-ink"
-                    style={{ fontSize: "clamp(28px, 3vw, 40px)" }}
-                  >
-                    €
-                  </span>
-                </div>
-                <div className="text-sm text-ink-muted mt-2 mb-4">
-                  und da ist alles drin:
-                </div>
-                <ul className="inline-flex flex-col items-start gap-1.5 text-left">
-                  {PAKET.map((p) => (
-                    <li
-                      key={p}
-                      className="flex items-start gap-2 text-[13px] text-ink-soft leading-snug"
-                    >
-                      <Check
-                        className="size-3.5 text-emerald-600 mt-[2px] shrink-0"
-                        strokeWidth={3}
-                      />
-                      <span>{p}</span>
-                    </li>
-                  ))}
-                </ul>
+                    <div className="absolute inset-0 flex items-center justify-center p-4">
+                      <Squircle
+                        radius={16}
+                        shadow="float"
+                        className="bg-white/95 backdrop-blur-md px-7 py-4 text-center"
+                      >
+                        <div className="flex items-baseline gap-1 justify-center">
+                          <span className="font-light tracking-[-0.04em] leading-none text-[44px] bg-clip-text text-transparent bg-[linear-gradient(96deg,#9573EE_0%,#7C5CE8_45%,#5E44C2_75%,#3F2D8A_100%)]">
+                            1 €
+                          </span>
+                        </div>
+                        <div className="text-[12px] text-ink-muted mt-1.5">
+                          pro Lead, alles inklusive
+                        </div>
+                      </Squircle>
+                    </div>
+                  </Squircle>
+                  <h3 className="text-lg font-semibold text-ink leading-tight mt-5 mb-2">
+                    Und da ist alles drin
+                  </h3>
+                  <ul className="flex flex-col gap-1.5">
+                    {PAKET.map((p) => (
+                      <li
+                        key={p}
+                        className="flex items-start gap-2 text-[14.5px] text-ink-soft leading-snug"
+                      >
+                        <Check
+                          className="size-3.5 text-emerald-600 mt-[3px] shrink-0"
+                          strokeWidth={3}
+                        />
+                        <span>{p}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Squircle>
               </div>
             </div>
 
