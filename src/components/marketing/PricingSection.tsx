@@ -103,32 +103,23 @@ export function PricingSection() {
         <RevealOnScroll delay={400}>
           <Squircle radius={30} shadow="float" className="bg-brand p-[2px]">
             <Squircle radius={28} className="relative bg-white p-8 md:p-12">
-            {/* Preis-Formel: Grundtarif + Per-Versand */}
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-6 md:gap-8 items-center pb-8 md:pb-10 border-b border-line">
+            {/* Preis-Formel: Grundtarif + Pro Lead als ruhige Boxen */}
+            <div className="relative grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-6 pb-8 md:pb-10 border-b border-line">
               {/* Grundtarif */}
-              <div className="text-center md:text-right">
-                <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted mb-3">
+              <div className="rounded-2xl bg-surface-soft p-6 md:p-8 text-center">
+                <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted mb-4">
                   Grundtarif
                 </div>
-                {/* Anker: Streichpreis 375 € (2023er Preis) */}
-                <div className="flex items-center justify-center md:justify-end gap-2 mb-1">
-                  <span className="text-[13px] font-medium text-ink-muted line-through decoration-[1.5px] decoration-red-400 tabular-nums">
-                    375 €
-                  </span>
-                  <span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider">
-                    −89 %
-                  </span>
-                </div>
-                <div className="flex items-baseline gap-1 justify-center md:justify-end">
+                <div className="flex items-baseline gap-1 justify-center">
                   <span
                     className="font-light tracking-[-0.04em] leading-none text-brand-deep"
-                    style={{ fontSize: "clamp(52px, 6.5vw, 88px)" }}
+                    style={{ fontSize: "clamp(52px, 5.5vw, 76px)" }}
                   >
                     40
                   </span>
                   <span
                     className="font-light tracking-[-0.04em] leading-none text-brand-deep"
-                    style={{ fontSize: "clamp(28px, 3.4vw, 44px)" }}
+                    style={{ fontSize: "clamp(28px, 3vw, 40px)" }}
                   >
                     €
                   </span>
@@ -136,55 +127,53 @@ export function PricingSection() {
                 <div className="text-sm text-ink-muted mt-2">
                   netto / Monat
                 </div>
-                <div className="text-[11px] text-ink-muted/80 mt-1 leading-tight max-w-[32ch] mx-auto md:ml-auto md:mr-0">
-                  2024 waren es noch 375 € pro Monat plus 12 Monate
-                  Mindestlaufzeit. Heute reichen 40 € und drei
-                  entspannte Monate.
+                <div className="flex items-center justify-center gap-2 mt-3">
+                  <span className="text-[13px] font-medium text-ink-muted line-through decoration-[1.5px] decoration-red-400 tabular-nums">
+                    375 €
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider">
+                    −89 %
+                  </span>
                 </div>
               </div>
 
-              {/* Plus-Trenner */}
-              <div className="hidden md:flex items-center justify-center">
+              {/* Plus-Trenner, schwebt zwischen den Boxen */}
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:flex">
                 <div
-                  className="size-12 rounded-full bg-brand-soft flex items-center justify-center"
+                  className="size-12 rounded-full bg-white border border-line flex items-center justify-center"
                   style={{
-                    boxShadow:
-                      "0 6px 16px -4px rgba(124,92,232,0.35)",
+                    boxShadow: "0 6px 16px -4px rgba(124,92,232,0.35)",
                   }}
                 >
-                  <Plus
-                    className="size-5 text-brand-deep"
-                    strokeWidth={2.5}
-                  />
+                  <Plus className="size-5 text-brand-deep" strokeWidth={2.5} />
                 </div>
               </div>
-              <div className="md:hidden flex items-center justify-center">
-                <Plus
-                  className="size-6 text-brand-deep"
-                  strokeWidth={2.5}
-                />
+              <div className="md:hidden flex items-center justify-center -my-6 relative z-[1]">
+                <div className="size-10 rounded-full bg-white border border-line flex items-center justify-center shadow-sm">
+                  <Plus className="size-5 text-brand-deep" strokeWidth={2.5} />
+                </div>
               </div>
 
               {/* Pro Lead */}
-              <div className="text-center md:text-left">
-                <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted mb-3">
+              <div className="rounded-2xl bg-surface-soft p-6 md:p-8 text-center">
+                <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted mb-4">
                   Pro Lead
                 </div>
-                <div className="flex items-baseline gap-1 justify-center md:justify-start">
+                <div className="flex items-baseline gap-1 justify-center">
                   <span
                     className="font-light tracking-[-0.04em] leading-none text-ink"
-                    style={{ fontSize: "clamp(52px, 6.5vw, 88px)" }}
+                    style={{ fontSize: "clamp(52px, 5.5vw, 76px)" }}
                   >
                     1
                   </span>
                   <span
                     className="font-light tracking-[-0.04em] leading-none text-ink"
-                    style={{ fontSize: "clamp(28px, 3.4vw, 44px)" }}
+                    style={{ fontSize: "clamp(28px, 3vw, 40px)" }}
                   >
                     €
                   </span>
                 </div>
-                <div className="text-sm text-ink-muted mt-2 mb-3">
+                <div className="text-sm text-ink-muted mt-2 mb-4">
                   und da ist alles drin:
                 </div>
                 <ul className="inline-flex flex-col items-start gap-1.5 text-left">
@@ -297,9 +286,8 @@ export function PricingSection() {
                 <ArrowRight className="size-4" />
               </Link>
               <div className="text-[12px] text-ink-muted mt-4">
-                3 Monate Mindestlaufzeit · nur für Unternehmen (B2B) · Leads
-                zahlst du mit Credits: 1 Credit = 1 € · E-Mail-Versand über
-                VIDEOCOMET: 10 E-Mails = 1 Credit
+                3 Monate Mindestlaufzeit · nur für Unternehmen (B2B) ·
+                E-Mail-Versand: 10 E-Mails = 1 Credit
               </div>
             </div>
             </Squircle>
