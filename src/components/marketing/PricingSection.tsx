@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Plus } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Plus } from "lucide-react";
 import { RevealOnScroll } from "./RevealOnScroll";
 import { Squircle } from "./Squircle";
 
@@ -46,12 +46,20 @@ const BASE_FEE = 40;
 const PER_VIDEO = 1;
 
 const EXAMPLES: ReadonlyArray<{ count: number; label: string }> = [
-  { count: 0, label: "0 Videos" },
-  { count: 250, label: "250 Videos" },
-  { count: 1000, label: "1.000 Videos" },
+  { count: 0, label: "0 Leads" },
+  { count: 250, label: "250 Leads" },
+  { count: 1000, label: "1.000 Leads" },
+];
+
+const PAKET: ReadonlyArray<string> = [
+  "Persönliches Video mit seiner Webseite und seinem Namen",
+  "Landingpage, auf der das Video läuft",
+  "Brief mit Link und QR-Code zum Video",
+  "Handschriftlicher Umschlag zum Ausdrucken",
 ];
 
 export function PricingSection() {
+  const [showFeatures, setShowFeatures] = React.useState(false);
   return (
     <section
       id="pricing"
@@ -85,9 +93,8 @@ export function PricingSection() {
           </RevealOnScroll>
           <RevealOnScroll delay={300}>
             <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-xl mx-auto">
-              40 € Grundgebühr im Monat. 1 € pro Video, das du
-              versendest. Egal ob mit Brief, mit Landingpage oder
-              ohne. Mehr nicht.
+              40 € Grundgebühr im Monat. 1 € pro Lead, komplett mit
+              Video, Landingpage, Brief und Umschlag. Mehr nicht.
             </p>
           </RevealOnScroll>
         </div>
@@ -158,10 +165,10 @@ export function PricingSection() {
                 />
               </div>
 
-              {/* Pro Video */}
+              {/* Pro Lead */}
               <div className="text-center md:text-left">
                 <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted mb-3">
-                  Pro Video
+                  Pro Lead
                 </div>
                 <div className="flex items-baseline gap-1 justify-center md:justify-start">
                   <span
@@ -177,9 +184,23 @@ export function PricingSection() {
                     €
                   </span>
                 </div>
-                <div className="text-sm text-ink-muted mt-2">
-                  egal ob mit Brief oder ohne
+                <div className="text-sm text-ink-muted mt-2 mb-3">
+                  und da ist alles drin:
                 </div>
+                <ul className="inline-flex flex-col items-start gap-1.5 text-left">
+                  {PAKET.map((p) => (
+                    <li
+                      key={p}
+                      className="flex items-start gap-2 text-[13px] text-ink-soft leading-snug"
+                    >
+                      <Check
+                        className="size-3.5 text-emerald-600 mt-[2px] shrink-0"
+                        strokeWidth={3}
+                      />
+                      <span>{p}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
 
@@ -234,25 +255,36 @@ export function PricingSection() {
               </div>
             </div>
 
-            {/* FEATURES — viele, dezent */}
+            {/* FEATURES — aufklappbar */}
             <div className="mt-10 pt-8 border-t border-line">
-              <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-ink-muted text-center mb-5">
-                Und das ist alles drin
-              </div>
-              <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-2">
-                {FEATURES.map((f) => (
-                  <li
-                    key={f}
-                    className="flex items-start gap-2 text-[12.5px] text-ink-soft leading-snug"
-                  >
-                    <Check
-                      className="size-3 text-brand-deep mt-[3px] shrink-0"
-                      strokeWidth={3}
-                    />
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
+              <button
+                type="button"
+                onClick={() => setShowFeatures((v) => !v)}
+                aria-expanded={showFeatures}
+                className="mx-auto flex items-center gap-2 rounded-full border border-line bg-surface-soft px-5 py-2.5 text-[13px] font-semibold text-ink hover:bg-brand-soft/60 transition-colors"
+              >
+                Alle {FEATURES.length} Plattform-Features ansehen
+                <ChevronDown
+                  className={`size-4 text-brand-deep transition-transform ${showFeatures ? "rotate-180" : ""}`}
+                  strokeWidth={2.5}
+                />
+              </button>
+              {showFeatures && (
+                <ul className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-2">
+                  {FEATURES.map((f) => (
+                    <li
+                      key={f}
+                      className="flex items-start gap-2 text-[12.5px] text-ink-soft leading-snug"
+                    >
+                      <Check
+                        className="size-3 text-brand-deep mt-[3px] shrink-0"
+                        strokeWidth={3}
+                      />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {/* CTA */}
@@ -265,9 +297,9 @@ export function PricingSection() {
                 <ArrowRight className="size-4" />
               </Link>
               <div className="text-[12px] text-ink-muted mt-4">
-                3 Monate Mindestlaufzeit · nur für Unternehmen (B2B) · Videos
-                erfordern zusätzlich Credits: 1 Credit = 1 € = 1 Video,
-                10 E-Mails = 1 Credit
+                3 Monate Mindestlaufzeit · nur für Unternehmen (B2B) · Leads
+                zahlst du mit Credits: 1 Credit = 1 € · E-Mail-Versand über
+                VIDEOCOMET: 10 E-Mails = 1 Credit
               </div>
             </div>
             </Squircle>
@@ -277,8 +309,8 @@ export function PricingSection() {
         {/* Footer note */}
         <RevealOnScroll delay={500}>
           <p className="text-center text-sm text-ink-muted mt-10">
-            Alle Preise netto, zzgl. MwSt. Videos werden taggenau
-            abgerechnet. Keine Mindestabnahme.
+            Alle Preise netto, zzgl. MwSt. Keine Mindestabnahme. Deine
+            Credits bleiben dir die gesamte Laufzeit erhalten.
           </p>
         </RevealOnScroll>
       </div>
