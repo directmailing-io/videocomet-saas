@@ -8,6 +8,7 @@ import { HowItWorksSection } from "@/components/marketing/HowItWorksSection";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { PricingSection } from "@/components/marketing/PricingSection";
+import { TestimonialsSection } from "@/components/marketing/TestimonialsSection";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
@@ -71,6 +72,7 @@ export default function HomePage() {
       <DemoSection />
       <HowItWorksSection />
       <FeaturesBento />
+      <TestimonialsSection />
       <PricingSection />
       <FAQSection />
       <MarketingFooter />
