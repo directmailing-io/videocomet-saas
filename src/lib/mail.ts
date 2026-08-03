@@ -553,6 +553,155 @@ export async function sendAccountCleanupReminderMail(
   if (sendResult.error) throw new Error(`Resend: ${sendResult.error.message}`);
 }
 
+export interface SendSubscriptionStartedMailInput {
+  to: string;
+  firstName?: string | null;
+}
+
+/** Willkommensmail nach erfolgreichem Abo-Start (Stripe-Webhook). */
+export async function sendSubscriptionStartedMail(
+  input: SendSubscriptionStartedMailInput,
+): Promise<void> {
+  const dashboardUrl = `${appUrl()}/dashboard`;
+  const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
+
+  const body = `
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:${BRAND_INK};line-height:1.25;">
+      Dein VIDEOCOMET Abo ist aktiv
+    </h1>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${escapeHtml(greeting)}
+    </p>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      willkommen bei VIDEOCOMET. Dein Abo ist ab sofort aktiv und du kannst direkt loslegen: persönliche Videos erstellen, Landingpages veröffentlichen und deine ersten Kampagnen starten.
+    </p>
+    <p style="margin:0 0 20px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      Deine Rechnung erhältst du automatisch per E-Mail von Stripe. Alle Details zu deinem Abo findest du jederzeit in deinen Einstellungen.
+    </p>
+    <p style="margin:0 0 28px 0;">
+      <a href="${dashboardUrl}" style="display:inline-block;background:${BRAND_ACCENT};color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;">
+        Jetzt loslegen
+      </a>
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Fragen zum Start? Schreib uns an <a href="mailto:info@videocomet.de" style="color:${BRAND_ACCENT};text-decoration:underline;">info@videocomet.de</a>.
+    </p>
+  `;
+
+  const subject = "Willkommen bei VIDEOCOMET: Dein Abo ist aktiv";
+  const html = shellHtml({
+    headline: "Dein VIDEOCOMET Abo ist aktiv",
+    preheader: "Willkommen bei VIDEOCOMET. Du kannst direkt loslegen.",
+    body,
+  });
+  const text = [
+    greeting,
+    "",
+    "willkommen bei VIDEOCOMET. Dein Abo ist ab sofort aktiv.",
+    "Du kannst direkt loslegen: persönliche Videos erstellen, Landingpages veröffentlichen und Kampagnen starten.",
+    "Deine Rechnung erhältst du automatisch per E-Mail von Stripe.",
+    "",
+    "Jetzt loslegen:",
+    dashboardUrl,
+    "",
+    "VIDEOCOMET",
+  ].join("\n");
+
+  const resend = getResend();
+  if (!resend) {
+    console.log("[mail:dev] sendSubscriptionStartedMail -> %s", input.to);
+    console.log("[mail:dev] subject: %s", subject);
+    return;
+  }
+  const sendResult = await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+  if (sendResult.error) throw new Error(`Resend: ${sendResult.error.message}`);
+}
+
+export interface SendTopupConfirmationMailInput {
+  to: string;
+  firstName?: string | null;
+  packageLabel: string;
+  credits: number;
+  newBalance: number;
+}
+
+/** Bestaetigung nach erfolgreichem Credit-Kauf (Stripe-Webhook). */
+export async function sendTopupConfirmationMail(
+  input: SendTopupConfirmationMailInput,
+): Promise<void> {
+  const billingUrl = `${appUrl()}/einstellungen?tab=abrechnung`;
+  const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
+  const creditsStr = input.credits.toLocaleString("de-DE");
+  const balanceStr = input.newBalance.toLocaleString("de-DE");
+
+  const body = `
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:${BRAND_INK};line-height:1.25;">
+      Deine Credits sind da
+    </h1>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${escapeHtml(greeting)}
+    </p>
+    <p style="margin:0 0 18px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      danke für deinen Kauf. Wir haben dir soeben <strong>${escapeHtml(creditsStr)} Credits</strong> gutgeschrieben. Sie sind sofort verfügbar und verfallen nie.
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 20px 0;border:1px solid ${BRAND_LINE};border-radius:12px;border-collapse:separate;">
+      <tr>
+        <td style="padding:14px 18px;font-size:14px;color:${BRAND_MUTED};border-bottom:1px solid ${BRAND_LINE};">Paket</td>
+        <td style="padding:14px 18px;font-size:14px;color:${BRAND_INK};font-weight:600;text-align:right;border-bottom:1px solid ${BRAND_LINE};">${escapeHtml(input.packageLabel)}</td>
+      </tr>
+      <tr>
+        <td style="padding:14px 18px;font-size:14px;color:${BRAND_MUTED};border-bottom:1px solid ${BRAND_LINE};">Gutgeschrieben</td>
+        <td style="padding:14px 18px;font-size:14px;color:${BRAND_INK};font-weight:600;text-align:right;border-bottom:1px solid ${BRAND_LINE};">${escapeHtml(creditsStr)} Credits</td>
+      </tr>
+      <tr>
+        <td style="padding:14px 18px;font-size:14px;color:${BRAND_MUTED};">Neues Guthaben</td>
+        <td style="padding:14px 18px;font-size:14px;color:${BRAND_INK};font-weight:600;text-align:right;">${escapeHtml(balanceStr)} Credits</td>
+      </tr>
+    </table>
+    <p style="margin:0 0 28px 0;">
+      <a href="${billingUrl}" style="display:inline-block;background:${BRAND_ACCENT};color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;">
+        Guthaben ansehen
+      </a>
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Deine Rechnung erhältst du automatisch per E-Mail von Stripe.
+    </p>
+  `;
+
+  const subject = `${creditsStr} Credits gutgeschrieben`;
+  const html = shellHtml({
+    headline: "Deine Credits sind da",
+    preheader: `${creditsStr} Credits gutgeschrieben. Neues Guthaben: ${balanceStr} Credits.`,
+    body,
+  });
+  const text = [
+    greeting,
+    "",
+    `danke für deinen Kauf. Wir haben dir soeben ${creditsStr} Credits gutgeschrieben.`,
+    "Sie sind sofort verfügbar und verfallen nie.",
+    "",
+    `Paket: ${input.packageLabel}`,
+    `Gutgeschrieben: ${creditsStr} Credits`,
+    `Neues Guthaben: ${balanceStr} Credits`,
+    "",
+    "Guthaben ansehen:",
+    billingUrl,
+    "",
+    "Deine Rechnung erhältst du automatisch per E-Mail von Stripe.",
+    "",
+    "VIDEOCOMET",
+  ].join("\n");
+
+  const resend = getResend();
+  if (!resend) {
+    console.log("[mail:dev] sendTopupConfirmationMail -> %s", input.to);
+    console.log("[mail:dev] subject: %s", subject);
+    return;
+  }
+  const sendResult = await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+  if (sendResult.error) throw new Error(`Resend: ${sendResult.error.message}`);
+}
+
 export interface SendAccountCleanupDoneMailInput {
   to: string;
   firstName?: string | null;

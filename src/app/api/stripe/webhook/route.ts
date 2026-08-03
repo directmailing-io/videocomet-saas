@@ -6,8 +6,16 @@ import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import { db } from "@/lib/db";
 import { stripeWebhookEvents, users } from "@/lib/db/schema";
-import { getStripe, mapSubscriptionStatus } from "@/lib/billing/stripe-client";
+import {
+  getStripe,
+  mapSubscriptionStatus,
+  CREDIT_PACKAGES,
+} from "@/lib/billing/stripe-client";
 import { grantTopup } from "@/lib/billing/credit-service";
+import {
+  sendSubscriptionStartedMail,
+  sendTopupConfirmationMail,
+} from "@/lib/mail";
 
 /**
  * POST /api/stripe/webhook
@@ -142,7 +150,7 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
       console.warn(`[stripe:webhook] topup mit ungueltigen credits: ${meta.credits}`);
       return;
     }
-    await grantTopup({
+    const txRow = await grantTopup({
       userId,
       amount: credits,
       stripeEventId: event.id,
@@ -150,6 +158,21 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
         ? String(session.payment_intent)
         : session.id,
     });
+    // Bestaetigungsmail nur bei echter Erst-Gutschrift (txRow === null ist
+    // ein Webhook-Replay). Best-effort: Mail-Fehler darf den Webhook nicht
+    // failen lassen, sonst retry't Stripe und wir loggen Fehler doppelt.
+    if (txRow) {
+      const pkg = CREDIT_PACKAGES.find((p) => p.id === meta.packageId);
+      await sendMailBestEffort("topup-confirmation", userId, (user) =>
+        sendTopupConfirmationMail({
+          to: user.email,
+          firstName: user.firstName,
+          packageLabel: pkg?.label ?? `${credits} Credits`,
+          credits,
+          newBalance: txRow.balanceAfter,
+        }),
+      );
+    }
     return;
   }
 
@@ -160,7 +183,42 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
     const stripe = getStripe();
     const sub = await stripe.subscriptions.retrieve(subId);
     await syncSubscriptionToUser(userId, sub);
+    // Willkommensmail genau einmal: bei Karte feuert completed direkt mit
+    // payment_status="paid"; bei async Methoden (SEPA) kommt completed mit
+    // "unpaid" (keine Mail) und spaeter async_payment_succeeded mit "paid".
+    if (
+      session.payment_status === "paid" ||
+      session.payment_status === "no_payment_required"
+    ) {
+      await sendMailBestEffort("subscription-started", userId, (user) =>
+        sendSubscriptionStartedMail({
+          to: user.email,
+          firstName: user.firstName,
+        }),
+      );
+    }
     return;
+  }
+}
+
+async function sendMailBestEffort(
+  label: string,
+  userId: string,
+  send: (user: { email: string; firstName: string | null }) => Promise<void>,
+): Promise<void> {
+  try {
+    const [user] = await db
+      .select({ email: users.email, firstName: users.firstName })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!user) {
+      console.warn(`[stripe:webhook] ${label} mail: user ${userId} not found`);
+      return;
+    }
+    await send(user);
+  } catch (err) {
+    console.error(`[stripe:webhook] ${label} mail failed for user ${userId}:`, err);
   }
 }
 
