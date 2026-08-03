@@ -45,8 +45,8 @@ function shellHtml(opts: { headline: string; preheader: string; body: string }):
         <td align="center">
           <table role="presentation" width="560" cellspacing="0" cellpadding="0" border="0" style="max-width:560px;width:100%;background:#FFFFFF;border:1px solid ${BRAND_LINE};border-radius:18px;overflow:hidden;">
             <tr>
-              <td style="padding:32px 40px 12px 40px;">
-                <div style="font-size:18px;font-weight:700;letter-spacing:-0.01em;color:${BRAND_INK};">VIDEOCOMET</div>
+              <td style="padding:32px 40px 16px 40px;">
+                <img src="${appUrl()}/mail/videocomet-logo.png" alt="VIDEOCOMET" width="120" height="28" style="display:block;width:120px;height:28px;border:0;" />
               </td>
             </tr>
             <tr>
@@ -56,6 +56,9 @@ function shellHtml(opts: { headline: string; preheader: string; body: string }):
             </tr>
             <tr>
               <td style="padding:24px 40px;border-top:1px solid ${BRAND_LINE};background:${BRAND_BG};">
+                <p style="margin:0 0 6px 0;font-size:12px;line-height:1.5;color:${BRAND_MUTED};">
+                  VIDEOCOMET GmbH · Herrleinstr. 39 · 97437 Haßfurt · <a href="mailto:info@videocomet.de" style="color:${BRAND_MUTED};text-decoration:underline;">info@videocomet.de</a>
+                </p>
                 <p style="margin:0;font-size:12px;line-height:1.5;color:${BRAND_MUTED};">
                   Diese Nachricht wurde automatisch versendet. Bitte antworte nicht direkt auf diese E-Mail.
                 </p>
