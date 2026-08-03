@@ -31,7 +31,6 @@ import {
 import { hardDeleteLeads } from "@/lib/leads/hard-delete";
 import { removeBunnyAssetRefsForOwner } from "@/lib/db/queries/bunny-assets";
 import { deleteVersion } from "@/lib/custom-lp/storage";
-import { triggerBunnyPurgeTick } from "@/lib/bunny/purge-trigger";
 
 export interface AccountCleanupResult {
   leadsDeleted: number;
@@ -149,8 +148,8 @@ export async function deleteUserContent(
       );
   }
 
-  // 6) Purge sofort anstossen (fire-and-forget, 60s-Cron ist Fallback).
-  void triggerBunnyPurgeTick("account-cleanup");
+  // Kein triggerBunnyPurgeTick: wir laufen IM Worker — der 60s-Purge-Cron
+  // im selben Prozess raeumt die ref-losen Assets im naechsten Tick ab.
 
   return {
     leadsDeleted,
