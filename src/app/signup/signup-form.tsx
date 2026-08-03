@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Squircle } from "@/components/marketing/Squircle";
 
-const PASSWORD_MIN = 12;
+const PASSWORD_MIN = 8;
 
 declare global {
   interface Window {
@@ -20,6 +20,8 @@ declare global {
           sitekey: string;
           callback: (token: string) => void;
           "error-callback"?: () => void;
+          "expired-callback"?: () => void;
+          "refresh-expired"?: "auto" | "manual" | "never";
         },
       ) => string;
       reset: (id?: string) => void;
@@ -31,6 +33,7 @@ const inputBase = "h-11 !text-[16px] bg-white";
 
 export function SignupForm() {
   const turnstileRef = React.useRef<HTMLDivElement>(null);
+  const turnstileWidgetId = React.useRef<string | null>(null);
   const [turnstileToken, setTurnstileToken] = React.useState<string | null>(null);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
@@ -58,7 +61,12 @@ export function SignupForm() {
         sitekey: siteKey,
         callback: (token: string) => setTurnstileToken(token),
         "error-callback": () => setTurnstileToken(null),
+        // Tokens laufen nach ~5 Min ab — ohne Auto-Refresh schlägt der
+        // Submit bei langsam ausgefüllten Formularen serverseitig fehl.
+        "expired-callback": () => setTurnstileToken(null),
+        "refresh-expired": "auto",
       });
+      turnstileWidgetId.current = widgetId;
     }
     if (window.turnstile) {
       render();
@@ -82,9 +90,6 @@ export function SignupForm() {
 
   function validatePassword(pw: string): string | null {
     if (pw.length < PASSWORD_MIN) return `Mindestens ${PASSWORD_MIN} Zeichen`;
-    if (!/[A-Z]/.test(pw)) return "Mindestens 1 Großbuchstabe";
-    if (!/[a-z]/.test(pw)) return "Mindestens 1 Kleinbuchstabe";
-    if (!/[0-9]/.test(pw)) return "Mindestens 1 Ziffer";
     return null;
   }
 
@@ -130,6 +135,7 @@ export function SignupForm() {
           setErrorMessage(
             "Dieses Konto gibt es schon. Log dich einfach ein oder setz dein Passwort zurück.",
           );
+          setSubmitting(false);
           return;
         }
         throw new Error(body.error ?? `HTTP ${res.status}`);
@@ -139,6 +145,14 @@ export function SignupForm() {
       setErrorMessage(
         err instanceof Error ? err.message : "Da ist was schiefgelaufen. Bitte nochmal.",
       );
+      // Turnstile-Tokens sind Einmal-Tokens: nach jedem fehlgeschlagenen
+      // Submit neues Token holen, sonst scheitert auch der Retry.
+      setTurnstileToken(null);
+      try {
+        if (window.turnstile && turnstileWidgetId.current) {
+          window.turnstile.reset(turnstileWidgetId.current);
+        }
+      } catch {}
       setSubmitting(false);
     }
   }
@@ -299,7 +313,7 @@ export function SignupForm() {
                     <span className="text-red-600">{pwFeedback}</span>
                   ) : (
                     <span className="text-ink-muted">
-                      Mindestens 12 Zeichen. Groß + Klein + Ziffer.
+                      Mindestens 8 Zeichen.
                     </span>
                   )}
                 </p>

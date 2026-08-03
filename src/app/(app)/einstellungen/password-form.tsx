@@ -18,9 +18,9 @@ export function PasswordForm() {
     setMessage(null);
     setError(false);
 
-    if (next.length < 10) {
+    if (next.length < 8) {
       setError(true);
-      setMessage("Das neue Passwort muss mindestens 10 Zeichen lang sein.");
+      setMessage("Das neue Passwort muss mindestens 8 Zeichen lang sein.");
       return;
     }
     if (next !== confirm) {

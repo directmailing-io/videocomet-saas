@@ -16,7 +16,7 @@ import { verifyTurnstile } from "@/lib/turnstile";
  *
  * B2B-only Self-Service-Signup:
  *   1. Rate-Limit (3/h/IP) + Turnstile-Verify (Bot-Schutz)
- *   2. Validation (Password ≥12 chars, Groß/Klein/Ziffer)
+ *   2. Validation (Password ≥8 chars)
  *   3. Duplicate-Check: bei aktivem Account → generische "reset PW"-Antwort;
  *      bei existierendem-aber-nicht-bezahltem Account → reuse
  *   4. User anlegen (subscriptionStatus = null bis Payment durch)
@@ -27,13 +27,10 @@ import { verifyTurnstile } from "@/lib/turnstile";
  * + Datenschutz-Zustimmung ueber explizite Checkbox (Body-Flag).
  */
 
-const PASSWORD_MIN = 12;
+const PASSWORD_MIN = 8;
 const PASSWORD_SCHEMA = z
   .string()
-  .min(PASSWORD_MIN, `Mindestens ${PASSWORD_MIN} Zeichen`)
-  .regex(/[A-Z]/, "Mindestens 1 Großbuchstabe")
-  .regex(/[a-z]/, "Mindestens 1 Kleinbuchstabe")
-  .regex(/[0-9]/, "Mindestens 1 Ziffer");
+  .min(PASSWORD_MIN, `Mindestens ${PASSWORD_MIN} Zeichen`);
 
 const BODY = z.object({
   email: z.string().trim().toLowerCase().email("Ungültige Email"),
