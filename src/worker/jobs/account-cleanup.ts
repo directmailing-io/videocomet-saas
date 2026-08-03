@@ -62,11 +62,14 @@ async function phaseEnter(now: Date): Promise<void> {
         isNotNull(users.subscriptionCurrentPeriodEnd),
         lt(users.subscriptionCurrentPeriodEnd, now),
         // Kein AKTIVER Zyklus (Row fehlt, oder alter Zyklus wurde
-        // abgebrochen/abgeschlossen → Reset erlaubt).
+        // abgebrochen/abgeschlossen → Reset erlaubt) ODER die Ankuendigung
+        // steht noch aus (Mail-Fehler im letzten Tick → Retry, dabei wird
+        // deleteAfter mit-resettet, damit Mail-Datum und Frist matchen).
         or(
           isNull(accountCleanupState.userId),
           isNotNull(accountCleanupState.canceledAt),
           isNotNull(accountCleanupState.deletedAt),
+          isNull(accountCleanupState.noticeSentAt),
         ),
       ),
     );

@@ -485,7 +485,10 @@ export async function sendAccountCleanupNoticeMail(
     console.log("[mail:dev] subject: %s", subject);
     return;
   }
-  await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+  const sendResult = await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+  // Resend-SDK wirft NICHT bei API-Fehlern — Cleanup-Mails muessen aber
+  // nachweislich raus sein, bevor der Sweep Timestamps setzt (Loesch-Gate).
+  if (sendResult.error) throw new Error(`Resend: ${sendResult.error.message}`);
 }
 
 /** Mail (b): 7 Tage vor Loeschung, letzte Erinnerung. */
@@ -541,7 +544,10 @@ export async function sendAccountCleanupReminderMail(
     console.log("[mail:dev] subject: %s", subject);
     return;
   }
-  await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+  const sendResult = await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+  // Resend-SDK wirft NICHT bei API-Fehlern — Cleanup-Mails muessen aber
+  // nachweislich raus sein, bevor der Sweep Timestamps setzt (Loesch-Gate).
+  if (sendResult.error) throw new Error(`Resend: ${sendResult.error.message}`);
 }
 
 export interface SendAccountCleanupDoneMailInput {
@@ -600,5 +606,8 @@ export async function sendAccountCleanupDoneMail(
     console.log("[mail:dev] subject: %s", subject);
     return;
   }
-  await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+  const sendResult = await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+  // Resend-SDK wirft NICHT bei API-Fehlern — Cleanup-Mails muessen aber
+  // nachweislich raus sein, bevor der Sweep Timestamps setzt (Loesch-Gate).
+  if (sendResult.error) throw new Error(`Resend: ${sendResult.error.message}`);
 }
