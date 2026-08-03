@@ -148,44 +148,57 @@ export async function POST(req: NextRequest) {
   }
 
   // 5) Stripe-Customer + Checkout-Session
-  const customerId = await findOrCreateCustomer({
-    userId,
-    email,
-    name: companyName || `${firstName} ${lastName}`.trim(),
-    vatId: vatId ?? null,
-    existingCustomerId: stripeCustomerId,
-  });
-  if (!stripeCustomerId) {
-    await db
-      .update(users)
-      .set({ stripeCustomerId: customerId, updatedAt: new Date() })
-      .where(eq(users.id, userId));
+  try {
+    const customerId = await findOrCreateCustomer({
+      userId,
+      email,
+      name: companyName || `${firstName} ${lastName}`.trim(),
+      vatId: vatId ?? null,
+      existingCustomerId: stripeCustomerId,
+    });
+    if (!stripeCustomerId) {
+      await db
+        .update(users)
+        .set({ stripeCustomerId: customerId, updatedAt: new Date() })
+        .where(eq(users.id, userId));
+    }
+
+    const stripe = getStripe();
+    const { subscription: subPriceId } = getPriceIds();
+    // Signup-Flow lebt auf der Marketing-Domain (videocomet.de). Stripe muss
+    // den User nach Zahlung dorthin zurueckschicken — nicht in den
+    // Memberbereich (app.videocomet.de), sonst kommt er auf einer Seite raus,
+    // die den Kauf-Kontext nicht kennt.
+    const marketingOrigin = (
+      process.env.MARKETING_URL ?? "https://videocomet.de"
+    ).replace(/\/+$/, "");
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      line_items: [{ price: subPriceId, quantity: 1 }],
+      automatic_tax: { enabled: true },
+      customer_update: { address: "auto", name: "auto" },
+      tax_id_collection: { enabled: true },
+      // payment_method_types bewusst nicht gesetzt — Stripe nutzt automatisch
+      // die im Dashboard aktivierten Methoden (sepa_debit war dort nicht aktiv
+      // und hat als harter Parameter jeden Signup mit 500 gekillt).
+      billing_address_collection: "required",
+      metadata: { userId, kind: "subscription" },
+      subscription_data: { metadata: { userId } },
+      success_url: `${marketingOrigin}/signup/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${marketingOrigin}/#pricing`,
+    });
+
+    return NextResponse.json({ url: session.url }, { status: 200 });
+  } catch (err) {
+    console.error("[signup] Stripe/Checkout-Fehler:", err);
+    return NextResponse.json(
+      {
+        error:
+          "Die Bestellung konnte nicht gestartet werden. Bitte versuch es gleich nochmal oder schreib an info@videocomet.de.",
+      },
+      { status: 500 },
+    );
   }
-
-  const stripe = getStripe();
-  const { subscription: subPriceId } = getPriceIds();
-  // Signup-Flow lebt auf der Marketing-Domain (videocomet.de). Stripe muss
-  // den User nach Zahlung dorthin zurueckschicken — nicht in den
-  // Memberbereich (app.videocomet.de), sonst kommt er auf einer Seite raus,
-  // die den Kauf-Kontext nicht kennt.
-  const marketingOrigin = (
-    process.env.MARKETING_URL ?? "https://videocomet.de"
-  ).replace(/\/+$/, "");
-
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer: customerId,
-    line_items: [{ price: subPriceId, quantity: 1 }],
-    automatic_tax: { enabled: true },
-    customer_update: { address: "auto", name: "auto" },
-    tax_id_collection: { enabled: true },
-    payment_method_types: ["card", "sepa_debit"],
-    billing_address_collection: "required",
-    metadata: { userId, kind: "subscription" },
-    subscription_data: { metadata: { userId } },
-    success_url: `${marketingOrigin}/signup/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${marketingOrigin}/#pricing`,
-  });
-
-  return NextResponse.json({ url: session.url }, { status: 200 });
 }

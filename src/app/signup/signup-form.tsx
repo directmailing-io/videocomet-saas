@@ -138,7 +138,10 @@ export function SignupForm() {
           setSubmitting(false);
           return;
         }
-        throw new Error(body.error ?? `HTTP ${res.status}`);
+        throw new Error(
+          body.error ??
+            "Da ist was schiefgelaufen. Bitte versuch es gleich nochmal.",
+        );
       }
       window.location.href = body.url;
     } catch (err) {
