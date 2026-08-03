@@ -33,7 +33,7 @@ import {
 export interface HardDeleteInput {
   userId: string;
   leadIds: string[];
-  reason: "user_request" | "gdpr_dsar" | "complaint";
+  reason: "user_request" | "gdpr_dsar" | "complaint" | "account_cleanup";
   requestedBy?: string;
 }
 

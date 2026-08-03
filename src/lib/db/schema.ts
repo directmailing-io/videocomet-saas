@@ -1669,3 +1669,24 @@ export const emailSuppressions = pgTable("email_suppressions", {
 
 export type EmailSuppression = typeof emailSuppressions.$inferSelect;
 export type NewEmailSuppression = typeof emailSuppressions.$inferInsert;
+
+// ── Abo-Ende-Cleanup (Migration 0040) ───────────────────────────────────────
+// Eine Row pro User = der aktuelle Cleanup-Zyklus nach Abo-Ende. 30 Tage
+// nach Periodenende werden Seiten + Videos geloescht (Worker-Sweep in
+// src/worker/jobs/account-cleanup.ts). Reaktivierung bricht den Zyklus per
+// `canceledAt` ab; erneute Kuendigung resettet die Row (neuer Zyklus).
+// Credits, User-Account und Rechnungsdaten bleiben unangetastet.
+export const accountCleanupState = pgTable("account_cleanup_state", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  subscriptionEndedAt: timestamp("subscription_ended_at", { withTimezone: true }).notNull(),
+  deleteAfter: timestamp("delete_after", { withTimezone: true }).notNull(),
+  noticeSentAt: timestamp("notice_sent_at", { withTimezone: true }),
+  reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  canceledAt: timestamp("canceled_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  deleteAfterIdx: index("account_cleanup_delete_after_idx").on(t.deleteAfter),
+}));
+
+export type AccountCleanupState = typeof accountCleanupState.$inferSelect;

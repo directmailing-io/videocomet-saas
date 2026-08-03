@@ -407,3 +407,198 @@ export async function sendAdminInviteMail(input: SendAdminInviteMailInput): Prom
     text,
   });
 }
+
+// ── Abo-Ende-Cleanup-Mails (Migration 0040) ────────────────────────────────
+// Drei Mails im Loesch-Zyklus nach Abo-Ende: Ankuendigung (Tag 0),
+// Erinnerung (7 Tage vor Loeschung), Bestaetigung (nach Loeschung).
+// Idempotenz stellt der Worker-Sweep sicher (Timestamp-Claim vor Versand).
+
+function formatDateDe(d: Date): string {
+  return d.toLocaleDateString("de-DE", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+export interface SendAccountCleanupMailInput {
+  to: string;
+  firstName?: string | null;
+  deleteDate: Date;
+}
+
+/** Mail (a): Abo beendet, Loeschdatum angekuendigt, Reaktivierungs-CTA. */
+export async function sendAccountCleanupNoticeMail(
+  input: SendAccountCleanupMailInput,
+): Promise<void> {
+  const billingUrl = `${appUrl()}/einstellungen?tab=abrechnung`;
+  const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
+  const dateStr = formatDateDe(input.deleteDate);
+
+  const body = `
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:${BRAND_INK};line-height:1.25;">
+      Dein VIDEOCOMET Abo ist beendet
+    </h1>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${escapeHtml(greeting)}
+    </p>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      dein VIDEOCOMET Abo ist ausgelaufen. Deine Videos, Landingpages und Kampagnen-Inhalte bleiben noch bis zum <strong>${escapeHtml(dateStr)}</strong> gespeichert. Danach werden sie endgültig gelöscht und alle veröffentlichten Links funktionieren nicht mehr.
+    </p>
+    <p style="margin:0 0 20px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      Dein Konto und dein Credit-Guthaben bleiben erhalten. Wenn du dein Abo vorher wieder aktivierst, passiert nichts und alles bleibt wie es ist.
+    </p>
+    <p style="margin:0 0 28px 0;">
+      <a href="${billingUrl}" style="display:inline-block;background:${BRAND_ACCENT};color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;">
+        Abo wieder aktivieren
+      </a>
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Funktioniert der Button nicht? Öffne diesen Link in deinem Browser:<br />
+      <a href="${billingUrl}" style="color:${BRAND_ACCENT};text-decoration:underline;">${escapeHtml(billingUrl)}</a>
+    </p>
+  `;
+
+  const subject = `Dein VIDEOCOMET Abo ist beendet. Deine Inhalte werden am ${dateStr} gelöscht`;
+  const html = shellHtml({
+    headline: "Dein VIDEOCOMET Abo ist beendet",
+    preheader: `Deine Inhalte werden am ${dateStr} gelöscht.`,
+    body,
+  });
+  const text = [
+    greeting,
+    "",
+    "dein VIDEOCOMET Abo ist ausgelaufen.",
+    `Deine Videos, Landingpages und Kampagnen-Inhalte bleiben noch bis zum ${dateStr} gespeichert.`,
+    "Danach werden sie endgültig gelöscht und alle veröffentlichten Links funktionieren nicht mehr.",
+    "Dein Konto und dein Credit-Guthaben bleiben erhalten.",
+    "",
+    "Abo wieder aktivieren:",
+    billingUrl,
+    "",
+    "VIDEOCOMET",
+  ].join("\n");
+
+  const resend = getResend();
+  if (!resend) {
+    console.log("[mail:dev] sendAccountCleanupNoticeMail -> %s", input.to);
+    console.log("[mail:dev] subject: %s", subject);
+    return;
+  }
+  await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+}
+
+/** Mail (b): 7 Tage vor Loeschung, letzte Erinnerung. */
+export async function sendAccountCleanupReminderMail(
+  input: SendAccountCleanupMailInput,
+): Promise<void> {
+  const billingUrl = `${appUrl()}/einstellungen?tab=abrechnung`;
+  const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
+  const dateStr = formatDateDe(input.deleteDate);
+
+  const body = `
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:${BRAND_INK};line-height:1.25;">
+      Noch 7 Tage bis zur Löschung
+    </h1>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${escapeHtml(greeting)}
+    </p>
+    <p style="margin:0 0 20px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      am <strong>${escapeHtml(dateStr)}</strong> werden deine VIDEOCOMET Videos, Landingpages und Kampagnen-Inhalte endgültig gelöscht. Alle veröffentlichten Links funktionieren danach nicht mehr. Wenn du deine Inhalte behalten möchtest, aktiviere jetzt dein Abo. Dann bleibt alles erhalten.
+    </p>
+    <p style="margin:0 0 28px 0;">
+      <a href="${billingUrl}" style="display:inline-block;background:${BRAND_ACCENT};color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;">
+        Abo wieder aktivieren
+      </a>
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Funktioniert der Button nicht? Öffne diesen Link in deinem Browser:<br />
+      <a href="${billingUrl}" style="color:${BRAND_ACCENT};text-decoration:underline;">${escapeHtml(billingUrl)}</a>
+    </p>
+  `;
+
+  const subject = `Noch 7 Tage: Deine VIDEOCOMET Videos und Landingpages werden am ${dateStr} gelöscht`;
+  const html = shellHtml({
+    headline: "Noch 7 Tage bis zur Löschung",
+    preheader: `Am ${dateStr} werden deine Inhalte endgültig gelöscht.`,
+    body,
+  });
+  const text = [
+    greeting,
+    "",
+    `am ${dateStr} werden deine VIDEOCOMET Videos, Landingpages und Kampagnen-Inhalte endgültig gelöscht.`,
+    "Alle veröffentlichten Links funktionieren danach nicht mehr.",
+    "Wenn du deine Inhalte behalten möchtest, aktiviere jetzt dein Abo:",
+    "",
+    billingUrl,
+    "",
+    "VIDEOCOMET",
+  ].join("\n");
+
+  const resend = getResend();
+  if (!resend) {
+    console.log("[mail:dev] sendAccountCleanupReminderMail -> %s", input.to);
+    console.log("[mail:dev] subject: %s", subject);
+    return;
+  }
+  await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+}
+
+export interface SendAccountCleanupDoneMailInput {
+  to: string;
+  firstName?: string | null;
+}
+
+/** Mail (c): Loeschung durchgefuehrt, Konto + Credits bleiben. */
+export async function sendAccountCleanupDoneMail(
+  input: SendAccountCleanupDoneMailInput,
+): Promise<void> {
+  const billingUrl = `${appUrl()}/einstellungen?tab=abrechnung`;
+  const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
+
+  const body = `
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:${BRAND_INK};line-height:1.25;">
+      Deine VIDEOCOMET Inhalte wurden gelöscht
+    </h1>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${escapeHtml(greeting)}
+    </p>
+    <p style="margin:0 0 20px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      wie angekündigt wurden deine Videos, Landingpages und Kampagnen-Inhalte heute endgültig gelöscht. Dein Konto und dein Credit-Guthaben bleiben erhalten. Du kannst jederzeit mit einem neuen Abo wieder starten.
+    </p>
+    <p style="margin:0 0 28px 0;">
+      <a href="${billingUrl}" style="display:inline-block;background:${BRAND_ACCENT};color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;">
+        Jetzt wieder starten
+      </a>
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Fragen dazu? Schreib uns an <a href="mailto:info@videocomet.de" style="color:${BRAND_ACCENT};text-decoration:underline;">info@videocomet.de</a>.
+    </p>
+  `;
+
+  const subject = "Deine VIDEOCOMET Inhalte wurden gelöscht";
+  const html = shellHtml({
+    headline: "Deine VIDEOCOMET Inhalte wurden gelöscht",
+    preheader: "Konto und Credit-Guthaben bleiben erhalten.",
+    body,
+  });
+  const text = [
+    greeting,
+    "",
+    "wie angekündigt wurden deine Videos, Landingpages und Kampagnen-Inhalte heute endgültig gelöscht.",
+    "Dein Konto und dein Credit-Guthaben bleiben erhalten.",
+    "Du kannst jederzeit mit einem neuen Abo wieder starten:",
+    "",
+    billingUrl,
+    "",
+    "VIDEOCOMET",
+  ].join("\n");
+
+  const resend = getResend();
+  if (!resend) {
+    console.log("[mail:dev] sendAccountCleanupDoneMail -> %s", input.to);
+    console.log("[mail:dev] subject: %s", subject);
+    return;
+  }
+  await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+}

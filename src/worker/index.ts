@@ -41,6 +41,7 @@ import { startBunnyPurger } from "./processors/bunny-purge";
 import { startBunnyLibraryReconciler } from "./processors/bunny-library-reconcile";
 import { recoverStaleEmailClaims, startEmailDrip } from "./jobs/email-drip";
 import { startMailboxSync } from "./jobs/mailbox-sync";
+import { startAccountCleanup } from "./jobs/account-cleanup";
 import {
   startHeartbeat,
   stopHeartbeat,
@@ -541,6 +542,11 @@ async function main(): Promise<void> {
   // IMAP-UID) auf Bounces und Replies.
   const stopMailboxSync = startMailboxSync();
 
+  // Abo-Ende-Cleanup: 6h-Sweep. 30 Tage nach Abo-Ende werden Seiten +
+  // Videos komplett geloescht — mit Ankuendigungs-, Erinnerungs- und
+  // Bestaetigungs-Mail. Credits und Account bleiben erhalten.
+  const stopAccountCleanup = startAccountCleanup();
+
   // Global cap — muss über der Summe der per-stage timeouts in
   // processors/pipeline.ts liegen. Worst case (Docs-native-Kampagne):
   // videoRender 300 + videoCompress 90 + videoUpload 330 (inkl. Bunny-
@@ -868,6 +874,11 @@ async function main(): Promise<void> {
       stopMailboxSync();
     } catch (err) {
       log("error", "mailbox sync stop failed:", err);
+    }
+    try {
+      stopAccountCleanup();
+    } catch (err) {
+      log("error", "account cleanup stop failed:", err);
     }
     if (preflightWorkerShutdown) {
       try {
