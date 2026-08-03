@@ -95,6 +95,10 @@ export const users = pgTable("users", {
   // jeder Mutation atomar im selben Transaction-Scope.
   creditBalance: integer("credit_balance").notNull().default(0),
 
+  // E-Mail-Verifizierung (Migration 0041): Pflicht VOR Buchung/Kauf.
+  // Bestandskunden wurden per Backfill als verifiziert markiert.
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
@@ -122,6 +126,18 @@ export const passwordResets = pgTable("password_resets", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tokenIdx: index("pwreset_token_idx").on(t.tokenHash),
+}));
+
+// ── E-Mail-Verifizierungs-Tokens ────────────────────────────────────────────
+export const emailVerifications = pgTable("email_verifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tokenIdx: index("email_verif_token_idx").on(t.tokenHash),
 }));
 
 // ── Mediathek ───────────────────────────────────────────────────────────────

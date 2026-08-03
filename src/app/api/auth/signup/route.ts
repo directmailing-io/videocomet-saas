@@ -2,12 +2,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
+import { randomBytes, createHash } from "node:crypto";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { users, emailVerifications } from "@/lib/db/schema";
 import { createUser } from "@/lib/db/queries/users";
-import { findOrCreateCustomer, getPriceIds, getStripe } from "@/lib/billing/stripe-client";
+import { createSignupCheckout, marketingOrigin } from "@/lib/billing/signup-checkout";
+import { sendEmailVerificationMail } from "@/lib/mail";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { verifyTurnstile } from "@/lib/turnstile";
 
@@ -20,8 +22,9 @@ import { verifyTurnstile } from "@/lib/turnstile";
  *   3. Duplicate-Check: bei aktivem Account → generische "reset PW"-Antwort;
  *      bei existierendem-aber-nicht-bezahltem Account → reuse
  *   4. User anlegen (subscriptionStatus = null bis Payment durch)
- *   5. Stripe-Customer + Checkout-Session mit userId in metadata
- *   6. Return: Stripe-Checkout-URL zum Redirect
+ *   5. E-Mail unbestaetigt → Verifizierungsmail + { verificationRequired } —
+ *      der Link verifiziert und leitet direkt in den Stripe-Checkout
+ *   6. E-Mail bestaetigt → Stripe-Customer + Checkout-Session, Return: URL
  *
  * B2B-only: Firmenname ist Pflicht, USt-ID optional aber empfohlen. AGB
  * + Datenschutz-Zustimmung ueber explizite Checkbox (Body-Flag).
@@ -102,6 +105,7 @@ export async function POST(req: NextRequest) {
       id: users.id,
       subscriptionStatus: users.subscriptionStatus,
       stripeCustomerId: users.stripeCustomerId,
+      emailVerifiedAt: users.emailVerifiedAt,
     })
     .from(users)
     .where(eq(users.email, email))
@@ -109,6 +113,7 @@ export async function POST(req: NextRequest) {
 
   let userId: string;
   let stripeCustomerId: string | null;
+  let emailVerified: boolean;
 
   if (existing) {
     // Falls User schon aktiv → 409 mit generischer Message (keine
@@ -131,6 +136,7 @@ export async function POST(req: NextRequest) {
     // sonst koennte jemand fremde Emails übernehmen).
     userId = existing.id;
     stripeCustomerId = existing.stripeCustomerId;
+    emailVerified = existing.emailVerifiedAt != null;
   } else {
     // Neuer User
     const created = await createUser({
@@ -145,52 +151,49 @@ export async function POST(req: NextRequest) {
     });
     userId = created.id;
     stripeCustomerId = null;
+    emailVerified = false;
   }
 
-  // 5) Stripe-Customer + Checkout-Session
+  // 5) E-Mail noch nicht bestaetigt → Verifizierungsmail statt Checkout.
+  //    Der Link im Postfach verifiziert und leitet direkt zu Stripe weiter.
+  if (!emailVerified) {
+    try {
+      const token = randomBytes(32).toString("hex");
+      const tokenHash = createHash("sha256").update(token).digest("hex");
+      await db.insert(emailVerifications).values({
+        userId,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      });
+      await sendEmailVerificationMail({
+        to: email,
+        firstName,
+        verifyUrl: `${marketingOrigin()}/api/auth/verify-email?token=${token}`,
+      });
+      return NextResponse.json({ verificationRequired: true }, { status: 200 });
+    } catch (err) {
+      console.error("[signup] Verifizierungsmail-Fehler:", err);
+      return NextResponse.json(
+        {
+          error:
+            "Die Bestätigungsmail konnte nicht gesendet werden. Bitte versuch es gleich nochmal oder schreib an info@videocomet.de.",
+        },
+        { status: 500 },
+      );
+    }
+  }
+
+  // 6) E-Mail bereits bestaetigt (z. B. zweiter Anlauf nach abgebrochenem
+  //    Checkout) → direkt Stripe-Customer + Checkout-Session.
   try {
-    const customerId = await findOrCreateCustomer({
+    const url = await createSignupCheckout({
       userId,
       email,
       name: companyName || `${firstName} ${lastName}`.trim(),
       vatId: vatId ?? null,
       existingCustomerId: stripeCustomerId,
     });
-    if (!stripeCustomerId) {
-      await db
-        .update(users)
-        .set({ stripeCustomerId: customerId, updatedAt: new Date() })
-        .where(eq(users.id, userId));
-    }
-
-    const stripe = getStripe();
-    const { subscription: subPriceId } = getPriceIds();
-    // Signup-Flow lebt auf der Marketing-Domain (videocomet.de). Stripe muss
-    // den User nach Zahlung dorthin zurueckschicken — nicht in den
-    // Memberbereich (app.videocomet.de), sonst kommt er auf einer Seite raus,
-    // die den Kauf-Kontext nicht kennt.
-    const marketingOrigin = (
-      process.env.MARKETING_URL ?? "https://videocomet.de"
-    ).replace(/\/+$/, "");
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: customerId,
-      line_items: [{ price: subPriceId, quantity: 1 }],
-      automatic_tax: { enabled: true },
-      customer_update: { address: "auto", name: "auto" },
-      tax_id_collection: { enabled: true },
-      // payment_method_types bewusst nicht gesetzt — Stripe nutzt automatisch
-      // die im Dashboard aktivierten Methoden (sepa_debit war dort nicht aktiv
-      // und hat als harter Parameter jeden Signup mit 500 gekillt).
-      billing_address_collection: "required",
-      metadata: { userId, kind: "subscription" },
-      subscription_data: { metadata: { userId } },
-      success_url: `${marketingOrigin}/signup/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${marketingOrigin}/#pricing`,
-    });
-
-    return NextResponse.json({ url: session.url }, { status: 200 });
+    return NextResponse.json({ url }, { status: 200 });
   } catch (err) {
     console.error("[signup] Stripe/Checkout-Fehler:", err);
     return NextResponse.json(

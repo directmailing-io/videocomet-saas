@@ -60,11 +60,19 @@ export async function POST(req: NextRequest) {
       companyName: users.companyName,
       vatId: users.vatId,
       stripeCustomerId: users.stripeCustomerId,
+      emailVerifiedAt: users.emailVerifiedAt,
     })
     .from(users)
     .where(eq(users.id, auth.user.id))
     .limit(1);
   if (!row) return NextResponse.json({ error: "User nicht gefunden" }, { status: 404 });
+
+  if (!row.emailVerifiedAt) {
+    return NextResponse.json(
+      { error: "Bitte bestätige zuerst deine E-Mail-Adresse. Schau in dein Postfach." },
+      { status: 403 },
+    );
+  }
 
   const customerId = await findOrCreateCustomer({
     userId: auth.user.id,

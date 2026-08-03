@@ -553,6 +553,72 @@ export async function sendAccountCleanupReminderMail(
   if (sendResult.error) throw new Error(`Resend: ${sendResult.error.message}`);
 }
 
+export interface SendEmailVerificationMailInput {
+  to: string;
+  firstName?: string | null;
+  verifyUrl: string;
+}
+
+/** Bestaetigungsmail vor der ersten Buchung (Signup-Flow). */
+export async function sendEmailVerificationMail(
+  input: SendEmailVerificationMailInput,
+): Promise<void> {
+  const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
+
+  const body = `
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:${BRAND_INK};line-height:1.25;">
+      Bestätige deine E-Mail-Adresse
+    </h1>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${escapeHtml(greeting)}
+    </p>
+    <p style="margin:0 0 20px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      schön, dass du bei VIDEOCOMET starten möchtest. Bitte bestätige kurz deine E-Mail-Adresse. Danach geht es direkt weiter zur Buchung.
+    </p>
+    <p style="margin:0 0 20px 0;">
+      <a href="${input.verifyUrl}" style="display:inline-block;background:${BRAND_ACCENT};color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;">
+        E-Mail bestätigen und weiter zur Buchung
+      </a>
+    </p>
+    <p style="margin:0 0 20px 0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Der Link ist 24 Stunden gültig. Wenn du dich nicht bei VIDEOCOMET registriert hast, kannst du diese E-Mail ignorieren.
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Funktioniert der Button nicht? Öffne diesen Link in deinem Browser:<br />
+      <a href="${input.verifyUrl}" style="color:${BRAND_ACCENT};text-decoration:underline;word-break:break-all;">${escapeHtml(input.verifyUrl)}</a>
+    </p>
+  `;
+
+  const subject = "Bestätige deine E-Mail-Adresse für VIDEOCOMET";
+  const html = shellHtml({
+    headline: "Bestätige deine E-Mail-Adresse",
+    preheader: "Ein Klick, dann geht es direkt weiter zur Buchung.",
+    body,
+  });
+  const text = [
+    greeting,
+    "",
+    "schön, dass du bei VIDEOCOMET starten möchtest.",
+    "Bitte bestätige kurz deine E-Mail-Adresse. Danach geht es direkt weiter zur Buchung:",
+    "",
+    input.verifyUrl,
+    "",
+    "Der Link ist 24 Stunden gültig.",
+    "Wenn du dich nicht bei VIDEOCOMET registriert hast, kannst du diese E-Mail ignorieren.",
+    "",
+    "VIDEOCOMET",
+  ].join("\n");
+
+  const resend = getResend();
+  if (!resend) {
+    console.log("[mail:dev] sendEmailVerificationMail -> %s", input.to);
+    console.log("[mail:dev] verifyUrl: %s", input.verifyUrl);
+    return;
+  }
+  const sendResult = await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+  if (sendResult.error) throw new Error(`Resend: ${sendResult.error.message}`);
+}
+
 export interface SendSubscriptionStartedMailInput {
   to: string;
   firstName?: string | null;

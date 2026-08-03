@@ -3,7 +3,7 @@
 import * as React from "react";
 import Script from "next/script";
 import Link from "next/link";
-import { Loader2, Check } from "lucide-react";
+import { Loader2, Check, MailCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,8 +48,42 @@ export function SignupForm() {
   });
   const [submitting, setSubmitting] = React.useState(false);
   const [pwFeedback, setPwFeedback] = React.useState<string | null>(null);
+  const [awaitingVerification, setAwaitingVerification] = React.useState(false);
+  const [resendState, setResendState] = React.useState<"idle" | "sending" | "sent">("idle");
 
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
+
+  // Rueckkehr vom Verifizierungslink mit Fehlerstatus (?verify=...).
+  React.useEffect(() => {
+    const verify = new URLSearchParams(window.location.search).get("verify");
+    if (!verify) return;
+    if (verify === "expired") {
+      setErrorMessage(
+        "Dein Bestätigungslink ist abgelaufen. Melde dich einfach nochmal mit denselben Daten an, dann schicken wir dir einen neuen Link.",
+      );
+    } else if (verify === "checkout_error") {
+      setErrorMessage(
+        "Deine E-Mail ist bestätigt, aber der Zahlungsschritt konnte nicht gestartet werden. Bitte melde dich nochmal an oder schreib an info@videocomet.de.",
+      );
+    } else {
+      setErrorMessage(
+        "Dieser Bestätigungslink ist ungültig. Melde dich einfach nochmal an, dann schicken wir dir einen neuen Link.",
+      );
+    }
+  }, []);
+
+  async function handleResend() {
+    if (resendState === "sending") return;
+    setResendState("sending");
+    try {
+      await fetch("/api/auth/signup/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email.trim() }),
+      });
+    } catch {}
+    setResendState("sent");
+  }
 
   React.useEffect(() => {
     if (!siteKey) return;
@@ -127,9 +161,15 @@ export function SignupForm() {
       });
       const body = (await res.json().catch(() => ({}))) as {
         url?: string;
+        verificationRequired?: boolean;
         error?: string;
         errorKind?: string;
       };
+      if (res.ok && body.verificationRequired) {
+        setAwaitingVerification(true);
+        setSubmitting(false);
+        return;
+      }
       if (!res.ok || !body.url) {
         if (body.errorKind === "existing_active") {
           setErrorMessage(
@@ -243,6 +283,48 @@ export function SignupForm() {
 
           {/* ═══════ RECHTS: Formular ═══════ */}
           <Squircle radius={26} shadow="float" className="bg-white p-5 sm:p-7 lg:p-8">
+            {awaitingVerification ? (
+            <div className="py-6 text-center">
+              <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-brand-soft">
+                <MailCheck className="size-7 text-brand-deep" />
+              </div>
+              <h2 className="font-bold text-xl text-ink mb-2">
+                Bestätige deine E-Mail-Adresse
+              </h2>
+              <p className="text-sm text-ink-soft leading-relaxed mb-4">
+                Wir haben dir eine E-Mail an{" "}
+                <strong className="font-semibold text-ink">{form.email.trim()}</strong>{" "}
+                geschickt. Klick auf den Link darin, dann geht es direkt weiter
+                zur Zahlung.
+              </p>
+              <p className="text-[13px] text-ink-muted leading-relaxed mb-5">
+                Keine E-Mail bekommen? Schau auch im Spam-Ordner nach.
+              </p>
+              {resendState === "sent" ? (
+                <p className="text-[13px] text-emerald-700 font-medium">
+                  E-Mail wurde erneut gesendet.
+                </p>
+              ) : (
+                <Button
+                  type="button"
+                  variant="subtle"
+                  className="rounded-full"
+                  onClick={handleResend}
+                  disabled={resendState === "sending"}
+                >
+                  {resendState === "sending" ? (
+                    <>
+                      <Loader2 className="size-4 mr-2 animate-spin" />
+                      Wird gesendet ...
+                    </>
+                  ) : (
+                    "E-Mail erneut senden"
+                  )}
+                </Button>
+              )}
+            </div>
+            ) : (
+            <>
             <h2 className="font-bold text-lg mb-1 lg:hidden text-ink">Konto anlegen</h2>
             <p className="text-xs text-ink-muted mb-4 lg:hidden">
               Dauert weniger als eine Minute.
@@ -412,7 +494,7 @@ export function SignupForm() {
                 {submitting ? (
                   <>
                     <Loader2 className="size-4 mr-2 animate-spin" />
-                    Weiter zu Stripe ...
+                    Einen Moment ...
                   </>
                 ) : (
                   "Zahlungspflichtig bestellen"
@@ -423,6 +505,8 @@ export function SignupForm() {
                 Sichere Zahlung über Stripe. SEPA + Kreditkarte.
               </p>
             </form>
+            </>
+            )}
           </Squircle>
         </div>
       </div>

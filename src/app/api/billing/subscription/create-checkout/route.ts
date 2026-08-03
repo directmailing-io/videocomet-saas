@@ -34,12 +34,20 @@ export async function POST() {
         vatId: users.vatId,
         stripeCustomerId: users.stripeCustomerId,
         subscriptionStatus: users.subscriptionStatus,
+        emailVerifiedAt: users.emailVerifiedAt,
       })
       .from(users)
       .where(eq(users.id, auth.user.id))
       .limit(1);
 
     if (!row) return NextResponse.json({ error: "User nicht gefunden" }, { status: 404 });
+
+    if (!row.emailVerifiedAt) {
+      return NextResponse.json(
+        { error: "Bitte bestätige zuerst deine E-Mail-Adresse. Schau in dein Postfach." },
+        { status: 403 },
+      );
+    }
 
     if (row.subscriptionStatus === "active" || row.subscriptionStatus === "trialing") {
       return NextResponse.json(
