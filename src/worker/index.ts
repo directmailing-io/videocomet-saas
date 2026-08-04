@@ -24,6 +24,18 @@ import { emailGifWorker, type EmailGifJobData } from "./email-gif-queue";
 import { processEmailGifJob } from "./jobs/email-gif";
 import { urlPreviewWorker } from "./url-preview-queue";
 import { processUrlPreviewJob } from "./processors/url-preview";
+import {
+  voiceTrainingWorker,
+  introCalibrationWorker,
+  introPreviewWorker,
+  enqueueIntroPreviewJob,
+  type VoiceTrainingJobData,
+  type IntroCalibrationJobData,
+  type IntroPreviewJobData,
+} from "./intro-queue";
+import { processVoiceTrainingJob } from "./processors/voice-training";
+import { processIntroCalibrationJob } from "./processors/intro-calibration";
+import { processIntroPreviewJob } from "./processors/intro-preview";
 import { refreshStalePreviews } from "@/lib/media-urls/stale-refresh";
 import {
   WEBHOOK_DELIVERY_QUEUE,
@@ -391,7 +403,7 @@ async function preflightRecovery(): Promise<void> {
   // ── (D) Run-Finalization: alle Leads terminal → awaiting_approval ─────
   // Idempotent via WHERE-Filter auf status='preflighting'.
   try {
-    await db.execute(sql`
+    const finalized = await db.execute(sql`
       UPDATE ${runs}
       SET status = 'awaiting_approval',
           preflight_completed_at = COALESCE(${runs.preflightCompletedAt}, NOW())
@@ -414,7 +426,27 @@ async function preflightRecovery(): Promise<void> {
             WHERE l2.run_id = r.id AND l2.removed_at IS NULL
           )
       )
+      RETURNING ${runs.id} AS id
     `);
+    // Intro-Previews für recovery-promotete Runs anstoßen (best effort,
+    // dedupe via jobId; Processor prüft selbst ob Intro aktiv/bereit ist).
+    // postgres-js liefert die Rows direkt als Array; defensiv auch .rows
+    // unterstützen (gleicher Zugriffs-Pattern wie queries/runs.ts).
+    const promotedRows = Array.isArray(finalized)
+      ? (finalized as unknown as Array<{ id: string }>)
+      : ((finalized as unknown as { rows?: Array<{ id: string }> }).rows ?? []);
+    for (const row of promotedRows) {
+      if (!row?.id) continue;
+      try {
+        await enqueueIntroPreviewJob(row.id);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[worker:${WORKER_ID}] intro-preview enqueue failed for run ${row.id}:`,
+          err,
+        );
+      }
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(
@@ -769,6 +801,106 @@ async function main(): Promise<void> {
     log("error", "url-preview worker error:", err.message);
   });
 
+  // Voice-Training-Worker (Intro-Feature): trainiert den Fish-Audio-Voice-
+  // Clone aus dem User-Sample. Concurrency 1 (VOICE_TRAINING_WORKER_
+  // CONCURRENCY) — selten und I/O-bound.
+  const voiceTrainingW = voiceTrainingWorker(
+    async (job: Job<VoiceTrainingJobData>) => {
+      incrementInFlight();
+      try {
+        log("info", `voice-training start job=${job.id} profile=${job.data.voiceProfileId}`);
+        const result = await processVoiceTrainingJob(job);
+        log(
+          "info",
+          `voice-training done  job=${job.id} profile=${job.data.voiceProfileId} status=${result.status}`,
+        );
+        return result;
+      } catch (err) {
+        log(
+          "error",
+          `voice-training fail  job=${job?.id} profile=${job?.data?.voiceProfileId}`,
+          err,
+        );
+        throw err;
+      } finally {
+        decrementInFlight();
+      }
+    },
+  );
+  voiceTrainingW.on("failed", (job, err) => {
+    log("error", `voice-training job ${job?.id} failed:`, err?.message);
+  });
+  voiceTrainingW.on("error", (err) => {
+    log("error", "voice-training worker error:", err.message);
+  });
+
+  // Intro-Kalibrierungs-Worker: Audio-Analyse eines Webcam-Videos
+  // (Silence-Struktur, LUFS/Spektrum, Raumton). Kurzlebig, ffmpeg-bound.
+  const introCalibrationW = introCalibrationWorker(
+    async (job: Job<IntroCalibrationJobData>) => {
+      incrementInFlight();
+      try {
+        log("info", `intro-calibration start job=${job.id} cal=${job.data.calibrationId}`);
+        const result = await processIntroCalibrationJob(job);
+        log(
+          "info",
+          `intro-calibration done  job=${job.id} cal=${job.data.calibrationId} status=${result.status}`,
+        );
+        return result;
+      } catch (err) {
+        log(
+          "error",
+          `intro-calibration fail  job=${job?.id} cal=${job?.data?.calibrationId}`,
+          err,
+        );
+        throw err;
+      } finally {
+        decrementInFlight();
+      }
+    },
+  );
+  introCalibrationW.on("failed", (job, err) => {
+    log("error", `intro-calibration job ${job?.id} failed:`, err?.message);
+  });
+  introCalibrationW.on("error", (err) => {
+    log("error", "intro-calibration worker error:", err.message);
+  });
+
+  // Intro-Preview-Worker: bis zu 3 Vorschau-Videos (~15s) mit KI-Begrüßung
+  // nach der awaiting_approval-Promotion. Läuft asynchron, blockiert die
+  // Promotion nie; die UI pollt runs.intro_preview.
+  const introPreviewW = introPreviewWorker(
+    async (job: Job<IntroPreviewJobData>) => {
+      incrementInFlight();
+      try {
+        log("info", `intro-preview start job=${job.id} run=${job.data.runId}`);
+        const result = await processIntroPreviewJob(job);
+        log(
+          "info",
+          `intro-preview done  job=${job.id} run=${job.data.runId} status=${result.status}` +
+            (result.previews !== undefined ? ` previews=${result.previews}` : "") +
+            (result.reason ? ` reason=${result.reason}` : ""),
+        );
+        return result;
+      } catch (err) {
+        log(
+          "error",
+          `intro-preview fail  job=${job?.id} run=${job?.data?.runId}`,
+          err,
+        );
+        throw err;
+      } finally {
+        decrementInFlight();
+      }
+    },
+  );
+  introPreviewW.on("failed", (job, err) => {
+    log("error", `intro-preview job ${job?.id} failed:`, err?.message);
+  });
+  introPreviewW.on("error", (err) => {
+    log("error", "intro-preview worker error:", err.message);
+  });
+
   // URL-Preview-Stale-Refresh-Tick. 1×/h scannt nach Preview-Eintraegen
   // deren TTL ueberfaellig ist und enqueued Refresh-Jobs (max 50 pro Tick).
   // Beim Boot 1× sofort, damit ein langer Container-Outage Stale-Backlog
@@ -839,6 +971,21 @@ async function main(): Promise<void> {
       await urlPreviewW.close();
     } catch (err) {
       log("error", "url-preview worker close failed:", err);
+    }
+    try {
+      await voiceTrainingW.close();
+    } catch (err) {
+      log("error", "voice-training worker close failed:", err);
+    }
+    try {
+      await introCalibrationW.close();
+    } catch (err) {
+      log("error", "intro-calibration worker close failed:", err);
+    }
+    try {
+      await introPreviewW.close();
+    } catch (err) {
+      log("error", "intro-preview worker close failed:", err);
     }
     try {
       await closeBrowserPool();

@@ -44,6 +44,7 @@ import {
 } from "@/lib/bunny/preflight-storage";
 import { probeUrl, type UrlProbeResult } from "@/lib/preflight/url-probe";
 import { captureLightScreenshot } from "@/lib/preflight/screenshot";
+import { enqueueIntroPreviewJob } from "../intro-queue";
 import type { PreflightJobData } from "../types";
 
 /**
@@ -175,7 +176,7 @@ async function maybePromoteRunToAwaitingApproval(runId: string): Promise<void> {
   // Idempotent promotion: WHERE-status guarantees only the first race wins.
   // The "preflighting" / "awaiting_approval" enum values live in the DB ENUM
   // but not in the narrow TS type — same cast pattern as setRunStatus().
-  await db
+  const promoted = await db
     .update(runs)
     .set({
       status: "awaiting_approval" as RunStatusValue,
@@ -186,7 +187,22 @@ async function maybePromoteRunToAwaitingApproval(runId: string): Promise<void> {
         eq(runs.id, runId),
         eq(runs.status, "preflighting" as RunStatusValue),
       ),
-    );
+    )
+    .returning({ id: runs.id });
+
+  // Intro-Previews asynchron anstoßen — nur der tatsächliche Promotion-
+  // Gewinner enqueued (`returning` nicht leer). Best effort: darf die
+  // Promotion niemals scheitern lassen; der Processor prüft selbst, ob das
+  // Intro-Feature für die Kampagne überhaupt aktiv/bereit ist.
+  if (promoted.length > 0) {
+    try {
+      await enqueueIntroPreviewJob(runId);
+    } catch (err) {
+      console.warn(
+        `[preflight] intro-preview enqueue failed for run ${runId}: ${(err as Error).message}`,
+      );
+    }
+  }
 }
 
 /**

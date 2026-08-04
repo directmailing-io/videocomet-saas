@@ -35,12 +35,20 @@
  */
 
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import type { Job } from "bullmq";
 import { db } from "@/lib/db";
-import { campaigns, leads, mediaItems, runs, userDomains } from "@/lib/db/schema";
+import {
+  campaigns,
+  introCalibrations,
+  leads,
+  mediaItems,
+  runs,
+  userDomains,
+  voiceProfiles,
+} from "@/lib/db/schema";
 import type { RunAbConfig } from "@/lib/db/schema";
 import { updateLeadStatus } from "@/lib/db/queries/leads";
 import { finalizeRunIfAllLeadsDone } from "@/lib/db/queries/runs";
@@ -75,6 +83,8 @@ import { trackAndRefAsset } from "../lib/bunny-asset-tracking";
 import { runThumbnailGenerate } from "./thumbnail-generate";
 import { runLandingpageScreenshot } from "./landingpage-screenshot";
 import { hasPersonalization } from "../lib/has-personalization";
+import { checkFirstName } from "@/lib/intro-name-check";
+import { generatePersonalizedWebcam } from "../lib/intro-engine";
 import {
   getSharedThumbnailUrl,
   setSharedThumbnailUrl,
@@ -91,6 +101,10 @@ import { parseStorageUrl } from "@/lib/bunny/storage";
  * pipeline timeout in `src/worker/index.ts`.
  */
 const STAGE_TIMEOUTS_MS = {
+  // Personalisierte Video-Begrüßung: TTS + EQ + Segment-Encode + sync.so-
+  // Lip-Sync (Poll bis 6 min) + finale Assembly. Timeout ⇒ FALLBACK aufs
+  // Original-Video, NIE ein Lead-Fail (siehe Stage-Code).
+  personalizeIntro: 480_000,
   // PPTX-basierte Segmente (gslide/canva) sind teuer: LibreOffice (5-15s)
   // + pdftoppm + ffmpeg-Loop, multiplied with parallel leads under
   // BullMQ concurrency=16. 300s gibt realistischen Puffer auch fuer
@@ -490,6 +504,12 @@ export async function pipelineProcessor(
     let leadCustomThumbnailUrl: string | null =
       lead.customThumbnailUrl ?? null;
     let runSharedThumbnailUrlForCustom: string | null = null;
+    // Personalisierte Video-Begrüßung (Intro-Feature): lokaler Pfad des
+    // personalisierten Webcam-Videos + validierter Vorname. null = Feature
+    // aus ODER Fallback aufs Original — in dem Fall bleiben die Video-
+    // Stages exakt wie bisher.
+    let personalizedWebcamPath: string | null = null;
+    let introFirstName: string | null = null;
 
     // ── Stages 1-2: Video render + upload ────────────────────────────
     if (!skipVideo) {
@@ -507,6 +527,151 @@ export async function pipelineProcessor(
         );
       }
 
+      // ── Stage 0: Personalisierte Video-Begrüßung (Intro-Feature) ──
+      // Ersetzt den ersten Satz der Webcam durch eine KI-Begrüßung mit dem
+      // Vornamen des Leads (Fish-TTS + sync.so-Lip-Sync). Läuft VOR beiden
+      // Video-Pfaden und tauscht bei Erfolg die Webcam-Quelle gegen das
+      // personalisierte lokale File. JEDER Fehlschlag (fehlende Voice/
+      // Kalibrierung, unbrauchbarer Vorname, Engine-Fehler, Timeout) ist
+      // ein Fallback aufs Original-Video — niemals ein Lead-Fail.
+      if (campaign.introEnabled) {
+        await setCurrentStage(data.leadId, "personalizeIntro");
+        const introStart = Date.now();
+        try {
+          const [voiceProfile] = await db
+            .select()
+            .from(voiceProfiles)
+            .where(eq(voiceProfiles.userId, run.userId))
+            .limit(1);
+          const [calibration] = campaign.webcamMediaId
+            ? await db
+                .select()
+                .from(introCalibrations)
+                .where(
+                  eq(introCalibrations.mediaItemId, campaign.webcamMediaId),
+                )
+                .limit(1)
+            : [];
+
+          if (
+            voiceProfile?.status !== "ready" ||
+            !voiceProfile.fishModelId ||
+            calibration?.status !== "ready"
+          ) {
+            await updateLeadStatus(data.leadId, { introStatus: "disabled" });
+            await insertPipelineEvent({
+              runId: data.runId,
+              leadId: data.leadId,
+              level: "warn",
+              stage: "render",
+              message: `${leadLabel}: Intro übersprungen — Voice-Profil oder Webcam-Kalibrierung nicht bereit; Original-Video wird verwendet`,
+            });
+          } else {
+            const rawFirstName = pickField(
+              (lead.data ?? {}) as Record<string, string>,
+              ["firstName", "Vorname", "first_name", "vorname"],
+            );
+            const nameCheck = checkFirstName(rawFirstName);
+            if (!nameCheck.ok) {
+              await updateLeadStatus(data.leadId, {
+                introStatus: "fallback_name",
+              });
+              await insertPipelineEvent({
+                runId: data.runId,
+                leadId: data.leadId,
+                level: "info",
+                stage: "render",
+                message: `${leadLabel}: Intro-Fallback — kein brauchbarer Vorname ("${rawFirstName.slice(0, 40)}", ${nameCheck.reason}); Original-Video wird verwendet`,
+              });
+            } else {
+              // Webcam lokal materialisieren (eigener Unterordner, damit
+              // die Engine-Artefakte den Lead-workDir nicht zumüllen).
+              const introDir = join(workDir, "intro");
+              await mkdir(introDir, { recursive: true });
+              const introWebcamPath = join(introDir, "webcam-src.mp4");
+              // Referer mitschicken — Bunny-CDN-Hotlink-Protection blockt
+              // sonst (gleiche Header wie fetchToFile in video-render.ts).
+              const introReferer =
+                process.env.APP_URL ?? "https://app.videocomet.de";
+              const webcamRes = await fetch(webcam.publicUrl, {
+                headers: {
+                  Referer: introReferer,
+                  Origin: introReferer,
+                  "User-Agent": "videocomet-worker/1.0",
+                },
+              });
+              if (!webcamRes.ok) {
+                throw new Error(
+                  `webcam download HTTP ${webcamRes.status} for intro stage`,
+                );
+              }
+              await writeFile(
+                introWebcamPath,
+                Buffer.from(await webcamRes.arrayBuffer()),
+              );
+
+              const result = await withStageTimeout(
+                () =>
+                  generatePersonalizedWebcam({
+                    userId: data.userId,
+                    tag: data.leadId.slice(0, 8),
+                    firstName: nameCheck.name,
+                    calibration,
+                    fishModelId: voiceProfile.fishModelId!,
+                    webcamLocalPath: introWebcamPath,
+                    workDir: introDir,
+                  }),
+                STAGE_TIMEOUTS_MS.personalizeIntro,
+                "personalizeIntro",
+              );
+              const introMs = Date.now() - introStart;
+              if (result.ok) {
+                personalizedWebcamPath = result.outputPath;
+                introFirstName = nameCheck.name;
+                await updateLeadStatus(data.leadId, {
+                  introStatus: "generated",
+                });
+                await insertPipelineEvent({
+                  runId: data.runId,
+                  leadId: data.leadId,
+                  level: "info",
+                  stage: "render",
+                  message: `${leadLabel}: personalisierte Begrüßung ("${nameCheck.name}") in ${(introMs / 1000).toFixed(1)}s erzeugt`,
+                  durationMs: introMs,
+                });
+              } else {
+                await updateLeadStatus(data.leadId, {
+                  introStatus: "fallback_error",
+                });
+                await insertPipelineEvent({
+                  runId: data.runId,
+                  leadId: data.leadId,
+                  level: "warn",
+                  stage: "render",
+                  message: `${leadLabel}: Intro-Fallback — ${result.reason.slice(0, 300)}; Original-Video wird verwendet`,
+                  durationMs: introMs,
+                });
+              }
+            }
+          }
+        } catch (err) {
+          // Timeout (withStageTimeout) oder unerwarteter Fehler → Fallback,
+          // NIE Lead-Fail. Status best-effort persistieren.
+          const message = err instanceof Error ? err.message : String(err);
+          await updateLeadStatus(data.leadId, {
+            introStatus: "fallback_error",
+          }).catch(() => undefined);
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "warn",
+            stage: "render",
+            message: `${leadLabel}: Intro-Fallback — ${message.slice(0, 300)}; Original-Video wird verwendet`,
+            durationMs: Date.now() - introStart,
+          }).catch(() => undefined);
+        }
+      }
+
       // ── Webcam-only Pfad: shared video resolve pro Run ───────────
       // Bei webcam-only ist das Video fuer alle Leads identisch. Wir
       // resolven es pro Run einmalig (Stream-URL → GUID reuse, sonst
@@ -514,7 +679,13 @@ export async function pipelineProcessor(
       // videoUpload entfallen komplett — KEIN inline-Fast-Path mehr,
       // damit auch dieser Pfad Compression durchläuft (sonst landen
       // unkomprimierte WebMs/MP4s in Bunny Stream).
-      const isWebcamOnly = campaign.mode !== "with-presentation";
+      //
+      // AUSNAHME Intro-Feature: mit personalisierter Begrüßung ist das
+      // Video pro Lead UNIQUE — der Shared-Pfad wäre falsch. Dann läuft
+      // auch webcam-only durch den per-Lead-Pfad (render→compress→upload),
+      // der die personalisierte Datei als `file://`-Quelle konsumiert.
+      const isWebcamOnly =
+        campaign.mode !== "with-presentation" && !personalizedWebcamPath;
       if (isWebcamOnly) {
         await setCurrentStage(data.leadId, "videoUpload");
         await updateLeadStatus(data.leadId, { status: "uploading" });
@@ -591,6 +762,12 @@ export async function pipelineProcessor(
             placeholderMapping: placeholderMapping ?? null,
             pipPosition: campaign.pipPosition ?? null,
             pipShape: campaign.pipShape ?? null,
+            // Intro-Feature: personalisierte Begrüßung macht das Video pro
+            // Lead unique — Resume darf ein altes Video ohne (oder mit
+            // anderem) Intro nicht weiterverwenden.
+            intro: personalizedWebcamPath
+              ? { firstName: introFirstName }
+              : null,
           }),
         )
         .digest("hex");
@@ -692,7 +869,11 @@ export async function pipelineProcessor(
             mode: (campaign.mode === "with-presentation"
               ? "with-presentation"
               : "webcam-only") as "webcam-only" | "with-presentation",
-            webcamSourceUrl: webcam.publicUrl!,
+            // Intro-Feature: personalisierte Webcam als lokale file://-
+            // Quelle — der Renderer normalisiert sie wie jede andere Quelle.
+            webcamSourceUrl: personalizedWebcamPath
+              ? `file://${personalizedWebcamPath}`
+              : webcam.publicUrl!,
             website: lead.data?.website ?? null,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             segments: (campaign.segments as any) ?? [],
@@ -1773,11 +1954,14 @@ export async function pipelineProcessor(
         const { chargeForVideo, DuplicateChargeError } = await import(
           "@/lib/billing/credit-service"
         );
+        // Intro-Feature: ein Video mit erfolgreich generierter KI-
+        // Begrüßung kostet 2 Credits (TTS + Lip-Sync-API-Kosten);
+        // Fallback-Leads (Original-Video) kosten den Normalpreis 1.
         await chargeForVideo({
           userId: run.userId,
           leadId: data.leadId,
           runId: data.runId,
-          amount: 1,
+          amount: personalizedWebcamPath ? 2 : 1,
         });
       } catch (err) {
         const isDuplicate =

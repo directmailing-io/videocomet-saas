@@ -94,6 +94,7 @@ export default async function NewRunPage({
       abTestingActive={abTestingActive}
       abDefaultMode={campaign.abSplitMode}
       abDefaultWeightA={campaign.abSplitWeightA}
+      introEnabled={campaign.introEnabled === true}
       resume={resumeState}
     />
   );

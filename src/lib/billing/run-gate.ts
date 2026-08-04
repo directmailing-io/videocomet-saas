@@ -35,6 +35,13 @@ export class BillingGateError extends Error {
 export async function assertBillingReadyForRun(input: {
   userId: string;
   plannedLeadCount: number;
+  /**
+   * Credits pro Video. Default 1. Kampagnen mit personalisierter Video-
+   * Begrüßung (intro_enabled) reservieren konservativ 2 Credits pro Lead —
+   * beim tatsächlichen Charge kosten Fallback-Leads (kein brauchbarer
+   * Vorname / Engine-Fehler) trotzdem nur 1.
+   */
+  pricePerVideo?: number;
 }): Promise<void> {
   const [row] = await db
     .select({
@@ -72,6 +79,7 @@ export async function assertBillingReadyForRun(input: {
   const est = await estimateRunCost({
     userId: input.userId,
     leadCount: input.plannedLeadCount,
+    pricePerVideo: input.pricePerVideo,
   });
   if (!est.sufficient) {
     throw new BillingGateError(

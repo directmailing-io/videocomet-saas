@@ -122,6 +122,24 @@ export async function runBunnyLibraryReconcileTick(
   const library = await listAllLibraryVideos();
   const cutoff = Date.now() - MIN_AGE_MS;
 
+  // Plausibilitäts-Notbremse: Eine (nahezu) leere DB bei voller Library
+  // bedeutet fast sicher "falsche DB" (lokales Dev / frische Instanz) —
+  // dann würde der Sweep die komplette Produktions-Library löschen.
+  if (library.length > 50 && known.size < library.length * 0.1) {
+    log(
+      "error",
+      `SAFETY ABORT: known-set (${known.size}) implausibly small vs library (${library.length}) — refusing to delete anything.`,
+    );
+    return {
+      libraryTotal: library.length,
+      knownGuids: known.size,
+      candidates: 0,
+      deleted: 0,
+      failed: 0,
+      dryRun,
+    };
+  }
+
   let candidates = library.filter((v) => {
     if (!v.guid || known.has(v.guid.toLowerCase())) return false;
     const uploadedAt = Date.parse(v.dateUploaded);
@@ -201,6 +219,14 @@ export async function runBunnyLibraryReconcileTick(
  * zu `startBunnyPurger()` — liefert eine stop()-Funktion.
  */
 export function startBunnyLibraryReconciler(): () => void {
+  // Kill-Switch für lokale/Test-Umgebungen: eine leere oder fremde DB
+  // gepaart mit dem Produktions-API-Key würde die komplette Library als
+  // "orphaned" einstufen und real löschen. Deshalb: Sweep nur, wenn
+  // explizit aktiviert.
+  if (process.env.BUNNY_RECONCILE_ENABLED !== "1") {
+    log("warn", "sweep disabled (set BUNNY_RECONCILE_ENABLED=1 to enable)");
+    return () => {};
+  }
   void runBunnyLibraryReconcileTick().catch((err) => {
     log("error", `initial tick crashed: ${(err as Error)?.message ?? err}`);
   });

@@ -61,6 +61,11 @@ export interface RunWizardProps {
   abDefaultMode: AbSplitMode;
   abDefaultWeightA: number;
   /**
+   * Personalisierte Video-Begrüßung aktiv: die Kostenvorschau rechnet mit
+   * 2 Credits pro Video (Spiegel der Reservierung im Start-Endpoint).
+   */
+  introEnabled: boolean;
+  /**
    * Fortsetzen einer unfertigen Runde (Status draft/mapping): der Server
    * rekonstruiert Preview + Legacy-Mapping aus `runs.column_mapping` und
    * der Wizard startet direkt in Step 1. Der Platzhalter-Mapping-Step lädt
@@ -104,6 +109,7 @@ export function RunWizard({
   abTestingActive,
   abDefaultMode,
   abDefaultWeightA,
+  introEnabled,
   resume,
 }: RunWizardProps) {
   const router = useRouter();
@@ -1075,6 +1081,7 @@ export function RunWizard({
                   // anderen nutzen wir totalRows als konservativen Estimate.
                   bulkMode ? bulkLeadTotal : abLeadCount
                 }
+                introEnabled={introEnabled}
                 onSufficient={setBillingReady}
               />
 

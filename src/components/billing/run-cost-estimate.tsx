@@ -22,6 +22,11 @@ interface Props {
   onSufficient: (sufficient: boolean) => void;
   /** "receipt": schlanke Bon-Zeilen statt eigener Box (für den Kassenbon im Wizard). */
   variant?: "card" | "receipt";
+  /**
+   * Kampagne mit personalisierter Video-Begrüßung: 2 Credits pro Video
+   * werden reserviert (Spiegel der Reservierung im Start-Endpoint).
+   */
+  introEnabled?: boolean;
 }
 
 interface Status {
@@ -33,6 +38,7 @@ export function RunCostEstimate({
   leadCount,
   onSufficient,
   variant = "card",
+  introEnabled = false,
 }: Props) {
   const [status, setStatus] = React.useState<Status | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -55,7 +61,11 @@ export function RunCostEstimate({
     return () => window.removeEventListener("credit-balance-changed", onChange);
   }, [load]);
 
-  const cost = leadCount;
+  // Spiegel von POST /api/runs/[id]/start: 2 Credits pro Video bei
+  // aktivierter personalisierter Begrüßung (Fallback erstattet 1 Credit
+  // erst nach der Produktion).
+  const perVideo = introEnabled ? 2 : 1;
+  const cost = leadCount * perVideo;
   const balance = status?.creditBalance ?? 0;
   const remaining = balance - cost;
   const sufficient = balance >= cost;
@@ -129,6 +139,12 @@ export function RunCostEstimate({
               −{cost} Credits
             </span>
           </div>
+          {introEnabled && (
+            <div className="text-[10px] leading-relaxed text-ink-muted">
+              2 Credits pro Video mit persönlicher Begrüßung. Bei Namens-Fallback
+              wird 1 Credit automatisch erstattet.
+            </div>
+          )}
           <div className="flex items-baseline justify-between gap-3">
             <span className="text-ink-muted">Aktuelles Guthaben</span>
             <span className="tabular-nums">{formatCreditBalance(balance)}</span>
@@ -182,6 +198,12 @@ export function RunCostEstimate({
           <Zap className="size-4 text-brand" />
           <div className="font-semibold text-sm">Credit-Verbrauch</div>
         </div>
+        {introEnabled && (
+          <p className="mb-3 text-xs text-ink-muted">
+            2 Credits pro Video mit persönlicher Begrüßung. Bei Namens-Fallback
+            wird 1 Credit automatisch erstattet.
+          </p>
+        )}
         <div className="grid grid-cols-3 gap-3 text-sm">
           <div>
             <div className="text-xs text-ink-muted">Kosten dieser Runde</div>

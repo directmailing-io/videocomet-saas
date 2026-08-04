@@ -43,6 +43,7 @@ import {
   DEFAULT_SLUG_TEMPLATE,
   renderSlugTemplate,
 } from "@/lib/slug";
+import { IntroSettingsCard } from "./intro-settings-card";
 
 export interface EditCampaignWebcam {
   id: string;
@@ -116,6 +117,11 @@ export interface EditCampaignData {
      */
     thumbnailMode?: "frame" | "custom_image" | "landingpage_screenshot";
     thumbnailPlayIcon?: boolean;
+    /**
+     * Personalisierte Video-Begrüßung (Migration 0042). Optional, damit
+     * ältere Server-Snapshots das Feld nicht zwingend liefern müssen.
+     */
+    introEnabled?: boolean;
   };
   webcams: EditCampaignWebcam[];
   templates: EditCampaignTemplate[];
@@ -474,6 +480,15 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
             )}
           </CardContent>
         </Card>
+
+        {/* Personalisierte Begrüßung (KI-Intro). webcamMediaId aus dem
+            Live-State — ein Wechsel des Webcam-Videos triggert in der Karte
+            automatisch den Re-Check der Kalibrierung. */}
+        <IntroSettingsCard
+          campaignId={id}
+          webcamMediaId={state.webcamMediaId}
+          initialEnabled={data.campaign.introEnabled ?? false}
+        />
 
         {/* Modus */}
         <Card>

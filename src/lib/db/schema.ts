@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, smallint, jsonb, pgEnum, index, unique, uniqueIndex, bigserial, date, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, boolean, integer, smallint, real, jsonb, pgEnum, index, unique, uniqueIndex, bigserial, date, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
 
@@ -291,6 +291,15 @@ export const campaigns = pgTable("campaigns", {
    */
   envelopeTemplateId: uuid("envelope_template_id"),
 
+  /**
+   * Personalisierte Video-Begrüßung (Migration 0042): Wenn aktiv, ersetzt
+   * die Pipeline den ersten Satz des Webcam-Videos durch eine KI-
+   * personalisierte Begrüßung (Voice-Clone + Lip-Sync). Setzt ein
+   * `voice_profiles`-Row mit status='ready' und eine `intro_calibrations`-
+   * Row für das Webcam-Video voraus — sonst Fallback auf das Original.
+   */
+  introEnabled: boolean("intro_enabled").notNull().default(false),
+
   /** Soft-Delete-Marker (Migration 0015). NULL = aktiv. Queries werden
    * in Paket G angepasst — bis dahin keine Verhaltensänderung. */
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -479,6 +488,12 @@ export const runs = pgTable("runs", {
   sourceTabGid: integer("source_tab_gid"),
   sourceTabTitle: text("source_tab_title"),
 
+  // ── Personalisierte Video-Begrüßung (Migration 0042) ──────────────────
+  // Vorschau-Videos (erste Leads der Runde) vor Freigabe des Intro-Renders.
+  // NULL = kein Intro aktiv oder Vorschau noch nicht erzeugt.
+  introPreview: jsonb("intro_preview").$type<IntroPreviewEntry[] | null>(),
+  introPreviewApprovedAt: timestamp("intro_preview_approved_at", { withTimezone: true }),
+
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -548,6 +563,19 @@ export const leads = pgTable("leads", {
    */
   emailGifUrl: text("email_gif_url"),
   emailGifHash: text("email_gif_hash"),
+
+  /**
+   * Personalisierte Video-Begrüßung (Migration 0042). Ergebnis-Status des
+   * Intro-Renders für diesen Lead:
+   *   NULL             → Feature nicht aktiv / noch nicht gerendert
+   *   'generated'      → KI-Begrüßung erfolgreich eingebaut
+   *   'fallback_name'  → kein brauchbarer Vorname → Original ausgespielt
+   *   'fallback_error' → TTS/Lip-Sync-Fehler → Original ausgespielt
+   *   'disabled'       → Intro zur Renderzeit deaktiviert
+   */
+  introStatus: text("intro_status").$type<
+    "generated" | "fallback_name" | "fallback_error" | "disabled" | null
+  >(),
 
   // ── Video-Dimensionen (Migration 0015) ─────────────────────────────────
   // Vom Bunny-Resolver berechnet & gecached, damit Player + PDF-Thumbnail-
@@ -1706,3 +1734,71 @@ export const accountCleanupState = pgTable("account_cleanup_state", {
 }));
 
 export type AccountCleanupState = typeof accountCleanupState.$inferSelect;
+
+// ── Personalisierte Video-Begrüßung (Migration 0042) ────────────────────────
+
+/** Vorschau-Eintrag in `runs.introPreview`. */
+export interface IntroPreviewEntry {
+  leadId: string;
+  videoUrl: string;
+}
+
+export type VoiceProfileStatus = "pending_sample" | "processing" | "ready" | "failed";
+
+/**
+ * Ein Voice-Clone pro User (Fish Audio). Das Sample (30-240s Sprachaufnahme)
+ * liegt in Bunny Storage unter `intro/{userId}/…`; nach dem Training hält
+ * `fishModelId` die Referenz für TTS-Calls. Einwilligungen (Stimm-Klonen +
+ * KI-Generierung) werden mit Zeitstempel, Textversion und Request-IP
+ * festgehalten (DSGVO-Nachweis).
+ */
+export const voiceProfiles = pgTable("voice_profiles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending_sample").$type<VoiceProfileStatus>(),
+  fishModelId: text("fish_model_id"),
+  sampleUrl: text("sample_url"),
+  sampleDurationSec: integer("sample_duration_sec"),
+  consentVoiceAt: timestamp("consent_voice_at", { withTimezone: true }),
+  consentAiAt: timestamp("consent_ai_at", { withTimezone: true }),
+  consentTextVersion: text("consent_text_version"),
+  consentIp: text("consent_ip"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type VoiceProfile = typeof voiceProfiles.$inferSelect;
+
+export type IntroCalibrationStatus = "pending" | "running" | "ready" | "failed";
+
+/**
+ * Kalibrierung eines Webcam-Videos für das Intro-Feature (eine Row pro
+ * Media-Item). Der Worker (`processors/intro-calibration.ts`) analysiert
+ * die Audiospur: Wo beginnt Sprache, wo endet der erste Satz
+ * (`anchorEndMs` = Start der Atempause), wo setzt das Original wieder ein
+ * (`resumeMs`, frame-aligned). Dazu Loudness- (`lufsRef`) und Spektral-
+ * Referenz (`spectralRef`, Band → normalisiertes dB) fürs TTS-Matching
+ * sowie ein extrahierter Raumton (`roomtoneUrl`).
+ */
+export const introCalibrations = pgTable("intro_calibrations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  mediaItemId: uuid("media_item_id").notNull().unique().references(() => mediaItems.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending").$type<IntroCalibrationStatus>(),
+  transcriptSentence: text("transcript_sentence"),
+  ttsTemplate: text("tts_template"),
+  speechStartMs: integer("speech_start_ms"),
+  anchorEndMs: integer("anchor_end_ms"),
+  resumeMs: integer("resume_ms"),
+  lufsRef: real("lufs_ref"),
+  spectralRef: jsonb("spectral_ref").$type<Record<string, number> | null>(),
+  roomtoneUrl: text("roomtone_url"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("intro_calib_user_idx").on(t.userId),
+}));
+
+export type IntroCalibration = typeof introCalibrations.$inferSelect;

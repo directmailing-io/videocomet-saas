@@ -44,3 +44,6 @@ Thumbs.db
 
 # drizzle
 drizzle/meta/
+
+# PoC-Testmaterial personalisierte Begrüßung (Stimm-/Videoaufnahmen, nicht committen)
+intro-poc/

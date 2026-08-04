@@ -87,6 +87,8 @@ export default async function CampaignEditPage({
       // Migration 0019 — Modus + Play-Icon-Overlay.
       thumbnailMode: campaign.thumbnailMode,
       thumbnailPlayIcon: campaign.thumbnailPlayIcon,
+      // Migration 0042 — Personalisierte Video-Begrüßung.
+      introEnabled: campaign.introEnabled,
     },
     webcams: webcams.map((w) => ({
       id: w.id,

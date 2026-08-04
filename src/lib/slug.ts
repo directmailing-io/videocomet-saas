@@ -97,6 +97,8 @@ export const RESERVED_SLUGS = new Set<string>([
   "lp-block", "cv", "c", "r",
   // Password-Reset (Top-Level-Routen in src/app/)
   "passwort-vergessen", "passwort-zuruecksetzen",
+  // Signup + E-Mail-Verifizierung, Abmelde-/Share-Links, Domain-Root-Redirect
+  "signup", "abmelden", "share", "domain-root",
   // Bridge-Script (wird vom Custom-LP Sandbox via /__videocomet-bridge.js
   // serviert; ein Lead-Slug `__videocomet-bridge.js` würde den Script-Pfad
   // schatten und Trackings brechen).

@@ -34,6 +34,10 @@ import { BulkActionBar } from "./_components/bulk-action-bar";
 import { ConfirmModal } from "./_components/confirm-modal";
 import { useSelection } from "./_components/use-selection";
 import { useKeyboardShortcuts } from "./_components/use-keyboard-shortcuts";
+import {
+  IntroPreviewSection,
+  type IntroPreviewInfo,
+} from "./_components/intro-preview-section";
 import type { PreflightLead, PreflightStatus } from "./_components/lead-card";
 
 /**
@@ -54,6 +58,8 @@ interface StatusPayload {
   startedAt: string;
   completedAt: string | null;
   progressPercent: number;
+  /** Personalisierte Video-Begrüßung (optional für ältere Server-Builds). */
+  intro?: IntroPreviewInfo;
 }
 
 interface LeadsResponse {
@@ -105,6 +111,9 @@ export function PreflightReviewClient({
     "initial" | "ready" | "error"
   >("initial");
   const [view, setView] = React.useState<FilterKey>("problematic");
+  // Einmalige Auto-Korrektur nach dem ersten Laden: der Default-Filter
+  // "Auffällig" wäre bei 0 auffälligen Leads eine leere Sicht.
+  const viewAutoAdjusted = React.useRef(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [ctxMenu, setCtxMenu] = React.useState<{
     leadId: string;
@@ -118,8 +127,17 @@ export function PreflightReviewClient({
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [confirmLoading, setConfirmLoading] = React.useState(false);
   const [bulkRemoveLoading, setBulkRemoveLoading] = React.useState(false);
+  // Personalisierte Video-Begrüßung: Status-Block + Pflicht-Checkbox.
+  const [intro, setIntro] = React.useState<IntroPreviewInfo | null>(null);
+  const [introChecked, setIntroChecked] = React.useState(false);
 
   const selection = useSelection(runId);
+
+  React.useEffect(() => {
+    if (loadingState !== "ready" || viewAutoAdjusted.current) return;
+    viewAutoAdjusted.current = true;
+    if (counts.problematic === 0) setView("all");
+  }, [loadingState, counts.problematic]);
 
   // ── Data fetching ────────────────────────────────────────────────
   const loadLeads = React.useCallback(async () => {
@@ -146,6 +164,7 @@ export function PreflightReviewClient({
       setCounts(data.counts);
       setRunStatus(data.runStatus);
       setProgressPercent(data.progressPercent);
+      setIntro(data.intro ?? null);
     } catch {
       // Polling-Fallback fängt das spätere Refresh.
     }
@@ -431,9 +450,28 @@ export function PreflightReviewClient({
     [runId, toast],
   );
 
+  // Intro-Gate: Solange Beispielvideos vorliegen aber noch nicht bestätigt
+  // sind, darf die Vollproduktion nicht starten.
+  const introApprovalRequired = Boolean(
+    intro?.enabled &&
+      intro.voiceReady &&
+      intro.previews.length > 0 &&
+      intro.previewApprovedAt === null,
+  );
+
   const handleApprove = React.useCallback(async (
     options?: { approveAlsoProblematic?: boolean },
   ) => {
+    if (introApprovalRequired && !introChecked) {
+      setConfirmOpen(false);
+      toast({
+        variant: "danger",
+        title: "Beispielvideos noch nicht freigegeben",
+        description:
+          "Bitte prüfe die Beispielvideos der personalisierten Begrüßung und setze das Häkchen zur Freigabe.",
+      });
+      return;
+    }
     setConfirmLoading(true);
     try {
       const res = await fetch(`/api/runs/${runId}/preflight/approve`, {
@@ -442,8 +480,27 @@ export function PreflightReviewClient({
         body: JSON.stringify({
           rejectedLeadIds: [],
           approveAlsoProblematic: options?.approveAlsoProblematic ?? false,
+          // Personalisierte Begrüßung: bestätigte Beispielvideos.
+          introApproved:
+            introChecked || Boolean(intro?.previewApprovedAt),
         }),
       });
+      if (res.status === 400) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (body.error === "intro_preview_not_approved") {
+          setConfirmOpen(false);
+          toast({
+            variant: "danger",
+            title: "Beispielvideos noch nicht freigegeben",
+            description:
+              "Bitte prüfe die Beispielvideos der personalisierten Begrüßung und setze das Häkchen zur Freigabe.",
+          });
+          return;
+        }
+        throw new Error(body.error ?? "HTTP 400");
+      }
       if (res.status === 409) {
         toast({
           variant: "danger",
@@ -473,7 +530,16 @@ export function PreflightReviewClient({
       setConfirmLoading(false);
       setConfirmOpen(false);
     }
-  }, [runId, campaignId, router, selection, toast]);
+  }, [
+    runId,
+    campaignId,
+    router,
+    selection,
+    toast,
+    intro,
+    introChecked,
+    introApprovalRequired,
+  ]);
 
   // ── Card-Selection-Layer ───────────────────────────────────────
   const onSelectToggle = React.useCallback(
@@ -818,6 +884,15 @@ export function PreflightReviewClient({
             onSearchChange={setSearchQuery}
           />
         </div>
+
+        {/* Personalisierte Begrüßung: Beispielvideos prüfen / Status */}
+        {intro && (
+          <IntroPreviewSection
+            intro={intro}
+            checked={introChecked}
+            onCheckedChange={setIntroChecked}
+          />
+        )}
 
         {/* All-problematic Callout */}
         {allProblematic && (

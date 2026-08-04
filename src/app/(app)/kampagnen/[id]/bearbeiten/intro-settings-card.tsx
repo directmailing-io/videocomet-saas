@@ -1,0 +1,435 @@
+"use client";
+
+/**
+ * Kampagnen-Karte "Personalisierte Begrüßung" (Intro-Feature).
+ *
+ * Voraussetzungs-Kette, jede Stufe mit genau EINER Aktion:
+ *   1. Kein Webcam-Video          → Hinweis (Aktion liegt in der Webcam-Karte)
+ *   2. Keine fertige KI-Stimme    → Link zu Einstellungen → KI-Stimme
+ *   3. Video nicht kalibriert     → Button "Video analysieren" + Polling
+ *   4. Alles bereit               → Toggle + Begrüßungs-Vorlage editierbar
+ *
+ * Ein Wechsel des Kampagnen-Webcam-Videos triggert automatisch einen
+ * Re-Check der Kalibrierung (Effect auf `webcamMediaId`).
+ */
+
+import * as React from "react";
+import Link from "next/link";
+import {
+  AlertCircle,
+  Check,
+  Save,
+  ScanLine,
+  Sparkles,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/components/ui/toaster";
+import { DEFAULT_TTS_TEMPLATE } from "@/lib/intro";
+import { cn } from "@/lib/utils";
+
+// ── API-Verträge ─────────────────────────────────────────────────────────
+
+interface VoiceProfileDto {
+  id: string;
+  status: "pending_sample" | "processing" | "ready" | "failed";
+}
+
+interface CalibrationDto {
+  id: string;
+  status: "pending" | "running" | "ready" | "failed";
+  transcriptSentence: string | null;
+  ttsTemplate: string | null;
+  error: string | null;
+}
+
+/** Analyse-Fehler-Codes des Workers → deutsche Hinweise. */
+function calibrationErrorHint(code: string | null): string {
+  switch (code) {
+    case "no_pause_detected":
+      return "Wir konnten keine Sprechpause nach der Begrüßung finden. Bitte nimm das Video mit einer kurzen Pause nach dem ersten Satz neu auf.";
+    case "no_speech_detected":
+      return "Wir konnten keine Sprache am Anfang des Videos erkennen. Bitte prüfe die Tonspur des Videos.";
+    case "transcription_failed":
+      return "Die Tonspur konnte nicht ausgewertet werden. Bitte versuche die Analyse erneut.";
+    default:
+      return "Die Analyse ist fehlgeschlagen. Bitte versuche es erneut oder nimm das Video neu auf.";
+  }
+}
+
+export function IntroSettingsCard({
+  campaignId,
+  webcamMediaId,
+  initialEnabled,
+}: {
+  campaignId: string;
+  webcamMediaId: string | null;
+  initialEnabled: boolean;
+}) {
+  const { toast } = useToast();
+
+  const [voiceStatus, setVoiceStatus] = React.useState<
+    "loading" | "none" | "processing" | "ready"
+  >("loading");
+  const [calibration, setCalibration] = React.useState<CalibrationDto | null>(
+    null,
+  );
+  const [calibrationLoading, setCalibrationLoading] = React.useState(false);
+  const [analyzeStarting, setAnalyzeStarting] = React.useState(false);
+  const [enabled, setEnabled] = React.useState(initialEnabled);
+  const [toggleSaving, setToggleSaving] = React.useState(false);
+
+  // Begrüßungs-Vorlage (editierbar, muss {vorname} enthalten).
+  const [template, setTemplate] = React.useState<string>(DEFAULT_TTS_TEMPLATE);
+  const [templateTouched, setTemplateTouched] = React.useState(false);
+  const [templateSaving, setTemplateSaving] = React.useState(false);
+
+  // ── KI-Stimme laden ─────────────────────────────────────────────────
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/voice-profile", { cache: "no-store" });
+        if (!res.ok) throw new Error();
+        const data = (await res.json()) as { profile: VoiceProfileDto | null };
+        if (cancelled) return;
+        if (data.profile?.status === "ready") setVoiceStatus("ready");
+        else if (data.profile?.status === "processing")
+          setVoiceStatus("processing");
+        else setVoiceStatus("none");
+      } catch {
+        if (!cancelled) setVoiceStatus("none");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ── Kalibrierung laden (re-check bei Webcam-Wechsel) ────────────────
+  const loadCalibration = React.useCallback(async () => {
+    if (!webcamMediaId) {
+      setCalibration(null);
+      return;
+    }
+    setCalibrationLoading(true);
+    try {
+      const res = await fetch(
+        `/api/media/${webcamMediaId}/intro-calibration`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) throw new Error();
+      const data = (await res.json()) as { calibration: CalibrationDto | null };
+      setCalibration(data.calibration);
+      if (data.calibration?.ttsTemplate && !templateTouched) {
+        setTemplate(data.calibration.ttsTemplate);
+      }
+    } catch {
+      setCalibration(null);
+    } finally {
+      setCalibrationLoading(false);
+    }
+    // templateTouched bewusst nicht in den Deps — der User-Edit soll beim
+    // Polling nicht überschrieben werden.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [webcamMediaId]);
+
+  React.useEffect(() => {
+    // Webcam gewechselt → Vorlage-Editing zurücksetzen und neu laden.
+    setTemplateTouched(false);
+    setTemplate(DEFAULT_TTS_TEMPLATE);
+    void loadCalibration();
+  }, [loadCalibration]);
+
+  // Polling alle 5s solange die Analyse läuft.
+  const calibrationRunning =
+    calibration?.status === "pending" || calibration?.status === "running";
+  React.useEffect(() => {
+    if (!calibrationRunning) return;
+    const handle = window.setInterval(() => {
+      void loadCalibration();
+    }, 5000);
+    return () => window.clearInterval(handle);
+  }, [calibrationRunning, loadCalibration]);
+
+  // ── Aktionen ────────────────────────────────────────────────────────
+  async function startAnalysis() {
+    if (!webcamMediaId) return;
+    setAnalyzeStarting(true);
+    try {
+      const res = await fetch(
+        `/api/media/${webcamMediaId}/intro-calibration`,
+        { method: "POST" },
+      );
+      const body = (await res.json().catch(() => ({}))) as {
+        calibration?: CalibrationDto;
+        error?: string;
+      };
+      if (!res.ok) {
+        toast({
+          title: "Analyse konnte nicht gestartet werden",
+          description: body.error ?? "Bitte erneut versuchen.",
+          variant: "danger",
+        });
+        return;
+      }
+      setCalibration(body.calibration ?? null);
+    } catch {
+      toast({
+        title: "Analyse konnte nicht gestartet werden",
+        description: "Verbindung zum Server fehlgeschlagen.",
+        variant: "danger",
+      });
+    } finally {
+      setAnalyzeStarting(false);
+    }
+  }
+
+  async function saveToggle(next: boolean) {
+    setEnabled(next);
+    setToggleSaving(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ introEnabled: next }),
+      });
+      if (!res.ok) throw new Error();
+      toast({
+        title: "Gespeichert",
+        description: next
+          ? "Personalisierte Begrüßung ist aktiv."
+          : "Personalisierte Begrüßung ist deaktiviert.",
+        variant: "success",
+      });
+    } catch {
+      setEnabled(!next);
+      toast({
+        title: "Speichern fehlgeschlagen",
+        description: "Bitte erneut versuchen.",
+        variant: "danger",
+      });
+    } finally {
+      setToggleSaving(false);
+    }
+  }
+
+  const templateValid = template.trim().length > 0 && template.includes("{vorname}");
+
+  async function saveTemplate() {
+    if (!webcamMediaId || !templateValid) return;
+    setTemplateSaving(true);
+    try {
+      const res = await fetch(
+        `/api/media/${webcamMediaId}/intro-calibration`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ttsTemplate: template.trim() }),
+        },
+      );
+      const body = (await res.json().catch(() => ({}))) as {
+        calibration?: CalibrationDto;
+        error?: string;
+      };
+      if (!res.ok) {
+        toast({
+          title: "Speichern fehlgeschlagen",
+          description: body.error ?? "Bitte erneut versuchen.",
+          variant: "danger",
+        });
+        return;
+      }
+      setTemplateTouched(false);
+      if (body.calibration) setCalibration(body.calibration);
+      toast({
+        title: "Gespeichert",
+        description: "Begrüßungs-Vorlage",
+        variant: "success",
+      });
+    } catch {
+      toast({
+        title: "Speichern fehlgeschlagen",
+        description: "Verbindung zum Server fehlgeschlagen.",
+        variant: "danger",
+      });
+    } finally {
+      setTemplateSaving(false);
+    }
+  }
+
+  const previewLine = templateValid
+    ? template.replaceAll("{vorname}", "Jürgen")
+    : null;
+
+  const ready =
+    voiceStatus === "ready" && calibration?.status === "ready";
+
+  // ── Render ──────────────────────────────────────────────────────────
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center gap-2">
+          <CardTitle>Personalisierte Begrüßung</CardTitle>
+          <Badge variant="brand">
+            <Sparkles className="size-3" />
+            KI
+          </Badge>
+          <Badge variant="neutral">2 Credits pro Video</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <p className="text-sm text-ink-muted leading-relaxed">
+            Der erste Satz deines Videos wird pro Lead mit Vornamen
+            gesprochen, in deiner Stimme und mit passenden Lippenbewegungen.
+            <span className="block text-xs mt-1">
+              Bei nicht nutzbarem Vornamen automatisch Original-Video, 1
+              Credit.
+            </span>
+          </p>
+          <Switch
+            checked={enabled}
+            disabled={!ready || toggleSaving}
+            onCheckedChange={(v) => void saveToggle(v)}
+            aria-label="Personalisierte Begrüßung aktivieren"
+          />
+        </div>
+
+        {/* Voraussetzungs-Stufen */}
+        {voiceStatus === "loading" || (calibrationLoading && !calibration) ? (
+          <div className="flex items-center gap-2 rounded-squircle-sm bg-surface-soft px-4 py-3 text-sm text-ink-muted">
+            <span className="inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            Status wird geprüft ...
+          </div>
+        ) : !webcamMediaId ? (
+          <PrereqHint text="Wähle zuerst oben ein Webcam-Video für diese Kampagne." />
+        ) : voiceStatus === "none" ? (
+          <PrereqHint
+            text="Du brauchst einmalig eine KI-Stimme aus deiner Stimmprobe."
+            action={
+              <Button asChild variant="subtle" size="sm">
+                <Link href="/einstellungen?tab=ki-stimme">
+                  KI-Stimme einrichten
+                </Link>
+              </Button>
+            }
+          />
+        ) : voiceStatus === "processing" ? (
+          <PrereqHint text="Deine KI-Stimme wird gerade trainiert. Das dauert nur wenige Minuten." />
+        ) : !calibration || calibration.status === "failed" ? (
+          <div className="rounded-squircle-sm bg-surface-soft px-4 py-3 space-y-3">
+            {calibration?.status === "failed" && (
+              <p className="flex items-start gap-2 text-sm text-danger">
+                <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                {calibrationErrorHint(calibration.error)}
+              </p>
+            )}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-ink-muted">
+                {calibration?.status === "failed"
+                  ? "Du kannst die Analyse erneut starten."
+                  : "Wir analysieren einmalig den ersten Satz deines Videos."}
+              </p>
+              <Button
+                variant="subtle"
+                size="sm"
+                loading={analyzeStarting}
+                iconLeft={<ScanLine className="size-4" />}
+                onClick={() => void startAnalysis()}
+              >
+                {calibration?.status === "failed"
+                  ? "Erneut analysieren"
+                  : "Video analysieren"}
+              </Button>
+            </div>
+          </div>
+        ) : calibrationRunning ? (
+          <div className="flex items-center gap-3 rounded-squircle-sm bg-brand-soft px-4 py-3 text-sm text-brand-deep">
+            <span className="inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            Video wird analysiert, das dauert etwa eine Minute ...
+          </div>
+        ) : (
+          <div className="space-y-4 pt-1 border-t border-line-soft">
+            {calibration.transcriptSentence && (
+              <div className="pt-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-1.5">
+                  Erkannter erster Satz
+                </p>
+                <p className="flex items-start gap-2 text-sm text-ink leading-relaxed">
+                  <Check className="size-4 text-ok shrink-0 mt-0.5" />
+                  <span className="italic">
+                    &bdquo;{calibration.transcriptSentence}&ldquo;
+                  </span>
+                </p>
+              </div>
+            )}
+
+            <div className={cn(!calibration.transcriptSentence && "pt-3")}>
+              <Label htmlFor="intro-tts-template">Begrüßungs-Vorlage</Label>
+              <div className="flex gap-2 items-start">
+                <div className="flex-1">
+                  <Input
+                    id="intro-tts-template"
+                    value={template}
+                    maxLength={200}
+                    aria-invalid={!templateValid ? true : undefined}
+                    onChange={(e) => {
+                      setTemplate(e.target.value);
+                      setTemplateTouched(true);
+                    }}
+                    placeholder={DEFAULT_TTS_TEMPLATE}
+                  />
+                  {!templateValid ? (
+                    <p className="mt-1.5 text-xs text-danger">
+                      Die Vorlage muss den Platzhalter{" "}
+                      <span className="font-mono">{"{vorname}"}</span>{" "}
+                      enthalten.
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-xs text-ink-muted">
+                      Beispiel:{" "}
+                      <span className="font-medium text-ink">
+                        {previewLine}
+                      </span>
+                    </p>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1"
+                  disabled={!templateValid || !templateTouched}
+                  loading={templateSaving}
+                  iconLeft={<Save className="size-4" />}
+                  onClick={() => void saveTemplate()}
+                >
+                  Speichern
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PrereqHint({
+  text,
+  action,
+}: {
+  text: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-squircle-sm bg-surface-soft px-4 py-3">
+      <p className="text-sm text-ink-muted">{text}</p>
+      {action}
+    </div>
+  );
+}

@@ -185,6 +185,15 @@ export async function POST(
   // in der DB die nie generiert werden koennen.
   const rowsIn = cm.parsed.rows;
   const plannedLeadCount = rowsIn.length;
+  // Kampagnen mit personalisierter Video-Begrüßung (intro_enabled)
+  // reservieren konservativ 2 Credits pro Lead — der tatsächliche Charge
+  // pro Lead ist 2 (Intro generiert) bzw. 1 (Fallback).
+  const [campaignBilling] = await db
+    .select({ introEnabled: campaigns.introEnabled })
+    .from(campaigns)
+    .where(eq(campaigns.id, run.campaignId))
+    .limit(1);
+  const pricePerVideo = campaignBilling?.introEnabled ? 2 : 1;
   try {
     const { assertBillingReadyForRun } = await import(
       "@/lib/billing/run-gate"
@@ -192,6 +201,7 @@ export async function POST(
     await assertBillingReadyForRun({
       userId: auth.user.id,
       plannedLeadCount,
+      pricePerVideo,
     });
   } catch (err) {
     if (err && typeof err === "object" && "kind" in err) {
@@ -431,6 +441,8 @@ export async function POST(
   const [campaignRow] = await db
     .select({
       mode: campaigns.mode,
+      introEnabled: campaigns.introEnabled,
+      webcamMediaId: campaigns.webcamMediaId,
       abTestingEnabled: campaigns.abTestingEnabled,
       pdfEnabled: campaigns.pdfEnabled,
       pdfGoogleDocsUrl: campaigns.pdfGoogleDocsUrl,
@@ -527,6 +539,77 @@ export async function POST(
         preflightCompletedAt: sql`NOW()`,
       })
       .where(and(eq(leads.runId, params.id), isNull(leads.removedAt)));
+
+    // ── Intro-Vorschau-Gate für webcam-only ──────────────────────────────
+    // Webcam-only überspringt zwar die Screenshot-Vorprüfung, aber Kampagnen
+    // mit aktivierter personalisierter Begrüßung brauchen trotzdem die
+    // Vorschau-Runde: Previews generieren → User bestätigt → Produktion
+    // (Approve-Route prüft `introApproved`). Nur wenn Voice + Kalibrierung
+    // wirklich `ready` sind — sonst bliebe der Run ohne aktives Gate in
+    // `awaiting_approval` hängen und wir nehmen wie bisher den Direkt-Pfad.
+    if (campaignRow?.introEnabled === true && campaignRow.webcamMediaId) {
+      const { voiceProfiles, introCalibrations } = await import(
+        "@/lib/db/schema"
+      );
+      const [voice] = await db
+        .select({ status: voiceProfiles.status })
+        .from(voiceProfiles)
+        .where(eq(voiceProfiles.userId, auth.user.id))
+        .limit(1);
+      const [calib] = await db
+        .select({ status: introCalibrations.status })
+        .from(introCalibrations)
+        .where(eq(introCalibrations.mediaItemId, campaignRow.webcamMediaId))
+        .limit(1);
+      if (voice?.status === "ready" && calib?.status === "ready") {
+        await updateRun(params.id, auth.user.id, {
+          status: "awaiting_approval",
+          preflightStartedAt: new Date(),
+          preflightCompletedAt: new Date(),
+          totalLeads: inserted,
+          approvedLeadCount: inserted - incompleteCount - dedupeRemovedCount,
+          customLpVersionId,
+          abConfig,
+        });
+
+        await db
+          .update(runs)
+          .set({
+            // placeholderMapping muss den Start überleben (s.u.).
+            columnMapping: {
+              mapping,
+              ...(cm.placeholderMapping
+                ? { placeholderMapping: cm.placeholderMapping }
+                : {}),
+            } as unknown as Record<string, string>,
+          })
+          .where(and(eq(runs.id, params.id), eq(runs.userId, auth.user.id)));
+
+        try {
+          const { enqueueIntroPreviewJob } = await import(
+            "@/worker/intro-queue"
+          );
+          await enqueueIntroPreviewJob(params.id);
+        } catch (err) {
+          // Best effort — der Recovery-Watcher im Worker enqueued Previews
+          // für awaiting_approval-Runs nicht nach, aber der User kann die
+          // Runde über die Review-Seite trotzdem freigeben (Gate greift
+          // nur bei vorhandenen Previews).
+          // eslint-disable-next-line no-console
+          console.error("[runs:start] intro-preview enqueue failed:", err);
+        }
+
+        return NextResponse.json({
+          ok: true,
+          preflightSkipped: false,
+          introPreviewPending: true,
+          totalLeads: inserted,
+          queuedForPreflight: 0,
+          alreadyDisqualified: 0,
+          dedupeRemoved: dedupeRemovedCount,
+        });
+      }
+    }
 
     await updateRun(params.id, auth.user.id, {
       status: "approved",

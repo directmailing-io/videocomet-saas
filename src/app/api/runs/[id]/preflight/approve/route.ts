@@ -3,7 +3,10 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
+import { db } from "@/lib/db";
+import { campaigns } from "@/lib/db/schema";
 import {
   approveLeads,
   markLeadsRemoved,
@@ -18,6 +21,12 @@ import { enqueueApprovedLeadsForPhase2 } from "@/lib/preflight/job-enqueue";
 const BodySchema = z.object({
   rejectedLeadIds: z.array(z.string().uuid()).optional().default([]),
   approveAlsoProblematic: z.boolean().optional().default(false),
+  /**
+   * Explizite Bestätigung der Intro-Vorschau (personalisierte Video-
+   * Begrüßung). Pflicht, wenn die Kampagne intro_enabled hat UND
+   * Vorschau-Videos vorliegen (`runs.intro_preview` nicht leer).
+   */
+  introApproved: z.boolean().optional().default(false),
 });
 
 /**
@@ -60,7 +69,7 @@ export async function POST(
       { status: 400 },
     );
   }
-  const { rejectedLeadIds, approveAlsoProblematic } = parsed.data;
+  const { rejectedLeadIds, approveAlsoProblematic, introApproved } = parsed.data;
 
   let run;
   try {
@@ -91,6 +100,35 @@ export async function POST(
     );
   }
 
+  // ── 0. Intro-Vorschau-Gate ───────────────────────────────────────────
+  // Kampagnen mit personalisierter Video-Begrüßung: liegen Vorschau-Videos
+  // vor, muss der User sie explizit bestätigen (introApproved=true), bevor
+  // die Runde freigegeben wird. Kein/leeres Preview-Array = kein Gate
+  // (Feature nicht bereit oder alle Previews fehlgeschlagen — dann läuft
+  // die Pipeline ohnehin mit Fallback-Logik).
+  let introGateActive = false;
+  const introPreviews = run.introPreview;
+  if (Array.isArray(introPreviews) && introPreviews.length > 0) {
+    const [campaign] = await db
+      .select({ introEnabled: campaigns.introEnabled })
+      .from(campaigns)
+      .where(eq(campaigns.id, run.campaignId))
+      .limit(1);
+    if (campaign?.introEnabled) {
+      introGateActive = true;
+      if (!introApproved) {
+        return NextResponse.json(
+          {
+            error: "intro_preview_not_approved",
+            details:
+              "Die Vorschau der personalisierten Begrüßung muss vor der Freigabe bestätigt werden.",
+          },
+          { status: 400 },
+        );
+      }
+    }
+  }
+
   // ── 1. Reject explizit gelistete Leads ──────────────────────────────
   let rejectedCount = 0;
   if (rejectedLeadIds.length > 0) {
@@ -118,10 +156,13 @@ export async function POST(
   });
 
   // ── 4. Run-Status hochziehen (atomic) ───────────────────────────────
+  // Bei aktivem Intro-Gate wird die Bestätigung der Vorschau im selben
+  // Update mit Zeitstempel festgehalten.
   const transition = await setRunStatus(
     params.id,
     auth.user.id,
     "approved",
+    introGateActive ? { introPreviewApprovedAt: new Date() } : undefined,
   );
   if (!transition.ok) {
     return NextResponse.json(

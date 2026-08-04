@@ -64,6 +64,10 @@ const patchSchema = z.object({
     .enum(["frame", "custom_image", "landingpage_screenshot"])
     .optional(),
   thumbnailPlayIcon: z.boolean().optional(),
+  // ── Personalisierte Video-Begrüßung (Migration 0042) ────────────────────
+  // Aktivierung setzt UI-seitig ein ready-Voice-Profil + Kalibrierung
+  // voraus; die Pipeline fällt sonst automatisch aufs Original zurück.
+  introEnabled: z.boolean().optional(),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
