@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { RecordingHint } from "@/components/intro/recording-hint";
 import {
   Dialog,
   DialogContent,
@@ -247,6 +248,7 @@ export function WizardStep1Webcam({
   return (
     <div>
       <div className="space-y-4">
+          <RecordingHint />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm text-ink-muted">
               {webcams.length === 0

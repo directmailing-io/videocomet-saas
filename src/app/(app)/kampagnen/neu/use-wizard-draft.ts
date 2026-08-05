@@ -30,7 +30,9 @@ import type { WizardState } from "./wizard-container";
  */
 
 // v2: Intro-Schritt eingefügt — Step-Indizes alter Drafts passen nicht mehr.
-const STORAGE_VERSION = 2;
+// v3: Step-Reihenfolge geändert (KI-Begrüßung ist jetzt Step 1 direkt nach
+//     Webcam) — Step-Indizes alter Drafts verweisen auf falsche Screens.
+const STORAGE_VERSION = 3;
 const DEBOUNCE_MS = 600;
 
 export type DraftSaveStatus = "idle" | "saving" | "saved" | "error";

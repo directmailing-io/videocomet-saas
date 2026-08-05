@@ -163,6 +163,11 @@ const STEP_META: StepMeta[] = [
     desc: "Nutze eine vorhandene Aufnahme oder nimm direkt eine neue auf.",
   },
   {
+    label: "KI-Begrüßung",
+    title: "Persönliche KI-Begrüßung",
+    desc: "Optional: jeder Lead wird mit Vornamen begrüßt, in deiner Stimme.",
+  },
+  {
     label: "Modus",
     title: "Modus wählen",
     desc: "Bestimme, wie deine Kampagne aufgebaut ist.",
@@ -183,11 +188,6 @@ const STEP_META: StepMeta[] = [
     desc: "Optional: personalisierter Brief mit QR-Code und Vorschaubild.",
   },
   {
-    label: "KI-Begrüßung",
-    title: "Persönliche KI-Begrüßung",
-    desc: "Optional: jeder Lead wird mit Vornamen begrüßt, in deiner Stimme.",
-  },
-  {
     label: "Fertigstellen",
     title: "Zusammenfassung",
     desc: "Prüfe alles und gib deiner Kampagne einen Namen.",
@@ -195,12 +195,12 @@ const STEP_META: StepMeta[] = [
 ];
 
 /**
- * Editor-Step (Index 2) wird nur gezeigt, wenn der Modus „with-presentation"
+ * Editor-Step (Index 3) wird nur gezeigt, wenn der Modus „with-presentation"
  * gewählt ist. Wir behalten ihn als sichtbaren-aber-disabled Schritt in der
  * Progress-Anzeige, damit es für den Nutzer keine plötzlichen „der Wizard ist
  * jetzt anders lang"-Sprünge gibt.
  */
-const EDITOR_STEP_INDEX = 2;
+const EDITOR_STEP_INDEX = 3;
 
 export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProps) {
   const router = useRouter();
@@ -275,13 +275,13 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
 
   function next() {
     let nextStep = step + 1;
-    if (nextStep === 2 && skipEditor) nextStep = 3;
+    if (nextStep === EDITOR_STEP_INDEX && skipEditor) nextStep = EDITOR_STEP_INDEX + 1;
     setStep(Math.min(nextStep, totalSteps - 1));
   }
 
   function back() {
     let prevStep = step - 1;
-    if (prevStep === 2 && skipEditor) prevStep = 1;
+    if (prevStep === EDITOR_STEP_INDEX && skipEditor) prevStep = EDITOR_STEP_INDEX - 1;
     setStep(Math.max(prevStep, 0));
   }
 
@@ -360,13 +360,16 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
   }
 
   // Validation per step (basic)
+  // Reihenfolge: 0 Webcam, 1 KI-Begrüßung, 2 Modus, 3 Editor,
+  // 4 Landingpage, 5 PDF-Brief, 6 Fertigstellen.
   const canProceed = (() => {
     if (step === 0) return Boolean(state.webcamMediaId);
-    if (step === 1) return Boolean(state.mode);
-    if (step === 2) return true;
-    if (step === 3)
+    if (step === 1) return true; // KI-Begrüßung ist immer optional
+    if (step === 2) return Boolean(state.mode);
+    if (step === 3) return true; // Editor: keine Pflichtvalidierung
+    if (step === 4)
       return Boolean(state.landingPageTemplateId || state.customLpTemplateId);
-    if (step === 4) {
+    if (step === 5) {
       if (!state.pdfEnabled) return true;
       if (state.pdfGoogleDocsUrl.trim().length === 0) return false;
       // A/B eingeschaltet → Brief B ist Pflicht, sonst wäre der Test
@@ -376,7 +379,6 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
       }
       return true;
     }
-    if (step === 5) return true;
     if (step === 6) return state.name.trim().length > 0;
     return true;
   })();
@@ -401,12 +403,19 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
           />
         )}
         {step === 1 && (
+          <WizardStepIntro
+            enabled={state.introEnabled}
+            onChange={(introEnabled) => update({ introEnabled })}
+            webcamMediaId={state.webcamMediaId}
+          />
+        )}
+        {step === 2 && (
           <WizardStep2Modus
             value={state.mode}
             onChange={(mode) => update({ mode })}
           />
         )}
-        {step === 2 && !skipEditor && (() => {
+        {step === 3 && !skipEditor && (() => {
           const wc = webcams.find((w) => w.id === state.webcamMediaId);
           return (
             <WizardStep3Editor
@@ -422,7 +431,7 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
             />
           );
         })()}
-        {step === 3 && (
+        {step === 4 && (
           <WizardStep4Landingpage
             templates={initialData.templates}
             value={state.landingPageTemplateId}
@@ -458,7 +467,7 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
             reloading={reloading}
           />
         )}
-        {step === 4 && (() => {
+        {step === 5 && (() => {
           const wc = webcams.find((w) => w.id === state.webcamMediaId);
           return (
             <WizardStep5Pdf
@@ -482,13 +491,6 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
             />
           );
         })()}
-        {step === 5 && (
-          <WizardStepIntro
-            enabled={state.introEnabled}
-            onChange={(introEnabled) => update({ introEnabled })}
-            webcamMediaId={state.webcamMediaId}
-          />
-        )}
         {step === 6 && (
           <WizardStep6Summary
             state={state}

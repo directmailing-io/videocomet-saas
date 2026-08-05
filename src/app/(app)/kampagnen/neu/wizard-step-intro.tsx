@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Check, Info, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RecordingHint } from "@/components/intro/recording-hint";
 import { CONSENT_AI_TEXT, CONSENT_VOICE_TEXT } from "@/lib/intro";
 import { cn } from "@/lib/utils";
 
@@ -180,6 +181,7 @@ export function WizardStepIntro({
 
       {enabled && (
         <div className="rounded-squircle-lg bg-surface shadow-card p-5 space-y-3">
+          <RecordingHint />
           <p className="flex items-start gap-2.5 text-sm text-ink-muted leading-relaxed">
             <Info className="size-4 shrink-0 mt-0.5 text-ink-soft" />
             <span>

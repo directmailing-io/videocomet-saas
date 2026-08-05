@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { RecordingHint } from "@/components/intro/recording-hint";
 import {
   Select,
   SelectContent,
@@ -329,6 +330,8 @@ export function IntroSettingsCard({
             aria-label="Personalisierte Begrüßung aktivieren"
           />
         </div>
+
+        {enabled && <RecordingHint />}
 
         {enabled && (
           <p className="flex items-start gap-2 text-xs text-ink-muted leading-relaxed">
