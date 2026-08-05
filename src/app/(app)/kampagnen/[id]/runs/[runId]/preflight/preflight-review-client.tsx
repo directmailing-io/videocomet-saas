@@ -891,6 +891,7 @@ export function PreflightReviewClient({
             intro={intro}
             checked={introChecked}
             onCheckedChange={setIntroChecked}
+            campaignId={campaignId}
           />
         )}
 

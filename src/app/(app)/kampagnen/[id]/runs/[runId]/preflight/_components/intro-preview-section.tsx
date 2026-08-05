@@ -55,10 +55,13 @@ export function IntroPreviewSection({
   intro,
   checked,
   onCheckedChange,
+  campaignId,
 }: {
   intro: IntroPreviewInfo;
   checked: boolean;
   onCheckedChange: (v: boolean) => void;
+  /** Für den Direkt-Link zur Bearbeiten-Seite mit Webcam-Karte. */
+  campaignId: string;
 }) {
   if (!intro.enabled) return null;
 
@@ -100,11 +103,10 @@ export function IntroPreviewSection({
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
-                href="/ki-begruessung"
-                target="_blank"
+                href={`/kampagnen/${campaignId}/bearbeiten`}
                 className="inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-deep transition-colors"
               >
-                Setup öffnen &amp; neu aufnehmen
+                Zur Kampagne — Webcam neu aufnehmen
               </Link>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-soft px-3 py-1.5 text-xs font-medium text-ink-muted">
                 Alternativ: oben „Vollproduktion starten" — läuft dann ohne
