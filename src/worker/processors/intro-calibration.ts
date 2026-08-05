@@ -164,22 +164,18 @@ export function analyzeSilenceStructure(
       // der Legacy-Modus wäre kaputt. Wir setzen synthetic anchor damit
       // die Kalibrierung ready wird.
       anchorEndSec = sentenceStartSec + SENTENCE_MIN_SEC;
-    } else if (sentenceLen > SENTENCE_MAX_SEC || anchorEndSec >= ANCHOR_MAX_SEC) {
+    } else if (sentenceLen > SENTENCE_MAX_SEC) {
       // Satz zu lang für Legacy — für greeting-only reicht die Pause.
-      // Wir cappen anchor auf ein synthetic Ende nach SENTENCE_MAX.
-      anchorEndSec = Math.min(
-        sentenceStartSec + SENTENCE_MAX_SEC,
-        ANCHOR_MAX_SEC - 0.5,
-      );
+      // Synthetic Ende nach SENTENCE_MAX. Kein ANCHOR_MAX-Cap: die
+      // absolute Position darf gross werden (interne Referenz), das
+      // beeinflusst ffmpeg-`-t` (Dauer) nicht, nur `-ss` (Position).
+      anchorEndSec = sentenceStartSec + SENTENCE_MAX_SEC;
     }
   } else {
     // Kein breath-gap gefunden (User spricht lang durch): synthetic
-    // anchor als sentenceStart + 5s. Für greeting-only irrelevant, für
-    // Legacy fällt Engine ohnehin zurück.
-    anchorEndSec = Math.min(
-      sentenceStartSec + Math.min(SENTENCE_MAX_SEC, 5),
-      ANCHOR_MAX_SEC - 0.5,
-    );
+    // anchor als sentenceStart + 5s. Muss > sentenceStartSec bleiben,
+    // sonst würde ffmpeg -t bei ASR/Loudness-Referenz negativ.
+    anchorEndSec = sentenceStartSec + Math.min(SENTENCE_MAX_SEC, 5);
   }
 
   return {
