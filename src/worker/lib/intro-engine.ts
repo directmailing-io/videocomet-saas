@@ -243,24 +243,15 @@ export async function generatePersonalizedWebcam(
     }
   }
   const isGreetingOnly = wantsGreeting;
-  const anchorEndMs = isGreetingOnly
+  // Initialer anchorEndMs — kann in der TTS-Phase noch nach hinten
+  // wandern, wenn Fish TTS länger als die Original-Anrede-Zone spricht
+  // (siehe unten „effectiveAnchorMs"). Als let, damit die Assembly-
+  // Berechnung unten den angepassten Wert verwendet.
+  let anchorEndMs = isGreetingOnly
     ? (cal.greetingEndMs as number)
     : cal.anchorEndMs;
-  // Resume im greeting-only-Modus: möglichst nahe an den ersten Satz, damit
-  // die verbleibende Pause im Preview kurz und natürlich klingt (~300ms
-  // Rest-Atempause). Wenn sentence_start_ms nicht vorliegt (Altbestand),
-  // konservativer Fallback ans Anrede-Ende + 120ms (alte 800ms-Pause-Semantik).
+  let resumeMs = 0; // wird nach TTS-Länge unten korrekt gesetzt
   const RESIDUAL_PAUSE_MS = 300;
-  let resumeMs: number;
-  if (isGreetingOnly) {
-    const base =
-      typeof cal.sentenceStartMs === "number"
-        ? Math.max(anchorEndMs + 120, cal.sentenceStartMs - RESIDUAL_PAUSE_MS)
-        : anchorEndMs + 120;
-    resumeMs = Math.round(Math.ceil(base / FRAME_MS) * FRAME_MS);
-  } else {
-    resumeMs = cal.resumeMs;
-  }
 
   const dir = opts.workDir;
   const tag = opts.tag.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
@@ -282,39 +273,49 @@ export async function generatePersonalizedWebcam(
       return fail(tag, "tts_unmeasurable");
     }
 
-    // Speed-Anpassung: Fish TTS spricht typischerweise langsamer als
-    // ein Sprecher im Original. Wenn die generierte „Hi Christoph"-TTS
-    // länger ist als die Original-Anrede-Zone (greeting_end_ms), passen
-    // wir sie via ffmpeg-atempo an. Bis Faktor 1.4 klingt das noch
-    // natürlich, darüber wird's hektisch → dann echter Fallback.
-    const targetMs = anchorEndMs - TTS_HEADROOM_MS;
-    let ttsPath = ttsRawPath;
-    let ttsDurMs = ttsRawDurSec * 1000;
-    if (ttsDurMs > targetMs) {
-      const speedFactor = ttsDurMs / targetMs;
-      // Bis Faktor 1.8 noch akzeptabel — Anrede wird schneller
-      // gesprochen aber nicht hektisch. Darüber echter Fallback.
-      if (speedFactor > 1.8) {
-        return fail(
-          tag,
-          `tts_too_long: ${ttsDurMs.toFixed(0)}ms für ${targetMs}ms Anrede-Zone (Faktor ${speedFactor.toFixed(2)})`,
-        );
-      }
-      const spedPath = join(dir, `tts-sped-${tag}.wav`);
-      await runFfmpeg([
-        "-y",
-        "-i", ttsRawPath,
-        "-filter:a", `atempo=${speedFactor.toFixed(3)}`,
-        "-ac", "1", "-ar", String(SAMPLE_RATE),
-        spedPath,
-      ]);
-      ttsPath = spedPath;
-      const spedDurSec = await probeVideoDuration(spedPath);
-      ttsDurMs = (spedDurSec ?? ttsRawDurSec) * 1000;
+    // Konzeptioneller Umbau: Statt die TTS an eine feste Original-Zone
+    // zu quetschen (via Speed-up → hektisch), erweitern wir die Cut-Zone
+    // dynamisch auf die TTS-Länge. Das bedeutet: bei greeting-only
+    // schneidet die Engine mehr vom Original weg als greeting_end_ms
+    // vorgibt, damit die TTS in natürlicher Geschwindigkeit spielen kann.
+    // Nachteil: der Video-Content startet ein paar 100ms später —
+    // meistens fällt das in die Original-Mikro-Pause + evtl. Anfang des
+    // ersten Wortes, was für den Zuhörer nicht störend ist.
+    //
+    // Grenze: der erweiterte Cut darf NICHT über anchor_end_ms hinaus
+    // (das wäre der ganze erste Satz, Legacy-Modus), sonst ist die
+    // TTS zu lang für die Aufnahme.
+    const ttsDurMs = ttsRawDurSec * 1000;
+    const HEADROOM_MS = 50;
+    const requiredAnchorMs = Math.ceil(ttsDurMs + HEADROOM_MS);
+    // Erweitere den Anchor (=Cut-Punkt im Original) auf TTS-Länge,
+    // damit die TTS in natürlicher Geschwindigkeit spielen kann.
+    // Grenze: nicht über anchor_end (Satz-Ende), sonst wäre die TTS
+    // länger als der ganze erste Satz.
+    if (requiredAnchorMs > cal.anchorEndMs) {
+      return fail(
+        tag,
+        `tts_too_long: ${ttsDurMs.toFixed(0)}ms braucht ${requiredAnchorMs}ms Video-Zone, aber nur ${cal.anchorEndMs}ms bis zum ersten Satz-Ende`,
+      );
     }
-    // ttsPath ist ab hier die zu verwendende TTS (raw oder sped-up).
-    // Die alten Schritte lesen bisher ttsRawPath — wir aliasen darauf.
-    const ttsAdjustedPath = ttsPath;
+    if (requiredAnchorMs > anchorEndMs) {
+      anchorEndMs = requiredAnchorMs;
+    }
+    // Resume erst JETZT berechnen (mit ggf. erweitertem anchorEndMs).
+    if (isGreetingOnly) {
+      const base =
+        typeof cal.sentenceStartMs === "number"
+          ? Math.max(anchorEndMs + 120, cal.sentenceStartMs - RESIDUAL_PAUSE_MS)
+          : anchorEndMs + 120;
+      // resume darf NICHT vor dem anchorEnd liegen (sonst Overlap).
+      resumeMs = Math.max(
+        anchorEndMs,
+        Math.round(Math.ceil(base / FRAME_MS) * FRAME_MS),
+      );
+    } else {
+      resumeMs = Math.max(anchorEndMs, cal.resumeMs);
+    }
+    const ttsAdjustedPath = ttsRawPath;
 
     // ── 2. Auto-EQ + Loudness-Match ─────────────────────────────────────
     const ttsSpectrum = await measureSpectrum(ttsAdjustedPath);
