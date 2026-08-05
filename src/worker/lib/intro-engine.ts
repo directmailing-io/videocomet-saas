@@ -292,7 +292,9 @@ export async function generatePersonalizedWebcam(
     let ttsDurMs = ttsRawDurSec * 1000;
     if (ttsDurMs > targetMs) {
       const speedFactor = ttsDurMs / targetMs;
-      if (speedFactor > 1.4) {
+      // Bis Faktor 1.8 noch akzeptabel — Anrede wird schneller
+      // gesprochen aber nicht hektisch. Darüber echter Fallback.
+      if (speedFactor > 1.8) {
         return fail(
           tag,
           `tts_too_long: ${ttsDurMs.toFixed(0)}ms für ${targetMs}ms Anrede-Zone (Faktor ${speedFactor.toFixed(2)})`,
