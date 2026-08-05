@@ -56,6 +56,13 @@ const DELIBERATE_PAUSE_MIN_SEC = 0.6;
  * ~300ms Silben-Dauer.
  */
 const GREETING_MIN_SEC = 0.3;
+/**
+ * Anrede-Ende (Beginn der bewussten Pause) muss VOR dieser Sekunde
+ * liegen. Sonst hat der User keine Anrede gesprochen, sondern gleich
+ * einen monologischen Anfang — es gibt keinen sinnvollen Cut-Punkt
+ * für „Hi {vorname}" (würde 5+ Sekunden Content zerstören).
+ */
+const GREETING_MAX_SEC = 5;
 /** Erster Satz muss mindestens so lang sein, bevor eine Atempause zählt. */
 const SENTENCE_MIN_SEC = 1.5;
 /**
@@ -137,6 +144,13 @@ export function analyzeSilenceStructure(
   );
   if (!pause) {
     throw new CalibrationError("no_pause_detected");
+  }
+  // Zu späte Pause → die „Anrede" ist tatsächlich ein monologischer
+  // Anfang; ein „Hi {vorname}"-Cut würde 5+ Sekunden Inhalt vernichten.
+  // Explizit failen mit klarer User-Guidance statt semantisch falsches
+  // Ergebnis zu produzieren.
+  if (pause.start > GREETING_MAX_SEC) {
+    throw new CalibrationError("greeting_too_late");
   }
 
   const sentenceStartSec = pause.end;
