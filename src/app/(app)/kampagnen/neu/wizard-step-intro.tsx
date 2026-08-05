@@ -3,11 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { Check, Info, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CONSENT_AI_TEXT, CONSENT_VOICE_TEXT } from "@/lib/intro";
 import { cn } from "@/lib/utils";
 
 export interface WizardStepIntroProps {
   enabled: boolean;
   onChange: (enabled: boolean) => void;
+  /** Gewähltes Video aus Schritt 1 — Quelle für die Inline-Stimmerstellung. */
+  webcamMediaId: string | null;
 }
 
 interface VoiceProfileDto {
@@ -41,16 +46,59 @@ function VisualPersonalized() {
  * Wizard-Schritt "KI-Begrüßung" — Opt-in für die personalisierte
  * Video-Begrüßung direkt bei der Kampagnen-Erstellung.
  *
- * Der Schritt trifft nur die Kampagnen-Entscheidung (intro_enabled).
- * Stimm-Klon (einmalig, unter Setup → KI-Begrüßung) und die Video-
- * Kalibrierung laufen danach; die Kalibrierung wird beim Speichern der
+ * Der Schritt trifft die Kampagnen-Entscheidung (intro_enabled). Fehlt
+ * noch eine KI-Stimme, kann sie hier inline aus der Tonspur des gewählten
+ * Videos erstellt werden (POST /api/voice-profile/from-media, beide
+ * Einwilligungen Pflicht). Die Video-Kalibrierung wird beim Speichern der
  * Kampagne automatisch angestoßen. Ohne fertige Stimme rendern Videos
  * ganz normal ohne Begrüßung (1 Credit).
  */
-export function WizardStepIntro({ enabled, onChange }: WizardStepIntroProps) {
+export function WizardStepIntro({
+  enabled,
+  onChange,
+  webcamMediaId,
+}: WizardStepIntroProps) {
   const [voiceStatus, setVoiceStatus] = React.useState<
     "loading" | "none" | "processing" | "ready"
   >("loading");
+  const [consentVoice, setConsentVoice] = React.useState(false);
+  const [consentAi, setConsentAi] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+
+  async function createVoiceFromVideo() {
+    if (!webcamMediaId || !consentVoice || !consentAi) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await fetch("/api/voice-profile/from-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mediaItemId: webcamMediaId,
+          consentVoice: true,
+          consentAi: true,
+        }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(
+          data?.error ?? "Das Training konnte nicht gestartet werden.",
+        );
+      }
+      setVoiceStatus("processing");
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Das Training konnte nicht gestartet werden.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   React.useEffect(() => {
     let cancelled = false;
@@ -151,7 +199,68 @@ export function WizardStepIntro({ enabled, onChange }: WizardStepIntroProps) {
               Videos erzeugt.
             </span>
           </p>
-          {voiceStatus === "none" && (
+          {voiceStatus === "none" && webcamMediaId && (
+            <div className="rounded-squircle-sm bg-surface-soft px-4 py-4 space-y-3">
+              <p className="flex items-start gap-2.5 text-sm text-ink leading-relaxed">
+                <Sparkles className="size-4 shrink-0 mt-0.5 text-brand" />
+                <span>
+                  <strong>Du hast noch keine KI-Stimme.</strong> VIDEOCOMET
+                  kann sie direkt aus der Tonspur deines gewählten Videos
+                  erstellen: gleiches Mikrofon, gleicher Raum und genau die
+                  Sprechweise, zu der die Begrüßung später passen muss.
+                </span>
+              </p>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <Checkbox
+                  checked={consentVoice}
+                  onCheckedChange={(v) => setConsentVoice(v === true)}
+                  className="mt-0.5"
+                  aria-label="Einwilligung Stimm-Klonen"
+                />
+                <span className="text-xs text-ink leading-relaxed">
+                  {CONSENT_VOICE_TEXT}
+                </span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <Checkbox
+                  checked={consentAi}
+                  onCheckedChange={(v) => setConsentAi(v === true)}
+                  className="mt-0.5"
+                  aria-label="Einwilligung KI-Generierung"
+                />
+                <span className="text-xs text-ink leading-relaxed">
+                  {CONSENT_AI_TEXT}
+                </span>
+              </label>
+              <p className="text-xs text-ink-muted">
+                Du bestätigst, dass das gewählte Video ausschließlich deine
+                eigene Stimme enthält.
+              </p>
+              {submitError && (
+                <p className="text-sm text-danger leading-relaxed">
+                  {submitError} Alternativ kannst du deine Stimme unter{" "}
+                  <Link
+                    href="/ki-begruessung"
+                    target="_blank"
+                    className="font-medium underline underline-offset-2"
+                  >
+                    Setup → KI-Begrüßung
+                  </Link>{" "}
+                  einrichten.
+                </p>
+              )}
+              <Button
+                size="sm"
+                disabled={!consentVoice || !consentAi}
+                loading={submitting}
+                iconLeft={<Sparkles className="size-4" />}
+                onClick={() => void createVoiceFromVideo()}
+              >
+                KI-Stimme aus diesem Video erstellen
+              </Button>
+            </div>
+          )}
+          {voiceStatus === "none" && !webcamMediaId && (
             <p className="flex items-start gap-2.5 rounded-squircle-sm bg-surface-soft px-4 py-3 text-sm text-ink-muted leading-relaxed">
               <Sparkles className="size-4 shrink-0 mt-0.5 text-brand" />
               <span>
@@ -172,7 +281,7 @@ export function WizardStepIntro({ enabled, onChange }: WizardStepIntroProps) {
             <p className="flex items-start gap-2.5 rounded-squircle-sm bg-brand-soft px-4 py-3 text-sm text-brand-deep leading-relaxed">
               <Sparkles className="size-4 shrink-0 mt-0.5" />
               <span>
-                Deine KI-Stimme wird gerade trainiert — das dauert nur wenige
+                Deine KI-Stimme wird gerade trainiert. Das dauert nur wenige
                 Minuten und läuft im Hintergrund weiter.
               </span>
             </p>

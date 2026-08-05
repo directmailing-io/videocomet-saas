@@ -22,6 +22,7 @@ import {
   Check,
   ChevronDown,
   Circle,
+  Film,
   Mic,
   RotateCcw,
   ShieldCheck,
@@ -43,6 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toaster";
+import { CONSENT_AI_TEXT, CONSENT_VOICE_TEXT } from "@/lib/intro";
 import { cn } from "@/lib/utils";
 
 // ── Vertrag mit GET /api/voice-profile ────────────────────────────────────
@@ -66,14 +68,19 @@ const MIN_SECONDS = 30;
 const MAX_SECONDS = 240;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
+// Die Grüße sind bewusst in ganze Erste-Sätze eingebettet (kein
+// "Hallo X. Hallo Y."-Staccato): das Modell lernt den Sprech-Rhythmus der
+// Referenz mit, und genau solche Begrüßungssätze muss es später erzeugen.
 const READING_SCRIPT =
-  "Hallo und schön, dass du dir das Video anschaust. Ich möchte dir heute kurz zeigen, wie wir bei uns arbeiten und warum das für dich spannend sein könnte. Hallo Jürgen. Hallo Herr Schmitz. Hallo Frau Müller. Guten Tag, Herr Yilmaz. Hi Alexandra. Schön, dass Sie reinschauen. Viele unserer Kunden fragen sich am Anfang, ob sich der Aufwand überhaupt lohnt. Die ehrliche Antwort ist: Es kommt darauf an, was du erreichen willst. Zahlen und Fakten sind wichtig: dreiundzwanzig Prozent mehr Antworten, vierhundert Euro gespart, am siebten Oktober um halb zehn. Ich freue mich, wenn wir uns kennenlernen. Bis gleich!";
+  "Hallo und schön, dass du dir das Video anschaust. Hi Jürgen, ich habe mir gerade deine Webseite angeschaut und mir ist direkt etwas aufgefallen. Guten Tag Frau Müller, ich bin gerade auf Ihrer Webseite und möchte Ihnen kurz etwas zeigen. Hallo Herr Yilmaz, schön, dass Sie reinschauen. Viele unserer Kunden fragen sich am Anfang, ob sich der Aufwand überhaupt lohnt. Die ehrliche Antwort ist: Es kommt darauf an, was du erreichen willst. Ein Beispiel: dreiundzwanzig Prozent mehr Antworten und vierhundert Euro gespart, am siebten Oktober um halb zehn. Ich freue mich, wenn wir uns kennenlernen. Bis gleich!";
 
-const CONSENT_VOICE_TEXT =
-  "Ich willige ausdrücklich ein, dass VIDEOCOMET aus meinen Aufnahmen ein digitales Stimmmodell erstellt und dieses ausschließlich für meine personalisierten Videobegrüßungen verwendet. Es handelt sich dabei um biometrische Daten (Art. 9 DSGVO). Verarbeitung durch die in der Datenschutzerklärung genannten Dienstleister. Ich kann diese Einwilligung jederzeit widerrufen, mein Stimmmodell wird dann gelöscht.";
-
-const CONSENT_AI_TEXT =
-  "Mir ist bekannt, dass die personalisierte Begrüßung mit KI-Technologie erzeugt wird und die Qualität schwanken kann. Vor jeder Produktion prüfe und genehmige ich Beispielvideos. Mit dieser Freigabe akzeptiere ich die gezeigte Qualität als vertragsgemäß.";
+/** Video aus der Mediathek, das als Stimmquelle wählbar ist. */
+interface MediaItemDto {
+  id: string;
+  name: string;
+  type: string;
+  durationSec: number | null;
+}
 
 /** Fehler-Codes des Voice-Training-Workers → deutsche Hinweise. */
 function trainingErrorHint(code: string | null): string {
@@ -208,7 +215,7 @@ export function KiStimmeTab() {
                   iconLeft={<Mic className="size-4" />}
                   onClick={() => setSetupActive(true)}
                 >
-                  Neue Stimmprobe aufnehmen
+                  Neue Stimmquelle wählen
                 </Button>
               </div>
             </div>
@@ -237,7 +244,7 @@ export function KiStimmeTab() {
 
 function IntroEmptyState({ onStart }: { onStart: () => void }) {
   const steps = [
-    { n: 1, label: "Aufnahme", hint: "1 bis 2 Minuten vorlesen" },
+    { n: 1, label: "Quelle wählen", hint: "Vorhandenes Video oder neue Aufnahme" },
     { n: 2, label: "Einwilligung", hint: "Zwei Häkchen setzen" },
     { n: 3, label: "Fertig", hint: "VIDEOCOMET trainiert deine Stimme" },
   ];
@@ -280,7 +287,7 @@ function IntroEmptyState({ onStart }: { onStart: () => void }) {
               iconLeft={<Mic className="size-4" />}
               onClick={onStart}
             >
-              Stimmprobe aufnehmen
+              KI-Stimme einrichten
             </Button>
           </div>
         </div>
@@ -450,43 +457,84 @@ function SetupFlow({
   const { toast } = useToast();
   const [step, setStep] = React.useState<SetupStep>("aufnahme");
 
-  // Ergebnis von Aufnahme ODER Datei-Upload.
+  // Quelle: Mediathek-Video ODER Aufnahme/Datei-Upload (schließen sich aus).
+  const [sampleMedia, setSampleMedia] = React.useState<MediaItemDto | null>(
+    null,
+  );
   const [sampleFile, setSampleFile] = React.useState<File | null>(null);
   const [sampleSource, setSampleSource] = React.useState<
     "aufnahme" | "upload" | null
   >(null);
   const [sampleSeconds, setSampleSeconds] = React.useState<number | null>(null);
 
+  // Wählbare Videos aus der Mediathek (Webcam-Aufnahmen + Video-Uploads).
+  const [mediaItems, setMediaItems] = React.useState<MediaItemDto[] | null>(
+    null,
+  );
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/media?type=webcam,video", {
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error();
+        const data = (await res.json()) as { items: MediaItemDto[] };
+        if (!cancelled) setMediaItems(data.items);
+      } catch {
+        if (!cancelled) setMediaItems([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [consentVoice, setConsentVoice] = React.useState(false);
   const [consentAi, setConsentAi] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
 
   async function handleSubmit() {
-    if (!sampleFile || !consentVoice || !consentAi) return;
+    if ((!sampleFile && !sampleMedia) || !consentVoice || !consentAi) return;
     setSubmitting(true);
     try {
-      const form = new FormData();
-      form.append("file", sampleFile);
-      form.append("consentVoice", "true");
-      form.append("consentAi", "true");
-      const res = await fetch("/api/voice-profile/sample", {
-        method: "POST",
-        body: form,
-      });
+      let res: Response;
+      if (sampleMedia) {
+        res = await fetch("/api/voice-profile/from-media", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mediaItemId: sampleMedia.id,
+            consentVoice: true,
+            consentAi: true,
+          }),
+        });
+      } else {
+        const form = new FormData();
+        form.append("file", sampleFile!);
+        form.append("consentVoice", "true");
+        form.append("consentAi", "true");
+        res = await fetch("/api/voice-profile/sample", {
+          method: "POST",
+          body: form,
+        });
+      }
       const body = (await res.json().catch(() => ({}))) as {
         profile?: VoiceProfileDto;
         error?: string;
       };
       if (!res.ok) {
         toast({
-          title: "Upload fehlgeschlagen",
+          title: "Start fehlgeschlagen",
           description: body.error ?? "Bitte versuche es erneut.",
           variant: "danger",
         });
         return;
       }
       toast({
-        title: "Stimmprobe hochgeladen",
+        title: sampleMedia
+          ? "Stimmquelle übernommen"
+          : "Stimmprobe hochgeladen",
         description: "Das Training deiner KI-Stimme startet jetzt.",
         variant: "success",
       });
@@ -534,6 +582,17 @@ function SetupFlow({
 
       {step === "aufnahme" ? (
         <RecordingStep
+          mediaItems={mediaItems}
+          sampleMedia={sampleMedia}
+          onSelectMedia={(item) => {
+            setSampleMedia(item);
+            // Mediathek-Video und Aufnahme schließen sich aus.
+            if (item) {
+              setSampleFile(null);
+              setSampleSource(null);
+              setSampleSeconds(null);
+            }
+          }}
           sampleFile={sampleFile}
           sampleSource={sampleSource}
           sampleSeconds={sampleSeconds}
@@ -541,6 +600,7 @@ function SetupFlow({
             setSampleFile(file);
             setSampleSource(source);
             setSampleSeconds(seconds);
+            setSampleMedia(null);
           }}
           onReset={() => {
             setSampleFile(null);
@@ -609,6 +669,9 @@ function StepPill({
 type RecState = "idle" | "recording" | "done";
 
 function RecordingStep({
+  mediaItems,
+  sampleMedia,
+  onSelectMedia,
   sampleFile,
   sampleSource,
   sampleSeconds,
@@ -617,6 +680,9 @@ function RecordingStep({
   onCancel,
   onNext,
 }: {
+  mediaItems: MediaItemDto[] | null;
+  sampleMedia: MediaItemDto | null;
+  onSelectMedia: (item: MediaItemDto | null) => void;
   sampleFile: File | null;
   sampleSource: "aufnahme" | "upload" | null;
   sampleSeconds: number | null;
@@ -804,19 +870,96 @@ function RecordingStep({
     sampleSource === "aufnahme" &&
     sampleSeconds !== null &&
     sampleSeconds < MIN_SECONDS;
-  const canContinue = sampleFile !== null && !tooShort;
+  const canContinue =
+    sampleMedia !== null || (sampleFile !== null && !tooShort);
+  const hasVideos = (mediaItems?.length ?? 0) > 0;
 
   return (
     <Card>
       <CardContent className="p-6 space-y-5">
+        {hasVideos && (
+          <div>
+            <h3 className="text-base font-semibold text-ink">
+              Empfohlen: Stimme aus einem deiner Videos
+            </h3>
+            <p className="mt-1 text-sm text-ink-muted leading-relaxed">
+              Die Tonspur deines Videos ist die beste Stimmprobe: gleiches
+              Mikrofon, gleicher Raum und genau die Sprechweise, zu der die
+              KI-Begrüßung später passen muss.
+            </p>
+            <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
+              {mediaItems!.map((item) => {
+                const eligible =
+                  item.durationSec === null || item.durationSec >= MIN_SECONDS;
+                const active = sampleMedia?.id === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={!eligible}
+                    aria-pressed={active}
+                    onClick={() => onSelectMedia(active ? null : item)}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-squircle-sm bg-surface-soft px-4 py-3 text-left transition-all",
+                      active
+                        ? "ring-2 ring-brand"
+                        : eligible
+                          ? "hover:bg-surface-muted/60"
+                          : "opacity-50 cursor-not-allowed",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-flex size-9 shrink-0 items-center justify-center rounded-squircle-sm",
+                        active
+                          ? "bg-brand text-white"
+                          : "bg-surface text-ink-muted",
+                      )}
+                    >
+                      {active ? (
+                        <Check className="size-4" strokeWidth={3} />
+                      ) : (
+                        <Film className="size-4" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-ink">
+                        {item.name}
+                      </span>
+                      <span className="block text-xs text-ink-muted tabular-nums">
+                        {eligible
+                          ? item.durationSec !== null
+                            ? `Länge ${formatTime(item.durationSec)} min`
+                            : "Video"
+                          : "Zu kurz für das Training (min. 0:30)"}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div
+              className="mt-5 flex items-center gap-3 text-xs font-medium uppercase tracking-wider text-ink-muted"
+              aria-hidden
+            >
+              <span className="h-px flex-1 bg-line" />
+              oder
+              <span className="h-px flex-1 bg-line" />
+            </div>
+          </div>
+        )}
+
         <div>
           <h3 className="text-base font-semibold text-ink">
-            Nimm deine Stimmprobe auf
+            {hasVideos
+              ? "Stimmprobe separat aufnehmen"
+              : "Nimm deine Stimmprobe auf"}
           </h3>
           <ul className="mt-3 space-y-1.5 text-sm text-ink-muted">
             {[
-              "Gleiches Mikrofon und gleiche Umgebung wie im Webcam-Video",
-              "1 bis 2 Minuten frei sprechen oder den Text unten vorlesen",
+              "Sprich so, wie du in deinen Videos sprichst: gleiche Energie, nicht wie beim Vorlesen",
+              "Gleiches Mikrofon und gleiche Umgebung wie im Webcam-Video, am besten direkt in derselben Sitzung aufnehmen",
+              "Lies den Text unten vor (etwa 45 Sekunden), mit kurzer Pause zwischen den Sätzen und gleichbleibender Lautstärke",
               "Kleine Versprecher sind okay",
             ].map((line) => (
               <li key={line} className="flex items-start gap-2">
@@ -1061,8 +1204,8 @@ function ConsentStep({
         </label>
 
         <p className="text-xs text-ink-muted">
-          Du bestätigst, dass die Aufnahme ausschließlich deine eigene Stimme
-          enthält.
+          Du bestätigst, dass die gewählte Aufnahme bzw. das gewählte Video
+          ausschließlich deine eigene Stimme enthält.
         </p>
 
         <div className="flex items-center justify-between pt-2">

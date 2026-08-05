@@ -486,6 +486,7 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
           <WizardStepIntro
             enabled={state.introEnabled}
             onChange={(introEnabled) => update({ introEnabled })}
+            webcamMediaId={state.webcamMediaId}
           />
         )}
         {step === 6 && (
