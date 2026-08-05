@@ -105,6 +105,13 @@ export interface TimelineSegmentBlockProps {
   onTrimCommit: (id: string, newDurationMs: number) => void;
   onMoveLeft: (id: string) => void;
   onMoveRight: (id: string) => void;
+  /**
+   * Startet einen Drag-Reorder. Der Parent hält den globalen Pointer-
+   * Handler; der Block liefert nur den Auslöse-Event am Grip.
+   */
+  onReorderStart: (id: string, event: React.PointerEvent) => void;
+  /** True während dieser Block gerade per Drag umsortiert wird. */
+  reordering: boolean;
   /** ms pro Pixel - benötigt für Drag-Berechnung. */
   msPerPx: number;
   /**
@@ -131,6 +138,8 @@ export function TimelineSegmentBlock({
   onTrimCommit,
   onMoveLeft,
   onMoveRight,
+  onReorderStart,
+  reordering,
   msPerPx,
   maxDurationMs,
 }: TimelineSegmentBlockProps) {
@@ -258,14 +267,28 @@ export function TimelineSegmentBlock({
           ? "ring-2 ring-brand ring-offset-1 ring-offset-surface-soft border-brand/40 z-10"
           : `${style.border} hover:brightness-105`,
         atLimit && "ring-2 ring-warn/70 ring-offset-1 ring-offset-surface-soft animate-pulse",
+        reordering && "opacity-40 z-30",
       )}
       style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
     >
-      {/* Reorder Drag-Handle (visuell links) - dient nur als Indikator. */}
+      {/* Reorder Drag-Handle — Pointerdown startet den Drag im Parent. */}
       {!veryCompact && (
-        <span className={cn("flex items-center justify-center shrink-0 text-ink-muted/70", style.text)} aria-hidden>
-          <GripVertical className="size-3" />
-        </span>
+        <button
+          type="button"
+          aria-label="Segment per Drag umsortieren"
+          onPointerDown={(e) => onReorderStart(segment.id, e)}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          className={cn(
+            "inline-flex items-center justify-center shrink-0 -ml-1 pr-0.5 touch-none",
+            "text-ink-muted/70 hover:text-ink cursor-grab active:cursor-grabbing",
+            style.text,
+          )}
+        >
+          <GripVertical className="size-3.5" />
+        </button>
       )}
 
       <Icon className={cn("size-3.5 shrink-0", style.text)} aria-hidden />
