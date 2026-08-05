@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { RecordingHint } from "@/components/intro/recording-hint";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +48,9 @@ export interface WizardStep1Props {
   /** Called when a new webcam recording is added so the parent can keep its
    *  webcam list in sync (e.g. for the summary step). Optional for back-compat. */
   onWebcamsChange?: (webcams: Webcam[]) => void;
+  /** Aufnahme-Tipp für die personalisierte KI-Begrüßung im Recorder
+   *  einblenden (kollabierbar). Nur wenn der User das Feature aktivieren will. */
+  showKiHint?: boolean;
 }
 
 interface MediaApiItem {
@@ -159,6 +161,7 @@ export function WizardStep1Webcam({
   value,
   onChange,
   onWebcamsChange,
+  showKiHint = false,
 }: WizardStep1Props) {
   const [recordOpen, setRecordOpen] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
@@ -248,7 +251,6 @@ export function WizardStep1Webcam({
   return (
     <div>
       <div className="space-y-4">
-          <RecordingHint />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm text-ink-muted">
               {webcams.length === 0
@@ -392,6 +394,7 @@ export function WizardStep1Webcam({
               onCancel={() => {
                 if (!uploading) setRecordOpen(false);
               }}
+              showKiHint={showKiHint}
             />
           )}
         </DialogContent>

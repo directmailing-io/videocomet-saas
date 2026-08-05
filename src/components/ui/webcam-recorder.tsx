@@ -36,6 +36,7 @@ import {
   Smartphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { RecordingHint } from "@/components/intro/recording-hint";
 import { cn } from "@/lib/utils";
 
 /**
@@ -75,6 +76,13 @@ export interface WebcamRecorderProps {
    * auto-stop and no countdown — the user records as long as they want.
    */
   maxDurationSec?: number;
+  /**
+   * Aufnahme-Tipp für die personalisierte KI-Begrüßung einblenden — als
+   * kollabierbarer Hinweis (default eingeklappt), damit User ohne KI-Absicht
+   * nicht gestört werden. Vor „Aufnahme starten" sichtbar, während der
+   * Aufnahme ausgeblendet (kein Platz-Wettbewerb mit dem Preview).
+   */
+  showKiHint?: boolean;
   /** Optional className for the outer wrapper. */
   className?: string;
 }
@@ -138,9 +146,11 @@ export function WebcamRecorder({
   onConfirm,
   onCancel,
   maxDurationSec,
+  showKiHint = false,
   className,
 }: WebcamRecorderProps) {
   const hasLimit = typeof maxDurationSec === "number" && maxDurationSec > 0;
+  const [kiHintOpen, setKiHintOpen] = React.useState(false);
 
   const liveVideoRef = React.useRef<HTMLVideoElement | null>(null);
   const reviewVideoRef = React.useRef<HTMLVideoElement | null>(null);
@@ -516,6 +526,36 @@ export function WebcamRecorder({
         </div>
       ) : (
         <>
+          {showKiHint && state === "preview" && (
+            <div className="rounded-squircle-md border border-line bg-surface">
+              <button
+                type="button"
+                onClick={() => setKiHintOpen((v) => !v)}
+                aria-expanded={kiHintOpen}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-ink hover:bg-surface-soft transition-colors"
+              >
+                <span aria-hidden>💡</span>
+                <span className="flex-1">
+                  KI-Begrüßung geplant? Tipp fürs Aufnehmen einblenden
+                </span>
+                <span
+                  className={cn(
+                    "text-ink-muted text-xs transition-transform",
+                    kiHintOpen && "rotate-180",
+                  )}
+                  aria-hidden
+                >
+                  ▾
+                </span>
+              </button>
+              {kiHintOpen && (
+                <div className="border-t border-line-soft p-3">
+                  <RecordingHint compact className="border-0 p-0" />
+                </div>
+              )}
+            </div>
+          )}
+
           {state === "recording" && (
             <div className="flex items-center justify-center gap-4 rounded-squircle-md border border-danger/20 bg-danger/5 px-5 py-4">
               <span className="inline-flex items-center gap-2 text-sm font-semibold text-danger">

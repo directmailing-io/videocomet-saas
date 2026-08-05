@@ -60,6 +60,21 @@ const createSchema = z.object({
     .optional(),
   thumbnailPlayIcon: z.boolean().optional(),
   introEnabled: z.boolean().optional(),
+  /**
+   * Optionales TTS-Template beim Kalibrierungs-Initial-Insert. Wird nur
+   * angenommen, wenn intro_enabled und noch keine Kalibrierung existiert;
+   * ansonsten bleibt die bestehende Template-Wahl unverändert. Muss den
+   * gleichen Format-Regeln entsprechen wie im PATCH-Endpoint.
+   */
+  introTtsTemplate: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .refine((v) => v.includes("{vorname}") || v.includes("{nachname}"), {
+      message: "Vorlage muss {vorname} oder {nachname} enthalten.",
+    })
+    .optional(),
 });
 
 export async function GET() {
@@ -85,7 +100,9 @@ export async function POST(req: NextRequest) {
   // Type erwartet `CampaignThumbnailImage | null | undefined`. Wir cast'en
   // hier bewusst, weil die Folien-Struktur vom Editor garantiert wird;
   // ein invaliderer Renderer-Pfad fängt Schema-Drift später ab.
-  const { thumbnailImage, ...rest } = body;
+  // introTtsTemplate wandert NICHT in die campaigns-Tabelle — es wird
+  // unten beim Kalibrierungs-Insert verwendet.
+  const { thumbnailImage, introTtsTemplate, ...rest } = body;
   const campaign = await createCampaign(auth.user.id, {
     ...rest,
     thumbnailImage:
@@ -107,17 +124,25 @@ export async function POST(req: NextRequest) {
         .limit(1);
       // Fertige oder laufende Kalibrierung nicht zurücksetzen.
       if (!existing || existing.status === "failed") {
+        const initialTemplate = introTtsTemplate ?? DEFAULT_TTS_TEMPLATE;
         const [calibration] = await db
           .insert(introCalibrations)
           .values({
             mediaItemId: body.webcamMediaId,
             userId: auth.user.id,
             status: "pending",
-            ttsTemplate: DEFAULT_TTS_TEMPLATE,
+            ttsTemplate: initialTemplate,
           })
           .onConflictDoUpdate({
             target: introCalibrations.mediaItemId,
-            set: { status: "pending", error: null, updatedAt: sql`now()` },
+            set: {
+              status: "pending",
+              error: null,
+              // Beim Retry-Weg (failed → pending) auch das Template
+              // aktualisieren, wenn der Client eines mitgesendet hat.
+              ...(introTtsTemplate ? { ttsTemplate: introTtsTemplate } : {}),
+              updatedAt: sql`now()`,
+            },
           })
           .returning();
         await introCalibrationQueue().add(

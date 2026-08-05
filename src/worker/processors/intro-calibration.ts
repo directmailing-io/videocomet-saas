@@ -42,8 +42,12 @@ import { DEFAULT_TTS_TEMPLATE } from "@/lib/intro";
 import type { IntroCalibrationJobData } from "../intro-queue";
 
 const SAMPLE_RATE = 48000;
-/** Bewusste Pause nach der Begrüßung: mindestens 0.8s Stille. */
-const DELIBERATE_PAUSE_MIN_SEC = 0.8;
+/**
+ * Bewusste Pause nach der Begrüßung: mindestens 0.6s Stille. Bewusst
+ * kürzer als „zähle bis 2" — ein natürlicher Atem-Beat nach dem „Hi!"
+ * reicht dem Detektor, damit User keine unnötig-lange Pause machen müssen.
+ */
+const DELIBERATE_PAUSE_MIN_SEC = 0.6;
 /**
  * Anrede muss mindestens so lang sein, bevor die bewusste Pause zählt.
  * Ohne diese Untergrenze picken kleine Initial-Stillen im Recorder (73ms
@@ -280,6 +284,7 @@ export async function processIntroCalibrationJob(job: {
       speechStartMs,
       anchorEndMs,
       greetingEndMs: Math.round(structure.greetingEndSec * 1000),
+      sentenceStartMs: Math.round(structure.sentenceStartSec * 1000),
       resumeMs,
       lufsRef,
       spectralRef,

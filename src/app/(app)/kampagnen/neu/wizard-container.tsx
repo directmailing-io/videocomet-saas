@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { buildGreetingTemplate } from "@/lib/intro";
 import { cn } from "@/lib/utils";
 
 import { WizardStep1Webcam } from "./wizard-step1-webcam";
@@ -122,6 +123,13 @@ export interface WizardState {
    * Stimme rendert die Pipeline ohne Begrüßung und berechnet 1 Credit.
    */
   introEnabled: boolean;
+  /**
+   * Prefix + Namens-Muster für die KI-Begrüßung. Werden zum Save-Zeitpunkt
+   * zu einem `ttsTemplate`-String zusammengebaut und beim Kalibrierungs-
+   * Insert der Kampagne mitgesendet.
+   */
+  introGreetingPrefix: import("@/lib/intro").GreetingPrefix;
+  introNamePattern: import("@/lib/intro").NamePatternKey;
 }
 
 export interface MediathekItem {
@@ -236,6 +244,8 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
     thumbnailMode: "frame",
     thumbnailPlayIcon: false,
     introEnabled: false,
+    introGreetingPrefix: "Hi",
+    introNamePattern: "firstName",
   });
 
   const update = React.useCallback((patch: Partial<WizardState>) => {
@@ -333,6 +343,17 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
           thumbnailMode: state.thumbnailMode,
           thumbnailPlayIcon: state.thumbnailPlayIcon,
           introEnabled: state.introEnabled,
+          // Nur mitsenden wenn KI-Begrüßung aktiv — sonst würde die
+          // API einen unbenutzten Wert an eine evtl. bestehende
+          // Kalibrierung schreiben wollen.
+          ...(state.introEnabled
+            ? {
+                introTtsTemplate: buildGreetingTemplate(
+                  state.introGreetingPrefix,
+                  state.introNamePattern,
+                ),
+              }
+            : {}),
         }),
       });
       if (!res.ok) {
@@ -400,6 +421,7 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
             value={state.webcamMediaId}
             onChange={(id) => update({ webcamMediaId: id })}
             onWebcamsChange={setWebcams}
+            showKiHint={state.introEnabled}
           />
         )}
         {step === 1 && (
@@ -407,6 +429,11 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
             enabled={state.introEnabled}
             onChange={(introEnabled) => update({ introEnabled })}
             webcamMediaId={state.webcamMediaId}
+            greetingPrefix={state.introGreetingPrefix}
+            namePattern={state.introNamePattern}
+            onGreetingChange={(prefix, pattern) =>
+              update({ introGreetingPrefix: prefix, introNamePattern: pattern })
+            }
           />
         )}
         {step === 2 && (

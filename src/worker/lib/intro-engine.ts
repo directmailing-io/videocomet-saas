@@ -65,6 +65,12 @@ export interface IntroEngineCalibration {
    * auf `anchorEndMs` zurück.
    */
   greetingEndMs: number | null;
+  /**
+   * Start des ersten Satzes (Ende der bewussten Pause). Engine trimmt
+   * im greeting-only-Modus die Rest-Pause auf ~300ms, damit die
+   * Übergangs-Atempause im Preview nicht als Loch wirkt.
+   */
+  sentenceStartMs: number | null;
   resumeMs: number | null;
   lufsRef: number | null;
   spectralRef: Record<string, number> | null;
@@ -231,11 +237,21 @@ export async function generatePersonalizedWebcam(
   const anchorEndMs = isGreetingOnly
     ? (cal.greetingEndMs as number)
     : cal.anchorEndMs;
-  // Resume analog: nach der Anrede + kleines Offset (bewusste Pause bleibt
-  // im Video und wirkt als natürliche Übergangs-Atempause).
-  const resumeMs = isGreetingOnly
-    ? Math.round(Math.ceil((anchorEndMs + 120) / FRAME_MS) * FRAME_MS)
-    : cal.resumeMs;
+  // Resume im greeting-only-Modus: möglichst nahe an den ersten Satz, damit
+  // die verbleibende Pause im Preview kurz und natürlich klingt (~300ms
+  // Rest-Atempause). Wenn sentence_start_ms nicht vorliegt (Altbestand),
+  // konservativer Fallback ans Anrede-Ende + 120ms (alte 800ms-Pause-Semantik).
+  const RESIDUAL_PAUSE_MS = 300;
+  let resumeMs: number;
+  if (isGreetingOnly) {
+    const base =
+      typeof cal.sentenceStartMs === "number"
+        ? Math.max(anchorEndMs + 120, cal.sentenceStartMs - RESIDUAL_PAUSE_MS)
+        : anchorEndMs + 120;
+    resumeMs = Math.round(Math.ceil(base / FRAME_MS) * FRAME_MS);
+  } else {
+    resumeMs = cal.resumeMs;
+  }
 
   const dir = opts.workDir;
   const tag = opts.tag.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);

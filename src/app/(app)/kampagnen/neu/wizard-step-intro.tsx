@@ -5,8 +5,23 @@ import Link from "next/link";
 import { Check, Info, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { RecordingHint } from "@/components/intro/recording-hint";
-import { CONSENT_AI_TEXT, CONSENT_VOICE_TEXT } from "@/lib/intro";
+import {
+  CONSENT_AI_TEXT,
+  CONSENT_VOICE_TEXT,
+  GREETING_PREFIXES,
+  buildGreetingTemplate,
+  type GreetingPrefix,
+  type NamePatternKey,
+} from "@/lib/intro";
 import { cn } from "@/lib/utils";
 
 export interface WizardStepIntroProps {
@@ -14,6 +29,9 @@ export interface WizardStepIntroProps {
   onChange: (enabled: boolean) => void;
   /** Gewähltes Video aus Schritt 1 — Quelle für die Inline-Stimmerstellung. */
   webcamMediaId: string | null;
+  greetingPrefix: GreetingPrefix;
+  namePattern: NamePatternKey;
+  onGreetingChange: (prefix: GreetingPrefix, pattern: NamePatternKey) => void;
 }
 
 interface VoiceProfileDto {
@@ -58,6 +76,9 @@ export function WizardStepIntro({
   enabled,
   onChange,
   webcamMediaId,
+  greetingPrefix,
+  namePattern,
+  onGreetingChange,
 }: WizardStepIntroProps) {
   const [voiceStatus, setVoiceStatus] = React.useState<
     "loading" | "none" | "processing" | "ready"
@@ -180,7 +201,12 @@ export function WizardStepIntro({
       </div>
 
       {enabled && (
-        <div className="rounded-squircle-lg bg-surface shadow-card p-5 space-y-3">
+        <div className="rounded-squircle-lg bg-surface shadow-card p-5 space-y-4">
+          <GreetingChooser
+            prefix={greetingPrefix}
+            pattern={namePattern}
+            onChange={onGreetingChange}
+          />
           <RecordingHint />
           <p className="flex items-start gap-2.5 text-sm text-ink-muted leading-relaxed">
             <Info className="size-4 shrink-0 mt-0.5 text-ink-soft" />
@@ -289,6 +315,85 @@ export function WizardStepIntro({
             </p>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Prefix + Namensart-Auswahl (identisch zur intro-settings-card in der
+ *  Bearbeiten-Ansicht). Wird beim Save an /api/campaigns übergeben. */
+function GreetingChooser({
+  prefix,
+  pattern,
+  onChange,
+}: {
+  prefix: GreetingPrefix;
+  pattern: NamePatternKey;
+  onChange: (prefix: GreetingPrefix, pattern: NamePatternKey) => void;
+}) {
+  const template = buildGreetingTemplate(prefix, pattern);
+  const preview =
+    pattern === "firstName"
+      ? template.replaceAll("{vorname}", "Julius")
+      : template.replaceAll("{anrede}", "Herr").replaceAll("{nachname}", "Thiesen");
+  return (
+    <div className="rounded-squircle-md border border-line bg-surface-soft p-4 space-y-3">
+      <div>
+        <p className="text-sm font-semibold text-ink">Begrüßung wählen</p>
+        <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+          So spricht die KI-Stimme jeden Lead an. Kurz und persönlich —
+          der Rest deines Videos folgt unverändert.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <Label htmlFor="wiz-intro-prefix" className="text-xs font-medium text-ink-muted">
+            Anrede
+          </Label>
+          <Select
+            value={prefix}
+            onValueChange={(v) => onChange(v as GreetingPrefix, pattern)}
+          >
+            <SelectTrigger id="wiz-intro-prefix" className="mt-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {GREETING_PREFIXES.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {p}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="wiz-intro-pattern" className="text-xs font-medium text-ink-muted">
+            Namensart
+          </Label>
+          <Select
+            value={pattern}
+            onValueChange={(v) => onChange(prefix, v as NamePatternKey)}
+          >
+            <SelectTrigger id="wiz-intro-pattern" className="mt-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="firstName">Vorname (Du)</SelectItem>
+              <SelectItem value="formal">Herr/Frau + Nachname (Sie)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <p className="text-xs text-ink-muted">
+        Beispiel: <span className="font-medium text-ink">„{preview}"</span>
+      </p>
+      {pattern === "formal" && (
+        <p className="text-xs text-ink-muted leading-relaxed">
+          Braucht die Spalten <span className="font-mono">Anrede</span>{" "}
+          (Herr/Frau) und <span className="font-mono">Nachname</span> in deiner
+          Leadliste. Fehlt eines, greift automatisch der Original-Video-Fallback
+          (1 Credit).
+        </p>
       )}
     </div>
   );

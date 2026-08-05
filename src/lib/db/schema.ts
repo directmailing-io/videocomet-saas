@@ -1798,6 +1798,10 @@ export const introCalibrations = pgTable("intro_calibrations", {
   // Migration 0044 — Ende der Anrede (vor der bewussten Pause). Für kurze
   // TTS-Templates („Hi {vorname}") — Fallback auf anchorEndMs wenn NULL.
   greetingEndMs: integer("greeting_end_ms"),
+  // Migration 0045 — Start des ersten Satzes (Ende der bewussten Pause).
+  // Engine nutzt es im greeting-only-Modus, um die Rest-Pause im Preview
+  // auf ~300ms zu trimmen.
+  sentenceStartMs: integer("sentence_start_ms"),
   resumeMs: integer("resume_ms"),
   lufsRef: real("lufs_ref"),
   spectralRef: jsonb("spectral_ref").$type<Record<string, number> | null>(),

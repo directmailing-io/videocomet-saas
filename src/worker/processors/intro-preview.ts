@@ -41,8 +41,10 @@ import { createTempDir, cleanupTempDir } from "../lib/temp";
 import { generatePersonalizedWebcam } from "../lib/intro-engine";
 import type { IntroPreviewJobData } from "../intro-queue";
 
-/** Vorschau-Länge in Sekunden. */
-const PREVIEW_TRIM_SEC = 15;
+/** Vorschau-Länge in Sekunden. Kurz genug fuer schnelles sync.so-Rendering,
+ *  lang genug damit der User die Anrede + Beginn des ersten Satzes bewerten
+ *  kann. */
+const PREVIEW_TRIM_SEC = 8;
 /**
  * Wie viele Kandidaten wir parallel rendern — Ziel + Puffer für Fallbacks.
  * Größer wäre schneller, würde aber Fish/sync.so unnötig belasten und die

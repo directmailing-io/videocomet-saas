@@ -59,6 +59,7 @@ async function main(): Promise<void> {
     speechStartMs: 2150,
     anchorEndMs: 8240,
     greetingEndMs: null,
+    sentenceStartMs: null,
     resumeMs: 8367,
     lufsRef: -19.0,
     spectralRef,
