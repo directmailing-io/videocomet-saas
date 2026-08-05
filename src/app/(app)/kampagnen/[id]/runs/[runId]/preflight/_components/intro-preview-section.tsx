@@ -24,6 +24,8 @@ export interface IntroPreviewInfo {
   /** `true` sobald der Worker die Beispielvideo-Generierung abgeschlossen
    *  hat — auch wenn dabei nichts glückte (dann previews leer). */
   previewsGenerated: boolean;
+  /** Ziel-Anzahl (drei), für „X von N fertig"-Anzeige. */
+  previewsExpected: number;
   previews: Array<{
     leadId: string;
     firstName: string | null;
@@ -54,52 +56,30 @@ export function IntroPreviewSection({
   }
 
   const alreadyApproved = intro.previewApprovedAt !== null;
+  const done = intro.previewsGenerated;
+  const expected = Math.max(1, intro.previewsExpected);
+  const readyCount = intro.previews.length;
+  const rendering = !done;
 
-  if (intro.previews.length === 0) {
+  // Endzustand: fertig UND null Erfolge — Kalibrierung/Voice/Rendering
+  // ist schiefgelaufen. Endloser Spinner wäre irreführend.
+  if (done && readyCount === 0) {
     if (alreadyApproved) return null;
-    // Worker fertig, aber kein einziges Beispielvideo — Kalibrierung,
-    // Voice-Modell oder Rendering ist schiefgelaufen. Endloser Spinner
-    // wäre irreführend, also expliziter Fehler-Zustand.
-    if (intro.previewsGenerated) {
-      return (
-        <div className="bg-surface rounded-squircle-md shadow-card p-5">
-          <div className="flex items-start gap-3">
-            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-squircle-sm bg-warn-soft text-warn">
-              <AlertTriangle className="size-4" />
-            </span>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-ink">
-                Beispielvideos konnten nicht erstellt werden
-              </p>
-              <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
-                Die Produktion läuft trotzdem, aber ohne personalisierte
-                Begrüßung. Jeder Lead erhält das Original-Video (1 Credit
-                statt 2). Prüfe im Setup unter „KI-Begrüßung", ob deine
-                Stimme bereit ist.
-              </p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    // Sonst: Worker läuft noch.
     return (
       <div className="bg-surface rounded-squircle-md shadow-card p-5">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep">
-            <span className="inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        <div className="flex items-start gap-3">
+          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-squircle-sm bg-warn-soft text-warn">
+            <AlertTriangle className="size-4" />
           </span>
-          <div>
-            <p className="text-sm font-semibold text-ink inline-flex items-center gap-2">
-              Beispielvideos werden erstellt
-              <Badge variant="brand">
-                <Sparkles className="size-3" />
-                KI
-              </Badge>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-ink">
+              Beispielvideos konnten nicht erstellt werden
             </p>
-            <p className="text-xs text-ink-muted mt-0.5">
-              Wir rendern die personalisierte Begrüßung für die ersten Leads.
-              Das dauert wenige Minuten.
+            <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+              Die Produktion läuft trotzdem, aber ohne personalisierte
+              Begrüßung. Jeder Lead erhält das Original-Video (1 Credit
+              statt 2). Prüfe im Setup unter „KI-Begrüßung", ob deine
+              Stimme bereit ist.
             </p>
           </div>
         </div>
@@ -107,11 +87,16 @@ export function IntroPreviewSection({
     );
   }
 
+  // Sichtbare Slots: bereits fertige Videos + Skeleton für die noch
+  // laufenden (Progress-Feedback: „X von N").
+  const skeletonCount = rendering ? Math.max(0, expected - readyCount) : 0;
+  const progressPercent = Math.round((readyCount / expected) * 100);
+
   return (
     <div className="bg-surface rounded-squircle-md shadow-card p-5">
       <div className="flex flex-wrap items-center gap-2 mb-1.5">
         <h2 className="text-base font-semibold text-ink">
-          Beispielvideos prüfen
+          {rendering ? "Beispielvideos werden erstellt" : "Beispielvideos prüfen"}
         </h2>
         <Badge variant="brand">
           <Sparkles className="size-3" />
@@ -119,12 +104,23 @@ export function IntroPreviewSection({
         </Badge>
       </div>
       <p className="text-sm text-ink-muted leading-relaxed">
-        So klingt deine personalisierte Begrüßung. Prüfe die Beispiele, bevor
-        die gesamte Produktion startet.
+        {rendering
+          ? `${readyCount} von ${expected} fertig — die Videos erscheinen einzeln, sobald sie gerendert sind. Das dauert ein bis zwei Minuten.`
+          : "So klingt deine personalisierte Begrüßung. Prüfe die Beispiele, bevor die gesamte Produktion startet."}
       </p>
 
+      {rendering && (
+        <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-surface-soft">
+          <div
+            className="h-full bg-brand transition-[width] duration-500 ease-out"
+            style={{ width: `${progressPercent}%` }}
+            aria-hidden
+          />
+        </div>
+      )}
+
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {intro.previews.slice(0, 3).map((p) => (
+        {intro.previews.slice(0, expected).map((p) => (
           <div key={p.leadId} className="min-w-0">
             <div className="overflow-hidden rounded-squircle-sm bg-ink aspect-video">
               {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
@@ -140,6 +136,17 @@ export function IntroPreviewSection({
             <p className="mt-2 text-sm font-semibold text-ink truncate">
               {p.firstName ?? "Ohne Vornamen"}
             </p>
+          </div>
+        ))}
+        {Array.from({ length: skeletonCount }).map((_, idx) => (
+          <div key={`skeleton-${idx}`} className="min-w-0">
+            <div className="relative overflow-hidden rounded-squircle-sm bg-surface-muted aspect-video">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="inline-block size-5 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-br from-surface-muted via-line-soft to-surface-muted opacity-40 animate-pulse" />
+            </div>
+            <p className="mt-2 text-xs text-ink-muted">Wird gerendert ...</p>
           </div>
         ))}
       </div>

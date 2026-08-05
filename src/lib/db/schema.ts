@@ -493,6 +493,11 @@ export const runs = pgTable("runs", {
   // NULL = kein Intro aktiv oder Vorschau noch nicht erzeugt.
   introPreview: jsonb("intro_preview").$type<IntroPreviewEntry[] | null>(),
   introPreviewApprovedAt: timestamp("intro_preview_approved_at", { withTimezone: true }),
+  // Migration 0043 — Marker fürs Ende des Preview-Worker-Laufs. NULL = läuft
+  // noch. Trennt „Zwischenstand mit N<3 Previews" von „endgültig fertig".
+  introPreviewCompletedAt: timestamp("intro_preview_completed_at", {
+    withTimezone: true,
+  }),
 
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),

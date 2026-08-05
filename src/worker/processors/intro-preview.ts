@@ -35,7 +35,7 @@ import {
   type IntroPreviewEntry,
 } from "@/lib/db/schema";
 import { resolveIntroSubstitutions } from "@/lib/intro-name-check";
-import { DEFAULT_TTS_TEMPLATE } from "@/lib/intro";
+import { DEFAULT_TTS_TEMPLATE, INTRO_PREVIEW_TARGET } from "@/lib/intro";
 import { uploadIntroFile } from "@/lib/bunny/intro-storage";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
 import { generatePersonalizedWebcam } from "../lib/intro-engine";
@@ -43,10 +43,12 @@ import type { IntroPreviewJobData } from "../intro-queue";
 
 /** Vorschau-Länge in Sekunden. */
 const PREVIEW_TRIM_SEC = 15;
-/** Ziel: so viele erfolgreiche Previews. */
-const PREVIEW_TARGET = 3;
-/** Obergrenze an Engine-Versuchen (Kosten-/Zeit-Deckel). */
-const PREVIEW_MAX_ATTEMPTS = 6;
+/**
+ * Wie viele Kandidaten wir parallel rendern — Ziel + Puffer für Fallbacks.
+ * Größer wäre schneller, würde aber Fish/sync.so unnötig belasten und die
+ * Kosten hochtreiben. 4 = Ziel 3 + ein Reserve-Lead für Fehlgeschlagene.
+ */
+const PREVIEW_PARALLEL = INTRO_PREVIEW_TARGET + 1;
 
 export async function processIntroPreviewJob(job: {
   data: IntroPreviewJobData;
@@ -60,15 +62,25 @@ export async function processIntroPreviewJob(job: {
       campaignId: runs.campaignId,
       status: runs.status,
       introPreview: runs.introPreview,
+      introPreviewCompletedAt: runs.introPreviewCompletedAt,
     })
     .from(runs)
     .where(eq(runs.id, runId))
     .limit(1);
   if (!run) return { status: "skipped", reason: "run_not_found" };
 
-  // Idempotenz: bereits erzeugt (auch leeres Array zählt als "versucht").
-  if (run.introPreview !== null && run.introPreview !== undefined) {
+  // Idempotenz: nur skippen, wenn der Vorlauf ECHT fertig ist. Ein
+  // Zwischenstand (introPreview != null, completed_at == null) darf nicht
+  // stehenbleiben — der Retry-Pfad startet dann sauber neu.
+  if (run.introPreviewCompletedAt) {
     return { status: "skipped", reason: "already_generated" };
+  }
+  // Vorherigen unvollständigen Lauf resetten (Worker-Crash, BullMQ-Retry).
+  if (run.introPreview !== null) {
+    await db
+      .update(runs)
+      .set({ introPreview: null })
+      .where(eq(runs.id, runId));
   }
 
   const [campaign] = await db
@@ -144,68 +156,107 @@ export async function processIntroPreviewJob(job: {
     const webcamLocalPath = join(tmpDir, "webcam-src.mp4");
     await writeFile(webcamLocalPath, Buffer.from(await res.arrayBuffer()));
 
-    const previews: IntroPreviewEntry[] = [];
-    const seenNames = new Set<string>();
-    let attempts = 0;
-
     const template = calibration.ttsTemplate?.trim() || DEFAULT_TTS_TEMPLATE;
 
+    // Vorfiltern + Dedup — nur Kandidaten, für die Substitutionen aus den
+    // Lead-Daten resolvbar sind. Erst DANN begrenzen wir die Anzahl, um
+    // die Reserve-Slots nicht durch früh disqualifizierte Leads zu
+    // verschwenden.
+    const seenNames = new Set<string>();
+    const eligible: Array<{
+      leadId: string;
+      substitutions: Record<string, string>;
+    }> = [];
     for (const lead of candidates) {
-      if (previews.length >= PREVIEW_TARGET) break;
-      if (attempts >= PREVIEW_MAX_ATTEMPTS) break;
-
+      if (eligible.length >= PREVIEW_PARALLEL) break;
       const substResult = resolveIntroSubstitutions(
         template,
         (lead.data ?? {}) as Record<string, string>,
       );
       if (!substResult.ok) continue;
-      // Dedup-Key aus allen Substitutionen (Vorname ODER Anrede+Nachname).
       const nameKey = Object.values(substResult.substitutions)
         .join(" ")
         .toLowerCase();
       if (seenNames.has(nameKey)) continue;
       seenNames.add(nameKey);
+      eligible.push({ leadId: lead.id, substitutions: substResult.substitutions });
+    }
 
-      attempts += 1;
-      try {
+    // Erste `intro_preview`-Zeile setzen, damit die UI vom Spinner-State
+    // in den Progress-State wechselt (statt „wird erstellt" ohne Zahlen
+    // zeigt sie jetzt „0 von N fertig"). Reine Klammer-Aktion.
+    await db
+      .update(runs)
+      .set({ introPreview: [] })
+      .where(eq(runs.id, runId));
+
+    // Parallel rendern — sync.so-Lipsync ist der Flaschenhals (~30-60s
+    // pro Video). Serieller Lauf hat ~3 Minuten gedauert; parallel fällt
+    // die Wall-Time näher an ein einzelnes Rendering. Erfolge werden
+    // sofort atomar an `intro_preview` angehängt, damit die UI live
+    // wächst statt am Ende „alle drei auf einmal" zu bekommen.
+    const fishModelId = voiceProfile.fishModelId; // narrow für Closures
+    const outcomes = await Promise.allSettled(
+      eligible.map(async (cand) => {
         const result = await generatePersonalizedWebcam({
           userId: run.userId,
-          tag: `pv-${lead.id.slice(0, 8)}`,
-          substitutions: substResult.substitutions,
+          tag: `pv-${cand.leadId.slice(0, 8)}`,
+          substitutions: cand.substitutions,
           calibration,
-          fishModelId: voiceProfile.fishModelId,
+          fishModelId,
           webcamLocalPath,
           workDir: tmpDir,
           trimToSec: PREVIEW_TRIM_SEC,
         });
         if (!result.ok) {
           console.warn(
-            `[intro-preview:${runId}] lead ${lead.id} fallback: ${result.reason}`,
+            `[intro-preview:${runId}] lead ${cand.leadId} fallback: ${result.reason}`,
           );
-          continue;
+          return null;
         }
         const upload = await uploadIntroFile({
           userId: run.userId,
-          fileName: `preview-${runId}-${lead.id}.mp4`,
+          fileName: `preview-${runId}-${cand.leadId}.mp4`,
           buffer: await readFile(result.outputPath),
           contentType: "video/mp4",
         });
-        previews.push({ leadId: lead.id, videoUrl: upload.url });
-      } catch (err) {
+        const entry: IntroPreviewEntry = {
+          leadId: cand.leadId,
+          videoUrl: upload.url,
+        };
+        // Atomarer JSONB-Append — mehrere parallele Renderings können
+        // gleichzeitig committen, ohne sich gegenseitig zu überschreiben.
+        // Der JSON-String wird von Drizzle parametrisiert, Postgres castet
+        // ihn via ::jsonb (kein Injection-Risiko trotz Strings aus API-URLs).
+        const entryJson = JSON.stringify([entry]);
+        await db
+          .update(runs)
+          .set({
+            introPreview: sql`COALESCE(${runs.introPreview}, '[]'::jsonb) || ${entryJson}::jsonb`,
+          })
+          .where(eq(runs.id, runId));
+        return entry;
+      }),
+    );
+
+    const successful = outcomes.filter(
+      (o) => o.status === "fulfilled" && o.value !== null,
+    ).length;
+    for (const o of outcomes) {
+      if (o.status === "rejected") {
         console.warn(
-          `[intro-preview:${runId}] lead ${lead.id} error: ${(err as Error).message}`,
+          `[intro-preview:${runId}] render error: ${(o.reason as Error).message}`,
         );
       }
     }
 
-    // Auch [] schreiben — signalisiert der UI "versucht, nichts gelungen"
-    // (Approve-Gate greift bei leerem Array bewusst NICHT).
+    // Abschluss-Marker setzen — die UI weiß jetzt „fertig, das ist alles".
     await db
       .update(runs)
-      .set({ introPreview: previews })
+      .set({ introPreviewCompletedAt: new Date() })
       .where(eq(runs.id, runId));
 
-    return { status: "done", previews: previews.length };
+    return { status: "done", previews: successful };
   } finally {
     await cleanupTempDir(tmpDir);
   }

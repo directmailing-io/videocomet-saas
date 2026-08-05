@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { campaigns, leads, voiceProfiles } from "@/lib/db/schema";
 import { getPreflightCounts } from "@/lib/db/queries/leads";
 import { getRunForPreflight } from "@/lib/db/queries/runs";
+import { INTRO_PREVIEW_TARGET } from "@/lib/intro";
 
 /**
  * Intro-Block der Status-Antwort (personalisierte Video-Begrüßung,
@@ -19,11 +20,13 @@ interface IntroStatusPayload {
   voiceReady: boolean;
   previewApprovedAt: string | null;
   /**
-   * `null` = Worker läuft noch (Spalte in DB ist NULL).
-   * `true` = Worker fertig, `previews` ist der endgültige Snapshot
-   *          (kann leer sein → keine Vorschau geglückt).
+   * `true` sobald `intro_preview_completed_at` gesetzt ist — der Worker
+   * ist mit allen parallelen Renderings durch. `false` heißt „läuft
+   * noch", auch wenn schon 1-2 Previews im Array stehen.
    */
   previewsGenerated: boolean;
+  /** Ziel-Anzahl der Vorschau-Videos (INTRO_PREVIEW_TARGET). Für „X von N"-UI. */
+  previewsExpected: number;
   previews: Array<{
     leadId: string;
     firstName: string | null;
@@ -94,6 +97,7 @@ export async function GET(
     voiceReady: false,
     previewApprovedAt: null,
     previewsGenerated: false,
+    previewsExpected: INTRO_PREVIEW_TARGET,
     previews: [],
   };
   const [campaign] = await db
@@ -108,9 +112,11 @@ export async function GET(
       .where(eq(voiceProfiles.userId, auth.user.id))
       .limit(1);
 
-    // introPreview: NULL = Worker läuft noch, [] = fertig ohne Erfolg,
-    // [...] = fertig mit Ergebnissen.
-    const generated = run.introPreview !== null;
+    // Worker signalisiert das Ende über `intro_preview_completed_at`.
+    // Bis dahin ist `intro_preview` ein möglicherweise wachsender
+    // Zwischenstand (parallel gerenderte Previews werden inkrementell
+    // angehängt).
+    const generated = run.introPreviewCompletedAt !== null;
     const entries = run.introPreview ?? [];
     const firstNameByLead = new Map<string, string | null>();
     if (entries.length > 0) {
@@ -135,6 +141,7 @@ export async function GET(
         ? run.introPreviewApprovedAt.toISOString()
         : null,
       previewsGenerated: generated,
+      previewsExpected: INTRO_PREVIEW_TARGET,
       previews: entries.map((e) => ({
         leadId: e.leadId,
         firstName: firstNameByLead.get(e.leadId) ?? null,

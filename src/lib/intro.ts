@@ -66,6 +66,13 @@ export const DEFAULT_TTS_TEMPLATE = buildGreetingTemplate("Hi", "firstName");
 /** Version des Einwilligungstexts (Stimm-Klonen + KI-Generierung). */
 export const CONSENT_TEXT_VERSION = "v1-2026-08";
 
+/**
+ * Ziel-Anzahl Beispielvideos pro Run vor der Vollproduktion. Wird von
+ * Worker (Rendering-Budget) UND Status-API/UI (Fortschritts-Anzeige)
+ * geteilt, damit „X von N fertig" immer konsistent bleibt.
+ */
+export const INTRO_PREVIEW_TARGET = 3;
+
 // Einwilligungstexte — von Setup-Seite UND Kampagnen-Wizard gerendert.
 // Bei jeder inhaltlichen Änderung CONSENT_TEXT_VERSION hochziehen
 // (Anwalts-Review der Texte steht noch aus).
