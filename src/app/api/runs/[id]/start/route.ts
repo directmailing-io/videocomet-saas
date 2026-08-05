@@ -542,11 +542,13 @@ export async function POST(
 
     // ── Intro-Vorschau-Gate für webcam-only ──────────────────────────────
     // Webcam-only überspringt zwar die Screenshot-Vorprüfung, aber Kampagnen
-    // mit aktivierter personalisierter Begrüßung brauchen trotzdem die
-    // Vorschau-Runde: Previews generieren → User bestätigt → Produktion
-    // (Approve-Route prüft `introApproved`). Nur wenn Voice + Kalibrierung
-    // wirklich `ready` sind — sonst bliebe der Run ohne aktives Gate in
-    // `awaiting_approval` hängen und wir nehmen wie bisher den Direkt-Pfad.
+    // mit aktivierter personalisierter Begrüßung brauchen IMMER ein Gate:
+    //   - Voice+Kalibrierung ready → Preview-Runde, User bestätigt.
+    //   - Sonst → auch awaiting_approval, aber mit sofortigem
+    //     „preview finished, 0 entries"-Marker; UI zeigt die Fehler-Karte
+    //     mit „ohne KI-Begrüßung produzieren"-Option.
+    // Ohne dieses Gate rennt der Direkt-Pfad in Vollproduktion, obwohl der
+    // User eigentlich eine personalisierte Begrüßung wollte.
     if (campaignRow?.introEnabled === true && campaignRow.webcamMediaId) {
       const { voiceProfiles, introCalibrations } = await import(
         "@/lib/db/schema"
@@ -561,30 +563,42 @@ export async function POST(
         .from(introCalibrations)
         .where(eq(introCalibrations.mediaItemId, campaignRow.webcamMediaId))
         .limit(1);
-      if (voice?.status === "ready" && calib?.status === "ready") {
-        await updateRun(params.id, auth.user.id, {
-          status: "awaiting_approval",
-          preflightStartedAt: new Date(),
-          preflightCompletedAt: new Date(),
-          totalLeads: inserted,
-          approvedLeadCount: inserted - incompleteCount - dedupeRemovedCount,
-          customLpVersionId,
-          abConfig,
-        });
+      const introReady =
+        voice?.status === "ready" && calib?.status === "ready";
 
-        await db
-          .update(runs)
-          .set({
-            // placeholderMapping muss den Start überleben (s.u.).
-            columnMapping: {
-              mapping,
-              ...(cm.placeholderMapping
-                ? { placeholderMapping: cm.placeholderMapping }
-                : {}),
-            } as unknown as Record<string, string>,
-          })
-          .where(and(eq(runs.id, params.id), eq(runs.userId, auth.user.id)));
+      await updateRun(params.id, auth.user.id, {
+        status: "awaiting_approval",
+        preflightStartedAt: new Date(),
+        preflightCompletedAt: new Date(),
+        totalLeads: inserted,
+        approvedLeadCount: inserted - incompleteCount - dedupeRemovedCount,
+        customLpVersionId,
+        abConfig,
+      });
 
+      await db
+        .update(runs)
+        .set({
+          // placeholderMapping muss den Start überleben (s.u.).
+          columnMapping: {
+            mapping,
+            ...(cm.placeholderMapping
+              ? { placeholderMapping: cm.placeholderMapping }
+              : {}),
+          } as unknown as Record<string, string>,
+          // Wenn kein Preview-Job laufen kann: sofortiger „fertig, leer"
+          // -Marker. UI unterscheidet dank sqlite completed_at + leerem
+          // Array den Fall „konnte nicht erstellt werden" vom Spinner.
+          ...(introReady
+            ? {}
+            : {
+                introPreview: [],
+                introPreviewCompletedAt: new Date(),
+              }),
+        })
+        .where(and(eq(runs.id, params.id), eq(runs.userId, auth.user.id)));
+
+      if (introReady) {
         try {
           const { enqueueIntroPreviewJob } = await import(
             "@/worker/intro-queue"
@@ -593,22 +607,22 @@ export async function POST(
         } catch (err) {
           // Best effort — der Recovery-Watcher im Worker enqueued Previews
           // für awaiting_approval-Runs nicht nach, aber der User kann die
-          // Runde über die Review-Seite trotzdem freigeben (Gate greift
-          // nur bei vorhandenen Previews).
+          // Runde über die Review-Seite trotzdem freigeben.
           // eslint-disable-next-line no-console
           console.error("[runs:start] intro-preview enqueue failed:", err);
         }
-
-        return NextResponse.json({
-          ok: true,
-          preflightSkipped: false,
-          introPreviewPending: true,
-          totalLeads: inserted,
-          queuedForPreflight: 0,
-          alreadyDisqualified: 0,
-          dedupeRemoved: dedupeRemovedCount,
-        });
       }
+
+      return NextResponse.json({
+        ok: true,
+        preflightSkipped: false,
+        introPreviewPending: introReady,
+        introReady,
+        totalLeads: inserted,
+        queuedForPreflight: 0,
+        alreadyDisqualified: 0,
+        dedupeRemoved: dedupeRemovedCount,
+      });
     }
 
     await updateRun(params.id, auth.user.id, {
