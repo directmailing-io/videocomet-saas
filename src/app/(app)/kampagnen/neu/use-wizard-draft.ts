@@ -29,7 +29,8 @@ import type { WizardState } from "./wizard-container";
  * deutlich risikoärmer und deckt 100 % des hier diskutierten Use-Cases ab.
  */
 
-const STORAGE_VERSION = 1;
+// v2: Intro-Schritt eingefügt — Step-Indizes alter Drafts passen nicht mehr.
+const STORAGE_VERSION = 2;
 const DEBOUNCE_MS = 600;
 
 export type DraftSaveStatus = "idle" | "saving" | "saved" | "error";
@@ -194,7 +195,8 @@ function isDefaultState(state: WizardState): boolean {
     !state.thumbnailImageEnabled &&
     state.thumbnailImage === null &&
     state.thumbnailMode === "frame" &&
-    !state.thumbnailPlayIcon
+    !state.thumbnailPlayIcon &&
+    !state.introEnabled
   );
 }
 
@@ -243,6 +245,7 @@ export function useWizardDraft(
       pdfGoogleDocsUrlB?: string;
       abSplitMode?: WizardState["abSplitMode"];
       abSplitWeightA?: number;
+      introEnabled?: boolean;
     };
     const fallbackMode: WizardState["thumbnailMode"] = prev.thumbnailImageEnabled
       ? "custom_image"
@@ -257,6 +260,7 @@ export function useWizardDraft(
       pdfGoogleDocsUrlB: prev.pdfGoogleDocsUrlB ?? "",
       abSplitMode: prev.abSplitMode ?? "random",
       abSplitWeightA: prev.abSplitWeightA ?? 50,
+      introEnabled: prev.introEnabled ?? false,
     };
     io.setState(migrated);
     io.setStep(existingDraft.step);

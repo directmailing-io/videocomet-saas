@@ -17,6 +17,7 @@ import {
   Mail as MailIcon,
   AtSign,
   Send,
+  Sparkles,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -47,6 +48,7 @@ export type AppNavKey =
   | "landingpages"
   | "envelopes"
   | "emailTemplates"
+  | "kiIntro"
   | "settings";
 
 export interface AppShellUser {
@@ -104,6 +106,7 @@ const NAV_GROUPS: Array<{ label: string | null; items: NavItem[] }> = [
       { key: "landingpages", label: "Landingpages", href: "/landingpages", icon: LayoutTemplate },
       { key: "envelopes", label: "Umschläge", href: "/umschlaege", icon: MailIcon },
       { key: "emailTemplates", label: "E-Mail-Vorlagen", href: "/email-vorlagen", icon: AtSign },
+      { key: "kiIntro", label: "KI-Begrüßung", href: "/ki-begruessung", icon: Sparkles },
       { key: "settings", label: "Einstellungen", href: "/einstellungen", icon: Settings },
     ],
   },

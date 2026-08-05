@@ -11,6 +11,7 @@ import { WizardStep2Modus } from "./wizard-step2-modus";
 import { WizardStep3Editor } from "./wizard-step3-editor";
 import { WizardStep4Landingpage } from "./wizard-step4-landingpage";
 import { WizardStep5Pdf } from "./wizard-step5-pdf";
+import { WizardStepIntro } from "./wizard-step-intro";
 import { WizardStep6Summary } from "./wizard-step6-summary";
 import { useWizardDraft } from "./use-wizard-draft";
 import { DraftRestoreBanner, DraftStatusPill } from "./wizard-draft-ui";
@@ -115,6 +116,12 @@ export interface WizardState {
    * landet in Paket C.
    */
   thumbnailPlayIcon: boolean;
+  /**
+   * Personalisierte KI-Begrüßung (2 Credits pro Video statt 1). Voice-Klon
+   * + Kalibrierung sind KEINE Voraussetzung für die Auswahl — ohne fertige
+   * Stimme rendert die Pipeline ohne Begrüßung und berechnet 1 Credit.
+   */
+  introEnabled: boolean;
 }
 
 export interface MediathekItem {
@@ -176,6 +183,11 @@ const STEP_META: StepMeta[] = [
     desc: "Optional: personalisierter Brief mit QR-Code und Vorschaubild.",
   },
   {
+    label: "KI-Begrüßung",
+    title: "Persönliche KI-Begrüßung",
+    desc: "Optional: jeder Lead wird mit Vornamen begrüßt, in deiner Stimme.",
+  },
+  {
     label: "Fertigstellen",
     title: "Zusammenfassung",
     desc: "Prüfe alles und gib deiner Kampagne einen Namen.",
@@ -223,6 +235,7 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
     thumbnailImage: null,
     thumbnailMode: "frame",
     thumbnailPlayIcon: false,
+    introEnabled: false,
   });
 
   const update = React.useCallback((patch: Partial<WizardState>) => {
@@ -319,6 +332,7 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
           // Migration 0019 — Single-Source-of-Truth + globales Play-Icon.
           thumbnailMode: state.thumbnailMode,
           thumbnailPlayIcon: state.thumbnailPlayIcon,
+          introEnabled: state.introEnabled,
         }),
       });
       if (!res.ok) {
@@ -362,7 +376,8 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
       }
       return true;
     }
-    if (step === 5) return state.name.trim().length > 0;
+    if (step === 5) return true;
+    if (step === 6) return state.name.trim().length > 0;
     return true;
   })();
 
@@ -468,6 +483,12 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
           );
         })()}
         {step === 5 && (
+          <WizardStepIntro
+            enabled={state.introEnabled}
+            onChange={(introEnabled) => update({ introEnabled })}
+          />
+        )}
+        {step === 6 && (
           <WizardStep6Summary
             state={state}
             webcams={webcams}

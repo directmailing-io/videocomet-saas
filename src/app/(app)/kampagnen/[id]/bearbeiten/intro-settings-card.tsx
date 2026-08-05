@@ -294,11 +294,22 @@ export function IntroSettingsCard({
           </p>
           <Switch
             checked={enabled}
-            disabled={!ready || toggleSaving}
+            // Deaktivieren muss immer möglich sein — nur das Aktivieren
+            // setzt fertige Stimme + Kalibrierung voraus.
+            disabled={toggleSaving || (!ready && !enabled)}
             onCheckedChange={(v) => void saveToggle(v)}
             aria-label="Personalisierte Begrüßung aktivieren"
           />
         </div>
+
+        {enabled && (
+          <p className="flex items-start gap-2 text-xs text-ink-muted leading-relaxed">
+            <Check className="size-3.5 shrink-0 mt-0.5 text-ok" />
+            Vor jeder Vollproduktion bekommst du eine Testrunde mit 3
+            Beispielvideos zur Freigabe. Erst nach deiner Bestätigung werden
+            alle Videos erzeugt.
+          </p>
+        )}
 
         {/* Voraussetzungs-Stufen */}
         {voiceStatus === "loading" || (calibrationLoading && !calibration) ? (
@@ -313,7 +324,7 @@ export function IntroSettingsCard({
             text="Du brauchst einmalig eine KI-Stimme aus deiner Stimmprobe."
             action={
               <Button asChild variant="subtle" size="sm">
-                <Link href="/einstellungen?tab=ki-stimme">
+                <Link href="/ki-begruessung">
                   KI-Stimme einrichten
                 </Link>
               </Button>

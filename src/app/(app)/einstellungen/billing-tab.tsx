@@ -279,6 +279,17 @@ export function BillingTab() {
               versendete Mails werden anteilig erstattet.
             </p>
           </div>
+          <div className="rounded-squircle-sm bg-surface-soft px-4 py-3 sm:col-span-2">
+            <p className="text-sm font-semibold text-ink">
+              2 Credits <span className="font-normal text-ink-muted">=</span> 1
+              Video mit persönlicher KI-Begrüßung
+            </p>
+            <p className="mt-0.5 text-[11px] text-ink-muted">
+              Jeder Lead wird mit Vornamen begrüßt, in deiner Stimme. Ist der
+              Vorname nicht nutzbar, wird dein Original-Video verwendet und
+              automatisch 1 Credit erstattet.
+            </p>
+          </div>
         </div>
         <div className="flex items-baseline gap-2 mb-4">
           <span className="text-4xl font-bold tabular-nums">

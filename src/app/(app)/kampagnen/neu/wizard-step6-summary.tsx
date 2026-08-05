@@ -129,6 +129,10 @@ export function WizardStep6Summary({
               </p>
             )}
           </SummaryRow>
+
+          <SummaryRow label="KI-Begrüßung">
+            {state.introEnabled ? "Aktiv (2 Credits pro Video)" : "Deaktiviert"}
+          </SummaryRow>
         </div>
       </div>
     </div>

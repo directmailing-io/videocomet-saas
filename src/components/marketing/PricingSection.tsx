@@ -243,6 +243,10 @@ export function PricingSection() {
                   </div>
                 ))}
               </div>
+              <p className="mt-4 text-center text-[13px] text-ink-muted">
+                Optional: persönliche KI-Begrüßung mit Vornamen, in deiner
+                Stimme. 2 € statt 1 € pro Video.
+              </p>
             </div>
 
             {/* NUTZEN */}

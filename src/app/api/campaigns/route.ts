@@ -9,6 +9,11 @@ import {
   listUserCampaigns,
 } from "@/lib/db/queries/campaigns";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
+import { eq, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { introCalibrations } from "@/lib/db/schema";
+import { introCalibrationQueue } from "@/worker/intro-queue";
+import { DEFAULT_TTS_TEMPLATE } from "@/lib/intro";
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -54,6 +59,7 @@ const createSchema = z.object({
     .enum(["frame", "custom_image", "landingpage_screenshot"])
     .optional(),
   thumbnailPlayIcon: z.boolean().optional(),
+  introEnabled: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -87,5 +93,43 @@ export async function POST(req: NextRequest) {
         ? undefined
         : (thumbnailImage as CampaignThumbnailImage | null),
   });
+
+  // Best-effort: Bei aktivierter KI-Begrüßung die Video-Kalibrierung des
+  // Webcam-Videos direkt anstoßen, damit sie beim ersten Run schon fertig
+  // ist. Fehler brechen die Kampagnen-Erstellung nicht ab — der Start-
+  // Endpoint fällt ohne fertige Kalibrierung auf den Direktpfad zurück.
+  if (body.introEnabled && body.webcamMediaId) {
+    try {
+      const [existing] = await db
+        .select({ status: introCalibrations.status })
+        .from(introCalibrations)
+        .where(eq(introCalibrations.mediaItemId, body.webcamMediaId))
+        .limit(1);
+      // Fertige oder laufende Kalibrierung nicht zurücksetzen.
+      if (!existing || existing.status === "failed") {
+        const [calibration] = await db
+          .insert(introCalibrations)
+          .values({
+            mediaItemId: body.webcamMediaId,
+            userId: auth.user.id,
+            status: "pending",
+            ttsTemplate: DEFAULT_TTS_TEMPLATE,
+          })
+          .onConflictDoUpdate({
+            target: introCalibrations.mediaItemId,
+            set: { status: "pending", error: null, updatedAt: sql`now()` },
+          })
+          .returning();
+        await introCalibrationQueue().add(
+          "intro-calibration",
+          { calibrationId: calibration.id },
+          { jobId: `intro-calibration-${calibration.id}-${Date.now()}` },
+        );
+      }
+    } catch (err) {
+      console.error("[api/campaigns] intro calibration enqueue failed:", err);
+    }
+  }
+
   return NextResponse.json({ campaign }, { status: 201 });
 }
