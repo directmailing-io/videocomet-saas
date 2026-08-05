@@ -58,6 +58,7 @@ async function main(): Promise<void> {
     ttsTemplate: null, // Engine fällt auf DEFAULT_TTS_TEMPLATE zurück
     speechStartMs: 2150,
     anchorEndMs: 8240,
+    greetingEndMs: null,
     resumeMs: 8367,
     lufsRef: -19.0,
     spectralRef,

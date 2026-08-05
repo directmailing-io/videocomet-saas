@@ -29,7 +29,7 @@ import {
   uploadIntroFile,
   deleteIntroFileByUrl,
 } from "@/lib/bunny/intro-storage";
-import { DEFAULT_TTS_TEMPLATE } from "@/lib/intro";
+import { DEFAULT_TTS_TEMPLATE, parseGreetingTemplate } from "@/lib/intro";
 import { probeVideoDuration } from "@/lib/ffprobe";
 import { runFfmpeg } from "./ffmpeg";
 import {
@@ -59,6 +59,12 @@ export interface IntroEngineCalibration {
   ttsTemplate: string | null;
   speechStartMs: number | null;
   anchorEndMs: number | null;
+  /**
+   * Ende der Anrede (Start der bewussten Pause). Für kurze Templates
+   * wird bis hier gecuttet — beim Fehlen (Altbestand) fällt die Engine
+   * auf `anchorEndMs` zurück.
+   */
+  greetingEndMs: number | null;
   resumeMs: number | null;
   lufsRef: number | null;
   spectralRef: Record<string, number> | null;
@@ -189,18 +195,33 @@ export async function generatePersonalizedWebcam(
   }
 
   const cal = opts.calibration;
-  const anchorEndMs = cal.anchorEndMs;
-  const resumeMs = cal.resumeMs;
   const lufsRef = cal.lufsRef;
   if (
-    typeof anchorEndMs !== "number" ||
-    typeof resumeMs !== "number" ||
+    typeof cal.anchorEndMs !== "number" ||
+    typeof cal.resumeMs !== "number" ||
     typeof lufsRef !== "number" ||
     !cal.spectralRef ||
     (!cal.roomtoneUrl && !opts.roomtoneLocalPath)
   ) {
     return fail(opts.tag, "calibration_incomplete");
   }
+
+  // Template-Modus: bei kurzem Anrede-Template („Hi {vorname}") cutten wir
+  // NUR die Anrede raus und lassen die bewusste Pause + den ersten Satz
+  // des Users stehen. Bei einem klassischen Volltext-Template
+  // (Legacy, „Hallo {vorname}! Schön, dass ...") ersetzt der TTS den
+  // ganzen ersten Satz — Anker bleibt dann anchorEndMs.
+  const template = cal.ttsTemplate?.trim() || DEFAULT_TTS_TEMPLATE;
+  const isGreetingOnly =
+    parseGreetingTemplate(template) !== null && cal.greetingEndMs !== null;
+  const anchorEndMs = isGreetingOnly
+    ? (cal.greetingEndMs as number)
+    : cal.anchorEndMs;
+  // Resume analog: nach der Anrede + kleines Offset (bewusste Pause bleibt
+  // im Video und wirkt als natürliche Übergangs-Atempause).
+  const resumeMs = isGreetingOnly
+    ? Math.round(Math.ceil((anchorEndMs + 120) / FRAME_MS) * FRAME_MS)
+    : cal.resumeMs;
 
   const dir = opts.workDir;
   const tag = opts.tag.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
@@ -209,7 +230,6 @@ export async function generatePersonalizedWebcam(
 
   try {
     // ── 1. TTS ──────────────────────────────────────────────────────────
-    const template = cal.ttsTemplate?.trim() || DEFAULT_TTS_TEMPLATE;
     let text = template;
     for (const [key, value] of Object.entries(opts.substitutions)) {
       text = text.replaceAll(`{${key}}`, value.trim());

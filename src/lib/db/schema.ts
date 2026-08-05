@@ -1795,6 +1795,9 @@ export const introCalibrations = pgTable("intro_calibrations", {
   ttsTemplate: text("tts_template"),
   speechStartMs: integer("speech_start_ms"),
   anchorEndMs: integer("anchor_end_ms"),
+  // Migration 0044 — Ende der Anrede (vor der bewussten Pause). Für kurze
+  // TTS-Templates („Hi {vorname}") — Fallback auf anchorEndMs wenn NULL.
+  greetingEndMs: integer("greeting_end_ms"),
   resumeMs: integer("resume_ms"),
   lufsRef: real("lufs_ref"),
   spectralRef: jsonb("spectral_ref").$type<Record<string, number> | null>(),

@@ -75,6 +75,13 @@ interface SilenceAnalysis {
   pause: SilenceInterval;
   sentenceStartSec: number;
   anchorEndSec: number;
+  /**
+   * Ende der Anrede — genauer: Start der bewussten Pause nach „Hi!".
+   * Für kurze TTS-Templates („Hi {vorname}") wird bis hier gecuttet,
+   * NICHT bis zum Ende des ersten Satzes. Alter Modus (langer Satz-
+   * Template) nutzt weiter `anchorEndSec`.
+   */
+  greetingEndSec: number;
 }
 
 /**
@@ -130,7 +137,14 @@ export function analyzeSilenceStructure(
     throw new CalibrationError("anchor_too_late");
   }
 
-  return { speechStartSec, pause, sentenceStartSec, anchorEndSec };
+  return {
+    speechStartSec,
+    pause,
+    sentenceStartSec,
+    anchorEndSec,
+    // Anrede endet mit dem Beginn der bewussten Pause.
+    greetingEndSec: pause.start,
+  };
 }
 
 /** Rundet auf die nächste 30fps-Frame-Grenze AUF (n/30 s in ms). */
@@ -253,6 +267,7 @@ export async function processIntroCalibrationJob(job: {
       ttsTemplate: row.calibration.ttsTemplate ?? DEFAULT_TTS_TEMPLATE,
       speechStartMs,
       anchorEndMs,
+      greetingEndMs: Math.round(structure.greetingEndSec * 1000),
       resumeMs,
       lufsRef,
       spectralRef,
