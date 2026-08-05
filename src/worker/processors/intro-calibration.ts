@@ -43,11 +43,13 @@ import type { IntroCalibrationJobData } from "../intro-queue";
 
 const SAMPLE_RATE = 48000;
 /**
- * Bewusste Pause nach der Begrüßung: mindestens 0.6s Stille. Bewusst
- * kürzer als „zähle bis 2" — ein natürlicher Atem-Beat nach dem „Hi!"
- * reicht dem Detektor, damit User keine unnötig-lange Pause machen müssen.
+ * Anrede-Ende: JEDE Mikro-Pause nach dem Namen zählt (150ms). In
+ * natürlicher Sprache passiert das automatisch zwischen „Hi Christoph"
+ * und dem folgenden Satz — auch ohne bewusste Zähl-Pause. Vorher waren
+ * es 600ms, was für User unnatürlich lang war und praktisch nie ohne
+ * explizite Instruktion getroffen wurde.
  */
-const DELIBERATE_PAUSE_MIN_SEC = 0.6;
+const DELIBERATE_PAUSE_MIN_SEC = 0.15;
 /**
  * Anrede muss mindestens so lang sein, bevor die bewusste Pause zählt.
  * Ohne diese Untergrenze picken kleine Initial-Stillen im Recorder (73ms
@@ -131,25 +133,25 @@ export function analyzeSilenceStructure(
     speechStartSec = leading.end;
   }
 
-  // Bewusste Pause: erste Stille >= 0.8s, die NACH dem Sprachbeginn UND
-  // mindestens `GREETING_MIN_SEC` in die Sprache hinein startet. Die
-  // 300ms-Untergrenze filtert False-Positives durch Aufnahme-Start-
-  // Artefakte (kurze Initial-Stille zwischen Recorder-Start und dem
-  // ersten Wort des Users).
-  const pause = coarse.find(
+  // Anrede-Ende: JEDE Mikro-Pause >= 150ms zwischen 300ms und 5s nach
+  // Sprachbeginn zählt. Damit fängt der Detektor auch die natürliche
+  // Mikro-Pause zwischen „Hi Christoph" und dem folgenden Satz, die
+  // beim normalen Sprechen automatisch entsteht — kein spezielles
+  // Aufnahme-Verhalten mehr nötig.
+  //
+  // WICHTIG: wir suchen in `fine` (silencedetect d=0.08s), nicht `coarse`
+  // (d=0.25s), sonst würden 150ms Mikro-Pausen komplett übersehen.
+  const pause = fine.find(
     (s) =>
       s.start >= speechStartSec + GREETING_MIN_SEC &&
+      s.start <= GREETING_MAX_SEC &&
       Number.isFinite(s.end) &&
       s.end - s.start >= DELIBERATE_PAUSE_MIN_SEC,
   );
   if (!pause) {
-    throw new CalibrationError("no_pause_detected");
-  }
-  // Zu späte Pause → die „Anrede" ist tatsächlich ein monologischer
-  // Anfang; ein „Hi {vorname}"-Cut würde 5+ Sekunden Inhalt vernichten.
-  // Explizit failen mit klarer User-Guidance statt semantisch falsches
-  // Ergebnis zu produzieren.
-  if (pause.start > GREETING_MAX_SEC) {
+    // Nichts im Anrede-Fenster gefunden — User hat wahrscheinlich
+    // durchgesprochen ohne Trennung. Explizit failen mit klarer
+    // Message statt semantisch falsches Ergebnis.
     throw new CalibrationError("greeting_too_late");
   }
 
