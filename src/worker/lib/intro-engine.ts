@@ -231,7 +231,11 @@ export async function generatePersonalizedWebcam(
     if (cal.greetingEndMs === null) {
       return fail(opts.tag, "greeting_anchor_missing");
     }
-    if ((cal.greetingEndMs as number) < 1000) {
+    // Untergrenze bewusst niedrig: 300ms sind das absolute Minimum für
+    // ein natürlich gesprochenes „Hi". Alles darunter ist ein
+    // Silence-False-Positive. Wenn die TTS länger ist als greeting_end,
+    // wird sie unten via atempo auf die Ziel-Länge beschleunigt.
+    if ((cal.greetingEndMs as number) < 300) {
       return fail(
         opts.tag,
         `greeting_anchor_too_small_${cal.greetingEndMs}ms`,
@@ -273,21 +277,49 @@ export async function generatePersonalizedWebcam(
     const ttsBuffer = await tts({ text, referenceId: opts.fishModelId });
     await writeFile(ttsRawPath, ttsBuffer);
 
-    const ttsDurSec = await probeVideoDuration(ttsRawPath);
-    if (!ttsDurSec || ttsDurSec <= 0.2) {
+    const ttsRawDurSec = await probeVideoDuration(ttsRawPath);
+    if (!ttsRawDurSec || ttsRawDurSec <= 0.2) {
       return fail(tag, "tts_unmeasurable");
     }
-    const ttsDurMs = ttsDurSec * 1000;
-    if (ttsDurMs > anchorEndMs - TTS_HEADROOM_MS) {
-      return fail(tag, "tts_too_long");
+
+    // Speed-Anpassung: Fish TTS spricht typischerweise langsamer als
+    // ein Sprecher im Original. Wenn die generierte „Hi Christoph"-TTS
+    // länger ist als die Original-Anrede-Zone (greeting_end_ms), passen
+    // wir sie via ffmpeg-atempo an. Bis Faktor 1.4 klingt das noch
+    // natürlich, darüber wird's hektisch → dann echter Fallback.
+    const targetMs = anchorEndMs - TTS_HEADROOM_MS;
+    let ttsPath = ttsRawPath;
+    let ttsDurMs = ttsRawDurSec * 1000;
+    if (ttsDurMs > targetMs) {
+      const speedFactor = ttsDurMs / targetMs;
+      if (speedFactor > 1.4) {
+        return fail(
+          tag,
+          `tts_too_long: ${ttsDurMs.toFixed(0)}ms für ${targetMs}ms Anrede-Zone (Faktor ${speedFactor.toFixed(2)})`,
+        );
+      }
+      const spedPath = join(dir, `tts-sped-${tag}.wav`);
+      await runFfmpeg([
+        "-y",
+        "-i", ttsRawPath,
+        "-filter:a", `atempo=${speedFactor.toFixed(3)}`,
+        "-ac", "1", "-ar", String(SAMPLE_RATE),
+        spedPath,
+      ]);
+      ttsPath = spedPath;
+      const spedDurSec = await probeVideoDuration(spedPath);
+      ttsDurMs = (spedDurSec ?? ttsRawDurSec) * 1000;
     }
+    // ttsPath ist ab hier die zu verwendende TTS (raw oder sped-up).
+    // Die alten Schritte lesen bisher ttsRawPath — wir aliasen darauf.
+    const ttsAdjustedPath = ttsPath;
 
     // ── 2. Auto-EQ + Loudness-Match ─────────────────────────────────────
-    const ttsSpectrum = await measureSpectrum(ttsRawPath);
+    const ttsSpectrum = await measureSpectrum(ttsAdjustedPath);
     const eqChain = buildEqFilterChain(cal.spectralRef, ttsSpectrum);
     const ttsEqPath = join(dir, `tts-eq-${tag}.wav`);
     await runFfmpeg([
-      "-y", "-i", ttsRawPath,
+      "-y", "-i", ttsAdjustedPath,
       ...(eqChain ? ["-af", eqChain] : []),
       "-ac", "1", "-ar", String(SAMPLE_RATE),
       ttsEqPath,
