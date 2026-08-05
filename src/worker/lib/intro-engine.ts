@@ -287,18 +287,26 @@ export async function generatePersonalizedWebcam(
     // TTS zu lang für die Aufnahme.
     let ttsDurMs = ttsRawDurSec * 1000;
     const HEADROOM_MS = 50;
-    // KEIN Anchor-Erweitern mehr: das schnitt im letzten Versuch mitten
-    // in User-Wörter rein („Hey ich habe..."). Stattdessen atempo-Speedup
-    // die TTS auf die Original-Anrede-Länge. Bis 1.3x klingt natürlich,
-    // darüber echter Fallback aufs Original-Video (1 Credit).
-    const targetMs = anchorEndMs - HEADROOM_MS;
+    // Ziel-Zone berechnen. Wenn sentence_start_ms bekannt ist, dürfen
+    // wir bis DORT cutten (Ende der bewussten Pause im Original) — die
+    // TTS-Sprache ersetzt dann Anrede + die kurze User-Pause. Original-
+    // Content bleibt unversehrt (im Gegensatz zum „mitten ins Wort
+    // schneiden"-Bug).
+    let extendedAnchorMs = anchorEndMs;
+    if (isGreetingOnly && typeof cal.sentenceStartMs === "number") {
+      extendedAnchorMs = Math.max(anchorEndMs, cal.sentenceStartMs);
+      anchorEndMs = extendedAnchorMs;
+    }
+    const targetMs = extendedAnchorMs - HEADROOM_MS;
     let ttsAdjustedPath = ttsRawPath;
     if (ttsDurMs > targetMs) {
       const speedFactor = ttsDurMs / targetMs;
-      if (speedFactor > 1.3) {
+      // 1.5x ist die Grenze wo Deutsch noch als „etwas flott" durchgeht,
+      // darüber wird's als „unnatürlich schnell" wahrgenommen.
+      if (speedFactor > 1.5) {
         return fail(
           tag,
-          `tts_too_long: ${ttsDurMs.toFixed(0)}ms für ${targetMs}ms Anrede-Zone (Faktor ${speedFactor.toFixed(2)}, max 1.3)`,
+          `tts_too_long: ${ttsDurMs.toFixed(0)}ms für ${targetMs}ms Anrede-Zone (Faktor ${speedFactor.toFixed(2)}, max 1.5)`,
         );
       }
       const spedPath = join(dir, `tts-sped-${tag}.wav`);
