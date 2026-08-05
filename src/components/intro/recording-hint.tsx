@@ -33,12 +33,24 @@ export function RecordingHint({
             <p className="text-sm font-semibold text-ink">
               Wichtig: So spricht dein Video den ersten Satz
             </p>
-            <p className="text-xs text-ink-muted mt-1 leading-relaxed">
-              Nach der Anrede („Hi!") muss ein vollständiger Satz mit
-              Subjekt und Verb folgen — so, wie du auch den ersten Satz
-              einer E-Mail schreiben würdest. Sonst passt die KI-Begrüßung
-              („Hey Julius") sprachlich nicht zu dem, was danach kommt.
-            </p>
+            <ol className="mt-2 space-y-1.5 text-xs text-ink-muted leading-relaxed list-decimal list-inside">
+              <li>
+                Sprich die Anrede kurz und für sich:{" "}
+                <span className="font-semibold text-ink">„Hi!"</span> oder
+                <span className="font-semibold text-ink"> „Hallo!"</span>.
+              </li>
+              <li>
+                <span className="font-semibold text-ink">
+                  Pausiere danach ~1 Sekunde
+                </span>{" "}
+                — deutlich hörbar. Das ist die Stelle, an der die KI später
+                den Vornamen einsetzt.
+              </li>
+              <li>
+                Dann ein <span className="font-semibold text-ink">vollständiger Satz</span>{" "}
+                mit Subjekt und Verb, wie in einer E-Mail-Einleitung.
+              </li>
+            </ol>
           </div>
         </div>
       )}
@@ -48,12 +60,13 @@ export function RecordingHint({
             <Check className="size-3" /> So passt es
           </p>
           <p className="text-sm text-ink italic leading-snug">
-            „Hi! Ich habe dir kurz ein Video aufgenommen, weil..."
+            „Hi!" <span className="not-italic text-ok/70">[Pause]</span> „Ich
+            habe dir kurz ein Video aufgenommen, weil..."
           </p>
         </div>
         <div className="rounded-squircle-sm bg-danger-soft px-3 py-2.5">
           <p className="flex items-center gap-1.5 text-xs font-semibold text-danger mb-1.5">
-            <X className="size-3" /> Klingt später komisch
+            <X className="size-3" /> Ohne Pause & mit Fragment
           </p>
           <p className="text-sm text-ink italic leading-snug">
             „Hi, kurzes Video für dich aufgenommen..."
