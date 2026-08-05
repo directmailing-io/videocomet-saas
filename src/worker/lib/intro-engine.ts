@@ -69,7 +69,14 @@ export interface GeneratePersonalizedWebcamOpts {
   userId: string;
   /** Eindeutiger Tag für Dateinamen (Lead-ID oder Test-Tag). */
   tag: string;
-  firstName: string;
+  /**
+   * Fertig geprüfte Substitutionen für die Template-Platzhalter. Enthält
+   * `vorname` (für Templates mit `{vorname}`) ODER `anrede`+`nachname`
+   * (für die formale Variante) — die Kette entscheidet ausschließlich
+   * anhand des Templates, welche Keys gebraucht werden. Alle Werte sind
+   * bereits normalisiert (siehe intro-name-check).
+   */
+  substitutions: Record<string, string>;
   calibration: IntroEngineCalibration;
   fishModelId: string;
   /** Lokaler Pfad zum Original-Webcam-Video. */
@@ -174,8 +181,8 @@ export async function generatePersonalizedWebcam(
   if (!opts.userId || !opts.tag || !opts.webcamLocalPath || !opts.workDir) {
     throw new Error("[intro-engine] missing required opts");
   }
-  if (!opts.firstName.trim()) {
-    throw new Error("[intro-engine] firstName must be non-empty (run checkFirstName first)");
+  if (Object.keys(opts.substitutions).length === 0) {
+    throw new Error("[intro-engine] substitutions must contain at least one key");
   }
   if (!opts.fishModelId) {
     throw new Error("[intro-engine] fishModelId is required");
@@ -203,7 +210,10 @@ export async function generatePersonalizedWebcam(
   try {
     // ── 1. TTS ──────────────────────────────────────────────────────────
     const template = cal.ttsTemplate?.trim() || DEFAULT_TTS_TEMPLATE;
-    const text = template.replaceAll("{vorname}", opts.firstName.trim());
+    let text = template;
+    for (const [key, value] of Object.entries(opts.substitutions)) {
+      text = text.replaceAll(`{${key}}`, value.trim());
+    }
     const ttsRawPath = join(dir, `tts-raw-${tag}.wav`);
     const ttsBuffer = await tts({ text, referenceId: opts.fishModelId });
     await writeFile(ttsRawPath, ttsBuffer);

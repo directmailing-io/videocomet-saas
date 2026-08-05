@@ -4,9 +4,64 @@
  * Worker-Dependencies (ffmpeg etc.).
  */
 
-/** Default-Vorlage für die TTS-Begrüßung. `{vorname}` wird pro Lead ersetzt. */
-export const DEFAULT_TTS_TEMPLATE =
-  "Hallo {vorname}! Schön, dass du dir das Video anschaust.";
+/**
+ * Fest wählbare Anrede-Prefixe. Absichtlich kurz und mündlich — der TTS
+ * spricht nur die Anrede, der Rest kommt aus dem Original-Video. Neue
+ * Prefixe hier ergänzen; die UI zeigt die Reihenfolge unverändert.
+ */
+export const GREETING_PREFIXES = [
+  "Hi",
+  "Hallo",
+  "Hey",
+  "Guten Tag",
+  "Moin",
+  "Servus",
+] as const;
+export type GreetingPrefix = (typeof GREETING_PREFIXES)[number];
+
+/**
+ * Zwei Namens-Muster. „firstName" ist informell (Du-Kunden), „formal" ist
+ * die Herr/Frau-Variante (Sie-Kunden). Die Platzhalter werden im Worker
+ * aus den Lead-Daten befüllt (Vorname, Anrede, Nachname).
+ */
+export const NAME_PATTERNS = {
+  firstName: "{vorname}",
+  formal: "{anrede} {nachname}",
+} as const;
+export type NamePatternKey = keyof typeof NAME_PATTERNS;
+
+export function buildGreetingTemplate(
+  prefix: GreetingPrefix,
+  pattern: NamePatternKey,
+): string {
+  return `${prefix} ${NAME_PATTERNS[pattern]}`;
+}
+
+/**
+ * Zerlegt eine gespeicherte Template-Zeile wieder in Prefix + Pattern,
+ * damit die UI die Dropdowns korrekt vorbelegen kann. Freitext-Templates
+ * (Legacy, längere Sätze) landen mit `prefix=null` — die UI stellt dann
+ * die Defaults ein.
+ */
+export function parseGreetingTemplate(
+  template: string | null | undefined,
+): { prefix: GreetingPrefix; pattern: NamePatternKey } | null {
+  if (!template) return null;
+  const t = template.trim();
+  // Reihenfolge wichtig: „Guten Tag" muss vor „Guten"-Startprefixen matchen.
+  for (const prefix of GREETING_PREFIXES) {
+    const rest = t.startsWith(prefix + " ")
+      ? t.slice(prefix.length + 1).trim()
+      : null;
+    if (rest === null) continue;
+    if (rest === NAME_PATTERNS.firstName) return { prefix, pattern: "firstName" };
+    if (rest === NAME_PATTERNS.formal) return { prefix, pattern: "formal" };
+  }
+  return null;
+}
+
+/** Default: kürzeste, universelle Begrüßung. Kein Satz — nur die Anrede. */
+export const DEFAULT_TTS_TEMPLATE = buildGreetingTemplate("Hi", "firstName");
 
 /** Version des Einwilligungstexts (Stimm-Klonen + KI-Generierung). */
 export const CONSENT_TEXT_VERSION = "v1-2026-08";

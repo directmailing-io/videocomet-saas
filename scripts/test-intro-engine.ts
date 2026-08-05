@@ -75,7 +75,7 @@ async function main(): Promise<void> {
   const result = await generatePersonalizedWebcam({
     userId: "engine-test",
     tag: "sabine",
-    firstName: FIRST_NAME,
+    substitutions: { vorname: FIRST_NAME },
     calibration,
     fishModelId: FISH_MODEL_ID,
     webcamLocalPath,

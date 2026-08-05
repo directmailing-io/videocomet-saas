@@ -34,7 +34,8 @@ import {
   voiceProfiles,
   type IntroPreviewEntry,
 } from "@/lib/db/schema";
-import { checkFirstName } from "@/lib/intro-name-check";
+import { resolveIntroSubstitutions } from "@/lib/intro-name-check";
+import { DEFAULT_TTS_TEMPLATE } from "@/lib/intro";
 import { uploadIntroFile } from "@/lib/bunny/intro-storage";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
 import { generatePersonalizedWebcam } from "../lib/intro-engine";
@@ -46,23 +47,6 @@ const PREVIEW_TRIM_SEC = 15;
 const PREVIEW_TARGET = 3;
 /** Obergrenze an Engine-Versuchen (Kosten-/Zeit-Deckel). */
 const PREVIEW_MAX_ATTEMPTS = 6;
-
-const FIRST_NAME_FIELDS = ["firstName", "Vorname", "first_name", "vorname"];
-
-function pickFirstNameRaw(data: Record<string, string>): string {
-  for (const key of FIRST_NAME_FIELDS) {
-    const v = data[key];
-    if (typeof v === "string" && v.trim()) return v;
-  }
-  // Case-insensitive Fallback über alle Keys.
-  const lower = new Set(FIRST_NAME_FIELDS.map((f) => f.toLowerCase()));
-  for (const [k, v] of Object.entries(data)) {
-    if (lower.has(k.toLowerCase()) && typeof v === "string" && v.trim()) {
-      return v;
-    }
-  }
-  return "";
-}
 
 export async function processIntroPreviewJob(job: {
   data: IntroPreviewJobData;
@@ -164,13 +148,21 @@ export async function processIntroPreviewJob(job: {
     const seenNames = new Set<string>();
     let attempts = 0;
 
+    const template = calibration.ttsTemplate?.trim() || DEFAULT_TTS_TEMPLATE;
+
     for (const lead of candidates) {
       if (previews.length >= PREVIEW_TARGET) break;
       if (attempts >= PREVIEW_MAX_ATTEMPTS) break;
 
-      const nameCheck = checkFirstName(pickFirstNameRaw(lead.data));
-      if (!nameCheck.ok) continue;
-      const nameKey = nameCheck.name.toLowerCase();
+      const substResult = resolveIntroSubstitutions(
+        template,
+        (lead.data ?? {}) as Record<string, string>,
+      );
+      if (!substResult.ok) continue;
+      // Dedup-Key aus allen Substitutionen (Vorname ODER Anrede+Nachname).
+      const nameKey = Object.values(substResult.substitutions)
+        .join(" ")
+        .toLowerCase();
       if (seenNames.has(nameKey)) continue;
       seenNames.add(nameKey);
 
@@ -179,7 +171,7 @@ export async function processIntroPreviewJob(job: {
         const result = await generatePersonalizedWebcam({
           userId: run.userId,
           tag: `pv-${lead.id.slice(0, 8)}`,
-          firstName: nameCheck.name,
+          substitutions: substResult.substitutions,
           calibration,
           fishModelId: voiceProfile.fishModelId,
           webcamLocalPath,

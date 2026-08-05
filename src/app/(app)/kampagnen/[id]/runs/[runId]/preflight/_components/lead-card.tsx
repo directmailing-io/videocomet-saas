@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
+import { AlertTriangle, Check, Loader2, RotateCcw } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -249,6 +249,18 @@ function LeadCardImpl({
             decoding="async"
             className="absolute inset-0 size-full object-cover"
           />
+        ) : status === "ok" ? (
+          // Kampagne ohne Screenshot-Vorprüfung (webcam-only skipPreflight):
+          // Status ist "ok", aber es gibt kein Bild. Statt Fehler-Optik
+          // ein neutraler "Bereit"-Platzhalter mit Domain.
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-4 text-center bg-surface-muted">
+            <span className="inline-flex size-8 items-center justify-center rounded-full bg-ok-soft text-ok">
+              <Check className="size-4" />
+            </span>
+            <div className="text-[11px] font-medium text-ink-muted leading-tight">
+              Bereit für die Produktion
+            </div>
+          </div>
         ) : (
           // Terminal-Status ohne Screenshot. Inhalt + Retry-Sichtbarkeit
           // hängen am genauen Status — nicht jeder Fehler verdient den

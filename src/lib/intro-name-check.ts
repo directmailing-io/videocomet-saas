@@ -15,6 +15,86 @@ export type NameCheckResult =
   | { ok: false; reason: string };
 
 /**
+ * Alias-Kandidaten pro Feld — case-insensitive vom Aufrufer geprüft.
+ * Reihenfolge: exakter Treffer gewinnt, dann CI.
+ */
+const FIELD_ALIASES = {
+  vorname: ["firstName", "Vorname", "first_name", "vorname"],
+  nachname: ["lastName", "Nachname", "last_name", "nachname"],
+  anrede: ["anrede", "Anrede", "salutation", "Salutation"],
+} as const;
+
+function pickField(
+  data: Record<string, string>,
+  candidates: readonly string[],
+): string {
+  for (const key of candidates) {
+    const v = data[key];
+    if (v && v.trim()) return v.trim();
+  }
+  const lower = new Map<string, string>();
+  for (const [k, v] of Object.entries(data)) lower.set(k.toLowerCase(), v);
+  for (const key of candidates) {
+    const v = lower.get(key.toLowerCase());
+    if (v && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+export type IntroSubstitutionResult =
+  | { ok: true; substitutions: Record<string, string> }
+  | { ok: false; reason: string };
+
+/**
+ * Ermittelt aus einem Template + Lead-Daten die validierten
+ * Substitutionen für die Intro-Engine. Erkennt automatisch
+ * `{vorname}`- vs. `{anrede} {nachname}`-Templates und ruft den passenden
+ * Namens-Check auf. Fehlt ein Pflichtfeld oder ist ungültig → Fallback
+ * (Pipeline nimmt dann Original-Video, 1 Credit).
+ */
+export function resolveIntroSubstitutions(
+  template: string,
+  leadData: Record<string, string>,
+): IntroSubstitutionResult {
+  const usesVorname = template.includes("{vorname}");
+  const usesNachname = template.includes("{nachname}");
+  const usesAnrede = template.includes("{anrede}");
+
+  if (!usesVorname && !usesNachname) {
+    return { ok: false, reason: "template_no_placeholders" };
+  }
+
+  const out: Record<string, string> = {};
+
+  if (usesVorname) {
+    const raw = pickField(leadData, FIELD_ALIASES.vorname);
+    const check = checkFirstName(raw);
+    if (!check.ok) return { ok: false, reason: `vorname_${check.reason}` };
+    out.vorname = check.name;
+  }
+
+  if (usesNachname) {
+    const nachnameRaw = pickField(leadData, FIELD_ALIASES.nachname);
+    if (usesAnrede) {
+      const anredeRaw = pickField(leadData, FIELD_ALIASES.anrede);
+      const check = checkFormalName(anredeRaw, nachnameRaw);
+      if (!check.ok) return { ok: false, reason: check.reason };
+      // Für den TTS-Text zusammen als „Herr Thiesen" gebraucht — Engine
+      // ersetzt {anrede} und {nachname} einzeln, also splitten wir wieder.
+      const [anredeNorm, ...rest] = check.name.split(" ");
+      out.anrede = anredeNorm;
+      out.nachname = rest.join(" ");
+    } else {
+      const check = checkFirstName(nachnameRaw);
+      if (!check.ok) return { ok: false, reason: `nachname_${check.reason}` };
+      out.nachname = check.name;
+    }
+  }
+
+  return { ok: true, substitutions: out };
+}
+
+/**
  * Führende Titel/Anreden, die vor der eigentlichen Namens-Prüfung
  * abgestreift werden. Matcht tokenweise, case-insensitive. Zusammengesetzte
  * Titel wie "Dipl.-Ing." sind einzelne Tokens und werden komplett entfernt.
@@ -76,6 +156,33 @@ function capitalize(token: string): string {
  *      Sonderzeichen außer '/-, 2-24 Zeichen) pro Token.
  *   5. Normalisierung: erster Buchstabe pro Token groß, Rest unverändert.
  */
+/**
+ * Prüft ein Anrede+Nachname-Paar für die formale Variante („Guten Tag
+ * Herr Thiesen"). Anrede wird auf „Herr"/„Frau" normalisiert, Nachname
+ * durchläuft dieselbe Blocklist/Pattern-Prüfung wie ein Vorname.
+ *
+ * Ergebnis-`name` ist der komplette Ausdruck, den der Worker als
+ * Substitutionswert einsetzt (z.B. „Herr Thiesen").
+ */
+export function checkFormalName(
+  anredeRaw: string,
+  nachnameRaw: string,
+): NameCheckResult {
+  const anrede = (anredeRaw ?? "").trim().toLowerCase();
+  const anredeNorm =
+    anrede === "herr" || anrede === "hr" || anrede === "hr."
+      ? "Herr"
+      : anrede === "frau" || anrede === "fr" || anrede === "fr."
+        ? "Frau"
+        : null;
+  if (!anredeNorm) return { ok: false, reason: "anrede_unknown" };
+
+  const nachnameCheck = checkFirstName(nachnameRaw);
+  if (!nachnameCheck.ok) return nachnameCheck;
+
+  return { ok: true, name: `${anredeNorm} ${nachnameCheck.name}` };
+}
+
 export function checkFirstName(raw: string): NameCheckResult {
   const trimmed = (raw ?? "").trim();
   if (!trimmed) {

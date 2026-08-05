@@ -103,9 +103,13 @@ const patchSchema = z.object({
     .trim()
     .min(1, "Vorlage darf nicht leer sein.")
     .max(200, "Vorlage ist zu lang (max. 200 Zeichen).")
-    .refine((v) => v.includes("{vorname}"), {
-      message: "Die Vorlage muss den Platzhalter {vorname} enthalten.",
-    }),
+    .refine(
+      (v) => v.includes("{vorname}") || v.includes("{nachname}"),
+      {
+        message:
+          "Die Vorlage muss mindestens {vorname} oder {nachname} enthalten.",
+      },
+    ),
 });
 
 /**

@@ -18,6 +18,12 @@ interface IntroStatusPayload {
   enabled: boolean;
   voiceReady: boolean;
   previewApprovedAt: string | null;
+  /**
+   * `null` = Worker läuft noch (Spalte in DB ist NULL).
+   * `true` = Worker fertig, `previews` ist der endgültige Snapshot
+   *          (kann leer sein → keine Vorschau geglückt).
+   */
+  previewsGenerated: boolean;
   previews: Array<{
     leadId: string;
     firstName: string | null;
@@ -87,6 +93,7 @@ export async function GET(
     enabled: false,
     voiceReady: false,
     previewApprovedAt: null,
+    previewsGenerated: false,
     previews: [],
   };
   const [campaign] = await db
@@ -101,6 +108,9 @@ export async function GET(
       .where(eq(voiceProfiles.userId, auth.user.id))
       .limit(1);
 
+    // introPreview: NULL = Worker läuft noch, [] = fertig ohne Erfolg,
+    // [...] = fertig mit Ergebnissen.
+    const generated = run.introPreview !== null;
     const entries = run.introPreview ?? [];
     const firstNameByLead = new Map<string, string | null>();
     if (entries.length > 0) {
@@ -124,6 +134,7 @@ export async function GET(
       previewApprovedAt: run.introPreviewApprovedAt
         ? run.introPreviewApprovedAt.toISOString()
         : null,
+      previewsGenerated: generated,
       previews: entries.map((e) => ({
         leadId: e.leadId,
         firstName: firstNameByLead.get(e.leadId) ?? null,

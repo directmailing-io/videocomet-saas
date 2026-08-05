@@ -83,7 +83,8 @@ import { trackAndRefAsset } from "../lib/bunny-asset-tracking";
 import { runThumbnailGenerate } from "./thumbnail-generate";
 import { runLandingpageScreenshot } from "./landingpage-screenshot";
 import { hasPersonalization } from "../lib/has-personalization";
-import { checkFirstName } from "@/lib/intro-name-check";
+import { checkFirstName, resolveIntroSubstitutions } from "@/lib/intro-name-check";
+import { DEFAULT_TTS_TEMPLATE } from "@/lib/intro";
 import { generatePersonalizedWebcam } from "../lib/intro-engine";
 import {
   getSharedThumbnailUrl,
@@ -572,12 +573,12 @@ export async function pipelineProcessor(
               message: `${leadLabel}: Intro übersprungen — Voice-Profil oder Webcam-Kalibrierung nicht bereit; Original-Video wird verwendet`,
             });
           } else {
-            const rawFirstName = pickField(
+            const template = calibration.ttsTemplate?.trim() || DEFAULT_TTS_TEMPLATE;
+            const substResult = resolveIntroSubstitutions(
+              template,
               (lead.data ?? {}) as Record<string, string>,
-              ["firstName", "Vorname", "first_name", "vorname"],
             );
-            const nameCheck = checkFirstName(rawFirstName);
-            if (!nameCheck.ok) {
+            if (!substResult.ok) {
               await updateLeadStatus(data.leadId, {
                 introStatus: "fallback_name",
               });
@@ -586,7 +587,7 @@ export async function pipelineProcessor(
                 leadId: data.leadId,
                 level: "info",
                 stage: "render",
-                message: `${leadLabel}: Intro-Fallback — kein brauchbarer Vorname ("${rawFirstName.slice(0, 40)}", ${nameCheck.reason}); Original-Video wird verwendet`,
+                message: `${leadLabel}: Intro-Fallback — Namensdaten nicht brauchbar (${substResult.reason}); Original-Video wird verwendet`,
               });
             } else {
               // Webcam lokal materialisieren (eigener Unterordner, damit
@@ -620,7 +621,7 @@ export async function pipelineProcessor(
                   generatePersonalizedWebcam({
                     userId: data.userId,
                     tag: data.leadId.slice(0, 8),
-                    firstName: nameCheck.name,
+                    substitutions: substResult.substitutions,
                     calibration,
                     fishModelId: voiceProfile.fishModelId!,
                     webcamLocalPath: introWebcamPath,
@@ -630,9 +631,19 @@ export async function pipelineProcessor(
                 "personalizeIntro",
               );
               const introMs = Date.now() - introStart;
+              // Log-Label bevorzugt Vorname, fällt auf die formale Variante
+              // zurück, damit content_hash + Log-Zeilen sprechend bleiben.
+              const introDisplayName =
+                substResult.substitutions.vorname ??
+                [
+                  substResult.substitutions.anrede,
+                  substResult.substitutions.nachname,
+                ]
+                  .filter(Boolean)
+                  .join(" ");
               if (result.ok) {
                 personalizedWebcamPath = result.outputPath;
-                introFirstName = nameCheck.name;
+                introFirstName = introDisplayName;
                 introStartTrimMs = result.startTrimMs;
                 await updateLeadStatus(data.leadId, {
                   introStatus: "generated",
@@ -642,7 +653,7 @@ export async function pipelineProcessor(
                   leadId: data.leadId,
                   level: "info",
                   stage: "render",
-                  message: `${leadLabel}: personalisierte Begrüßung ("${nameCheck.name}") in ${(introMs / 1000).toFixed(1)}s erzeugt`,
+                  message: `${leadLabel}: personalisierte Begrüßung ("${introDisplayName}") in ${(introMs / 1000).toFixed(1)}s erzeugt`,
                   durationMs: introMs,
                 });
               } else {

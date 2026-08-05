@@ -669,10 +669,12 @@ export function RunWizardStepPlaceholders({
             </div>
           )}
 
-          {/* Validation-Banner */}
+          {/* Info-Banner: unmapped Platzhalter bleiben im Video leer.
+              Bewusst nur Warnung, kein Blocker — manche Platzhalter sind
+              optional und sollen im Video schlicht nichts anzeigen. */}
           {unmapped.length > 0 && (
-            <div className="flex items-start gap-3 rounded-squircle-sm bg-warn-soft px-4 py-3">
-              <span className="mt-0.5 inline-flex size-7 items-center justify-center rounded-full bg-warn text-white shrink-0">
+            <div className="flex items-start gap-3 rounded-squircle-sm bg-surface-soft px-4 py-3">
+              <span className="mt-0.5 inline-flex size-7 items-center justify-center rounded-full bg-ink-muted/15 text-ink-muted shrink-0">
                 <AlertTriangle className="size-4" />
               </span>
               <div className="flex-1">
@@ -683,8 +685,8 @@ export function RunWizardStepPlaceholders({
                     : "Platzhalter ohne Zuweisung"}
                 </p>
                 <p className="text-xs text-ink-muted mt-0.5">
-                  Weise jedem Key entweder eine CSV-Spalte oder einen
-                  Fallback-Wert zu, sonst können wir den Lauf nicht starten.
+                  Diese Platzhalter werden im Video leer gelassen. Weise eine
+                  CSV-Spalte oder einen Fallback zu, wenn du das nicht möchtest.
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {unmapped.slice(0, 6).map((p) => (
@@ -753,15 +755,9 @@ export function RunWizardStepPlaceholders({
 
       {/* ── Weiter-Button ─────────────────────────────────────────── */}
       <div className="flex items-center justify-end gap-3">
-        {unmapped.length > 0 && (
-          <span className="text-xs text-ink-muted">
-            Bitte alle {unmapped.length} unmappten Keys zuweisen.
-          </span>
-        )}
         <Button
           onClick={handleContinue}
           loading={advancing}
-          disabled={unmapped.length > 0}
           iconRight={<ArrowRight className="size-4" />}
         >
           Weiter

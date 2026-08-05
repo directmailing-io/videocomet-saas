@@ -13,7 +13,7 @@
  */
 
 import * as React from "react";
-import { Sparkles } from "lucide-react";
+import { AlertTriangle, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -21,6 +21,9 @@ export interface IntroPreviewInfo {
   enabled: boolean;
   voiceReady: boolean;
   previewApprovedAt: string | null;
+  /** `true` sobald der Worker die Beispielvideo-Generierung abgeschlossen
+   *  hat — auch wenn dabei nichts glückte (dann previews leer). */
+  previewsGenerated: boolean;
   previews: Array<{
     leadId: string;
     firstName: string | null;
@@ -52,9 +55,34 @@ export function IntroPreviewSection({
 
   const alreadyApproved = intro.previewApprovedAt !== null;
 
-  // Previews werden noch generiert.
   if (intro.previews.length === 0) {
     if (alreadyApproved) return null;
+    // Worker fertig, aber kein einziges Beispielvideo — Kalibrierung,
+    // Voice-Modell oder Rendering ist schiefgelaufen. Endloser Spinner
+    // wäre irreführend, also expliziter Fehler-Zustand.
+    if (intro.previewsGenerated) {
+      return (
+        <div className="bg-surface rounded-squircle-md shadow-card p-5">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-squircle-sm bg-warn-soft text-warn">
+              <AlertTriangle className="size-4" />
+            </span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-ink">
+                Beispielvideos konnten nicht erstellt werden
+              </p>
+              <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+                Die Produktion läuft trotzdem, aber ohne personalisierte
+                Begrüßung. Jeder Lead erhält das Original-Video (1 Credit
+                statt 2). Prüfe im Setup unter „KI-Begrüßung", ob deine
+                Stimme bereit ist.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    // Sonst: Worker läuft noch.
     return (
       <div className="bg-surface rounded-squircle-md shadow-card p-5">
         <div className="flex items-center gap-3">

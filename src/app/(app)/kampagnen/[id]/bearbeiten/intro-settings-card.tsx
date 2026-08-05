@@ -18,19 +18,36 @@ import Link from "next/link";
 import {
   AlertCircle,
   Check,
-  Save,
   ScanLine,
   Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toaster";
-import { DEFAULT_TTS_TEMPLATE } from "@/lib/intro";
+import {
+  DEFAULT_TTS_TEMPLATE,
+  GREETING_PREFIXES,
+  type GreetingPrefix,
+  type NamePatternKey,
+  buildGreetingTemplate,
+  parseGreetingTemplate,
+} from "@/lib/intro";
 import { cn } from "@/lib/utils";
+
+const DEFAULT_PICK = parseGreetingTemplate(DEFAULT_TTS_TEMPLATE) ?? {
+  prefix: "Hi" as GreetingPrefix,
+  pattern: "firstName" as NamePatternKey,
+};
 
 // ── API-Verträge ─────────────────────────────────────────────────────────
 
@@ -83,10 +100,13 @@ export function IntroSettingsCard({
   const [enabled, setEnabled] = React.useState(initialEnabled);
   const [toggleSaving, setToggleSaving] = React.useState(false);
 
-  // Begrüßungs-Vorlage (editierbar, muss {vorname} enthalten).
-  const [template, setTemplate] = React.useState<string>(DEFAULT_TTS_TEMPLATE);
-  const [templateTouched, setTemplateTouched] = React.useState(false);
-  const [templateSaving, setTemplateSaving] = React.useState(false);
+  // Begrüßung: Prefix + Namensart. Wird beim Speichern zu einem
+  // `{prefix} {vorname}`- / `{prefix} {anrede} {nachname}`-Template
+  // zusammengesetzt und in intro_calibrations.tts_template abgelegt.
+  const [prefix, setPrefix] = React.useState<GreetingPrefix>(DEFAULT_PICK.prefix);
+  const [pattern, setPattern] = React.useState<NamePatternKey>(DEFAULT_PICK.pattern);
+  const [greetingSaving, setGreetingSaving] = React.useState(false);
+  const [greetingDirty, setGreetingDirty] = React.useState(false);
 
   // ── KI-Stimme laden ─────────────────────────────────────────────────
   React.useEffect(() => {
@@ -125,23 +145,28 @@ export function IntroSettingsCard({
       if (!res.ok) throw new Error();
       const data = (await res.json()) as { calibration: CalibrationDto | null };
       setCalibration(data.calibration);
-      if (data.calibration?.ttsTemplate && !templateTouched) {
-        setTemplate(data.calibration.ttsTemplate);
+      if (data.calibration?.ttsTemplate && !greetingDirty) {
+        const parsed = parseGreetingTemplate(data.calibration.ttsTemplate);
+        if (parsed) {
+          setPrefix(parsed.prefix);
+          setPattern(parsed.pattern);
+        }
       }
     } catch {
       setCalibration(null);
     } finally {
       setCalibrationLoading(false);
     }
-    // templateTouched bewusst nicht in den Deps — der User-Edit soll beim
+    // greetingDirty bewusst nicht in den Deps — der User-Edit soll beim
     // Polling nicht überschrieben werden.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [webcamMediaId]);
 
   React.useEffect(() => {
     // Webcam gewechselt → Vorlage-Editing zurücksetzen und neu laden.
-    setTemplateTouched(false);
-    setTemplate(DEFAULT_TTS_TEMPLATE);
+    setGreetingDirty(false);
+    setPrefix(DEFAULT_PICK.prefix);
+    setPattern(DEFAULT_PICK.pattern);
     void loadCalibration();
   }, [loadCalibration]);
 
@@ -218,53 +243,56 @@ export function IntroSettingsCard({
     }
   }
 
-  const templateValid = template.trim().length > 0 && template.includes("{vorname}");
+  const templateString = buildGreetingTemplate(prefix, pattern);
 
-  async function saveTemplate() {
-    if (!webcamMediaId || !templateValid) return;
-    setTemplateSaving(true);
-    try {
-      const res = await fetch(
-        `/api/media/${webcamMediaId}/intro-calibration`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ttsTemplate: template.trim() }),
-        },
-      );
-      const body = (await res.json().catch(() => ({}))) as {
-        calibration?: CalibrationDto;
-        error?: string;
-      };
-      if (!res.ok) {
+  const saveGreeting = React.useCallback(
+    async (nextPrefix: GreetingPrefix, nextPattern: NamePatternKey) => {
+      if (!webcamMediaId) return;
+      setGreetingSaving(true);
+      try {
+        const res = await fetch(
+          `/api/media/${webcamMediaId}/intro-calibration`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ttsTemplate: buildGreetingTemplate(nextPrefix, nextPattern),
+            }),
+          },
+        );
+        const body = (await res.json().catch(() => ({}))) as {
+          calibration?: CalibrationDto;
+          error?: string;
+        };
+        if (!res.ok) {
+          toast({
+            title: "Speichern fehlgeschlagen",
+            description: body.error ?? "Bitte erneut versuchen.",
+            variant: "danger",
+          });
+          return;
+        }
+        if (body.calibration) setCalibration(body.calibration);
+      } catch {
         toast({
           title: "Speichern fehlgeschlagen",
-          description: body.error ?? "Bitte erneut versuchen.",
+          description: "Verbindung zum Server fehlgeschlagen.",
           variant: "danger",
         });
-        return;
+      } finally {
+        setGreetingSaving(false);
       }
-      setTemplateTouched(false);
-      if (body.calibration) setCalibration(body.calibration);
-      toast({
-        title: "Gespeichert",
-        description: "Begrüßungs-Vorlage",
-        variant: "success",
-      });
-    } catch {
-      toast({
-        title: "Speichern fehlgeschlagen",
-        description: "Verbindung zum Server fehlgeschlagen.",
-        variant: "danger",
-      });
-    } finally {
-      setTemplateSaving(false);
-    }
-  }
+    },
+    [webcamMediaId, toast],
+  );
 
-  const previewLine = templateValid
-    ? template.replaceAll("{vorname}", "Jürgen")
-    : null;
+  // Preview-Beispiel: informell zeigt Vorname, formal zeigt Herr/Frau.
+  const previewLine =
+    pattern === "firstName"
+      ? templateString.replaceAll("{vorname}", "Jürgen")
+      : templateString
+          .replaceAll("{anrede}", "Herr")
+          .replaceAll("{nachname}", "Thiesen");
 
   const ready =
     voiceStatus === "ready" && calibration?.status === "ready";
@@ -381,47 +409,86 @@ export function IntroSettingsCard({
             )}
 
             <div className={cn(!calibration.transcriptSentence && "pt-3")}>
-              <Label htmlFor="intro-tts-template">Begrüßungs-Vorlage</Label>
-              <div className="flex gap-2 items-start">
-                <div className="flex-1">
-                  <Input
-                    id="intro-tts-template"
-                    value={template}
-                    maxLength={200}
-                    aria-invalid={!templateValid ? true : undefined}
-                    onChange={(e) => {
-                      setTemplate(e.target.value);
-                      setTemplateTouched(true);
+              <Label>Begrüßung</Label>
+              <p className="mt-1 mb-2 text-xs text-ink-muted leading-relaxed">
+                Wähle Anrede und Namensart. Die TTS spricht nur diese kurze
+                Zeile — der Rest deines Videos läuft danach unverändert
+                weiter. Passe sie so an, dass sie zum Ton deiner
+                Original-Aufnahme passt.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label
+                    htmlFor="intro-prefix"
+                    className="text-xs font-medium text-ink-muted"
+                  >
+                    Anrede
+                  </Label>
+                  <Select
+                    value={prefix}
+                    onValueChange={(v) => {
+                      const next = v as GreetingPrefix;
+                      setPrefix(next);
+                      setGreetingDirty(true);
+                      void saveGreeting(next, pattern);
                     }}
-                    placeholder={DEFAULT_TTS_TEMPLATE}
-                  />
-                  {!templateValid ? (
-                    <p className="mt-1.5 text-xs text-danger">
-                      Die Vorlage muss den Platzhalter{" "}
-                      <span className="font-mono">{"{vorname}"}</span>{" "}
-                      enthalten.
-                    </p>
-                  ) : (
-                    <p className="mt-1.5 text-xs text-ink-muted">
-                      Beispiel:{" "}
-                      <span className="font-medium text-ink">
-                        {previewLine}
-                      </span>
-                    </p>
-                  )}
+                  >
+                    <SelectTrigger id="intro-prefix" className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GREETING_PREFIXES.map((p) => (
+                        <SelectItem key={p} value={p}>
+                          {p}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-1"
-                  disabled={!templateValid || !templateTouched}
-                  loading={templateSaving}
-                  iconLeft={<Save className="size-4" />}
-                  onClick={() => void saveTemplate()}
-                >
-                  Speichern
-                </Button>
+                <div>
+                  <Label
+                    htmlFor="intro-pattern"
+                    className="text-xs font-medium text-ink-muted"
+                  >
+                    Namensart
+                  </Label>
+                  <Select
+                    value={pattern}
+                    onValueChange={(v) => {
+                      const next = v as NamePatternKey;
+                      setPattern(next);
+                      setGreetingDirty(true);
+                      void saveGreeting(prefix, next);
+                    }}
+                  >
+                    <SelectTrigger id="intro-pattern" className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="firstName">Vorname (Du)</SelectItem>
+                      <SelectItem value="formal">
+                        Herr/Frau + Nachname (Sie)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+              <p className="mt-2 text-xs text-ink-muted">
+                Beispiel:{" "}
+                <span className="font-medium text-ink">„{previewLine}"</span>
+                {greetingSaving && (
+                  <span className="ml-2 text-ink-soft">Speichere ...</span>
+                )}
+              </p>
+              {pattern === "formal" && (
+                <p className="mt-1.5 text-xs text-ink-muted leading-relaxed">
+                  Braucht die Spalten <span className="font-mono">Anrede</span>{" "}
+                  (Herr/Frau) und{" "}
+                  <span className="font-mono">Nachname</span> in deiner
+                  Leadliste. Fehlt eines, greift automatisch der
+                  Original-Video-Fallback (1 Credit).
+                </p>
+              )}
             </div>
           </div>
         )}
