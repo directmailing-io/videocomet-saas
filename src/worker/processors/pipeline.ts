@@ -672,8 +672,26 @@ export async function pipelineProcessor(
             }
           }
         } catch (err) {
-          // Timeout (withStageTimeout) oder unerwarteter Fehler → Fallback,
-          // NIE Lead-Fail. Status best-effort persistieren.
+          // Retryable Provider-Fehler (Fish 429/5xx) explizit durchleiten,
+          // damit BullMQ retried statt SILENT auf Fallback zu gehen —
+          // sonst zahlt der User 1 Credit obwohl das Feature nur transient
+          // nicht verfügbar war.
+          if (
+            err instanceof Error &&
+            (err as { retryable?: boolean }).retryable === true
+          ) {
+            await insertPipelineEvent({
+              runId: data.runId,
+              leadId: data.leadId,
+              level: "warn",
+              stage: "render",
+              message: `${leadLabel}: Intro-Provider-Fehler — wird automatisch wiederholt: ${err.message.slice(0, 200)}`,
+              durationMs: Date.now() - introStart,
+            }).catch(() => undefined);
+            throw err;
+          }
+          // Nicht-retryable (Timeout, Logic-Fehler) → Fallback auf
+          // Original-Video, kein Lead-Fail.
           const message = err instanceof Error ? err.message : String(err);
           await updateLeadStatus(data.leadId, {
             introStatus: "fallback_error",

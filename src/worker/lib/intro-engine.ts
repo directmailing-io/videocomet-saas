@@ -218,22 +218,27 @@ export async function generatePersonalizedWebcam(
   // (Legacy, „Hallo {vorname}! Schön, dass ...") ersetzt der TTS den
   // ganzen ersten Satz — Anker bleibt dann anchorEndMs.
   //
-  // Fallback: greeting_end_ms muss genügend Platz für die TTS lassen —
-  // bei falsch kalibriertem 73ms-Anker (False-Positive Silence am
-  // Aufnahmeanfang) würde jeder TTS „tts_too_long" scheitern. In dem
-  // Fall lieber auf anchor_end_ms fallen (Legacy-Verhalten) als komplett
-  // zu failen — die Kalibrierung ist Nutzer-sichtbar reparierbar.
+  // KEIN silent-Sentence-Fallback mehr: wenn der User „Hi {vorname}"
+  // gewählt hat und die Kalibrierung liefert einen zu kleinen Anker
+  // (False-Positive am Aufnahme-Start), skippen wir das Intro komplett
+  // (Fallback auf Original-Video, 1 Credit). Andernfalls würden wir
+  // heimlich den ganzen ersten Satz des Users ersetzen — semantisch
+  // eine Lüge gegenüber der UI-Wahl. Die Kalibrierung ist Nutzer-sichtbar
+  // reparierbar (deutliche Pause nach „Hi!" bei Neu-Aufnahme).
   const template = cal.ttsTemplate?.trim() || DEFAULT_TTS_TEMPLATE;
-  const wantsGreeting =
-    parseGreetingTemplate(template) !== null && cal.greetingEndMs !== null;
-  const greetingUsable =
-    wantsGreeting && (cal.greetingEndMs as number) >= 1000; // ≥ 1s Platz für „Hi Julius"
-  const isGreetingOnly = wantsGreeting && greetingUsable;
-  if (wantsGreeting && !greetingUsable) {
-    console.warn(
-      `[intro-engine:${opts.tag}] greeting_end_ms zu klein (${cal.greetingEndMs}ms) — Fallback auf anchor_end_ms`,
-    );
+  const wantsGreeting = parseGreetingTemplate(template) !== null;
+  if (wantsGreeting) {
+    if (cal.greetingEndMs === null) {
+      return fail(opts.tag, "greeting_anchor_missing");
+    }
+    if ((cal.greetingEndMs as number) < 1000) {
+      return fail(
+        opts.tag,
+        `greeting_anchor_too_small_${cal.greetingEndMs}ms`,
+      );
+    }
   }
+  const isGreetingOnly = wantsGreeting;
   const anchorEndMs = isGreetingOnly
     ? (cal.greetingEndMs as number)
     : cal.anchorEndMs;

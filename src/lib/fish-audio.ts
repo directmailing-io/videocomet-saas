@@ -26,6 +26,22 @@ function apiKey(): string {
   return key;
 }
 
+/**
+ * HTTP-Fehler, den der Caller unterscheiden kann:
+ *   - `retryable=true` bei 429 (Rate-Limit) und 5xx (Server-Fehler bei Fish)
+ *     → BullMQ-Retry sollte greifen statt sofort in Fallback zu gehen.
+ *   - `retryable=false` bei 4xx (Client-Fehler, unser Bug oder ungültige Daten).
+ */
+export class FishAudioError extends Error {
+  readonly status: number;
+  readonly retryable: boolean;
+  constructor(status: number, context: string, detail: string) {
+    super(`[fish-audio] ${context} failed: HTTP ${status} ${detail}`);
+    this.status = status;
+    this.retryable = status === 429 || status >= 500;
+  }
+}
+
 async function assertOk(res: Response, context: string): Promise<void> {
   if (res.ok) return;
   let detail = "";
@@ -34,7 +50,7 @@ async function assertOk(res: Response, context: string): Promise<void> {
   } catch {
     // ignore
   }
-  throw new Error(`[fish-audio] ${context} failed: HTTP ${res.status} ${detail}`);
+  throw new FishAudioError(res.status, context, detail);
 }
 
 export interface CreateVoiceModelInput {

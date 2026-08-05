@@ -77,12 +77,20 @@ export async function processIntroPreviewJob(job: {
   if (run.introPreviewCompletedAt) {
     return { status: "skipped", reason: "already_generated" };
   }
-  // Vorherigen unvollständigen Lauf resetten (Worker-Crash, BullMQ-Retry).
+  // Atomic Claim: reset intro_preview auf null NUR wenn completed_at auch
+  // NULL ist. Verhindert Race, wenn zwei Worker-Instanzen gleichzeitig den
+  // Job starten (BullMQ hat Locks, aber Recovery-Watcher + manueller
+  // Enqueue könnten theoretisch beide passieren). Wenn der Reset 0 Rows
+  // affected → ein anderer Prozess ist gleichzeitig aktiv oder war schneller.
   if (run.introPreview !== null) {
-    await db
+    const claimed = await db
       .update(runs)
       .set({ introPreview: null })
-      .where(eq(runs.id, runId));
+      .where(and(eq(runs.id, runId), isNull(runs.introPreviewCompletedAt)))
+      .returning({ id: runs.id });
+    if (claimed.length === 0) {
+      return { status: "skipped", reason: "already_completed_by_other" };
+    }
   }
 
   const [campaign] = await db
