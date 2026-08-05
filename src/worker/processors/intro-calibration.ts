@@ -58,11 +58,21 @@ const DELIBERATE_PAUSE_MIN_SEC = 0.6;
 const GREETING_MIN_SEC = 0.3;
 /** Erster Satz muss mindestens so lang sein, bevor eine Atempause zählt. */
 const SENTENCE_MIN_SEC = 1.5;
-const SENTENCE_MAX_SEC = 8;
+/**
+ * Der erste Satz darf länger sein, wenn der User etwas mehr Kontext gibt
+ * („Ich habe dir kurz ein Video aufgenommen, weil ich..." mit ~10-12s).
+ * Nur der Legacy-Volltext-Modus schneidet bis anchor_end; im greeting-only-
+ * Modus reicht das Anrede-Ende und ein längerer erster Satz stört nicht.
+ */
+const SENTENCE_MAX_SEC = 15;
 /** Atempause nach dem Satz: erste Stille >= 80ms. */
 const BREATH_GAP_MIN_SEC = 0.08;
-/** anchor_end muss vor Sekunde 20 liegen. */
-const ANCHOR_MAX_SEC = 20;
+/**
+ * anchor_end (Satz-Ende) muss vor dieser Sekunde liegen. Erhöht von 20s
+ * auf 30s — im greeting-only-Modus wird dieser Wert ohnehin nicht als
+ * Cut-Punkt genutzt (dann greift greeting_end_ms).
+ */
+const ANCHOR_MAX_SEC = 30;
 const RESUME_OFFSET_MS = 120;
 const FPS = 30;
 
