@@ -13,6 +13,7 @@
  */
 
 import * as React from "react";
+import Link from "next/link";
 import { AlertTriangle, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -75,12 +76,24 @@ export function IntroPreviewSection({
             <p className="text-sm font-semibold text-ink">
               Beispielvideos konnten nicht erstellt werden
             </p>
-            <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
-              Die Produktion läuft trotzdem, aber ohne personalisierte
-              Begrüßung. Jeder Lead erhält das Original-Video (1 Credit
-              statt 2). Prüfe im Setup unter „KI-Begrüßung", ob deine
-              Stimme bereit ist.
+            <p className="text-xs text-ink-muted mt-1 leading-relaxed">
+              Häufigster Grund: die Anrede im Webcam-Video war zu kurz oder
+              die bewusste Pause danach zu knapp. Neu aufnehmen oder mit
+              Original-Video (1 Credit pro Lead) starten — deine Wahl.
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link
+                href="/ki-begruessung"
+                target="_blank"
+                className="inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-deep transition-colors"
+              >
+                Setup öffnen &amp; neu aufnehmen
+              </Link>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-soft px-3 py-1.5 text-xs font-medium text-ink-muted">
+                Alternativ: oben „Vollproduktion starten" — läuft dann ohne
+                KI-Begrüßung
+              </span>
+            </div>
           </div>
         </div>
       </div>

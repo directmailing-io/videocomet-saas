@@ -211,9 +211,23 @@ export async function generatePersonalizedWebcam(
   // des Users stehen. Bei einem klassischen Volltext-Template
   // (Legacy, „Hallo {vorname}! Schön, dass ...") ersetzt der TTS den
   // ganzen ersten Satz — Anker bleibt dann anchorEndMs.
+  //
+  // Fallback: greeting_end_ms muss genügend Platz für die TTS lassen —
+  // bei falsch kalibriertem 73ms-Anker (False-Positive Silence am
+  // Aufnahmeanfang) würde jeder TTS „tts_too_long" scheitern. In dem
+  // Fall lieber auf anchor_end_ms fallen (Legacy-Verhalten) als komplett
+  // zu failen — die Kalibrierung ist Nutzer-sichtbar reparierbar.
   const template = cal.ttsTemplate?.trim() || DEFAULT_TTS_TEMPLATE;
-  const isGreetingOnly =
+  const wantsGreeting =
     parseGreetingTemplate(template) !== null && cal.greetingEndMs !== null;
+  const greetingUsable =
+    wantsGreeting && (cal.greetingEndMs as number) >= 1000; // ≥ 1s Platz für „Hi Julius"
+  const isGreetingOnly = wantsGreeting && greetingUsable;
+  if (wantsGreeting && !greetingUsable) {
+    console.warn(
+      `[intro-engine:${opts.tag}] greeting_end_ms zu klein (${cal.greetingEndMs}ms) — Fallback auf anchor_end_ms`,
+    );
+  }
   const anchorEndMs = isGreetingOnly
     ? (cal.greetingEndMs as number)
     : cal.anchorEndMs;

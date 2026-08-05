@@ -44,6 +44,14 @@ import type { IntroCalibrationJobData } from "../intro-queue";
 const SAMPLE_RATE = 48000;
 /** Bewusste Pause nach der Begrüßung: mindestens 0.8s Stille. */
 const DELIBERATE_PAUSE_MIN_SEC = 0.8;
+/**
+ * Anrede muss mindestens so lang sein, bevor die bewusste Pause zählt.
+ * Ohne diese Untergrenze picken kleine Initial-Stillen im Recorder (73ms
+ * Silence bei Aufnahme-Start, ehe der User „Hi" sagt) als „Anrede-Ende"
+ * → greeting_end_ms wäre für TTS unbrauchbar klein. „Hi" braucht mind.
+ * ~300ms Silben-Dauer.
+ */
+const GREETING_MIN_SEC = 0.3;
 /** Erster Satz muss mindestens so lang sein, bevor eine Atempause zählt. */
 const SENTENCE_MIN_SEC = 1.5;
 const SENTENCE_MAX_SEC = 8;
@@ -102,10 +110,14 @@ export function analyzeSilenceStructure(
     speechStartSec = leading.end;
   }
 
-  // Bewusste Pause: erste Stille >= 0.8s, die NACH dem Sprachbeginn startet.
+  // Bewusste Pause: erste Stille >= 0.8s, die NACH dem Sprachbeginn UND
+  // mindestens `GREETING_MIN_SEC` in die Sprache hinein startet. Die
+  // 300ms-Untergrenze filtert False-Positives durch Aufnahme-Start-
+  // Artefakte (kurze Initial-Stille zwischen Recorder-Start und dem
+  // ersten Wort des Users).
   const pause = coarse.find(
     (s) =>
-      s.start > speechStartSec + 0.05 &&
+      s.start >= speechStartSec + GREETING_MIN_SEC &&
       Number.isFinite(s.end) &&
       s.end - s.start >= DELIBERATE_PAUSE_MIN_SEC,
   );
