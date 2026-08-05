@@ -49,7 +49,10 @@ import {
 } from "../lib/shared-run-video";
 import { compressForBunny, type VideoOrientation } from "../lib/video-compress";
 import { trackAndRefAsset } from "../lib/bunny-asset-tracking";
-import { waitForBunnyEncoding } from "../lib/wait-for-bunny-encoding";
+import {
+  waitForBunnyEncoding,
+  BunnyEncodingRetryableError,
+} from "../lib/wait-for-bunny-encoding";
 
 const POLL_INTERVAL_MS = 1500;
 // Nicht-Lock-Owner warten so lange wie der Owner maximal aufs Encoding wartet
@@ -445,10 +448,44 @@ async function resolveByUpload(
       fallbackOrientation,
     );
     let mp4Url: string | null = null;
-    const ready = await waitForBunnyEncoding(videoId, {
-      timeoutMs: SHARED_ENCODING_TIMEOUT_MS,
-      intervalMs: SHARED_ENCODING_POLL_MS,
-    });
+    let ready: Awaited<ReturnType<typeof waitForBunnyEncoding>>;
+    try {
+      ready = await waitForBunnyEncoding(videoId, {
+        timeoutMs: SHARED_ENCODING_TIMEOUT_MS,
+        intervalMs: SHARED_ENCODING_POLL_MS,
+      });
+    } catch (err) {
+      // Encoding-Stall-Recovery: wenn Bunny nach Timeout immer noch bei
+      // Status <=2 hängt (Queued/Uploaded/Processing — kein Fortschritt in
+      // Richtung transcoded), ist das Video defekt bei Bunny. Löschen +
+      // DB-Reset, damit der BullMQ-Retry NICHT wieder auf dasselbe stuck
+      // Video wartet, sondern frisch hochlädt. Retry sonst nur endlos.
+      if (
+        err instanceof BunnyEncodingRetryableError &&
+        err.lastStatus >= 0 &&
+        err.lastStatus <= 2
+      ) {
+        console.warn(
+          `[video-resolve-shared] encoding stuck at status=${err.lastStatus} for ${videoId} — resetting for fresh upload`,
+        );
+        await insertPipelineEvent({
+          runId: input.runId,
+          leadId: null,
+          level: "warn",
+          stage: "shared-video",
+          message: `Bunny-Encoding stallte bei status=${err.lastStatus} nach ${Math.round(SHARED_ENCODING_TIMEOUT_MS / 1000)}s — Video wird gelöscht, Upload wird beim nächsten Versuch frisch gemacht`,
+        });
+        try {
+          await deleteVideo(videoId);
+        } catch (delErr) {
+          console.warn(
+            `[video-resolve-shared] deleteVideo(${videoId}) failed (ignored): ${(delErr as Error).message}`,
+          );
+        }
+        await clearSharedVideoUploadRecord(input.runId);
+      }
+      throw err;
+    }
     if (ready.width > 0 && ready.height > 0) {
       width = ready.width;
       height = ready.height;
@@ -508,6 +545,16 @@ async function resolveByUpload(
     };
   } catch (err) {
     await setSharedVideoFailed(input.runId, err);
+    // Fehler auch ins UI-sichtbare Log — sonst sieht der User auf der
+    // Run-Seite nur „Fehler" ohne Kontext (Screenshot-Report 2026-08-05).
+    const message = err instanceof Error ? err.message : String(err);
+    await insertPipelineEvent({
+      runId: input.runId,
+      leadId: null,
+      level: "error",
+      stage: "shared-video",
+      message: `Video-Upload zu Bunny fehlgeschlagen: ${message.slice(0, 240)}`,
+    }).catch(() => undefined);
     throw err;
   } finally {
     // Heartbeat zuerst killen — wir wollen keinen Tick mehr feuern nachdem

@@ -395,7 +395,11 @@ export function LiveTable({
       runStatus === "failed" ||
       runStatus === "cancelled"
     ) {
-      if (!needFinalSyncRef.current) return;
+      // Snapshot IMMER holen — sowohl bei Terminal-Transition mitten im
+      // Live-Streaming (needFinalSyncRef=true) als auch bei First-Load eines
+      // bereits abgeschlossenen Runs (needFinalSyncRef=false). Ohne diesen
+      // First-Load-Pfad bleibt „Technisches Log (0)" leer obwohl in der DB
+      // 30+ Events stehen.
       needFinalSyncRef.current = false;
       // One-shot final sync: snapshot anwenden, sofort wieder schließen.
       const finalEs = new EventSource(`/api/runs/${runId}/stream`, {

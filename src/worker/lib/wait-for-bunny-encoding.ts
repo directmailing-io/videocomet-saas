@@ -50,8 +50,17 @@ const POLL_TIMEOUT_MS = 300_000;
 export class BunnyEncodingRetryableError extends Error {
   override name = "RetryableError" as const;
   readonly retryable = true as const;
-  constructor(message: string) {
+  /**
+   * Zuletzt gesehener Bunny-status (siehe Enum-Semantik im Datei-Kopf).
+   * Erlaubt dem Caller Stall-Erkennung: lastStatus === 2 (Encoding) + kein
+   * Fortschritt heißt „Bunny hat unser Video, kommt aber nicht weiter" —
+   * dann ist Löschen + Frisch-Upload die richtige Antwort.
+   * -1 = wir haben nie eine Antwort gesehen (Netzwerk komplett tot).
+   */
+  readonly lastStatus: number;
+  constructor(message: string, lastStatus: number) {
     super(message);
+    this.lastStatus = lastStatus;
   }
 }
 
@@ -202,5 +211,6 @@ export async function waitForBunnyEncoding(
   const lastStatus = lastMeta ? parseStatus(lastMeta) : -1;
   throw new BunnyEncodingRetryableError(
     `[wait-for-bunny] timeout after ${elapsedMs}ms / ${attempts} attempts (videoId=${videoId}, lastStatus=${lastStatus}) — retrying job`,
+    lastStatus,
   );
 }

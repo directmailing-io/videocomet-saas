@@ -69,7 +69,7 @@ interface CalibrationDto {
 function calibrationErrorHint(code: string | null): string {
   switch (code) {
     case "no_pause_detected":
-      return "Wir haben keine deutliche Pause nach deiner Anrede gefunden. Nimm neu auf: „Hi!" → 1 Sekunde Stille → dann der erste Satz.";
+      return "Wir haben keine deutliche Pause nach deiner Anrede gefunden. Nimm neu auf: erst „Hi!“ sagen, dann 1 Sekunde Stille, dann der erste Satz.";
     case "no_speech_detected":
       return "Wir konnten keine Sprache am Anfang des Videos erkennen. Bitte prüfe die Tonspur des Videos.";
     case "no_breath_gap_detected":
