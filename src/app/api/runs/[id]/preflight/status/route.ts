@@ -27,6 +27,13 @@ interface IntroStatusPayload {
   previewsGenerated: boolean;
   /** Ziel-Anzahl der Vorschau-Videos (INTRO_PREVIEW_TARGET). Für „X von N"-UI. */
   previewsExpected: number;
+  /**
+   * Status der Video-Kalibrierung — damit die UI im 0-Preview-Fall den
+   * konkreten Grund zeigen kann (z.B. `greeting_too_late` → „Anrede
+   * beginnt zu spät") statt nur einer generischen Nachricht.
+   */
+  calibrationStatus: "pending" | "running" | "ready" | "failed" | null;
+  calibrationError: string | null;
   previews: Array<{
     leadId: string;
     firstName: string | null;
@@ -98,10 +105,15 @@ export async function GET(
     previewApprovedAt: null,
     previewsGenerated: false,
     previewsExpected: INTRO_PREVIEW_TARGET,
+    calibrationStatus: null,
+    calibrationError: null,
     previews: [],
   };
   const [campaign] = await db
-    .select({ introEnabled: campaigns.introEnabled })
+    .select({
+      introEnabled: campaigns.introEnabled,
+      webcamMediaId: campaigns.webcamMediaId,
+    })
     .from(campaigns)
     .where(eq(campaigns.id, run.campaignId))
     .limit(1);
@@ -111,6 +123,26 @@ export async function GET(
       .from(voiceProfiles)
       .where(eq(voiceProfiles.userId, auth.user.id))
       .limit(1);
+
+    // Kalibrierungs-Status/Fehler mitliefern, damit die UI im 0-Preview-
+    // Fall konkrete Handlungsanweisung geben kann.
+    let calibrationStatus: IntroStatusPayload["calibrationStatus"] = null;
+    let calibrationError: string | null = null;
+    if (campaign.webcamMediaId) {
+      const { introCalibrations } = await import("@/lib/db/schema");
+      const [calib] = await db
+        .select({
+          status: introCalibrations.status,
+          error: introCalibrations.error,
+        })
+        .from(introCalibrations)
+        .where(eq(introCalibrations.mediaItemId, campaign.webcamMediaId))
+        .limit(1);
+      if (calib) {
+        calibrationStatus = calib.status;
+        calibrationError = calib.error;
+      }
+    }
 
     // Worker signalisiert das Ende über `intro_preview_completed_at`.
     // Bis dahin ist `intro_preview` ein möglicherweise wachsender
@@ -142,6 +174,8 @@ export async function GET(
         : null,
       previewsGenerated: generated,
       previewsExpected: INTRO_PREVIEW_TARGET,
+      calibrationStatus,
+      calibrationError,
       previews: entries.map((e) => ({
         leadId: e.leadId,
         firstName: firstNameByLead.get(e.leadId) ?? null,

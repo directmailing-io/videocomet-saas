@@ -27,11 +27,28 @@ export interface IntroPreviewInfo {
   previewsGenerated: boolean;
   /** Ziel-Anzahl (drei), für „X von N fertig"-Anzeige. */
   previewsExpected: number;
+  /** Kalibrierungs-Zustand vom Server — für konkrete Fehler-Hints. */
+  calibrationStatus?: "pending" | "running" | "ready" | "failed" | null;
+  calibrationError?: string | null;
   previews: Array<{
     leadId: string;
     firstName: string | null;
     videoUrl: string;
   }>;
+}
+
+/** Konkrete Handlungsanweisung pro Kalibrierungs-Fehler-Code. */
+function calibrationHint(error: string | null | undefined): string {
+  switch (error) {
+    case "greeting_too_late":
+      return "Deine Anrede beginnt zu spät oder du hast durchgesprochen. Nimm neu auf und starte SOFORT mit einer kurzen Anrede („Hi!“), dann 1 Sekunde Stille, dann der erste Satz.";
+    case "no_pause_detected":
+      return "Wir haben keine deutliche Pause nach deiner Anrede gefunden. Nimm neu auf: erst „Hi!“ sagen, dann 1 Sekunde Stille, dann der erste Satz.";
+    case "no_speech_detected":
+      return "Wir konnten keine Sprache am Anfang des Videos erkennen.";
+    default:
+      return "Die Anrede im Webcam-Video war zu kurz oder die bewusste Pause danach zu knapp. Neu aufnehmen oder mit Original-Video (1 Credit pro Lead) starten — deine Wahl.";
+  }
 }
 
 export function IntroPreviewSection({
@@ -77,9 +94,9 @@ export function IntroPreviewSection({
               Beispielvideos konnten nicht erstellt werden
             </p>
             <p className="text-xs text-ink-muted mt-1 leading-relaxed">
-              Häufigster Grund: die Anrede im Webcam-Video war zu kurz oder
-              die bewusste Pause danach zu knapp. Neu aufnehmen oder mit
-              Original-Video (1 Credit pro Lead) starten — deine Wahl.
+              {intro.calibrationStatus === "failed"
+                ? calibrationHint(intro.calibrationError)
+                : "Die Kalibrierung deines Webcam-Videos ist noch nicht bereit oder das Rendering ist fehlgeschlagen. Neu aufnehmen oder mit Original-Video (1 Credit pro Lead) starten — deine Wahl."}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
