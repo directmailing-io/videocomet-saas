@@ -285,37 +285,44 @@ export async function generatePersonalizedWebcam(
     // Grenze: der erweiterte Cut darf NICHT über anchor_end_ms hinaus
     // (das wäre der ganze erste Satz, Legacy-Modus), sonst ist die
     // TTS zu lang für die Aufnahme.
-    const ttsDurMs = ttsRawDurSec * 1000;
+    let ttsDurMs = ttsRawDurSec * 1000;
     const HEADROOM_MS = 50;
-    const requiredAnchorMs = Math.ceil(ttsDurMs + HEADROOM_MS);
-    // Erweitere den Anchor (=Cut-Punkt im Original) auf TTS-Länge,
-    // damit die TTS in natürlicher Geschwindigkeit spielen kann.
-    // Grenze: nicht über anchor_end (Satz-Ende), sonst wäre die TTS
-    // länger als der ganze erste Satz.
-    if (requiredAnchorMs > cal.anchorEndMs) {
-      return fail(
-        tag,
-        `tts_too_long: ${ttsDurMs.toFixed(0)}ms braucht ${requiredAnchorMs}ms Video-Zone, aber nur ${cal.anchorEndMs}ms bis zum ersten Satz-Ende`,
-      );
+    // KEIN Anchor-Erweitern mehr: das schnitt im letzten Versuch mitten
+    // in User-Wörter rein („Hey ich habe..."). Stattdessen atempo-Speedup
+    // die TTS auf die Original-Anrede-Länge. Bis 1.3x klingt natürlich,
+    // darüber echter Fallback aufs Original-Video (1 Credit).
+    const targetMs = anchorEndMs - HEADROOM_MS;
+    let ttsAdjustedPath = ttsRawPath;
+    if (ttsDurMs > targetMs) {
+      const speedFactor = ttsDurMs / targetMs;
+      if (speedFactor > 1.3) {
+        return fail(
+          tag,
+          `tts_too_long: ${ttsDurMs.toFixed(0)}ms für ${targetMs}ms Anrede-Zone (Faktor ${speedFactor.toFixed(2)}, max 1.3)`,
+        );
+      }
+      const spedPath = join(dir, `tts-sped-${tag}.wav`);
+      await runFfmpeg([
+        "-y", "-i", ttsRawPath,
+        "-filter:a", `atempo=${speedFactor.toFixed(3)}`,
+        "-ac", "1", "-ar", String(SAMPLE_RATE),
+        spedPath,
+      ]);
+      ttsAdjustedPath = spedPath;
+      const spedDur = await probeVideoDuration(spedPath);
+      ttsDurMs = (spedDur ?? ttsRawDurSec) * 1000;
     }
-    if (requiredAnchorMs > anchorEndMs) {
-      anchorEndMs = requiredAnchorMs;
-    }
-    // Resume erst JETZT berechnen (mit ggf. erweitertem anchorEndMs).
+    // Resume auf sentence_start (Ende der User-Pause) — dort setzt der
+    // Original-Content sauber ein. Ohne dynamische Anchor-Erweiterung.
     if (isGreetingOnly) {
       const base =
         typeof cal.sentenceStartMs === "number"
           ? Math.max(anchorEndMs + 120, cal.sentenceStartMs - RESIDUAL_PAUSE_MS)
           : anchorEndMs + 120;
-      // resume darf NICHT vor dem anchorEnd liegen (sonst Overlap).
-      resumeMs = Math.max(
-        anchorEndMs,
-        Math.round(Math.ceil(base / FRAME_MS) * FRAME_MS),
-      );
+      resumeMs = Math.round(Math.ceil(base / FRAME_MS) * FRAME_MS);
     } else {
-      resumeMs = Math.max(anchorEndMs, cal.resumeMs);
+      resumeMs = cal.resumeMs;
     }
-    const ttsAdjustedPath = ttsRawPath;
 
     // ── 2. Auto-EQ + Loudness-Match ─────────────────────────────────────
     const ttsSpectrum = await measureSpectrum(ttsAdjustedPath);
@@ -471,9 +478,17 @@ export async function generatePersonalizedWebcam(
     }
 
     // ── 8. Cut-freie Assembly (ein einziger Encode) ─────────────────────
+    // Statt hartem Concat mit 20ms Fade → 150ms überlappender acrossfade.
+    // Der longer overlap überbrückt akustische Unterschiede zwischen
+    // TTS-Segment (Roomtone+Fish-Voice) und Original-User-Audio (echte
+    // Aufnahme). 150ms ist Standard-Sweet-Spot für Sprach-Splice.
     const outPath = join(dir, `intro-out-${tag}.mp4`);
     const resumeSec = (resumeMs / 1000).toFixed(4);
-    const fadeOutStartSec = ((segEndMs - 20) / 1000).toFixed(4);
+    const CROSSFADE_MS = 150;
+    // acrossfade braucht dass beide Streams sich überlappen, also
+    // schneiden wir das Original-Audio ~150ms VOR resumeSec, damit die
+    // TTS-Segment-Ende sich mit dem Original-Beginn überschneiden kann.
+    const origStartSec = ((resumeMs - CROSSFADE_MS) / 1000).toFixed(4);
     await runFfmpeg([
       "-y",
       "-i", syncedPath,
@@ -483,9 +498,9 @@ export async function generatePersonalizedWebcam(
       `[0:v]fps=${FPS},setpts=PTS-STARTPTS[v0];` +
         `[2:v]trim=start=${resumeSec},fps=${FPS},setpts=PTS-STARTPTS[v1];` +
         `[v0][v1]concat=n=2:v=1:a=0[v];` +
-        `[1:a]afade=t=out:st=${fadeOutStartSec}:d=0.02,aresample=${SAMPLE_RATE},pan=mono|c0=c0[a0];` +
-        `[2:a]atrim=start=${resumeSec},asetpts=PTS-STARTPTS,aresample=${SAMPLE_RATE},pan=mono|c0=c0,afade=t=in:st=0:d=0.02[a1];` +
-        `[a0][a1]concat=n=2:v=0:a=1[a]`,
+        `[1:a]aresample=${SAMPLE_RATE},pan=mono|c0=c0[a0];` +
+        `[2:a]atrim=start=${origStartSec},asetpts=PTS-STARTPTS,aresample=${SAMPLE_RATE},pan=mono|c0=c0[a1];` +
+        `[a0][a1]acrossfade=d=${(CROSSFADE_MS / 1000).toFixed(3)}:c1=tri:c2=tri[a]`,
       "-map", "[v]",
       "-map", "[a]",
       "-c:v", "libx264",
