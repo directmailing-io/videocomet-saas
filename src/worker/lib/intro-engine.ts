@@ -86,7 +86,17 @@ export interface GeneratePersonalizedWebcamOpts {
 }
 
 export type GeneratePersonalizedWebcamResult =
-  | { ok: true; outputPath: string }
+  | {
+      ok: true;
+      outputPath: string;
+      /**
+       * Um wieviel ms der Anfang des Original-Videos getrimmt wurde. Das
+       * Output-Video ist um genau diesen Betrag kürzer — alle Sprech-
+       * Zeitpunkte nach dem Resume liegen entsprechend früher. Der
+       * Presentation-Renderer kompensiert das über die Segment-Dauern.
+       */
+      startTrimMs: number;
+    }
   | { ok: false; reason: string };
 
 const clamp = (v: number, lo: number, hi: number): number =>
@@ -436,10 +446,10 @@ export async function generatePersonalizedWebcam(
         "-movflags", "+faststart",
         trimmedPath,
       ]);
-      return { ok: true, outputPath: trimmedPath };
+      return { ok: true, outputPath: trimmedPath, startTrimMs };
     }
 
-    return { ok: true, outputPath: outPath };
+    return { ok: true, outputPath: outPath, startTrimMs };
   } catch (err) {
     // Transiente/externe Fehler (Fish, sync.so, Bunny, ffmpeg) → Fallback.
     const message = err instanceof Error ? err.message : String(err);

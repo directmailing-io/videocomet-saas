@@ -46,6 +46,7 @@ import {
   renderUnreachablePlaceholder,
 } from "../lib/website-render-pipeline";
 import type { Segment } from "@/lib/segments/types";
+import { planSegmentDurations } from "@/lib/segments/plan-durations";
 import { substitute, resolveValue } from "@/lib/placeholders/substitute";
 import { websiteSegmentMappingKey } from "@/lib/placeholders/website-url";
 import type {
@@ -70,6 +71,15 @@ export interface VideoRenderInput {
   defaultDurationSec?: number;
   /** Optional ordered segments for the presentation track. */
   segments?: Segment[];
+  /**
+   * Intro-Feature: um wieviel ms die KI-Begrüßung den Anfang des Webcam-
+   * Videos getrimmt hat. Alle Sprech-Zeitpunkte liegen dadurch um diesen
+   * Betrag früher — die vorderen Segmente werden um exakt denselben Betrag
+   * gekürzt (kaskadierend, min 200ms pro Segment), damit spätere Segment-
+   * wechsel wieder synchron zur Sprache liegen. Es wird NICHTS geschnitten,
+   * nur Anzeigedauern der separat gerenderten Segment-Clips ändern sich.
+   */
+  introTrimMs?: number;
   /** Lead data for placeholder substitution in text segments. */
   leadData?: Record<string, string>;
   /**
@@ -551,6 +561,7 @@ export async function runVideoRender(
       basePath,
       fallbackWebsite: input.website ?? null,
       totalDurationSec: duration,
+      introTrimMs: input.introTrimMs ?? 0,
     });
   } else {
     await renderPresentationBase({
@@ -607,22 +618,26 @@ async function renderSegmentsBase(opts: {
   basePath: string;
   fallbackWebsite: string | null;
   totalDurationSec: number;
+  introTrimMs?: number;
 }): Promise<void> {
-  // Hart auf die Webcam-Dauer clampen: Segmente, die nicht mehr in das
-  // Webcam-Budget passen, werden komplett verworfen — das letzte Segment
-  // das noch passt wird gekürzt. Schützt vor falsch konfigurierten
-  // Wizard-State und vor zu-langen-Slides.
-  const totalBudgetMs = Math.max(200, Math.round(opts.totalDurationSec * 1000));
-  const clampedSegments: Array<{ seg: Segment; durationMs: number }> = [];
-  let consumedMs = 0;
-  for (const seg of opts.segments) {
-    if (consumedMs >= totalBudgetMs) break;
-    const requested = Math.max(200, seg.durationMs);
-    const remaining = totalBudgetMs - consumedMs;
-    const granted = Math.min(requested, remaining);
-    if (granted < 200) break;
-    clampedSegments.push({ seg, durationMs: granted });
-    consumedMs += granted;
+  // Intro-Kompensation (vordere Segmente um introTrimMs kürzen, damit
+  // Segmentwechsel synchron zur früher liegenden Sprache bleiben) +
+  // Budget-Clamp auf die Webcam-Dauer — Logik + Doku in planSegmentDurations.
+  const plan = planSegmentDurations(
+    opts.segments,
+    opts.totalDurationSec,
+    opts.introTrimMs ?? 0,
+  );
+  const clampedSegments = plan.planned;
+  if (plan.absorbedTrimMs > 0 || plan.unabsorbedTrimMs > 0) {
+    console.log(
+      `[render] intro compensation: shortened leading segments by ${plan.absorbedTrimMs}ms (requested=${plan.absorbedTrimMs + plan.unabsorbedTrimMs}ms)`,
+    );
+  }
+  if (plan.unabsorbedTrimMs > 0) {
+    console.warn(
+      `[render] intro compensation incomplete: ${plan.unabsorbedTrimMs}ms could not be absorbed (all segments at 200ms floor) — trailing segments will be truncated by the budget clamp`,
+    );
   }
   if (clampedSegments.length !== opts.segments.length) {
     console.warn(

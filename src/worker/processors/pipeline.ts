@@ -510,6 +510,11 @@ export async function pipelineProcessor(
     // Stages exakt wie bisher.
     let personalizedWebcamPath: string | null = null;
     let introFirstName: string | null = null;
+    // Start-Trim der Intro-Engine in ms: das personalisierte Video ist um
+    // diesen Betrag kürzer als das Original. Der Presentation-Renderer
+    // kürzt die vorderen Segmente um exakt denselben Betrag, damit die
+    // Segmentwechsel synchron zur (früher liegenden) Sprache bleiben.
+    let introStartTrimMs = 0;
 
     // ── Stages 1-2: Video render + upload ────────────────────────────
     if (!skipVideo) {
@@ -628,6 +633,7 @@ export async function pipelineProcessor(
               if (result.ok) {
                 personalizedWebcamPath = result.outputPath;
                 introFirstName = nameCheck.name;
+                introStartTrimMs = result.startTrimMs;
                 await updateLeadStatus(data.leadId, {
                   introStatus: "generated",
                 });
@@ -766,7 +772,7 @@ export async function pipelineProcessor(
             // Lead unique — Resume darf ein altes Video ohne (oder mit
             // anderem) Intro nicht weiterverwenden.
             intro: personalizedWebcamPath
-              ? { firstName: introFirstName }
+              ? { firstName: introFirstName, startTrimMs: introStartTrimMs }
               : null,
           }),
         )
@@ -874,6 +880,7 @@ export async function pipelineProcessor(
             webcamSourceUrl: personalizedWebcamPath
               ? `file://${personalizedWebcamPath}`
               : webcam.publicUrl!,
+            introTrimMs: personalizedWebcamPath ? introStartTrimMs : 0,
             website: lead.data?.website ?? null,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             segments: (campaign.segments as any) ?? [],
