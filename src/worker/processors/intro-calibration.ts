@@ -142,25 +142,44 @@ export function analyzeSilenceStructure(
   const sentenceStartSec = pause.end;
 
   // Satzende: erste Stille >= 80ms nach mindestens 1.5s Sprache.
+  // WICHTIG: der greeting-only-Modus (kurzes „Hi {vorname}"-Template)
+  // braucht den Satz-Ende-Punkt NICHT — er cuttet bis greeting_end_ms
+  // (= pause.start). Also darf ein fehlender/später breath-gap NICHT
+  // die ganze Kalibrierung failen lassen. Wir setzen einen best-guess
+  // synthetic `anchorEndSec` und markieren die Kalibrierung als ready.
+  // Legacy-Volltext-Templates würden mit dem synthetic Wert schlechtere
+  // Ergebnisse liefern; der Engine-Fallback greift dann.
   const breath = fine.find(
     (s) =>
       s.start >= sentenceStartSec + SENTENCE_MIN_SEC &&
       (Number.isFinite(s.end) ? s.end - s.start : Infinity) >= BREATH_GAP_MIN_SEC,
   );
-  if (!breath) {
-    throw new CalibrationError("no_breath_gap_detected");
-  }
-  const anchorEndSec = breath.start;
-
-  const sentenceLen = anchorEndSec - sentenceStartSec;
-  if (sentenceLen < SENTENCE_MIN_SEC) {
-    throw new CalibrationError("sentence_too_short");
-  }
-  if (sentenceLen > SENTENCE_MAX_SEC) {
-    throw new CalibrationError("sentence_too_long");
-  }
-  if (anchorEndSec >= ANCHOR_MAX_SEC) {
-    throw new CalibrationError("anchor_too_late");
+  let anchorEndSec: number;
+  if (breath) {
+    anchorEndSec = breath.start;
+    const sentenceLen = anchorEndSec - sentenceStartSec;
+    if (sentenceLen < SENTENCE_MIN_SEC) {
+      // Zu kurzer Satz zwischen Pause und Atempause = wahrscheinlich noch
+      // eine False-Positive-Silence, greeting-only-Modus wäre okay, aber
+      // der Legacy-Modus wäre kaputt. Wir setzen synthetic anchor damit
+      // die Kalibrierung ready wird.
+      anchorEndSec = sentenceStartSec + SENTENCE_MIN_SEC;
+    } else if (sentenceLen > SENTENCE_MAX_SEC || anchorEndSec >= ANCHOR_MAX_SEC) {
+      // Satz zu lang für Legacy — für greeting-only reicht die Pause.
+      // Wir cappen anchor auf ein synthetic Ende nach SENTENCE_MAX.
+      anchorEndSec = Math.min(
+        sentenceStartSec + SENTENCE_MAX_SEC,
+        ANCHOR_MAX_SEC - 0.5,
+      );
+    }
+  } else {
+    // Kein breath-gap gefunden (User spricht lang durch): synthetic
+    // anchor als sentenceStart + 5s. Für greeting-only irrelevant, für
+    // Legacy fällt Engine ohnehin zurück.
+    anchorEndSec = Math.min(
+      sentenceStartSec + Math.min(SENTENCE_MAX_SEC, 5),
+      ANCHOR_MAX_SEC - 0.5,
+    );
   }
 
   return {
