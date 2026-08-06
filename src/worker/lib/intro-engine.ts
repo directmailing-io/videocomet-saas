@@ -157,21 +157,28 @@ async function measureSpectrum(path: string): Promise<Record<string, number>> {
 
 /**
  * Baut die Auto-EQ-Filterkette aus (spectral_ref − tts_spectrum) pro Band.
+ *   - Highpass bei 90 Hz vorweg (Rumpel/Sub-Bass raus)
  *   - 80 Hz wird übersprungen (Rumpel-Risiko beim Anheben)
- *   - 160…10000 Hz → parametrischer equalizer (q=1), Gain ±12 dB
+ *   - 160…10000 Hz → parametrischer equalizer (q=1), Gain ±12 dB;
+ *     Boosts der Bass-Bänder sind hart gedeckelt (160 Hz: +4, 315 Hz: +6):
+ *     Fish-TTS hat kaum Tiefbass, die Webcam-Referenz (Nahbesprechung,
+ *     Raum) dagegen viel — ungedeckelt landet hier +12 dB und jede Silbe
+ *     wummert als tieffrequentes „DUM" durchs KI-Segment.
  *   - 16000 Hz → highshelf bei 11 kHz, Gain ±8 dB
  */
 export function buildEqFilterChain(
   ref: Record<string, number>,
   measured: Record<string, number>,
 ): string {
-  const parts: string[] = [];
+  const parts: string[] = ["highpass=f=90"];
+  const BOOST_CAP_DB: Record<number, number> = { 160: 4, 315: 6 };
   for (const band of SPECTRAL_BAND_CENTERS_HZ) {
     if (band === 80) continue;
     const refDb = ref[String(band)];
     const ttsDb = measured[String(band)];
     if (typeof refDb !== "number" || typeof ttsDb !== "number") continue;
-    const gain = clamp(refDb - ttsDb, -12, 12);
+    const boostCap = BOOST_CAP_DB[band] ?? 12;
+    const gain = clamp(refDb - ttsDb, -12, boostCap);
     if (band === 16000) {
       const shelfGain = clamp(gain, -8, 8);
       parts.push(`highshelf=f=11000:g=${shelfGain.toFixed(1)}`);
