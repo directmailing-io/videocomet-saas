@@ -446,20 +446,21 @@ export async function renderViaDocsApi(
 
     // 5b. Ueberlauf-Kompensation: Das Inline-QR belegt ~60pt Textfluss-Platz,
     // den der floating Platzhalter nicht brauchte. Laeuft der Brief dadurch
-    // (oder durch laengere Personalisierungs-Werte) auf eine Extra-Seite,
-    // entfernen wir Leerabsaetze oberhalb des QR — genau das, was ein Mensch
-    // im Doc auch taete —, bis die Template-Seitenzahl wieder erreicht ist.
+    // auf eine Extra-Seite, kompensieren wir in zwei Stufen — REIHENFOLGE
+    // umgekehrt seit 2026-08-06 nach User-Feedback:
+    //
+    //   Stufe 1: marginBottom in 4pt-Schritten reduzieren (max 12pt). Das
+    //            ist unsichtbar fuer den Leser (Fussrand wird knapper) und
+    //            zerstoert keine Design-Elemente.
+    //   Stufe 2: Leerabsaetze vor dem QR loeschen. HAERTERE Massnahme,
+    //            weil sinnvolle Absatz-Trenner zwischen Textbloecken
+    //            entfernt werden (User-Bug: „Wer sind wir? / Sportliche
+    //            Gruesse" klebten am Vorabsatz).
     if (qrInlineObjectId && baselinePages !== null) {
-      const MAX_ITERATIONS = 6;
+      const MAX_ITERATIONS = 8;
       const EMPTIES_PER_ITERATION = 4;
-      // Stufe 2, wenn keine Leerabsaetze mehr uebrig sind: marginBottom in
-      // 4pt-Schritten reduzieren (max 8pt). Haeufiger Restfall: Ein langer
-      // {{ort}}/{{firma}}-Wert erzeugt zusaetzliche Zeilenumbrueche und der
-      // QR verfehlt die Seite um wenige Punkte (Erler-Fall: 2,4pt). Die
-      // QR-Groesse bleibt dabei exakt die Platzhalter-Groesse; der Docs-
-      // Footer liegt im marginFooter-Bereich und bleibt frei.
       const MARGIN_STEP_PT = 4;
-      const MARGIN_MAX_REDUCTION_PT = 8;
+      const MARGIN_MAX_REDUCTION_PT = 12;
       let marginReducedPt = 0;
       let currentMarginBottomPt: number | null = null;
       for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -468,29 +469,15 @@ export async function renderViaDocsApi(
         const struct = await withGoogleRetry("docs.documents.get(compensate)", () =>
           docs.documents.get({ documentId: copyDocId! }),
         );
-        // Die dem QR am naechsten liegenden Leerabsaetze zuerst loeschen
-        // (kleinster optischer Eingriff), in EINEM batchUpdate mit absteigend
-        // sortierten Ranges, damit die Indizes gueltig bleiben.
-        const batch = findEmptyParagraphsBeforeInlineObject(struct.data, qrInlineObjectId)
-          .slice(-EMPTIES_PER_ITERATION)
-          .sort((a, b) => b.start - a.start);
         let requests: docs_v1.Schema$Request[];
-        if (batch.length > 0) {
-          console.warn(
-            `[docs-native] page overflow (${pages} > ${baselinePages}) — removing ${batch.length} empty paragraph(s) (iteration ${i + 1}/${MAX_ITERATIONS})`,
-          );
-          requests = batch.map((r) => ({
-            deleteContentRange: {
-              range: { startIndex: r.start, endIndex: r.end },
-            },
-          }));
-        } else if (marginReducedPt < MARGIN_MAX_REDUCTION_PT) {
+        // Stufe 1: unsichtbare marginBottom-Reduktion zuerst.
+        if (marginReducedPt < MARGIN_MAX_REDUCTION_PT) {
           currentMarginBottomPt ??=
             struct.data.documentStyle?.marginBottom?.magnitude ?? 72;
           currentMarginBottomPt -= MARGIN_STEP_PT;
           marginReducedPt += MARGIN_STEP_PT;
           console.warn(
-            `[docs-native] page overflow (${pages} > ${baselinePages}) — no empty paragraphs left, reducing marginBottom to ${currentMarginBottomPt}pt (iteration ${i + 1}/${MAX_ITERATIONS})`,
+            `[docs-native] page overflow (${pages} > ${baselinePages}) — reducing marginBottom to ${currentMarginBottomPt}pt (iteration ${i + 1}/${MAX_ITERATIONS})`,
           );
           requests = [
             {
@@ -503,10 +490,25 @@ export async function renderViaDocsApi(
             },
           ];
         } else {
-          console.warn(
-            `[docs-native] page overflow (${pages} > ${baselinePages}) — compensation exhausted, accepting extra page.`,
-          );
-          break;
+          // Stufe 2: erst wenn margin ausgereizt ist, Leerabsaetze loeschen.
+          const batch = findEmptyParagraphsBeforeInlineObject(struct.data, qrInlineObjectId)
+            .slice(-EMPTIES_PER_ITERATION)
+            .sort((a, b) => b.start - a.start);
+          if (batch.length > 0) {
+            console.warn(
+              `[docs-native] page overflow (${pages} > ${baselinePages}) — removing ${batch.length} empty paragraph(s) (iteration ${i + 1}/${MAX_ITERATIONS})`,
+            );
+            requests = batch.map((r) => ({
+              deleteContentRange: {
+                range: { startIndex: r.start, endIndex: r.end },
+              },
+            }));
+          } else {
+            console.warn(
+              `[docs-native] page overflow (${pages} > ${baselinePages}) — compensation exhausted, accepting extra page.`,
+            );
+            break;
+          }
         }
         await withGoogleRetry("docs.documents.batchUpdate(compensate)", async () => {
           await acquireDocsWriteSlot();
