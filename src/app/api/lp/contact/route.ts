@@ -37,9 +37,11 @@ const bodySchema = z.object({
   slots: z.array(slotSchema).max(20).optional().default([]),
 });
 
-// TEST-PHASE: nur an Christoph. Sobald das Wording sitzt, kommt
-// info@bodytime-concept.de dazu.
-const RECIPIENTS = ["christoph@daniel-kurzeja.de"];
+// Produktiv (2026-08-06 freigegeben): beide BODYTIME-Empfaenger.
+const RECIPIENTS = [
+  "info@bodytime-concept.de",
+  "christoph@daniel-kurzeja.de",
+];
 
 const WEEKDAYS_DE = [
   "Sonntag",
