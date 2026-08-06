@@ -421,7 +421,9 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
             value={state.webcamMediaId}
             onChange={(id) => update({ webcamMediaId: id })}
             onWebcamsChange={setWebcams}
-            showKiHint={state.introEnabled}
+            // Immer anzeigen: Die KI-Entscheidung fällt erst im nächsten
+            // Schritt, aufgenommen wird aber hier — der Tipp muss vorher da sein.
+            showKiHint
           />
         )}
         {step === 1 && (

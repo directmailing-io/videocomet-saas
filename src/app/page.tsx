@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ComingSoonIntro } from "@/components/marketing/ComingSoonIntro";
 import { DemoSection } from "@/components/marketing/DemoSection";
 import { FAQSection } from "@/components/marketing/FAQSection";
 import { FAQ } from "@/components/marketing/faq-data";
@@ -70,6 +71,7 @@ export default function HomePage() {
       />
       <MarketingNav />
       <HeroSection />
+      <ComingSoonIntro />
       <DemoSection />
       <HowItWorksSection />
       <TestimonialsSection />

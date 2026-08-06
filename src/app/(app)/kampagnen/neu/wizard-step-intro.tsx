@@ -207,7 +207,19 @@ export function WizardStepIntro({
             pattern={namePattern}
             onChange={onGreetingChange}
           />
-          <RecordingHint />
+          <div className="space-y-2">
+            <p className="flex items-start gap-2.5 text-sm text-ink-muted leading-relaxed">
+              <Info className="size-4 shrink-0 mt-0.5 text-ink-soft" />
+              <span>
+                <strong className="text-ink">
+                  Dein Video ist schon aufgenommen?
+                </strong>{" "}
+                Prüfe kurz, ob der Anfang zu den Beispielen unten passt. Falls
+                nicht, geh einfach einen Schritt zurück und nimm es neu auf.
+              </span>
+            </p>
+            <RecordingHint compact />
+          </div>
           <p className="flex items-start gap-2.5 text-sm text-ink-muted leading-relaxed">
             <Info className="size-4 shrink-0 mt-0.5 text-ink-soft" />
             <span>

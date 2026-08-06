@@ -9,7 +9,9 @@ import {
   Play,
   AlertCircle,
   Film,
+  Sparkles,
 } from "lucide-react";
+import { RecordingHint } from "@/components/intro/recording-hint";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -251,6 +253,7 @@ export function WizardStep1Webcam({
   return (
     <div>
       <div className="space-y-4">
+          <KiRecordingTeaser />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm text-ink-muted">
               {webcams.length === 0
@@ -406,6 +409,61 @@ export function WizardStep1Webcam({
 /* ------------------------------------------------------------------ */
 /* Sub-Components                                                     */
 /* ------------------------------------------------------------------ */
+
+/**
+ * KiRecordingTeaser — Aufnahme-Tipp VOR der Aufnahme.
+ *
+ * Die KI-Begrüßung wird erst im nächsten Wizard-Schritt gewählt, aber die
+ * Sprech-Anleitung muss greifen, bevor das Video im Kasten ist. Deshalb
+ * steht hier die Kernregel immer sichtbar, die Beispiel-Karten sind
+ * ausklappbar (wer keine KI-Begrüßung will, wird nicht zugetextet).
+ */
+function KiRecordingTeaser() {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="rounded-squircle-md border border-line bg-surface">
+      <div className="flex items-start gap-2.5 px-4 pt-3.5">
+        <Sparkles className="size-4 text-brand shrink-0 mt-0.5" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink">
+            Tipp: Im nächsten Schritt kannst du die persönliche KI-Begrüßung
+            aktivieren
+          </p>
+          <p className="mt-1 text-xs text-ink-muted leading-relaxed">
+            Dann wird der erste Satz pro Lead mit Vornamen gesprochen, in
+            deiner Stimme. Damit das klappt: Fang deine Aufnahme mit einer
+            kurzen Anrede an („Hi!", „Hallo!") und sprich danach in einem
+            vollständigen Satz weiter.
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="mt-1 flex w-full items-center gap-2 px-4 py-2.5 text-left text-xs font-medium text-ink-muted hover:text-ink transition-colors"
+      >
+        <span className="flex-1">
+          {open ? "Beispiele ausblenden" : "Beispiele anzeigen"}
+        </span>
+        <span
+          className={cn(
+            "text-xs transition-transform",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        >
+          ▾
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-line-soft p-3">
+          <RecordingHint compact className="border-0 p-0" />
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * WebcamThumb — Grid-Tile in der Mediathek-Übersicht / im Picker-Dialog.
