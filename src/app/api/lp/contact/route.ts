@@ -125,8 +125,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const from = process.env.RESEND_FROM ?? "VIDEOCOMET <no-reply@videocomet.de>";
+  // From-Name traegt den Anfragenden-Namen, damit im Postfach sofort
+  // sichtbar ist WER anfragt (nicht nur „VIDEOCOMET"). Absender-Adresse
+  // bleibt no-reply (nicht die User-E-Mail, sonst SPF/DMARC-Bruch);
+  // eingehende Antworten laufen via Reply-To auf die User-E-Mail zurück.
   const fullName = `${data.first_name} ${data.last_name}`.trim();
+  const senderDomain =
+    process.env.RESEND_FROM_DOMAIN ?? "no-reply@videocomet.de";
+  const from = `${fullName} (Beratungsanfrage) <${senderDomain}>`;
   const subject = `🔔 Neue Beratungsanfrage von ${fullName}`;
   const referer = req.headers.get("referer") ?? "unbekannt";
   const phoneFull = `${data.phone_country ?? ""} ${data.phone}`.replace(/\s+/g, " ").trim();
@@ -224,7 +230,9 @@ export async function POST(req: NextRequest) {
       subject,
       text: textParts.join("\n"),
       html,
-      replyTo: data.email,
+      // Reply-To mit Name → beim Antworten sieht Christoph den Klar-Namen
+      // im To-Feld, nicht nur eine anonyme E-Mail-Adresse.
+      replyTo: data.email ? `${fullName} <${data.email}>` : undefined,
     });
   } catch (err) {
     console.error("[lp/contact] resend failed:", err);
