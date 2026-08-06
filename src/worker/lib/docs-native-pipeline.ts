@@ -445,24 +445,28 @@ export async function renderViaDocsApi(
     let pdfBuffer = await exportPdf();
 
     // 5b. Ueberlauf-Kompensation: Das Inline-QR belegt ~60pt Textfluss-Platz,
-    // den der floating Platzhalter nicht brauchte. Laeuft der Brief dadurch
-    // auf eine Extra-Seite, kompensieren wir in zwei Stufen — REIHENFOLGE
-    // umgekehrt seit 2026-08-06 nach User-Feedback:
+    // den der floating Platzhalter nicht brauchte. Kompensations-Kaskade in
+    // vier Stufen, von komplett-unsichtbar zu sichtbar-destruktiv:
     //
-    //   Stufe 1: marginBottom in 4pt-Schritten reduzieren (max 12pt). Das
-    //            ist unsichtbar fuer den Leser (Fussrand wird knapper) und
-    //            zerstoert keine Design-Elemente.
-    //   Stufe 2: Leerabsaetze vor dem QR loeschen. HAERTERE Massnahme,
-    //            weil sinnvolle Absatz-Trenner zwischen Textbloecken
-    //            entfernt werden (User-Bug: „Wer sind wir? / Sportliche
-    //            Gruesse" klebten am Vorabsatz).
+    //   Stufe 1: marginBottom bis 30pt reduzieren (Fussrand schrumpft, sonst
+    //            nichts). Bei 72pt Standard bleibt >40pt = ~1.5cm Rand.
+    //   Stufe 2: marginTop bis 30pt reduzieren (Kopfrand schrumpft, sonst
+    //            nichts). Adress-Header sitzt weiterhin oben, nur naeher am
+    //            Blattrand.
+    //   Stufe 3: lineSpacing global auf 100% setzen (falls hoeher). Spart
+    //            ~10-15% Vertikal. Text wird kompakter, aber nicht gequetscht.
+    //   Stufe 4: NUR wenn 1-3 nicht reichen — Leerabsaetze vor dem QR
+    //            loeschen. Design-relevante Trenner koennen verschwinden.
     if (qrInlineObjectId && baselinePages !== null) {
-      const MAX_ITERATIONS = 8;
+      const MAX_ITERATIONS = 20;
       const EMPTIES_PER_ITERATION = 4;
       const MARGIN_STEP_PT = 4;
-      const MARGIN_MAX_REDUCTION_PT = 12;
-      let marginReducedPt = 0;
+      const MARGIN_MAX_REDUCTION_PT = 30;
+      let marginBottomReducedPt = 0;
       let currentMarginBottomPt: number | null = null;
+      let marginTopReducedPt = 0;
+      let currentMarginTopPt: number | null = null;
+      let lineSpacingReduced = false;
       for (let i = 0; i < MAX_ITERATIONS; i++) {
         const pages = await countPdfPages(pdfBuffer);
         if (pages <= baselinePages) break;
@@ -470,14 +474,14 @@ export async function renderViaDocsApi(
           docs.documents.get({ documentId: copyDocId! }),
         );
         let requests: docs_v1.Schema$Request[];
-        // Stufe 1: unsichtbare marginBottom-Reduktion zuerst.
-        if (marginReducedPt < MARGIN_MAX_REDUCTION_PT) {
+        // Stufe 1: marginBottom reduzieren.
+        if (marginBottomReducedPt < MARGIN_MAX_REDUCTION_PT) {
           currentMarginBottomPt ??=
             struct.data.documentStyle?.marginBottom?.magnitude ?? 72;
           currentMarginBottomPt -= MARGIN_STEP_PT;
-          marginReducedPt += MARGIN_STEP_PT;
+          marginBottomReducedPt += MARGIN_STEP_PT;
           console.warn(
-            `[docs-native] page overflow (${pages} > ${baselinePages}) — reducing marginBottom to ${currentMarginBottomPt}pt (iteration ${i + 1}/${MAX_ITERATIONS})`,
+            `[docs-native] page overflow (${pages} > ${baselinePages}) — reducing marginBottom to ${currentMarginBottomPt}pt (iter ${i + 1}/${MAX_ITERATIONS})`,
           );
           requests = [
             {
@@ -489,14 +493,53 @@ export async function renderViaDocsApi(
               },
             },
           ];
+        } else if (marginTopReducedPt < MARGIN_MAX_REDUCTION_PT) {
+          // Stufe 2: marginTop reduzieren.
+          currentMarginTopPt ??=
+            struct.data.documentStyle?.marginTop?.magnitude ?? 72;
+          currentMarginTopPt -= MARGIN_STEP_PT;
+          marginTopReducedPt += MARGIN_STEP_PT;
+          console.warn(
+            `[docs-native] page overflow (${pages} > ${baselinePages}) — reducing marginTop to ${currentMarginTopPt}pt (iter ${i + 1}/${MAX_ITERATIONS})`,
+          );
+          requests = [
+            {
+              updateDocumentStyle: {
+                documentStyle: {
+                  marginTop: { magnitude: currentMarginTopPt, unit: "PT" },
+                },
+                fields: "marginTop",
+              },
+            },
+          ];
+        } else if (!lineSpacingReduced) {
+          // Stufe 3: lineSpacing global auf 100% (falls > 100%) fuer ALLE
+          // Paragraphen im Body. Google-Docs-Standard ist oft 115% — die
+          // Reduktion auf 100% spart pro 20 Zeilen etwa 30pt.
+          lineSpacingReduced = true;
+          console.warn(
+            `[docs-native] page overflow (${pages} > ${baselinePages}) — setting lineSpacing 100% on all body paragraphs (iter ${i + 1}/${MAX_ITERATIONS})`,
+          );
+          const bodyEnd =
+            struct.data.body?.content?.[struct.data.body.content.length - 1]
+              ?.endIndex ?? 1;
+          requests = [
+            {
+              updateParagraphStyle: {
+                range: { startIndex: 1, endIndex: Math.max(2, bodyEnd - 1) },
+                paragraphStyle: { lineSpacing: 100 },
+                fields: "lineSpacing",
+              },
+            },
+          ];
         } else {
-          // Stufe 2: erst wenn margin ausgereizt ist, Leerabsaetze loeschen.
+          // Stufe 4: letzte Instanz — Leerabsaetze vor dem QR loeschen.
           const batch = findEmptyParagraphsBeforeInlineObject(struct.data, qrInlineObjectId)
             .slice(-EMPTIES_PER_ITERATION)
             .sort((a, b) => b.start - a.start);
           if (batch.length > 0) {
             console.warn(
-              `[docs-native] page overflow (${pages} > ${baselinePages}) — removing ${batch.length} empty paragraph(s) (iteration ${i + 1}/${MAX_ITERATIONS})`,
+              `[docs-native] page overflow (${pages} > ${baselinePages}) — LAST RESORT: removing ${batch.length} empty paragraph(s) (iter ${i + 1}/${MAX_ITERATIONS})`,
             );
             requests = batch.map((r) => ({
               deleteContentRange: {
