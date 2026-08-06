@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
   Plus,
@@ -182,6 +183,13 @@ export function RunWizardDedupeCard({
   const totalRows = rows.length;
   const excluded = result.stats.excluded;
   const remaining = totalRows - excluded;
+  const keepAll = value.strategy === "keep-all";
+  // Gefundene Duplikate unabhängig von der Strategie — bei keep-all ist
+  // `excluded` immer 0, die Gruppen sind aber trotzdem erkannt.
+  const dupCount = result.groups.reduce(
+    (acc, g) => acc + g.duplicateRowIndices.length,
+    0,
+  );
 
   function patchRule(ruleId: string, patch: Partial<DedupeRule>) {
     onChange({
@@ -215,9 +223,11 @@ export function RunWizardDedupeCard({
 
   const summary = !value.enabled
     ? `Ausgeschaltet — alle ${totalRows} Leads kommen weiter.`
-    : excluded === 0
-      ? `Keine Duplikate gefunden — alle ${totalRows} Leads kommen weiter.`
-      : `${excluded} Duplikat${excluded === 1 ? " wird" : "e werden"} entfernt — ${remaining} von ${totalRows} Leads kommen weiter.`;
+    : dupCount === 0
+      ? `Keine Duplikate in dieser Liste — alle ${totalRows} Leads kommen weiter.`
+      : keepAll
+        ? `${dupCount} Duplikat${dupCount === 1 ? "" : "e"} gefunden — du behältst alle, ${totalRows} Leads kommen weiter.`
+        : `${excluded} Duplikat${excluded === 1 ? " wird" : "e werden"} entfernt — ${remaining} von ${totalRows} Leads kommen weiter.`;
 
   return (
     <Card>
@@ -255,6 +265,67 @@ export function RunWizardDedupeCard({
             />
           </div>
         </div>
+
+        {/* Entscheidungs-Banner: sichtbar sobald Duplikate gefunden wurden,
+            auch ohne die Regeln aufzuklappen. Der User wählt explizit, ob
+            entfernt oder behalten wird — nichts passiert mehr still. */}
+        {value.enabled && dupCount > 0 && (
+          <div className="mt-4 rounded-squircle-md bg-warn-soft/60 px-4 py-3">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex size-7 items-center justify-center rounded-full bg-warn/15 text-warn shrink-0">
+                <AlertTriangle className="size-4" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-ink">
+                  {dupCount} Duplikat{dupCount === 1 ? "" : "e"} in dieser
+                  Liste gefunden
+                </p>
+                <p className="text-xs text-ink-muted mt-0.5">
+                  Geprüft wird nur innerhalb dieser Liste — Leads aus
+                  früheren Runden zählen nicht als Duplikat. Du entscheidest,
+                  was damit passiert:
+                </p>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChange({ ...value, strategy: "keep-first" })
+                    }
+                    className={cn(
+                      "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
+                      !keepAll
+                        ? "bg-ink text-white"
+                        : "bg-surface text-ink-muted hover:text-ink",
+                    )}
+                  >
+                    Duplikate entfernen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChange({ ...value, strategy: "keep-all" })
+                    }
+                    className={cn(
+                      "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
+                      keepAll
+                        ? "bg-ink text-white"
+                        : "bg-surface text-ink-muted hover:text-ink",
+                    )}
+                  >
+                    Alle behalten
+                  </button>
+                </div>
+                {!keepAll && remaining === 0 && (
+                  <p className="mt-2 text-xs font-medium text-danger">
+                    Achtung: So bleibt kein einziger Lead übrig und die Runde
+                    hätte nichts zu produzieren. Wähle „Alle behalten" oder
+                    prüfe deine Liste.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {detailOpen && (
         <div
