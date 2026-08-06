@@ -343,21 +343,31 @@ export async function enqueueApprovedLeadsForPhase2(
     return { queued: 0, transitioned: false, campaignId };
   }
 
-  // 3) Stale-Job-Purge + bulk-add in pipeline-queue. Best-effort: bei Redis-
-  //    Ausfall werfen wir, der Caller kann das auffangen — der Run bleibt
-  //    in `generating` und wird vom Stuck-Recovery beim nächsten Boot
-  //    aufgesammelt.
+  // 3) Stale-Job-Purge + bulk-add in pipeline-queue. Ein Retry nach kurzem
+  //    Delay: mit `enableOfflineQueue: false` schlägt der allererste Redis-
+  //    Befehl nach einem frischen Prozess-Boot fehl, solange die Verbindung
+  //    noch im Aufbau ist — der zweite Versuch sitzt dann. Wirft erst nach
+  //    dem zweiten Fehlschlag; der Run bleibt in `generating` und wird vom
+  //    Orphaned-Pending-Recovery im Worker aufgesammelt.
   const queue = pipelineQueueLocal();
-  await Promise.all(
-    leadIds.map((id) => queue.remove(id).catch(() => undefined)),
-  );
-  await queue.addBulk(
-    leadIds.map((leadId) => ({
-      name: "lead-pipeline",
-      data: { leadId, runId, userId, campaignId },
-      opts: { jobId: leadId },
-    })),
-  );
+  const purgeAndAdd = async (): Promise<void> => {
+    await Promise.all(
+      leadIds.map((id) => queue.remove(id).catch(() => undefined)),
+    );
+    await queue.addBulk(
+      leadIds.map((leadId) => ({
+        name: "lead-pipeline",
+        data: { leadId, runId, userId, campaignId },
+        opts: { jobId: leadId },
+      })),
+    );
+  };
+  try {
+    await purgeAndAdd();
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    await purgeAndAdd();
+  }
 
   return { queued: leadIds.length, transitioned: true, campaignId };
 }

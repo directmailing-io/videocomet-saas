@@ -688,15 +688,30 @@ export async function approveLeads(
         inArray(leads.preflightStatus, allowedStatuses),
       ),
     );
-  if (ownedIds.length === 0) return { approvedCount: 0 };
-  const ids = ownedIds.map((r) => r.id);
+  if (ownedIds.length > 0) {
+    await db
+      .update(leads)
+      .set({ approvedAt: new Date() })
+      .where(inArray(leads.id, ownedIds.map((r) => r.id)));
+  }
 
-  const updated = await db
-    .update(leads)
-    .set({ approvedAt: new Date() })
-    .where(inArray(leads.id, ids))
-    .returning({ id: leads.id });
-  return { approvedCount: updated.length };
+  // Gesamtzahl approvter Leads zurückgeben, nicht nur die frisch
+  // gestempelten: bei skipPreflight-Runs trägt schon die start-Route den
+  // approved_at-Stempel, hier käme sonst 0 raus und die UI zeigt
+  // fälschlich „0 von N Leads".
+  const [total] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        eq(leads.runId, runId),
+        eq(runs.userId, userId),
+        isNull(leads.removedAt),
+        sql`${leads.approvedAt} IS NOT NULL`,
+      ),
+    );
+  return { approvedCount: total?.count ?? 0 };
 }
 
 /**

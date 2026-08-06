@@ -67,6 +67,7 @@ import {
   requeuePreflightLeads,
 } from "@/lib/preflight/job-enqueue";
 import { PREFLIGHT_TERMINAL_STATUSES } from "@/lib/preflight/types";
+import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
 import type { LeadJobData } from "./types";
 import type { Job } from "bullmq";
 
@@ -470,14 +471,53 @@ async function preflightRecovery(): Promise<void> {
       .from(runs)
       .where(eq(runs.status, "approved"))
       .limit(100);
+    const seenIds = new Set(approvedRuns.map((r) => r.id));
+    for (const id of Array.from(approvedStuckFirstSeen.keys())) {
+      if (!seenIds.has(id)) approvedStuckFirstSeen.delete(id);
+    }
     for (const r of approvedRuns) {
       try {
         const result = await enqueueApprovedLeadsForPhase2(r.id, r.userId);
         if (result.transitioned) {
+          approvedStuckFirstSeen.delete(r.id);
           // eslint-disable-next-line no-console
           console.log(
             `[worker:${WORKER_ID}] approved-run-watcher: enqueued ${result.queued} leads for run=${r.id}`,
           );
+          continue;
+        }
+        // transitioned=false + 0 queued: Run ist approved, hat aber keinen
+        // einzigen Lead mit approved_at (alle removed/abgelehnt). Der Run
+        // würde still für immer hängen — sichtbar machen + nach 10 min als
+        // failed terminieren, damit der User nicht ewig auf einen Worker
+        // wartet (DigiSpace-Incident 2026-08-06).
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[worker:${WORKER_ID}] approved-run-watcher: run=${r.id} is approved but has 0 approved leads — nothing to enqueue`,
+        );
+        const firstSeen = approvedStuckFirstSeen.get(r.id);
+        if (firstSeen === undefined) {
+          approvedStuckFirstSeen.set(r.id, Date.now());
+        } else if (Date.now() - firstSeen > APPROVED_STUCK_TIMEOUT_MS) {
+          const failed = await db
+            .update(runs)
+            .set({ status: "failed", completedAt: new Date() })
+            .where(and(eq(runs.id, r.id), eq(runs.status, "approved")))
+            .returning({ id: runs.id });
+          if (failed.length > 0) {
+            approvedStuckFirstSeen.delete(r.id);
+            await insertPipelineEvent({
+              runId: r.id,
+              level: "error",
+              stage: "watchdog",
+              message:
+                "Runde gestoppt: Es gibt keinen einzigen freigegebenen Lead zum Produzieren — alle Leads wurden entfernt oder abgelehnt (z.B. Duplikate aus früheren Runden oder unvollständige Daten). Bitte prüfe deine Liste und starte eine neue Runde.",
+            });
+            // eslint-disable-next-line no-console
+            console.error(
+              `[worker:${WORKER_ID}] approved-run-watchdog: marked run=${r.id} as failed (approved >10min without any approved leads)`,
+            );
+          }
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -495,6 +535,14 @@ async function preflightRecovery(): Promise<void> {
     );
   }
 }
+
+/**
+ * First-seen-Tracking für approved-Runs ohne approvte Leads. In-memory
+ * reicht: ein Worker-Restart setzt die 10-min-Uhr zurück, was den Watchdog
+ * nur verzögert, nie falsch auslöst.
+ */
+const approvedStuckFirstSeen = new Map<string, number>();
+const APPROVED_STUCK_TIMEOUT_MS = 10 * 60 * 1000;
 
 const WORKER_ID = `${hostname()}-${randomUUID().slice(0, 8)}`;
 

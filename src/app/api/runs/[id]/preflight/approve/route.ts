@@ -147,6 +147,25 @@ export async function POST(
     { approveAlsoProblematic },
   );
 
+  // Guard: Ohne einen einzigen approvten Lead darf der Run NICHT auf
+  // `approved` gehen — er würde dort für immer hängen bleiben, weil der
+  // Phase-2-Enqueue und der Recovery-Watcher bei 0 approvten Leads bewusst
+  // nichts tun (DigiSpace-Incident 2026-08-06).
+  if (approvedCount === 0) {
+    await updateRunCounts(params.id, auth.user.id, {
+      approvedLeadCount: 0,
+      rejectedLeadCount: (run.rejectedLeadCount ?? 0) + rejectedCount,
+    });
+    return NextResponse.json(
+      {
+        error:
+          "Kein einziger Lead kann produziert werden — alle wurden abgelehnt oder beim Import aussortiert. Bitte prüfe die Liste und starte ggf. eine neue Runde.",
+        details: "no_approved_leads",
+      },
+      { status: 422 },
+    );
+  }
+
   // ── 3. Counter auf dem Run setzen ────────────────────────────────────
   // Wir addieren rejectedCount zum bestehenden Wert, weil der Operator
   // möglicherweise vorher schon einzeln rejected hat (siehe /reject Endpoint).

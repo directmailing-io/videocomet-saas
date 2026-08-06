@@ -14,6 +14,7 @@ import {
   type RunAbConfig,
 } from "@/lib/db/schema";
 import { getRun, updateRun } from "@/lib/db/queries/runs";
+import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
 import {
   bulkInsertLeads,
   softRemoveLeads,
@@ -543,14 +544,43 @@ export async function POST(
     // approven — sonst stempeln wir einen approved-Marker auf einen entfernten
     // Lead, was die Counts in `runs.approvedLeadCount` verfälschen würde und
     // semantisch ein "approved + removed"-Widerspruch wäre.
-    await db
+    const stamped = await db
       .update(leads)
       .set({
         preflightStatus: "ok",
         approvedAt: sql`NOW()`,
         preflightCompletedAt: sql`NOW()`,
       })
-      .where(and(eq(leads.runId, params.id), isNull(leads.removedAt)));
+      .where(and(eq(leads.runId, params.id), isNull(leads.removedAt)))
+      .returning({ id: leads.id });
+
+    // Guard: Wenn Dedupe + Pflichtfeld-Validierung ALLE Leads aussortiert
+    // haben, gibt es nichts zu produzieren. Ohne diesen Abbruch ginge der
+    // Run auf approved/generating und bliebe für immer bei „Warte auf den
+    // ersten Worker" hängen (DigiSpace-Incident 2026-08-06).
+    if (stamped.length === 0) {
+      await updateRun(params.id, auth.user.id, {
+        status: "failed",
+        totalLeads: inserted,
+        approvedLeadCount: 0,
+      });
+      await insertPipelineEvent({
+        runId: params.id,
+        level: "error",
+        stage: "start",
+        message: `Runde gestoppt: Alle ${inserted} Leads wurden beim Import aussortiert (${dedupeRemovedCount} Duplikate aus früheren Runden, ${incompleteCount} mit unvollständigen Pflichtfeldern).`,
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `Alle ${inserted} Leads wurden beim Import aussortiert (${dedupeRemovedCount} Duplikate aus früheren Runden, ${incompleteCount} mit unvollständigen Pflichtfeldern). Es gibt nichts zu produzieren — bitte prüfe deine Liste und starte eine neue Runde.`,
+          totalLeads: inserted,
+          dedupeRemoved: dedupeRemovedCount,
+          incomplete: incompleteCount,
+        },
+        { status: 422 },
+      );
+    }
 
     // ── Intro-Vorschau-Gate für webcam-only ──────────────────────────────
     // Webcam-only überspringt zwar die Screenshot-Vorprüfung, aber Kampagnen
@@ -690,6 +720,37 @@ export async function POST(
   }
 
   // ── Phase-1-Pfad (Default für `with-presentation`) ─────────────────────
+  // Gleicher Guard wie im skipPreflight-Pfad: ohne einen einzigen nicht-
+  // removed Lead bliebe der Run für immer in `preflighting` (die Run-
+  // Finalization im Worker verlangt mindestens einen aktiven Lead).
+  const [eligibleCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(leads)
+    .where(and(eq(leads.runId, params.id), isNull(leads.removedAt)));
+  if ((eligibleCount?.count ?? 0) === 0) {
+    await updateRun(params.id, auth.user.id, {
+      status: "failed",
+      totalLeads: inserted,
+      approvedLeadCount: 0,
+    });
+    await insertPipelineEvent({
+      runId: params.id,
+      level: "error",
+      stage: "start",
+      message: `Runde gestoppt: Alle ${inserted} Leads wurden beim Import aussortiert (${dedupeRemovedCount} Duplikate aus früheren Runden, ${incompleteCount} mit unvollständigen Pflichtfeldern).`,
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `Alle ${inserted} Leads wurden beim Import aussortiert (${dedupeRemovedCount} Duplikate aus früheren Runden, ${incompleteCount} mit unvollständigen Pflichtfeldern). Es gibt nichts zu produzieren — bitte prüfe deine Liste und starte eine neue Runde.`,
+        totalLeads: inserted,
+        dedupeRemoved: dedupeRemovedCount,
+        incomplete: incompleteCount,
+      },
+      { status: 422 },
+    );
+  }
+
   await updateRun(params.id, auth.user.id, {
     status: "preflighting",
     preflightStartedAt: new Date(),
