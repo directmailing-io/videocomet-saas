@@ -1655,6 +1655,17 @@ export async function pipelineProcessor(
               message: `${leadLabel}: docs-native rendered in ${((Date.now() - nativeStart) / 1000).toFixed(1)}s (vars=${nativeResult.textReplacements}, qr=${nativeResult.qrReplaced}, thumb=${nativeResult.thumbReplaced})`,
               durationMs: Date.now() - nativeStart,
             });
+          } else {
+            // Sichtbar machen, dass hier ein anderer Renderer läuft: der
+            // HTML-Renderer 3.0 liefert strukturell anderes Layout — ein
+            // stiller Wechsel wäre bei Layout-Reklamationen nicht debugbar.
+            await insertPipelineEvent({
+              runId: data.runId,
+              leadId: data.leadId,
+              level: "warn",
+              stage: "docx",
+              message: `${leadLabel}: Renderer 4.0 nicht konfiguriert (GOOGLE_SHARED_DRIVE_ID/GOOGLE_DRIVE_SA_KEY fehlt) — Fallback auf HTML-Renderer 3.0, Layout kann vom Google Doc abweichen`,
+            });
           }
         } catch (err) {
           // KEIN stiller Fallback mehr (Incident 2026-07-15): der HTML-Renderer

@@ -143,28 +143,35 @@ function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
     });
   }
 
-  let qr: QrTarget | null = null;
-  let thumbObjectId: string | null = null;
+  // Bei mehreren Kandidaten pro Aspect-Klasse gewinnt der GRÖSSTE (Fläche):
+  // Templates enthalten oft kleine quadratische Deko-Icons oder Logos —
+  // der eigentliche QR-Platzhalter ist praktisch immer das größte 1:1-Bild
+  // (analog Thumbnail als größtes 16:9-Bild).
+  let qrCand: (typeof candidates)[number] | null = null;
+  let thumbCand: (typeof candidates)[number] | null = null;
   for (const c of candidates) {
     const aspect = c.w / c.h;
     // Quadratisch → QR
-    if (!qr && aspect >= 0.95 && aspect <= 1.05) {
-      qr = {
-        objectId: c.id,
-        kind: c.kind,
-        widthPt: c.w,
-        heightPt: c.h,
-        leftOffsetPt: c.leftOffsetPt,
-      };
+    if (aspect >= 0.95 && aspect <= 1.05) {
+      if (!qrCand || c.w * c.h > qrCand.w * qrCand.h) qrCand = c;
       continue;
     }
     // 16:9 → Thumbnail
-    if (!thumbObjectId && aspect >= 1.7 && aspect <= 1.83) {
-      thumbObjectId = c.id;
+    if (aspect >= 1.7 && aspect <= 1.83) {
+      if (!thumbCand || c.w * c.h > thumbCand.w * thumbCand.h) thumbCand = c;
       continue;
     }
   }
-  return { qr, thumbObjectId };
+  const qr: QrTarget | null = qrCand
+    ? {
+        objectId: qrCand.id,
+        kind: qrCand.kind,
+        widthPt: qrCand.w,
+        heightPt: qrCand.h,
+        leftOffsetPt: qrCand.leftOffsetPt,
+      }
+    : null;
+  return { qr, thumbObjectId: thumbCand?.id ?? null };
 }
 
 /**
@@ -205,6 +212,33 @@ function findEmptyParagraphsBeforeInlineObject(
     if (isEmpty) empties.push({ start: el.startIndex, end: el.endIndex });
   }
   return [];
+}
+
+/**
+ * Sammelt den kompletten sichtbaren Text eines Docs — Body-Absätze,
+ * Tabellen (rekursiv), TOC, Header, Footer und Fußnoten. Text-Runs werden
+ * ohne Trenner konkateniert, damit Platzhalter, die über mehrere Runs
+ * verteilt sind (z.B. durch Rechtschreibkorrektur-Splits), trotzdem als
+ * zusammenhängender String erkannt werden.
+ */
+function collectDocText(doc: docs_v1.Schema$Document): string {
+  const parts: string[] = [];
+  const walk = (content: docs_v1.Schema$StructuralElement[] | undefined): void => {
+    for (const el of content ?? []) {
+      for (const pe of el.paragraph?.elements ?? []) {
+        if (pe.textRun?.content) parts.push(pe.textRun.content);
+      }
+      for (const row of el.table?.tableRows ?? []) {
+        for (const cell of row.tableCells ?? []) walk(cell.content);
+      }
+      walk(el.tableOfContents?.content);
+    }
+  };
+  walk(doc.body?.content);
+  for (const h of Object.values(doc.headers ?? {})) walk(h.content);
+  for (const f of Object.values(doc.footers ?? {})) walk(f.content);
+  for (const fn of Object.values(doc.footnotes ?? {})) walk(fn.content);
+  return parts.join("");
 }
 
 /**
@@ -404,6 +438,29 @@ export async function renderViaDocsApi(
       );
       qrInlineObjectId =
         replies.find((r) => r.insertInlineImage?.objectId)?.insertInlineImage?.objectId ?? null;
+    }
+
+    // 4b. Partial-Failure-Detection: verbleibende {{…}}-Platzhalter im
+    // fertigen Doc sind ein harter Fehler — ein Brief mit sichtbarem
+    // "{{name}}" darf nie beim Kunden landen. Wir holen das Doc nach dem
+    // batchUpdate erneut und scannen den kompletten Text (inkl. Tabellen,
+    // Header/Footer). Das fängt beide Fehlrichtungen: Keys, die die API
+    // nicht ersetzt hat, UND Template-Platzhalter, für die gar kein Wert
+    // gemappt war (Tippfehler im Template, fehlendes Lead-Feld).
+    if (Object.keys(input.textVars).length > 0) {
+      const verify = await withGoogleRetry("docs.documents.get(verify)", () =>
+        docs.documents.get({ documentId: copyDocId! }),
+      );
+      const remaining = Array.from(
+        new Set(collectDocText(verify.data).match(/\{\{[^{}\n]{1,80}\}\}/g) ?? []),
+      );
+      if (remaining.length > 0) {
+        throw new Error(
+          `docs-native: ${remaining.length} Platzhalter nicht ersetzt: ${remaining
+            .slice(0, 10)
+            .join(", ")}`,
+        );
+      }
     }
 
     // 5. PDF-Export via Google's eigenen Renderer.
