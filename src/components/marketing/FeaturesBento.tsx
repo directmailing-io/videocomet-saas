@@ -12,6 +12,7 @@ import {
   TrendingUp,
   UploadCloud,
 } from "lucide-react";
+import { ComingSoonFeatureCard } from "./ComingSoonIntro";
 import { RevealOnScroll } from "./RevealOnScroll";
 import { Squircle } from "./Squircle";
 
@@ -74,8 +75,13 @@ export function FeaturesBento() {
 
         {/* Bento Grid — 2 wide Hero-Cards + 6 standard cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-          {/* Wide opener: Eigene Domain */}
+          {/* Coming soon: persönliche KI-Begrüßung */}
           <RevealOnScroll delay={400} className="md:col-span-2">
+            <ComingSoonFeatureCard />
+          </RevealOnScroll>
+
+          {/* Wide opener: Eigene Domain */}
+          <RevealOnScroll delay={500} className="md:col-span-2">
             <FeatureCardMesh
               title="Deine eigene Domain, dein Auftritt."
               sub="Verbinde in zwei Minuten deine eigene Domain. SSL, DNS, Subdomain. Alles inklusive, ohne Frickelei."
