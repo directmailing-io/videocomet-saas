@@ -355,14 +355,26 @@ export async function POST(
   // `removedReason`-Stempel (wäre semantisch falsch; deshalb prüfen wir vor
   // dem Update via `isNull(leads.removedAt)`).
   let incompleteCount = 0;
-  // System-Sentinel (z.B. `@system:pageUrl`) sind KEINE Pflicht-CSV-Spalten —
-  // die werden zur Render-Zeit befüllt. Aus der required-Liste filtern,
-  // damit Leads NICHT als „Daten unvollständig" markiert werden, nur weil
-  // die System-Spalte natürlich nicht in der CSV vorkommt.
-  const requiredCols = Object.values(mapping).filter(
-    (v): v is string =>
-      typeof v === "string" && v.trim() !== "" && !v.startsWith("@system:"),
-  );
+  // Nur der VORNAME ist wirklich kritisch fuer Personalisierung („Servus
+  // Vorname,"). Alle anderen Placeholders (E-Mail, Ort, Firma, Telefon,
+  // etc.) sind optional — leere Werte werden vom Placeholder-Renderer
+  // als leere Strings substituiert, der Brief funktioniert trotzdem.
+  // 2026-08-06 Regression-Fix: vorher waren ALLE gemappten Felder Pflicht;
+  // dadurch wurden 60% der Leads unsichtbar rausgefiltert wenn z.B. die
+  // E-Mail-Spalte gemappt aber im CSV leer war (Daniels Fall: 144/243
+  // Leads verschwanden weil ohne E-Mail).
+  //
+  // System-Sentinel (z.B. `@system:pageUrl`) werden zur Render-Zeit
+  // befuellt — nie aus der required-Liste.
+  const VORNAME_PLACEHOLDER_KEYS = new Set(["vorname", "firstname", "first_name"]);
+  const requiredCols: string[] = [];
+  for (const [placeholderKey, columnName] of Object.entries(mapping)) {
+    if (typeof columnName !== "string" || columnName.trim() === "") continue;
+    if (columnName.startsWith("@system:")) continue;
+    if (VORNAME_PLACEHOLDER_KEYS.has(placeholderKey.toLowerCase())) {
+      requiredCols.push(columnName);
+    }
+  }
   if (requiredCols.length > 0) {
     const incompleteByRowIndex = new Map<number, string[]>();
     for (let i = 0; i < rowsIn.length; i++) {

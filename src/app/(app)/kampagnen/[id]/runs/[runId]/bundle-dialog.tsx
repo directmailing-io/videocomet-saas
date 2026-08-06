@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toaster";
 import {
   Select,
   SelectContent,
@@ -64,6 +65,8 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
   const [open, setOpen] = React.useState(false);
   const [pdfsPerFile, setPdfsPerFile] = React.useState("100");
   const [variant, setVariant] = React.useState<BundleVariant>("mixed");
+  const [downloading, setDownloading] = React.useState(false);
+  const { toast } = useToast();
   // Default base name: runName slugified light. User can overwrite.
   const defaultBase = React.useMemo(
     () =>
@@ -81,14 +84,60 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
   );
   const [baseName, setBaseName] = React.useState(defaultBase);
 
-  function handleDownload() {
-    const params = new URLSearchParams({
-      pdfsPerFile,
-      baseName: baseName.trim() || defaultBase,
+  async function handleDownload() {
+    if (downloading) return;
+    setDownloading(true);
+    // Sofortiges User-Feedback: der Server braucht bei vielen Leads
+    // 3-15 Sekunden zum Bundeln — ohne Toast dachte der User das UI
+    // haengt.
+    toast({
+      variant: "default",
+      title: "Bundle wird vorbereitet ...",
+      description:
+        "Der Download startet automatisch, sobald die PDFs zusammengeführt sind. Kann bei vielen Leads einige Sekunden dauern.",
     });
-    if (abActive && variant !== "mixed") params.set("variant", variant);
-    window.location.href = `/api/runs/${runId}/pdf-bundle?${params}`;
-    setOpen(false);
+    try {
+      const params = new URLSearchParams({
+        pdfsPerFile,
+        baseName: baseName.trim() || defaultBase,
+      });
+      if (abActive && variant !== "mixed") params.set("variant", variant);
+      // Bewusst kein window.location — der Fetch erlaubt uns den
+      // Loading-State ehrlich zu tracken (bis die Server-Response Headers
+      // kommen) und dann den Blob-Download programmatisch auszuloesen.
+      const res = await fetch(`/api/runs/${runId}/pdf-bundle?${params}`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const nameMatch = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+      const filename =
+        (nameMatch && decodeURIComponent(nameMatch[1])) ??
+        `${baseName.trim() || defaultBase}.zip`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({
+        variant: "success",
+        title: "Bundle heruntergeladen",
+        description: filename,
+      });
+      setOpen(false);
+    } catch (err) {
+      toast({
+        variant: "danger",
+        title: "Bundle konnte nicht erstellt werden",
+        description: err instanceof Error ? err.message : "Bitte erneut versuchen.",
+      });
+    } finally {
+      setDownloading(false);
+    }
   }
 
   return (
@@ -186,13 +235,15 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
 
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="ghost">Abbrechen</Button>
+            <Button variant="ghost" disabled={downloading}>Abbrechen</Button>
           </DialogClose>
           <Button
             onClick={handleDownload}
             iconLeft={<FileDown className="size-4" />}
+            loading={downloading}
+            disabled={downloading}
           >
-            Bundle herunterladen
+            {downloading ? "Bundle wird erstellt ..." : "Bundle herunterladen"}
           </Button>
         </DialogFooter>
       </DialogContent>
