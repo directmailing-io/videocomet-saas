@@ -80,16 +80,7 @@ export function FeaturesBento() {
             <ComingSoonFeatureCard />
           </RevealOnScroll>
 
-          {/* Wide opener: Eigene Domain */}
-          <RevealOnScroll delay={500} className="md:col-span-2">
-            <FeatureCardMesh
-              title="Deine eigene Domain, dein Auftritt."
-              sub="Verbinde in zwei Minuten deine eigene Domain. SSL, DNS, Subdomain. Alles inklusive, ohne Frickelei."
-            >
-              <DomainVisual />
-            </FeatureCardMesh>
-          </RevealOnScroll>
-
+          {/* Pair 1: Landingpage + Brief */}
           <RevealOnScroll delay={500}>
             <FeatureCard
               title="Selber bauen, oder einfach hochladen."
@@ -99,7 +90,7 @@ export function FeaturesBento() {
             </FeatureCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={600}>
+          <RevealOnScroll delay={650}>
             <FeatureCard
               title="Briefpost, die ankommt."
               sub="Persönlich adressiert, mit QR-Code zum Video. Druckfertig als PDF zum Download."
@@ -108,7 +99,18 @@ export function FeaturesBento() {
             </FeatureCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={700}>
+          {/* Wide: Eigene Domain */}
+          <RevealOnScroll delay={500} className="md:col-span-2">
+            <FeatureCardMesh
+              title="Deine eigene Domain, dein Auftritt."
+              sub="Verbinde in zwei Minuten deine eigene Domain. SSL, DNS, Subdomain. Alles inklusive, ohne Frickelei."
+            >
+              <DomainVisual />
+            </FeatureCardMesh>
+          </RevealOnScroll>
+
+          {/* Pair 2: Scroll-Animation + Slack-Push */}
+          <RevealOnScroll delay={500}>
             <FeatureCard
               title="Scroll-Animationen mitten im Video."
               sub="Zeige die Webseite des Kunden, ein Google-Doc oder eine Karriere-Seite. Live scrollend, direkt im Video."
@@ -117,7 +119,7 @@ export function FeaturesBento() {
             </FeatureCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={800}>
+          <RevealOnScroll delay={650}>
             <FeatureCard
               title="Slack-Push, sobald jemand reagiert."
               sub="Öffnung, Watch-Time, Klick auf den CTA. Alles landet in deinem Slack, in Echtzeit."
@@ -126,26 +128,8 @@ export function FeaturesBento() {
             </FeatureCard>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={900}>
-            <FeatureCard
-              title="Sieh, was wirklich funktioniert."
-              sub="Watch-Time, Klicks und Anfragen in einem klaren Dashboard. Live abrufbar, jederzeit vergleichbar."
-            >
-              <AnalyticsVisual />
-            </FeatureCard>
-          </RevealOnScroll>
-
-          <RevealOnScroll delay={1000}>
-            <FeatureCard
-              title="Daten zeigen, was besser wirkt."
-              sub="Zwei Video-Botschaften oder zwei Briefe gegeneinander testen. Die Variante mit der besseren Conversion gewinnt."
-            >
-              <ABVisual />
-            </FeatureCard>
-          </RevealOnScroll>
-
           {/* Wide: E-Mail-Versand aus dem eigenen Postfach */}
-          <RevealOnScroll delay={1100} className="md:col-span-2">
+          <RevealOnScroll delay={500} className="md:col-span-2">
             <FeatureCardMesh
               title="Verschicke deine Videos per E-Mail. Aus deinem eigenen Postfach."
               sub="Verbinde Microsoft 365, Gmail oder jedes andere Postfach und versende deine Videos direkt daraus. Das automatische Warm-up steigert dein Sendevolumen Schritt für Schritt und hält deine Zustellbarkeit stabil."
@@ -154,8 +138,27 @@ export function FeaturesBento() {
             </FeatureCardMesh>
           </RevealOnScroll>
 
+          {/* Pair 3: Analytics + A/B */}
+          <RevealOnScroll delay={500}>
+            <FeatureCard
+              title="Sieh, was wirklich funktioniert."
+              sub="Watch-Time, Klicks und Anfragen in einem klaren Dashboard. Live abrufbar, jederzeit vergleichbar."
+            >
+              <AnalyticsVisual />
+            </FeatureCard>
+          </RevealOnScroll>
+
+          <RevealOnScroll delay={650}>
+            <FeatureCard
+              title="Daten zeigen, was besser wirkt."
+              sub="Zwei Video-Botschaften oder zwei Briefe gegeneinander testen. Die Variante mit der besseren Conversion gewinnt."
+            >
+              <ABVisual />
+            </FeatureCard>
+          </RevealOnScroll>
+
           {/* Wide closer: Anbindungen */}
-          <RevealOnScroll delay={1200} className="md:col-span-2">
+          <RevealOnScroll delay={500} className="md:col-span-2">
             <FeatureCardMesh
               title="Eingebunden in deine Tools."
               sub="Jedes Tracking-Event landet automatisch in deinem CRM oder Automation-Tool. Per Webhook, ohne Umweg."
@@ -187,9 +190,9 @@ function FeatureCard({
       radius={28}
       shadow="pretty"
       wrapperClassName="h-full"
-      className="relative bg-gradient-to-b from-white to-[#FAFAFE] p-8 md:p-10 flex flex-col"
+      className="relative bg-gradient-to-b from-white to-[#FAFAFE] p-6 sm:p-8 md:p-10 flex flex-col"
     >
-      <div className="relative flex-1 flex items-center justify-center min-h-[320px] mb-8">
+      <div className="relative flex-1 flex items-center justify-center min-h-[260px] md:min-h-[320px] mb-6 md:mb-8">
         {children}
       </div>
       <div className="text-center">
@@ -218,7 +221,7 @@ function FeatureCardMesh({
       radius={28}
       shadow="pretty"
       wrapperClassName="h-full"
-      className="relative p-8 md:p-12 flex flex-col lg:flex-row gap-10 lg:gap-14 items-center"
+      className="relative p-6 sm:p-8 md:p-12 flex flex-col lg:flex-row gap-8 md:gap-10 lg:gap-14 items-center"
     >
       <div
         aria-hidden
@@ -238,7 +241,7 @@ function FeatureCardMesh({
         }}
       />
 
-      <div className="relative flex-1 flex items-center justify-center min-h-[280px] w-full">
+      <div className="relative flex-1 flex items-center justify-center min-h-[230px] md:min-h-[280px] w-full">
         {children}
       </div>
 

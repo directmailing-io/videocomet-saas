@@ -60,7 +60,7 @@ export function ComingSoonFeatureCard() {
       radius={28}
       shadow="pretty"
       wrapperClassName="h-full"
-      className="relative p-8 md:p-12 flex flex-col lg:flex-row gap-12 lg:gap-14 items-center overflow-hidden"
+      className="relative p-6 sm:p-8 md:p-12 flex flex-col lg:flex-row gap-8 md:gap-12 lg:gap-14 items-center overflow-hidden"
     >
       {/* Lavendel-Canvas + Glow — hebt die Card als „Ankündigung" vom Rest ab */}
       <div
