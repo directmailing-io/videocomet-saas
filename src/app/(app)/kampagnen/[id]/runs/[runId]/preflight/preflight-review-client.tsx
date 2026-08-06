@@ -510,6 +510,20 @@ export function PreflightReviewClient({
         router.push(`/kampagnen/${campaignId}/runs/${runId}`);
         return;
       }
+      if (res.status === 422) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        setConfirmOpen(false);
+        toast({
+          variant: "danger",
+          title: "Keine Leads zum Produzieren",
+          description:
+            body.error ??
+            "Alle Leads wurden abgelehnt oder aussortiert. Bitte prüfe die Liste.",
+        });
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast({
         variant: "success",
