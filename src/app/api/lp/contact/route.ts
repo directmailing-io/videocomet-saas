@@ -3,7 +3,10 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { Resend } from "resend";
+import { db } from "@/lib/db";
+import { leads, runs, campaigns } from "@/lib/db/schema";
 
 /**
  * Kontakt-Endpoint fuer die per Custom-LP eingebetteten Beratungs-
@@ -61,6 +64,82 @@ const MONTHS_DE = [
   "November",
   "Dezember",
 ];
+
+/**
+ * Fügt Ländervorwahl und Nummer zu einer sauberen Telefonnummer zusammen —
+ * ignoriert die Vorwahl, wenn der User sie schon selbst mit + eingegeben hat
+ * (verhindert „+49 +49 931 …"-Doppelung).
+ */
+function joinPhone(country: string, phone: string): string {
+  const p = phone.trim();
+  const c = country.trim();
+  if (p.startsWith("+")) return p.replace(/\s+/g, " ");
+  if (c) return `${c} ${p}`.replace(/\s+/g, " ").trim();
+  return p.replace(/\s+/g, " ");
+}
+
+/**
+ * Slug aus Referer-URL extrahieren: /cv/<slug>/... → <slug>.
+ * Der zurückgegebene Wert dient nur als DB-Lookup — keine XSS-Gefahr.
+ */
+function extractSlugFromReferer(referer: string | null): string | null {
+  if (!referer) return null;
+  try {
+    const url = new URL(referer);
+    const match = url.pathname.match(/^\/cv\/([^/]+)/);
+    if (!match) return null;
+    const slug = match[1];
+    if (!/^[a-z0-9-]{3,64}$/i.test(slug)) return null;
+    return slug;
+  } catch {
+    return null;
+  }
+}
+
+interface LeadContext {
+  leadFirma: string | null;
+  leadOrt: string | null;
+  campaignName: string | null;
+}
+
+/** Holt Firma + Ort aus dem Lead + Kampagnen-Name aus der DB. */
+async function loadLeadContext(slug: string): Promise<LeadContext> {
+  try {
+    const [row] = await db
+      .select({
+        data: leads.data,
+        campaignName: campaigns.name,
+      })
+      .from(leads)
+      .innerJoin(runs, eq(runs.id, leads.runId))
+      .innerJoin(campaigns, eq(campaigns.id, runs.campaignId))
+      .where(eq(leads.slug, slug))
+      .limit(1);
+    if (!row) return { leadFirma: null, leadOrt: null, campaignName: null };
+    const d = (row.data ?? {}) as Record<string, string>;
+    const pick = (keys: string[]): string | null => {
+      for (const k of keys) {
+        const v = d[k];
+        if (typeof v === "string" && v.trim().length > 0) return v.trim();
+      }
+      const lower = new Map<string, string>();
+      for (const [k, v] of Object.entries(d)) lower.set(k.toLowerCase(), v);
+      for (const k of keys) {
+        const v = lower.get(k.toLowerCase());
+        if (typeof v === "string" && v.trim().length > 0) return v.trim();
+      }
+      return null;
+    };
+    return {
+      leadFirma: pick(["Firmenname", "firma", "Firma", "company"]),
+      leadOrt: pick(["Ort", "ort", "Stadt", "stadt", "city"]),
+      campaignName: row.campaignName ?? null,
+    };
+  } catch (err) {
+    console.warn("[lp/contact] loadLeadContext failed:", err);
+    return { leadFirma: null, leadOrt: null, campaignName: null };
+  }
+}
 
 /** Formatiert ein Slot-Objekt {date, time} zu „Dienstag, 12. August um 09:00 Uhr". */
 function formatSlot(raw: z.infer<typeof slotSchema>): string | null {
@@ -134,8 +213,22 @@ export async function POST(req: NextRequest) {
     process.env.RESEND_FROM_DOMAIN ?? "no-reply@videocomet.de";
   const from = `${fullName} (Beratungsanfrage) <${senderDomain}>`;
   const subject = `🔔 Neue Beratungsanfrage von ${fullName}`;
-  const referer = req.headers.get("referer") ?? "unbekannt";
-  const phoneFull = `${data.phone_country ?? ""} ${data.phone}`.replace(/\s+/g, " ").trim();
+  const referer = req.headers.get("referer");
+  const phoneFull = joinPhone(data.phone_country ?? "", data.phone);
+
+  // Kontext aus DB: Firma + Ort aus dem Lead, Kampagnen-Name.
+  // Der Referer enthaelt /cv/<slug>/… — daraus koennen wir den Lead
+  // eindeutig identifizieren. Das ist zuverlaessiger als die Formular-
+  // Werte (city, {{ort|}}-Placeholder etc.), die manipulierbar sind.
+  const slug = extractSlugFromReferer(referer);
+  const ctx = slug
+    ? await loadLeadContext(slug)
+    : { leadFirma: null, leadOrt: null, campaignName: null };
+  // Ort-Fallback: DB-Wert > Formular-Feld (nur wenn nicht offensichtlich
+  // ein nicht-ersetzter Placeholder wie „{{ort|}}").
+  const formOrt =
+    data.city && !data.city.includes("{{") ? data.city : null;
+  const ort = ctx.leadOrt ?? formOrt;
 
   const slotLines = (data.slots ?? [])
     .map((s) => formatSlot(s))
@@ -149,7 +242,9 @@ export async function POST(req: NextRequest) {
     `Telefon: ${phoneFull}`,
   ];
   if (data.email) textParts.push(`E-Mail: ${data.email}`);
-  if (data.city) textParts.push(`Ort: ${data.city}`);
+  if (ort) textParts.push(`Ort: ${ort}`);
+  if (ctx.leadFirma) textParts.push(`Studio: ${ctx.leadFirma}`);
+  if (ctx.campaignName) textParts.push(`Kampagne: ${ctx.campaignName}`);
   textParts.push("");
   if (slotLines.length > 0) {
     textParts.push("Wunsch-Termine:");
@@ -157,7 +252,7 @@ export async function POST(req: NextRequest) {
   } else {
     textParts.push("Wunsch-Termine: keine Angabe");
   }
-  textParts.push("", `Quelle: ${referer}`);
+  textParts.push("", `Quelle: ${referer ?? "unbekannt"}`);
 
   const slotsHtml =
     slotLines.length > 0
@@ -196,7 +291,9 @@ export async function POST(req: NextRequest) {
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 ${row("Telefon", `<a href="tel:${escapeHtml(phoneFull.replace(/[^+0-9]/g, ""))}" style="color:#1a1a1a; text-decoration:none;">${escapeHtml(phoneFull)}</a>`)}
                 ${data.email ? row("E-Mail", `<a href="mailto:${escapeHtml(data.email)}" style="color:#25A8E0; text-decoration:none;">${escapeHtml(data.email)}</a>`) : ""}
-                ${data.city ? row("Ort", escapeHtml(data.city)) : ""}
+                ${ort ? row("Ort", escapeHtml(ort)) : ""}
+                ${ctx.leadFirma ? row("Studio", `<strong>${escapeHtml(ctx.leadFirma)}</strong>`) : ""}
+                ${ctx.campaignName ? row("Kampagne", `<span style="color:#6b6b6b;">${escapeHtml(ctx.campaignName)}</span>`) : ""}
               </table>
             </td>
           </tr>
@@ -211,7 +308,7 @@ export async function POST(req: NextRequest) {
               <div style="color:#9a9a9a; font-size:11px; line-height:1.5;">
                 Diese Anfrage kam über deine Landingpage. Antworte einfach direkt auf diese E-Mail — die Antwort geht an den Absender.
               </div>
-              <div style="color:#c4c4c4; font-size:10px; margin-top:8px; word-break:break-all;">Quelle: ${escapeHtml(referer)}</div>
+              <div style="color:#c4c4c4; font-size:10px; margin-top:8px; word-break:break-all;">Quelle: ${escapeHtml(referer ?? "unbekannt")}</div>
             </td>
           </tr>
         </table>
