@@ -35,20 +35,32 @@ export function TimelineRuler({
   const safeWidth = Math.max(1, widthPx);
   const pxPerMs = safeWidth / safeTotalMs;
 
-  // Sekunden-Major-Ticks (immer mit Label).
+  const pxPerSec = pxPerMs * 1000;
+
+  // Label-Abstand adaptiv wählen, damit sich Beschriftungen auch in der
+  // rausgezoomten Fit-Ansicht (wenige px pro Sekunde) nie überlappen.
+  const LABEL_STEPS_SEC = [1, 2, 5, 10, 15, 30, 60, 120, 300];
+  const labelStepSec = LABEL_STEPS_SEC.find((s) => s * pxPerSec >= 48) ?? 600;
   const totalSeconds = Math.ceil(safeTotalMs / 1000);
   const majorTicks: { sec: number; left: number }[] = [];
-  for (let s = 0; s <= totalSeconds; s += 1) {
+  for (let s = 0; s <= totalSeconds; s += labelStepSec) {
     majorTicks.push({ sec: s, left: s * 1000 * pxPerMs });
   }
 
-  // 100ms-Minor-Ticks. Wenn weniger als 8px Abstand: ausdünnen.
-  const minorStepMs = pxPerMs * 100 >= 8 ? 100 : pxPerMs * 200 >= 8 ? 200 : 500;
+  // Minor-Ticks zwischen den Labels; ausgedünnt, sobald es unter 8px eng wird.
+  const MINOR_STEPS_SEC = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60];
+  const minorStepSec = MINOR_STEPS_SEC.find(
+    (s) => s >= labelStepSec / 10 && s * pxPerSec >= 8,
+  );
   const minorTicks: number[] = [];
-  for (let ms = 0; ms <= safeTotalMs; ms += minorStepMs) {
-    // Sekunden-Marken auslassen (die zeichnen wir größer).
-    if (ms % 1000 === 0) continue;
-    minorTicks.push(ms * pxPerMs);
+  if (minorStepSec && minorStepSec < labelStepSec) {
+    const stepMs = Math.round(minorStepSec * 1000);
+    const labelMs = labelStepSec * 1000;
+    for (let ms = 0; ms <= safeTotalMs; ms += stepMs) {
+      // Label-Marken auslassen (die zeichnen wir größer).
+      if (ms % labelMs === 0) continue;
+      minorTicks.push(ms * pxPerMs);
+    }
   }
 
   function handleClick(event: React.MouseEvent<HTMLDivElement>) {

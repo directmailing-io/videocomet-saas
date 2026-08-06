@@ -103,6 +103,13 @@ export interface TimelineSegmentBlockProps {
   onTrimPreview: (id: string, newDurationMs: number) => void;
   /** Wird beim mouseup gerufen, persistiert die finale Dauer. */
   onTrimCommit: (id: string, newDurationMs: number) => void;
+  /**
+   * Roll-Edit am linken Handle (nur index > 0): verschiebt die Grenze zum
+   * vorigen Segment. deltaMs > 0 = voriges länger, dieses kürzer. Clamping
+   * und Snapping macht der Parent (kennt beide Segmente).
+   */
+  onRollPreview: (id: string, deltaMs: number) => void;
+  onRollCommit: (id: string, deltaMs: number) => void;
   onMoveLeft: (id: string) => void;
   onMoveRight: (id: string) => void;
   /**
@@ -136,6 +143,8 @@ export function TimelineSegmentBlock({
   onSelect,
   onTrimPreview,
   onTrimCommit,
+  onRollPreview,
+  onRollCommit,
   onMoveLeft,
   onMoveRight,
   onReorderStart,
@@ -227,6 +236,35 @@ export function TimelineSegmentBlock({
     onTrimCommit(segment.id, value);
   }
 
+  // Roll-Edit-Drag am linken Handle: nur Delta relativ zum Start melden,
+  // Clamping/Snapping übernimmt der Parent.
+  const rollRef = React.useRef<{ startX: number } | null>(null);
+
+  function handleRollPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    event.stopPropagation();
+    event.preventDefault();
+    (event.currentTarget as HTMLDivElement).setPointerCapture(event.pointerId);
+    rollRef.current = { startX: event.clientX };
+  }
+
+  function handleRollPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = rollRef.current;
+    if (!drag) return;
+    onRollPreview(segment.id, (event.clientX - drag.startX) * msPerPx);
+  }
+
+  function handleRollPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = rollRef.current;
+    if (!drag) return;
+    try {
+      (event.currentTarget as HTMLDivElement).releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer wurde evtl. schon implizit freigegeben - ignorieren.
+    }
+    rollRef.current = null;
+    onRollCommit(segment.id, (event.clientX - drag.startX) * msPerPx);
+  }
+
   function handleBlockClick(event: React.MouseEvent<HTMLDivElement>) {
     // Klicks auf die Handles oder Buttons sollen nicht zu Select führen.
     if (event.defaultPrevented) return;
@@ -257,6 +295,15 @@ export function TimelineSegmentBlock({
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           onSelect(segment.id);
+        }
+        // Alt+Pfeil: Dauer in 100ms-Schritten feinjustieren — präziser
+        // als Maus-Trim, besonders in der rausgezoomten Fit-Ansicht.
+        if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+          e.preventDefault();
+          const raw = segment.durationMs + (e.key === "ArrowRight" ? 100 : -100);
+          const { value, capped } = clampWithSnap(raw);
+          if (capped) flashLimit();
+          if (value !== segment.durationMs) onTrimCommit(segment.id, value);
         }
       }}
       className={cn(
@@ -348,11 +395,21 @@ export function TimelineSegmentBlock({
         </div>
       )}
 
-      {/* Trim-Handles - links rein optisch, rechts funktional (ändert Dauer). */}
-      <div
-        aria-hidden
-        className="absolute inset-y-1 left-0 w-1.5 rounded-full cursor-ew-resize hover:bg-brand/40 active:bg-brand"
-      />
+      {/* Trim-Handles - links Roll-Edit (Grenze zum vorigen Segment
+          verschieben, Gesamtdauer bleibt), rechts Dauer-Trim. Beim ersten
+          Segment gibt es keine linke Grenze → kein Handle. */}
+      {index > 0 && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Übergang zum vorigen Segment verschieben"
+          onPointerDown={handleRollPointerDown}
+          onPointerMove={handleRollPointerMove}
+          onPointerUp={handleRollPointerUp}
+          onPointerCancel={handleRollPointerUp}
+          className="absolute inset-y-1 left-0 w-1.5 rounded-full cursor-ew-resize touch-none hover:bg-brand/40 active:bg-brand"
+        />
+      )}
       <div
         role="separator"
         aria-orientation="vertical"

@@ -28,13 +28,16 @@ export interface TimelineProps {
 }
 
 /**
- * Verfügbare Zoom-Stufen (px pro Sekunde). Erste Stufe = "Fit to screen"
- * (auto), danach steigende Fixwerte für lange Videos. Der User wechselt
- * mit +/− oder dem Slider durch die Liste.
+ * Zoom-Modell: `"fit"` = die ganze Timeline füllt exakt den Container
+ * (kein horizontales Scrollen, Default), Zahl = px pro Sekunde für
+ * Detail-Arbeit (Overflow → horizontaler Scroll). Stufenlos über Slider,
+ * +/−-Buttons und Ctrl/Cmd+Mausrad; Rauszoomen unter die Fit-Stufe
+ * rastet automatisch auf "fit".
  */
-const ZOOM_LEVELS = [60, 120, 240, 480, 960] as const;
-type ZoomLevel = (typeof ZOOM_LEVELS)[number];
-const DEFAULT_ZOOM: ZoomLevel = 60;
+const MIN_ZOOM = 10;
+const MAX_ZOOM = 1000;
+const ZOOM_STEP = 1.5;
+const MIN_SEGMENT_MS = 200;
 
 export function Timeline({
   segments,
@@ -67,22 +70,79 @@ export function Timeline({
     return () => observer.disconnect();
   }, []);
 
-  // Zoom-State: User-gewählte Stufe. Bei Default-Stufe (60) verhält sich
-  // die Timeline wie zuvor (Container-Breite füllt aus). Höhere Stufen
-  // erzeugen bewusst Overflow → horizontaler Scroll für Detail-Arbeit
-  // an langen Videos.
-  const [zoom, setZoom] = React.useState<ZoomLevel>(DEFAULT_ZOOM);
-  const zoomIdx = ZOOM_LEVELS.indexOf(zoom);
-  const canZoomIn = zoomIdx < ZOOM_LEVELS.length - 1;
-  const canZoomOut = zoomIdx > 0;
+  const [zoom, setZoom] = React.useState<"fit" | number>("fit");
+  const fitZoom = containerWidth > 0 ? containerWidth / (scaleMs / 1000) : MIN_ZOOM;
+  const effZoom = zoom === "fit" ? fitZoom : zoom;
+  const canZoomOut = zoom !== "fit";
+  const canZoomIn = effZoom < MAX_ZOOM;
 
-  const zoomedWidth = (scaleMs / 1000) * zoom;
-  const trackWidth = Math.max(
-    zoomedWidth,
-    containerWidth || zoomedWidth,
+  function setZoomClamped(next: number) {
+    // Unter der Fit-Stufe gibt es nichts mehr zu sehen → auf Fit rasten.
+    if (next <= fitZoom) {
+      setZoom("fit");
+      return;
+    }
+    setZoom(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next)));
+  }
+
+  // Logarithmische Slider-Skala: gleiche Slider-Wege fühlen sich über den
+  // gesamten Bereich (10–1000 px/s) gleich stark an.
+  const sliderPos = Math.round(
+    Math.min(
+      100,
+      Math.max(
+        0,
+        (100 * Math.log(Math.max(MIN_ZOOM, effZoom) / MIN_ZOOM)) /
+          Math.log(MAX_ZOOM / MIN_ZOOM),
+      ),
+    ),
   );
+
+  const zoomedWidth = (scaleMs / 1000) * effZoom;
+  const trackWidth =
+    zoom === "fit"
+      ? Math.max(1, containerWidth)
+      : Math.max(zoomedWidth, containerWidth || zoomedWidth);
   const msPerPx = scaleMs / Math.max(1, trackWidth);
   const pxPerMs = 1 / msPerPx;
+
+  // Ctrl/Cmd+Mausrad-Zoom, am Cursor verankert: der Zeitpunkt unter dem
+  // Mauszeiger bleibt beim Zoomen an derselben Bildschirmposition.
+  // Nativer Listener mit passive:false, weil React-onWheel das
+  // preventDefault (Browser-Page-Zoom) nicht zuverlässig unterdrücken kann.
+  const zoomStateRef = React.useRef({ effZoom, fitZoom });
+  zoomStateRef.current = { effZoom, fitZoom };
+  const wheelAnchorRef = React.useRef<{ timeMs: number; cursorX: number } | null>(null);
+
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const { effZoom: cur, fitZoom: fit } = zoomStateRef.current;
+      const factor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
+      const next = cur * factor;
+      const rect = el.getBoundingClientRect();
+      const cursorX = e.clientX - rect.left;
+      wheelAnchorRef.current = {
+        timeMs: ((el.scrollLeft + cursorX) / Math.max(0.001, cur)) * 1000,
+        cursorX,
+      };
+      if (next <= fit) setZoom("fit");
+      else setZoom(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next)));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  React.useLayoutEffect(() => {
+    const anchor = wheelAnchorRef.current;
+    const el = containerRef.current;
+    if (!anchor || !el) return;
+    wheelAnchorRef.current = null;
+    el.scrollLeft = Math.max(0, (anchor.timeMs / 1000) * effZoom - anchor.cursorX);
+  }, [effZoom]);
 
   // Live-Preview für Trim: lokaler Overlay-State, der Original-Props nicht mutiert.
   const [previewSegments, setPreviewSegments] = React.useState<Segment[] | null>(null);
@@ -101,6 +161,39 @@ export function Timeline({
       s.id === id ? { ...s, durationMs: newDurationMs } : s,
     );
     onSegmentsChange(next);
+  }
+
+  // ── Roll-Edit: Grenze zwischen zwei Segmenten verschieben ────────────
+  // Linker Handle von Segment i (i > 0): deltaMs > 0 macht das vorige
+  // Segment länger und dieses kürzer — die Gesamtdauer bleibt konstant,
+  // deshalb kann das Webcam-Limit hier nie überschritten werden.
+  function rollAdjusted(id: string, deltaMs: number): Segment[] | null {
+    const idx = segments.findIndex((s) => s.id === id);
+    if (idx <= 0) return null;
+    const prev = segments[idx - 1];
+    const cur = segments[idx];
+    const snapped = Math.round(deltaMs / 100) * 100;
+    const maxGrow = Math.max(0, cur.durationMs - MIN_SEGMENT_MS);
+    const maxShrink = Math.max(0, prev.durationMs - MIN_SEGMENT_MS);
+    const d = Math.max(-maxShrink, Math.min(maxGrow, snapped));
+    if (d === 0) return null;
+    return segments.map((s, i) =>
+      i === idx - 1
+        ? { ...s, durationMs: s.durationMs + d }
+        : i === idx
+          ? { ...s, durationMs: s.durationMs - d }
+          : s,
+    );
+  }
+
+  function applyRollPreview(id: string, deltaMs: number) {
+    setPreviewSegments(rollAdjusted(id, deltaMs) ?? segments);
+  }
+
+  function commitRoll(id: string, deltaMs: number) {
+    setPreviewSegments(null);
+    const next = rollAdjusted(id, deltaMs);
+    if (next) onSegmentsChange(next);
   }
 
   function moveSegment(id: string, direction: -1 | 1) {
@@ -327,22 +420,45 @@ export function Timeline({
       {/* Zoom-Toolbar — bei langen Videos entscheidend, um einzelne
           Segmente feinjustieren zu können. */}
       <div className="flex items-center justify-end gap-2 text-xs text-ink-muted">
-        <span aria-hidden>Zoom</span>
         <button
           type="button"
-          onClick={() => canZoomOut && setZoom(ZOOM_LEVELS[zoomIdx - 1])}
+          onClick={() => setZoom("fit")}
+          aria-pressed={zoom === "fit"}
+          className={cn(
+            "rounded-full border px-2.5 py-1 leading-none transition-colors",
+            zoom === "fit"
+              ? "border-ink bg-ink text-surface"
+              : "border-line bg-surface text-ink hover:bg-surface-soft",
+          )}
+        >
+          Alles anzeigen
+        </button>
+        <button
+          type="button"
+          onClick={() => canZoomOut && setZoomClamped(effZoom / ZOOM_STEP)}
           disabled={!canZoomOut}
           aria-label="Weniger Zoom"
           className="inline-flex size-6 items-center justify-center rounded-full border border-line bg-surface hover:bg-surface-soft disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Minus className="size-3" />
         </button>
-        <span className="font-mono tabular-nums w-10 text-center text-ink">
-          {zoom}px/s
-        </span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={sliderPos}
+          onChange={(e) =>
+            setZoomClamped(
+              MIN_ZOOM * Math.pow(MAX_ZOOM / MIN_ZOOM, Number(e.target.value) / 100),
+            )
+          }
+          aria-label="Zoom-Stufe"
+          title="Zoom (auch: Strg/Cmd + Mausrad über der Timeline)"
+          className="w-28 accent-ink"
+        />
         <button
           type="button"
-          onClick={() => canZoomIn && setZoom(ZOOM_LEVELS[zoomIdx + 1])}
+          onClick={() => canZoomIn && setZoomClamped(effZoom * ZOOM_STEP)}
           disabled={!canZoomIn}
           aria-label="Mehr Zoom"
           className="inline-flex size-6 items-center justify-center rounded-full border border-line bg-surface hover:bg-surface-soft disabled:opacity-40 disabled:cursor-not-allowed"
@@ -383,6 +499,8 @@ export function Timeline({
                   onSelect={onSelectSegment}
                   onTrimPreview={applyTrimPreview}
                   onTrimCommit={commitTrim}
+                  onRollPreview={applyRollPreview}
+                  onRollCommit={commitRoll}
                   onMoveLeft={(id) => moveSegment(id, -1)}
                   onMoveRight={(id) => moveSegment(id, 1)}
                   onReorderStart={handleReorderStart}

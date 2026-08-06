@@ -2,6 +2,9 @@ import { defineConfig } from "vitest/config";
 import path from "node:path";
 
 export default defineConfig({
+  // Next setzt tsconfig "jsx": "preserve" — für Component-Tests muss
+  // vitest (rolldown-vite/oxc) JSX selbst transformieren.
+  oxc: { jsx: { runtime: "automatic" } },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -17,6 +20,7 @@ export default defineConfig({
         test: {
           name: "node",
           include: ["src/lib/**/*.test.ts"],
+          exclude: ["**/*.test.tsx"],
           environment: "node",
         },
       },
