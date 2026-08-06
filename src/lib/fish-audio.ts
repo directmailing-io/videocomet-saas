@@ -121,6 +121,15 @@ export interface TtsInput {
   text: string;
   /** Fish-Model-ID (voice_profiles.fishModelId). */
   referenceId: string;
+  /** Sampling-Randomness 0..1 (Fish-Default 0.7). */
+  temperature?: number;
+  /** Nucleus-Sampling 0..1 (Fish-Default 0.7). */
+  topP?: number;
+  /**
+   * Sprechtempo 0.5–2.0 via Fish `prosody.speed` — klingt natürlicher
+   * als nachträgliches ffmpeg-atempo (kein Resampling-Artefakt).
+   */
+  speed?: number;
 }
 
 /** Synthetisiert `text` mit dem Voice-Clone; liefert WAV-Bytes. */
@@ -136,6 +145,9 @@ export async function tts(input: TtsInput): Promise<Buffer> {
       text: input.text,
       reference_id: input.referenceId,
       format: "wav",
+      ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
+      ...(input.topP !== undefined ? { top_p: input.topP } : {}),
+      ...(input.speed !== undefined ? { prosody: { speed: input.speed } } : {}),
     }),
   });
   await assertOk(res, "tts");

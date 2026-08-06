@@ -3,13 +3,16 @@
  *
  * Zwei Schritte:
  *
- * 1. Intro-Kompensation: die KI-Begrüßung trimmt den Anfang des Webcam-
- *    Videos um `introTrimMs` — alles Gesprochene liegt dadurch früher. Die
- *    VORDEREN Segmente werden um exakt denselben Betrag gekürzt
- *    (kaskadierend, min 200ms pro Segment), damit alle späteren
- *    Segmentwechsel wieder synchron zur Sprache liegen. Dabei wird nichts
- *    geschnitten: jedes Segment ist ein separat gerenderter Clip, es
- *    ändern sich nur die Anzeigedauern, der Concat bleibt nahtlos.
+ * 1. Intro-Kompensation: die KI-Begrüßung verändert den Anfang des Webcam-
+ *    Videos um `introTrimMs` — positiv = Anfang wurde getrimmt (Sprache
+ *    liegt früher), negativ = Anfang wurde VERLÄNGERT (TTS war länger als
+ *    die Original-Anrede, sync.so bounce; Sprache liegt später). Bei
+ *    positivem Trim werden die VORDEREN Segmente kaskadierend gekürzt
+ *    (min 200ms pro Segment), bei Verlängerung wird das ERSTE Segment um
+ *    den Betrag gestreckt — damit alle späteren Segmentwechsel wieder
+ *    synchron zur Sprache liegen. Dabei wird nichts geschnitten: jedes
+ *    Segment ist ein separat gerenderter Clip, es ändern sich nur die
+ *    Anzeigedauern, der Concat bleibt nahtlos.
  *
  * 2. Budget-Clamp: hart auf die Webcam-Dauer begrenzen. Segmente, die
  *    nicht mehr ins Budget passen, werden verworfen — das letzte noch
@@ -24,6 +27,8 @@ export interface SegmentDurationPlan<S> {
   absorbedTrimMs: number;
   /** Rest, der nicht absorbiert werden konnte (alle Segmente am Floor). */
   unabsorbedTrimMs: number;
+  /** Um wieviel das erste Segment gestreckt wurde (introTrimMs < 0). */
+  extendedLeadMs: number;
 }
 
 export function planSegmentDurations<S extends { durationMs: number }>(
@@ -47,6 +52,12 @@ export function planSegmentDurations<S extends { durationMs: number }>(
     trimLeftMs -= cut;
   }
 
+  let extendedLeadMs = 0;
+  if (introTrimMs < 0 && adjusted.length > 0) {
+    extendedLeadMs = Math.round(-introTrimMs);
+    adjusted[0].durationMs += extendedLeadMs;
+  }
+
   const totalBudgetMs = Math.max(
     MIN_SEGMENT_MS,
     Math.round(totalDurationSec * 1000),
@@ -65,5 +76,6 @@ export function planSegmentDurations<S extends { durationMs: number }>(
     planned,
     absorbedTrimMs: totalTrim - trimLeftMs,
     unabsorbedTrimMs: trimLeftMs,
+    extendedLeadMs,
   };
 }

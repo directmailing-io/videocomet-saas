@@ -634,6 +634,11 @@ async function renderSegmentsBase(opts: {
       `[render] intro compensation: shortened leading segments by ${plan.absorbedTrimMs}ms (requested=${plan.absorbedTrimMs + plan.unabsorbedTrimMs}ms)`,
     );
   }
+  if (plan.extendedLeadMs > 0) {
+    console.log(
+      `[render] intro compensation: extended first segment by ${plan.extendedLeadMs}ms (intro lengthened the video start)`,
+    );
+  }
   if (plan.unabsorbedTrimMs > 0) {
     console.warn(
       `[render] intro compensation incomplete: ${plan.unabsorbedTrimMs}ms could not be absorbed (all segments at 200ms floor) — trailing segments will be truncated by the budget clamp`,

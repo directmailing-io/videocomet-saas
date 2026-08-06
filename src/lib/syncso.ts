@@ -126,9 +126,21 @@ function parseGeneration(raw: unknown): SyncsoGeneration {
   };
 }
 
+/**
+ * sync_mode steuert, wie sync.so Längen-Differenzen zwischen Video und
+ * Audio auflöst:
+ *   - "cut_off": auf das kürzere Ende schneiden (Default, Video==Audio-Länge)
+ *   - "bounce": Video vorwärts/rückwärts spiegeln bis es die Audio-Länge
+ *     erreicht — genutzt wenn die TTS-Begrüßung länger ist als die
+ *     Original-Anrede-Zone (Video wird lippensynchron VERLÄNGERT statt
+ *     die TTS zu beschleunigen).
+ */
+export type SyncsoSyncMode = "cut_off" | "bounce" | "loop" | "silence" | "remap";
+
 export async function createGeneration(input: {
   videoUrl: string;
   audioUrl: string;
+  syncMode?: SyncsoSyncMode;
 }): Promise<SyncsoGeneration> {
   const raw = await syncsoRequest({
     method: "POST",
@@ -139,7 +151,7 @@ export async function createGeneration(input: {
         { type: "video", url: input.videoUrl },
         { type: "audio", url: input.audioUrl },
       ],
-      options: { sync_mode: "cut_off" },
+      options: { sync_mode: input.syncMode ?? "cut_off" },
     },
   });
   return parseGeneration(raw);

@@ -5,13 +5,18 @@
  * sync.so `lipsync-2`), schnittfrei zusammengesetzt.
  *
  * Rezept = validierter PoC (intro-poc/, 2026-08-03). Schritte:
- *   1. TTS ("Hallo {vorname}! …") → Länge muss vor anchor_end enden
+ *   1. TTS ("Hallo {vorname}! …") in natürlicher Geschwindigkeit
  *   2. Auto-EQ (9-Band-FFT-Match gegen spectral_ref) + LUFS-Angleich
- *   3. Timing: startTrim/ttsAt/segEnd frame-aligned (30fps)
+ *   3. Timing: startTrim/ttsAt/segEnd frame-aligned (30fps). Ist die TTS
+ *      länger als die Original-Anrede-Zone, wird das Video am Anfang
+ *      VERLÄNGERT (sync.so sync_mode=bounce) statt die TTS zu
+ *      beschleunigen — der Content ab resume bleibt 1:1 original, alle
+ *      Segment-Overlays werden über negativen startTrimMs nach hinten
+ *      versetzt.
  *   4. Raumton-Bett loopen + TTS via adelay einmischen
  *   5. Video-Segment [startTrim, resume] schneiden (re-encode, CRF18)
  *   6. Segment + Audio zu Bunny (sync.so braucht öffentliche URLs)
- *   7. sync.so Lip-Sync (Poll bis 6 min)
+ *   7. sync.so Lip-Sync (Poll bis 6 min; bounce wenn Audio länger)
  *   8. Cut-freie Assembly: concat-Filter in EINEM Encode (Video+Audio)
  *   9. QA-Gates (Dauer, LUFS-Fenster, Dateigröße)
  *
@@ -45,8 +50,12 @@ const FPS = 30;
 const FRAME_MS = 1000 / FPS;
 /** Vorlauf vor der TTS-Begrüßung (Original-Video ohne Sprache). */
 const LEAD_IN_MS = 1200;
-/** TTS muss mindestens so viel Luft vor anchor_end lassen. */
-const TTS_HEADROOM_MS = 300;
+/**
+ * Maximale Video-Verlängerung durch eine überlange TTS. Realistische
+ * Anreden ("Guten Tag Frau Dr. Müller-Lüdenscheid") liegen unter 3s —
+ * mehr deutet auf einen TTS-Ausreißer hin, der als Fallback endet.
+ */
+const MAX_EXTENSION_MS = 5000;
 /** sync.so Poll-Intervall / Gesamt-Timeout. */
 const SYNCSO_POLL_INTERVAL_MS = 10_000;
 const SYNCSO_TIMEOUT_MS = 6 * 60 * 1000;
@@ -109,10 +118,11 @@ export type GeneratePersonalizedWebcamResult =
       ok: true;
       outputPath: string;
       /**
-       * Um wieviel ms der Anfang des Original-Videos getrimmt wurde. Das
-       * Output-Video ist um genau diesen Betrag kürzer — alle Sprech-
-       * Zeitpunkte nach dem Resume liegen entsprechend früher. Der
-       * Presentation-Renderer kompensiert das über die Segment-Dauern.
+       * Netto-Zeitversatz des Original-Contents in ms. Positiv = der
+       * Anfang wurde getrimmt (Output kürzer, Sprech-Zeitpunkte früher).
+       * Negativ = der Anfang wurde für eine lange TTS VERLÄNGERT (Output
+       * länger, Sprech-Zeitpunkte später). Der Presentation-Renderer
+       * kompensiert beides über die Segment-Dauern (planSegmentDurations).
        */
       startTrimMs: number;
     }
@@ -234,7 +244,7 @@ export async function generatePersonalizedWebcam(
     // Untergrenze bewusst niedrig: 300ms sind das absolute Minimum für
     // ein natürlich gesprochenes „Hi". Alles darunter ist ein
     // Silence-False-Positive. Wenn die TTS länger ist als greeting_end,
-    // wird sie unten via atempo auf die Ziel-Länge beschleunigt.
+    // wird das Video unten am Anfang verlängert (sync.so bounce).
     if ((cal.greetingEndMs as number) < 300) {
       return fail(
         opts.tag,
@@ -264,6 +274,11 @@ export async function generatePersonalizedWebcam(
     for (const [key, value] of Object.entries(opts.substitutions)) {
       text = text.replaceAll(`{${key}}`, value.trim());
     }
+    // Terminale Interpunktion gibt Fish einen Prosodie-Anker — ohne sie
+    // klingen kurze Anreden („Hi Daniel") oft abgehackt/monoton.
+    if (!/[.!?]$/.test(text.trim())) {
+      text = `${text.trim()}!`;
+    }
     const ttsRawPath = join(dir, `tts-raw-${tag}.wav`);
     const ttsBuffer = await tts({ text, referenceId: opts.fishModelId });
     await writeFile(ttsRawPath, ttsBuffer);
@@ -273,53 +288,23 @@ export async function generatePersonalizedWebcam(
       return fail(tag, "tts_unmeasurable");
     }
 
-    // Konzeptioneller Umbau: Statt die TTS an eine feste Original-Zone
-    // zu quetschen (via Speed-up → hektisch), erweitern wir die Cut-Zone
-    // dynamisch auf die TTS-Länge. Das bedeutet: bei greeting-only
-    // schneidet die Engine mehr vom Original weg als greeting_end_ms
-    // vorgibt, damit die TTS in natürlicher Geschwindigkeit spielen kann.
-    // Nachteil: der Video-Content startet ein paar 100ms später —
-    // meistens fällt das in die Original-Mikro-Pause + evtl. Anfang des
-    // ersten Wortes, was für den Zuhörer nicht störend ist.
-    //
-    // Grenze: der erweiterte Cut darf NICHT über anchor_end_ms hinaus
-    // (das wäre der ganze erste Satz, Legacy-Modus), sonst ist die
-    // TTS zu lang für die Aufnahme.
-    let ttsDurMs = ttsRawDurSec * 1000;
+    // KEIN Speed-up mehr: die TTS spielt IMMER in natürlicher
+    // Geschwindigkeit. Passt sie nicht in die Original-Anrede-Zone, wird
+    // das Video am Anfang verlängert (Timing unten + sync.so bounce) —
+    // atempo klang gehetzt/robotisch und hat Content-Verschiebungen
+    // erzeugt, genau das Gegenteil der Produkt-Anforderung.
+    const ttsDurMs = ttsRawDurSec * 1000;
     const HEADROOM_MS = 50;
-    // Ziel-Zone berechnen. Wenn sentence_start_ms bekannt ist, dürfen
-    // wir bis DORT cutten (Ende der bewussten Pause im Original) — die
-    // TTS-Sprache ersetzt dann Anrede + die kurze User-Pause. Original-
-    // Content bleibt unversehrt (im Gegensatz zum „mitten ins Wort
-    // schneiden"-Bug).
+    // Cut-Zone: wenn sentence_start_ms bekannt ist, dürfen wir bis DORT
+    // cutten (Ende der bewussten Pause im Original) — die TTS-Sprache
+    // ersetzt dann Anrede + die kurze User-Pause. Original-Content
+    // bleibt unversehrt.
     let extendedAnchorMs = anchorEndMs;
     if (isGreetingOnly && typeof cal.sentenceStartMs === "number") {
       extendedAnchorMs = Math.max(anchorEndMs, cal.sentenceStartMs);
       anchorEndMs = extendedAnchorMs;
     }
     const targetMs = extendedAnchorMs - HEADROOM_MS;
-    let ttsAdjustedPath = ttsRawPath;
-    if (ttsDurMs > targetMs) {
-      const speedFactor = ttsDurMs / targetMs;
-      // 1.5x ist die Grenze wo Deutsch noch als „etwas flott" durchgeht,
-      // darüber wird's als „unnatürlich schnell" wahrgenommen.
-      if (speedFactor > 1.5) {
-        return fail(
-          tag,
-          `tts_too_long: ${ttsDurMs.toFixed(0)}ms für ${targetMs}ms Anrede-Zone (Faktor ${speedFactor.toFixed(2)}, max 1.5)`,
-        );
-      }
-      const spedPath = join(dir, `tts-sped-${tag}.wav`);
-      await runFfmpeg([
-        "-y", "-i", ttsRawPath,
-        "-filter:a", `atempo=${speedFactor.toFixed(3)}`,
-        "-ac", "1", "-ar", String(SAMPLE_RATE),
-        spedPath,
-      ]);
-      ttsAdjustedPath = spedPath;
-      const spedDur = await probeVideoDuration(spedPath);
-      ttsDurMs = (spedDur ?? ttsRawDurSec) * 1000;
-    }
     // Resume auf sentence_start (Ende der User-Pause) — dort setzt der
     // Original-Content sauber ein. Ohne dynamische Anchor-Erweiterung.
     if (isGreetingOnly) {
@@ -333,11 +318,11 @@ export async function generatePersonalizedWebcam(
     }
 
     // ── 2. Auto-EQ + Loudness-Match ─────────────────────────────────────
-    const ttsSpectrum = await measureSpectrum(ttsAdjustedPath);
+    const ttsSpectrum = await measureSpectrum(ttsRawPath);
     const eqChain = buildEqFilterChain(cal.spectralRef, ttsSpectrum);
     const ttsEqPath = join(dir, `tts-eq-${tag}.wav`);
     await runFfmpeg([
-      "-y", "-i", ttsAdjustedPath,
+      "-y", "-i", ttsRawPath,
       ...(eqChain ? ["-af", eqChain] : []),
       "-ac", "1", "-ar", String(SAMPLE_RATE),
       ttsEqPath,
@@ -367,12 +352,46 @@ export async function generatePersonalizedWebcam(
     }
 
     // ── 3. Timing (ms, 30fps-frame-aligned) ─────────────────────────────
-    const startTrimMs =
-      Math.floor(Math.max(0, anchorEndMs - ttsDurMs - LEAD_IN_MS) / FRAME_MS) *
-      FRAME_MS;
-    const ttsAtMs = anchorEndMs - ttsDurMs - startTrimMs;
-    const segEndMs = resumeMs - startTrimMs;
-    if (ttsAtMs < 0 || segEndMs <= 0) {
+    // Fit-Fall: TTS passt in die Anrede-Zone → TTS endet an anchorEnd,
+    // totes Vorlauf-Material vor der Sprache wird getrimmt (LEAD_IN bleibt).
+    // Overflow-Fall: TTS ist länger → TTS startet am Original-Sprachbeginn
+    // und das Intro-Segment wird um extensionMs LÄNGER als das Quell-
+    // material. sync.so (sync_mode=bounce) liefert dazu lippensynchrones
+    // Video; der Original-Content ab resume bleibt 1:1 unverändert und
+    // rutscht als Ganzes um extensionMs nach hinten.
+    let startTrimMs: number;
+    let ttsAtMs: number;
+    let extensionMs = 0;
+    if (ttsDurMs <= targetMs) {
+      startTrimMs =
+        Math.floor(Math.max(0, anchorEndMs - ttsDurMs - LEAD_IN_MS) / FRAME_MS) *
+        FRAME_MS;
+      ttsAtMs = anchorEndMs - ttsDurMs - startTrimMs;
+    } else {
+      const speechStartMs =
+        typeof cal.speechStartMs === "number" && cal.speechStartMs > 0
+          ? cal.speechStartMs
+          : LEAD_IN_MS;
+      startTrimMs =
+        Math.floor(Math.max(0, speechStartMs - LEAD_IN_MS) / FRAME_MS) *
+        FRAME_MS;
+      ttsAtMs = speechStartMs - startTrimMs;
+      const desiredSegMs =
+        Math.ceil((ttsAtMs + ttsDurMs + RESIDUAL_PAUSE_MS) / FRAME_MS) *
+        FRAME_MS;
+      extensionMs = Math.max(0, desiredSegMs - (resumeMs - startTrimMs));
+      if (extensionMs > MAX_EXTENSION_MS) {
+        return fail(
+          tag,
+          `tts_extension_too_long: ${extensionMs.toFixed(0)}ms Verlängerung nötig (tts=${ttsDurMs.toFixed(0)}ms, max ${MAX_EXTENSION_MS}ms)`,
+        );
+      }
+    }
+    /** Dauer des geschnittenen Quell-Videosegments [startTrim, resume]. */
+    const segVideoMs = resumeMs - startTrimMs;
+    /** Dauer des Intro-Segments im Output (Audio ist maßgeblich). */
+    const segEndMs = segVideoMs + extensionMs;
+    if (ttsAtMs < 0 || segVideoMs <= 0) {
       return fail(tag, "timing_invalid");
     }
 
@@ -421,11 +440,11 @@ export async function generatePersonalizedWebcam(
     const segVideoDurSec = await probeVideoDuration(segmentVideoPath);
     if (
       segVideoDurSec === null ||
-      Math.abs(segVideoDurSec * 1000 - segEndMs) > 40
+      Math.abs(segVideoDurSec * 1000 - segVideoMs) > 40
     ) {
       return fail(
         tag,
-        `segment_duration_mismatch (got=${segVideoDurSec}s want=${(segEndMs / 1000).toFixed(3)}s)`,
+        `segment_duration_mismatch (got=${segVideoDurSec}s want=${(segVideoMs / 1000).toFixed(3)}s)`,
       );
     }
 
@@ -446,9 +465,14 @@ export async function generatePersonalizedWebcam(
     uploadedUrls.push(segAudioUpload.url);
 
     // ── 7. sync.so Lip-Sync ─────────────────────────────────────────────
+    // bounce nur wenn das Audio länger ist als das Video-Segment: sync.so
+    // spiegelt dann Video-Material am Ende (vor/zurück) und generiert
+    // darauf lippensynchrone Mundbewegungen — die Verlängerung fällt in
+    // die Original-Pause (stilles Gesicht), daher unauffällig.
     const generation = await createGeneration({
       videoUrl: segVideoUpload.url,
       audioUrl: segAudioUpload.url,
+      syncMode: extensionMs > 0 ? "bounce" : "cut_off",
     });
     if (!generation.id) return fail(tag, "lipsync_create_failed");
 
@@ -493,7 +517,10 @@ export async function generatePersonalizedWebcam(
     // afade-in/out an den beiden Segment-Rändern.
     const outPath = join(dir, `intro-out-${tag}.mp4`);
     const resumeSec = (resumeMs / 1000).toFixed(4);
-    const FADE_MS = 60;
+    // 120ms: lang genug gegen Knack-Transienten am Schnitt, kurz genug,
+    // dass kein Lautstärke-Loch entsteht — beide Fades liegen komplett
+    // in der Rest-Pause (RESIDUAL_PAUSE_MS=300 vor/nach dem Übergang).
+    const FADE_MS = 120;
     const fadeOutStartSec = ((segEndMs - FADE_MS) / 1000).toFixed(4);
     await runFfmpeg([
       "-y",
@@ -525,7 +552,7 @@ export async function generatePersonalizedWebcam(
     if (outDurSec === null || webcamDurSec === null) {
       return fail(tag, "qa_duration_unmeasurable");
     }
-    const expectedSec = webcamDurSec - startTrimMs / 1000;
+    const expectedSec = webcamDurSec - startTrimMs / 1000 + extensionMs / 1000;
     if (Math.abs(outDurSec - expectedSec) > 0.5) {
       return fail(
         tag,
@@ -553,8 +580,13 @@ export async function generatePersonalizedWebcam(
 
     console.log(
       `[intro-engine:${tag}] ok — tts=${(ttsDurMs / 1000).toFixed(2)}s startTrim=${(startTrimMs / 1000).toFixed(3)}s ` +
-        `ttsAt=${(ttsAtMs / 1000).toFixed(3)}s out=${outDurSec.toFixed(2)}s windowLufs=${windowLufs.toFixed(1)} (ref=${lufsRef})`,
+        `extension=${(extensionMs / 1000).toFixed(3)}s ttsAt=${(ttsAtMs / 1000).toFixed(3)}s ` +
+        `out=${outDurSec.toFixed(2)}s windowLufs=${windowLufs.toFixed(1)} (ref=${lufsRef})`,
     );
+
+    // Netto-Zeitversatz des Original-Contents: positiv = vorne getrimmt
+    // (Content früher), negativ = vorne verlängert (Content später).
+    const netTrimMs = startTrimMs - extensionMs;
 
     // Preview-Modus: auf die ersten N Sekunden kürzen (nach Assembly + QA).
     if (opts.trimToSec && opts.trimToSec > 0) {
@@ -567,10 +599,10 @@ export async function generatePersonalizedWebcam(
         "-movflags", "+faststart",
         trimmedPath,
       ]);
-      return { ok: true, outputPath: trimmedPath, startTrimMs };
+      return { ok: true, outputPath: trimmedPath, startTrimMs: netTrimMs };
     }
 
-    return { ok: true, outputPath: outPath, startTrimMs };
+    return { ok: true, outputPath: outPath, startTrimMs: netTrimMs };
   } catch (err) {
     // Transiente/externe Fehler (Fish, sync.so, Bunny, ffmpeg) → Fallback.
     const message = err instanceof Error ? err.message : String(err);

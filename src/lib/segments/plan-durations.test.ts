@@ -67,11 +67,34 @@ describe("planSegmentDurations", () => {
     expect(plan.planned.map((p) => p.durationMs)).toEqual([200]);
   });
 
-  it("introTrimMs=0 und negative Werte sind neutral", () => {
-    const base = planSegmentDurations([seg(4_000, "a")], 4, 0);
-    const negative = planSegmentDurations([seg(4_000, "a")], 4, -500);
-    expect(base.planned).toEqual(negative.planned);
-    expect(negative.absorbedTrimMs).toBe(0);
+  it("introTrimMs=0 ist neutral", () => {
+    const plan = planSegmentDurations([seg(4_000, "a")], 4, 0);
+    expect(plan.planned.map((p) => p.durationMs)).toEqual([4_000]);
+    expect(plan.absorbedTrimMs).toBe(0);
+    expect(plan.extendedLeadMs).toBe(0);
+  });
+
+  it("negativer introTrimMs (Intro hat Video verlängert) streckt Segment 1", () => {
+    // TTS war 900ms länger als die Anrede-Zone → Video vorne verlängert,
+    // Sprache liegt später. Segment 1 wird um exakt 900ms gestreckt,
+    // damit alle späteren Segmentwechsel wieder synchron liegen.
+    const plan = planSegmentDurations(
+      [seg(10_000, "a"), seg(20_000, "b")],
+      30.9,
+      -900,
+    );
+    expect(plan.planned.map((p) => p.durationMs)).toEqual([10_900, 20_000]);
+    expect(plan.extendedLeadMs).toBe(900);
+    expect(plan.absorbedTrimMs).toBe(0);
+    expect(plan.unabsorbedTrimMs).toBe(0);
+    const total = plan.planned.reduce((s, p) => s + p.durationMs, 0);
+    expect(total).toBe(30_900);
+  });
+
+  it("negativer introTrimMs ohne Segmente ist ein No-op", () => {
+    const plan = planSegmentDurations([], 10, -900);
+    expect(plan.planned).toEqual([]);
+    expect(plan.extendedLeadMs).toBe(0);
   });
 
   it("Segmente unter 200ms werden auf den Floor angehoben", () => {
