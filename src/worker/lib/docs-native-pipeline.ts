@@ -347,51 +347,25 @@ export async function renderViaDocsApi(
     // replaceAllText veraendert Textlaengen und damit alle Indizes dahinter.
     const requests: docs_v1.Schema$Request[] = [];
     if (qrTarget && qrBunnyUrl) {
-      if (qrTarget.kind === "positioned" && qrAnchorEnd !== null) {
-        // Floating-Platzhalter → Inline-Konvertierung.
-        // Anker-Absatz endet bei qrAnchorEnd; sein terminierendes \n liegt
-        // bei qrAnchorEnd-1. Dort ein \n einfuegen splittet den Absatz und
-        // erzeugt einen leeren Folge-Absatz [qrAnchorEnd, qrAnchorEnd+1),
-        // in den das Inline-Bild bei Index qrAnchorEnd eingesetzt wird.
-        requests.push(
-          { insertText: { location: { index: qrAnchorEnd - 1 }, text: "\n" } },
-          {
-            insertInlineImage: {
-              location: { index: qrAnchorEnd },
-              uri: qrBunnyUrl,
-              objectSize: {
-                width: { magnitude: qrTarget.widthPt, unit: "PT" },
-                height: { magnitude: qrTarget.heightPt, unit: "PT" },
-              },
-            },
-          },
-          {
-            // lineSpacing 100% + Abstaende 0: Der QR-Absatz erbt sonst den
-            // Zeilenabstand des URL-Absatzes (~115%) — das kostet ~9pt und
-            // schiebt knappe Briefe (langer {{ort}}/{{firma}}-Umbruch) auf
-            // Seite 2, obwohl der QR selbst noch passen wuerde.
-            updateParagraphStyle: {
-              range: { startIndex: qrAnchorEnd, endIndex: qrAnchorEnd + 1 },
-              paragraphStyle: {
-                alignment: qrAlignment,
-                lineSpacing: 100,
-                spaceAbove: { magnitude: 0, unit: "PT" },
-                spaceBelow: { magnitude: 0, unit: "PT" },
-              },
-              fields: "alignment,lineSpacing,spaceAbove,spaceBelow",
-            },
-          },
-          { deletePositionedObject: { objectId: qrTarget.objectId } },
-        );
-      } else {
-        requests.push({
-          replaceImage: {
-            imageObjectId: qrTarget.objectId,
-            uri: qrBunnyUrl,
-            imageReplaceMethod: "CENTER_CROP",
-          },
-        });
-      }
+      // ROLLBACK 2026-08-06: die Inline-Konvertierung (Commit 64fbc19 vom
+      // 15. Juli) reservierte ~60pt Textfluss-Platz die vorher nicht
+      // existierten und produzierte zuverlaessig Overflow bei jeder
+      // dritten Vorlage. Zurueck zum ursprünglichen Verhalten von
+      // Renderer 4.0 (3. Juli): sowohl positioned als auch inline
+      // QR-Platzhalter werden per replaceImage ersetzt. Der QR bleibt in
+      // seiner Vorlagen-Position (floating), Text fließt drumherum wie
+      // in Google Docs vorgesehen. Bei sehr langen Personalisierungs-
+      // Werten (Erler-Case: „Klagenfurt am Wörthersee") kann der QR
+      // wieder ueber den Text ragen — das ist ein Design-Problem der
+      // Vorlage und wird spaeter mit einem PDF-Overlay-Renderer gelöst
+      // statt mit Text-Vernichtung.
+      requests.push({
+        replaceImage: {
+          imageObjectId: qrTarget.objectId,
+          uri: qrBunnyUrl,
+          imageReplaceMethod: "CENTER_CROP",
+        },
+      });
     }
     for (const [key, value] of Object.entries(input.textVars)) {
       requests.push({
@@ -444,19 +418,14 @@ export async function renderViaDocsApi(
     };
     let pdfBuffer = await exportPdf();
 
-    // 5b. Ueberlauf-Kompensation: Das Inline-QR belegt ~60pt Textfluss-Platz,
-    // den der floating Platzhalter nicht brauchte. Kompensations-Kaskade in
-    // vier Stufen, von komplett-unsichtbar zu sichtbar-destruktiv:
-    //
-    //   Stufe 1: marginBottom bis 30pt reduzieren (Fussrand schrumpft, sonst
-    //            nichts). Bei 72pt Standard bleibt >40pt = ~1.5cm Rand.
-    //   Stufe 2: marginTop bis 30pt reduzieren (Kopfrand schrumpft, sonst
-    //            nichts). Adress-Header sitzt weiterhin oben, nur naeher am
-    //            Blattrand.
-    //   Stufe 3: lineSpacing global auf 100% setzen (falls hoeher). Spart
-    //            ~10-15% Vertikal. Text wird kompakter, aber nicht gequetscht.
-    //   Stufe 4: NUR wenn 1-3 nicht reichen — Leerabsaetze vor dem QR
-    //            loeschen. Design-relevante Trenner koennen verschwinden.
+    // 5b. Ueberlauf-Kompensation DEAKTIVIERT nach Rollback 2026-08-06.
+    // Die ganze Kompensation existierte nur, weil die inzwischen entfernte
+    // Inline-Konvertierung 60pt zusätzlichen Platz frass. Mit floating QR
+    // gibt es kein systematisches Overflow-Problem mehr — das Doc wird
+    // 1:1 gerendert wie Google es macht. Der Code bleibt einstweilen
+    // stehen (dead code) für den Fall dass wir ihn beim PDF-Overlay-
+    // Umbau brauchen. `qrInlineObjectId` bleibt null, deshalb bricht der
+    // Guard sofort ab.
     if (qrInlineObjectId && baselinePages !== null) {
       const MAX_ITERATIONS = 20;
       const EMPTIES_PER_ITERATION = 4;
