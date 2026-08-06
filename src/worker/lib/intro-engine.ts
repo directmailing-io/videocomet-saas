@@ -486,17 +486,15 @@ export async function generatePersonalizedWebcam(
     }
 
     // ── 8. Cut-freie Assembly (ein einziger Encode) ─────────────────────
-    // Statt hartem Concat mit 20ms Fade → 150ms überlappender acrossfade.
-    // Der longer overlap überbrückt akustische Unterschiede zwischen
-    // TTS-Segment (Roomtone+Fish-Voice) und Original-User-Audio (echte
-    // Aufnahme). 150ms ist Standard-Sweet-Spot für Sprach-Splice.
+    // Kritisch: Original-Audio startet EXAKT bei resumeSec — nicht davor,
+    // sonst zieht sich die Original-Anrede („Hey!") zurück in den Mix und
+    // der Zuhörer hört zweimal die Anrede („Hi Test. Hey, ich nehm...").
+    // Der Übergang nutzt statt acrossfade (das überlappt) getrennte
+    // afade-in/out an den beiden Segment-Rändern.
     const outPath = join(dir, `intro-out-${tag}.mp4`);
     const resumeSec = (resumeMs / 1000).toFixed(4);
-    const CROSSFADE_MS = 150;
-    // acrossfade braucht dass beide Streams sich überlappen, also
-    // schneiden wir das Original-Audio ~150ms VOR resumeSec, damit die
-    // TTS-Segment-Ende sich mit dem Original-Beginn überschneiden kann.
-    const origStartSec = ((resumeMs - CROSSFADE_MS) / 1000).toFixed(4);
+    const FADE_MS = 60;
+    const fadeOutStartSec = ((segEndMs - FADE_MS) / 1000).toFixed(4);
     await runFfmpeg([
       "-y",
       "-i", syncedPath,
@@ -506,9 +504,9 @@ export async function generatePersonalizedWebcam(
       `[0:v]fps=${FPS},setpts=PTS-STARTPTS[v0];` +
         `[2:v]trim=start=${resumeSec},fps=${FPS},setpts=PTS-STARTPTS[v1];` +
         `[v0][v1]concat=n=2:v=1:a=0[v];` +
-        `[1:a]aresample=${SAMPLE_RATE},pan=mono|c0=c0[a0];` +
-        `[2:a]atrim=start=${origStartSec},asetpts=PTS-STARTPTS,aresample=${SAMPLE_RATE},pan=mono|c0=c0[a1];` +
-        `[a0][a1]acrossfade=d=${(CROSSFADE_MS / 1000).toFixed(3)}:c1=tri:c2=tri[a]`,
+        `[1:a]afade=t=out:st=${fadeOutStartSec}:d=${(FADE_MS / 1000).toFixed(3)},aresample=${SAMPLE_RATE},pan=mono|c0=c0[a0];` +
+        `[2:a]atrim=start=${resumeSec},asetpts=PTS-STARTPTS,aresample=${SAMPLE_RATE},pan=mono|c0=c0,afade=t=in:st=0:d=${(FADE_MS / 1000).toFixed(3)}[a1];` +
+        `[a0][a1]concat=n=2:v=0:a=1[a]`,
       "-map", "[v]",
       "-map", "[a]",
       "-c:v", "libx264",
