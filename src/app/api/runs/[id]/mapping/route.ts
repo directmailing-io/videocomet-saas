@@ -33,6 +33,9 @@ const ruleSchema = z.object({
 const entrySchema = z.object({
   column: z.string().min(1).max(200).optional(),
   fallback: z.string().max(500).optional(),
+  // Explizites „leer lassen" — ohne dieses Feld strippt zod den Marker
+  // und der Wizard verliert die User-Entscheidung beim Reload.
+  empty: z.boolean().optional(),
   rules: z.array(ruleSchema).max(100).optional(),
 });
 

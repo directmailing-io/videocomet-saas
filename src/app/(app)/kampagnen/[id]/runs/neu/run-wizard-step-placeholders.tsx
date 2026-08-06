@@ -363,7 +363,7 @@ export function RunWizardStepPlaceholders({
       const hasColumn = typeof e.column === "string" && e.column.length > 0;
       const hasFallback =
         typeof e.fallback === "string" && e.fallback.length > 0;
-      return hasColumn || hasFallback;
+      return hasColumn || hasFallback || e.empty === true;
     }).length;
   }, [placeholders, mapping]);
 
@@ -374,7 +374,7 @@ export function RunWizardStepPlaceholders({
       const hasColumn = typeof e.column === "string" && e.column.length > 0;
       const hasFallback =
         typeof e.fallback === "string" && e.fallback.length > 0;
-      return !hasColumn && !hasFallback;
+      return !hasColumn && !hasFallback && e.empty !== true;
     });
   }, [placeholders, mapping]);
 
@@ -391,11 +391,14 @@ export function RunWizardStepPlaceholders({
     setMapping((m) => {
       const prev: PlaceholderMappingEntry = m[key] ?? {};
       const next: PlaceholderMappingEntry = { ...prev, ...patch };
-      // Aufräumen: leere Strings → undefined, damit "keine Zuweisung"
-      // konsistent serialisiert wird.
-      if (next.column === "") delete next.column;
-      if (next.fallback === "") delete next.fallback;
-      if (next.rules && next.rules.length === 0) delete next.rules;
+      // Aufräumen: leere/undefined Werte raus, damit "keine Zuweisung"
+      // konsistent serialisiert wird (JSON.stringify dropt undefined nicht
+      // aus "key in obj"-Sicht, aber der gespeicherte Blob soll sauber sein).
+      if (next.column === "" || next.column === undefined) delete next.column;
+      if (next.fallback === "" || next.fallback === undefined)
+        delete next.fallback;
+      if (next.empty !== true) delete next.empty;
+      if (!next.rules || next.rules.length === 0) delete next.rules;
       return { ...m, [key]: next };
     });
   }
@@ -436,7 +439,14 @@ export function RunWizardStepPlaceholders({
   const [advancing, setAdvancing] = React.useState(false);
   async function handleContinue() {
     if (unmapped.length > 0) {
-      // Banner ist sichtbar — Sprung zum ersten unmappten Key.
+      // Klares Feedback statt stillem Block: Toast + Sprung zum ersten
+      // offenen Key. Vorher passierte hier für den User „einfach nichts".
+      toast({
+        variant: "danger",
+        title: `${unmapped.length} Platzhalter noch offen`,
+        description:
+          "Wähle für jeden Platzhalter eine CSV-Spalte, trage einen Standardwert ein oder wähle „(leer lassen)“, wenn dort nichts stehen soll.",
+      });
       const first = unmapped[0];
       const el = rowRefs.current[first.key];
       if (el) {
@@ -685,8 +695,9 @@ export function RunWizardStepPlaceholders({
                     : "Platzhalter ohne Zuweisung"}
                 </p>
                 <p className="text-xs text-ink-muted mt-0.5">
-                  Diese Platzhalter werden im Video leer gelassen. Weise eine
-                  CSV-Spalte oder einen Fallback zu, wenn du das nicht möchtest.
+                  Wähle für jeden Platzhalter eine CSV-Spalte, trage einen
+                  Standardwert ein oder wähle „(leer lassen)", wenn dort
+                  bewusst nichts stehen soll.
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {unmapped.slice(0, 6).map((p) => (
@@ -734,7 +745,12 @@ export function RunWizardStepPlaceholders({
                     entry={mapping[p.key]}
                     csvColumns={csvColumns}
                     similarUnmapped={similarKeys(p.key)}
-                    onChangeColumn={(col) => patchEntry(p.key, { column: col })}
+                    onSelectColumn={(col, empty) =>
+                      patchEntry(p.key, {
+                        column: col,
+                        empty: empty ? true : undefined,
+                      })
+                    }
                     onChangeFallback={(fb) => patchEntry(p.key, { fallback: fb })}
                     onChangeRules={(rules) =>
                       patchEntry(p.key, {
@@ -777,7 +793,7 @@ interface PlaceholderRowProps {
   entry: PlaceholderMappingEntry | undefined;
   csvColumns: string[];
   similarUnmapped: string[];
-  onChangeColumn: (column: string | undefined) => void;
+  onSelectColumn: (column: string | undefined, empty: boolean) => void;
   onChangeFallback: (fallback: string) => void;
   onChangeRules: (rules: PlaceholderRule[]) => void;
   onApplyToSimilar: (column: string) => void;
@@ -790,7 +806,7 @@ function PlaceholderRow({
   entry,
   csvColumns,
   similarUnmapped,
-  onChangeColumn,
+  onSelectColumn,
   onChangeFallback,
   onChangeRules,
   onApplyToSimilar,
@@ -798,6 +814,7 @@ function PlaceholderRow({
 }: PlaceholderRowProps) {
   const hasInaccessibleSource = placeholder.sources.some((s) => s.inaccessible);
   const column = entry?.column;
+  const isEmptyChoice = entry?.empty === true && !column;
   const fallback = entry?.fallback ?? "";
   const rules = entry?.rules ?? [];
   const [rulesOpen, setRulesOpen] = React.useState(false);
@@ -811,7 +828,7 @@ function PlaceholderRow({
   const selectValue =
     column && column.length > 0
       ? column
-      : entry && "column" in entry
+      : entry?.empty === true
         ? LEAVE_EMPTY
         : NO_COLUMN;
 
@@ -878,14 +895,14 @@ function PlaceholderRow({
             value={selectValue}
             onValueChange={(v) => {
               if (v === NO_COLUMN) {
-                onChangeColumn(undefined);
+                onSelectColumn(undefined, false);
               } else if (v === LEAVE_EMPTY) {
-                // Explizit „leer lassen" → column = undefined, aber wir markieren
-                // den Eintrag als „intentionally empty" (Fallback greift).
-                onChangeColumn(undefined);
+                // Explizite Entscheidung „leer lassen" — zählt als
+                // zugewiesen, kein Standardwert nötig.
+                onSelectColumn(undefined, true);
               } else {
                 // CSV-Spalte ODER System-Sentinel (@system:pageUrl)
-                onChangeColumn(v);
+                onSelectColumn(v, false);
               }
             }}
           >
@@ -938,7 +955,10 @@ function PlaceholderRow({
               id={`fb-${placeholder.key}`}
               value={fallback}
               onChange={(e) => onChangeFallback(e.target.value)}
-              placeholder="Standard"
+              disabled={isEmptyChoice}
+              placeholder={
+                isEmptyChoice ? "bleibt bewusst leer" : "Standardwert (optional)"
+              }
             />
             {fallback && (
               <button

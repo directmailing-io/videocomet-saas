@@ -82,6 +82,13 @@ export interface PlaceholderMappingEntry {
   column?: string;
   /** Wert, der eingesetzt wird, wenn die CSV-Zelle leer ist. */
   fallback?: string;
+  /**
+   * Explizite User-Entscheidung „leer lassen": der Platzhalter rendert leer,
+   * ohne dass Spalte oder Fallback nötig sind. Muss persistiert werden —
+   * `column: undefined` allein überlebt JSON.stringify nicht und wäre vom
+   * Zustand „noch nicht zugewiesen" nicht unterscheidbar.
+   */
+  empty?: boolean;
   /** Wenn-Dann-Regeln, angewandt auf den Spaltenwert (siehe PlaceholderRule). */
   rules?: PlaceholderRule[];
 }
