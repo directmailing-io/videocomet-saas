@@ -49,7 +49,9 @@
 
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
+import { stampQrOverlay } from "./pdf-qr-overlay";
 import { getDriveClient, getDocsClient, extractDocId } from "@/lib/google-docs/sa-auth";
 import { uploadFile, deleteFile } from "@/lib/bunny/storage";
 import { acquireDocsWriteSlot, withGoogleRetry } from "./google-api-guard";
@@ -64,6 +66,15 @@ export interface DocsNativePipelineInput {
   qrPngPath?: string | null;
   /** Optional: Pfad zum personalisierten Thumbnail (PNG/JPG). */
   thumbnailFilePath?: string | null;
+  /**
+   * Renderer 4.1 (PDF-Overlay): wenn gesetzt und der QR-Platzhalter ein
+   * positioned object ist, wird er im Doc durch ein transparentes Bild
+   * ersetzt und der echte QR NACH dem Export per pdf-lib ins PDF
+   * gestempelt — relativ zur Link-Zeile (`anchorText`), damit der QR dem
+   * Text folgt statt von Googles Renderer an fester Position geclampt zu
+   * werden. Ohne dieses Feld: unverändertes replaceImage-Verhalten.
+   */
+  qrOverlay?: { anchorText: string } | null;
 }
 
 export interface DocsNativePipelineOutput {
@@ -72,6 +83,8 @@ export interface DocsNativePipelineOutput {
   qrReplaced: boolean;
   thumbReplaced: boolean;
   copyDocId: string;
+  /** true, wenn der QR per PDF-Overlay (Renderer 4.1) gestempelt wurde. */
+  qrOverlayApplied: boolean;
 }
 
 export function isDocsNativeConfigured(): boolean {
@@ -313,6 +326,7 @@ export async function renderViaDocsApi(
     let qrTarget: QrTarget | null = null;
     let qrAnchorEnd: number | null = null;
     let qrAlignment: "START" | "CENTER" | "END" = "CENTER";
+    let qrFallbackXPt: number | null = null;
     let thumbObjectId: string | null = null;
     if (input.qrPngPath || input.thumbnailFilePath) {
       const structure = await withGoogleRetry("docs.documents.get", () =>
@@ -324,8 +338,18 @@ export async function renderViaDocsApi(
       if (qrTarget?.kind === "positioned") {
         qrAnchorEnd = findAnchorParagraphEnd(structure.data, qrTarget.objectId);
         qrAlignment = computeQrAlignment(structure.data, qrTarget);
+        // Fallback-X fürs Overlay: linker Seitenrand + Platzhalter-Offset
+        // (Offset ist relativ zum Spaltenanfang; Absatz-Einzüge ignorieren
+        // wir — der Wert greift nur, wenn die Marker-Box im PDF fehlt).
+        const marginL = structure.data.documentStyle?.marginLeft?.magnitude ?? 72;
+        qrFallbackXPt = marginL + qrTarget.leftOffsetPt;
       }
     }
+    // Renderer 4.1 aktiv? Nur für positioned QR-Platzhalter — inline
+    // Platzhalter wandern mit dem Text und haben das Clamping-Problem nicht.
+    const qrOverlayActive = Boolean(
+      input.qrOverlay?.anchorText && input.qrPngPath && qrTarget?.kind === "positioned",
+    );
 
     // 2b. Referenz-Seitenzahl des unveraenderten Templates (nur bei
     // Inline-Konvertierung noetig, pro Template gecacht). Die Copy ist hier
@@ -351,7 +375,21 @@ export async function renderViaDocsApi(
     // referenzieren kann. Bunny-CDN-URL ist public HTTPS — passt fuer replaceImage.
     let qrBunnyUrl: string | null = null;
     if (input.qrPngPath && qrTarget) {
-      const buf = await readFile(input.qrPngPath);
+      // Overlay-Modus: der Platzhalter bekommt ein TRANSPARENTES Bild —
+      // Layout bleibt exakt wie Google rendert, der echte QR wird nach dem
+      // Export gestempelt. Sonst: der echte QR via replaceImage wie bisher.
+      const buf = qrOverlayActive
+        ? await sharp({
+            create: {
+              width: 64,
+              height: 64,
+              channels: 4,
+              background: { r: 255, g: 255, b: 255, alpha: 0 },
+            },
+          })
+            .png()
+            .toBuffer()
+        : await readFile(input.qrPngPath);
       const remotePath = `docs-native-tmp/qr-${randomUUID()}.png`;
       const uploaded = await uploadFile({
         buffer: buf,
@@ -475,6 +513,28 @@ export async function renderViaDocsApi(
     };
     let pdfBuffer = await exportPdf();
 
+    // 5a. Renderer 4.1: echten QR ins exportierte PDF stempeln. Fehler
+    // hier sind HART — ein Brief ohne QR (transparenter Platzhalter!)
+    // darf nie ausgeliefert werden.
+    let qrOverlayApplied = false;
+    if (qrOverlayActive && input.qrPngPath) {
+      const overlayResult = await stampQrOverlay({
+        pdfBuffer,
+        qrPng: await readFile(input.qrPngPath),
+        qrWidthPt: qrTarget!.widthPt,
+        qrHeightPt: qrTarget!.heightPt,
+        anchorText: input.qrOverlay!.anchorText,
+        fallbackXPt: qrFallbackXPt,
+      });
+      pdfBuffer = overlayResult.pdfBuffer;
+      qrOverlayApplied = true;
+      console.log(
+        `[docs-native] qr-overlay: page=${overlayResult.pageIndex} x=${overlayResult.xPt.toFixed(1)} yTop=${overlayResult.yTopPt.toFixed(1)} ` +
+          `size=${overlayResult.widthPt.toFixed(1)}x${overlayResult.heightPt.toFixed(1)} marker=${overlayResult.markerFound} ` +
+          `anchor=${overlayResult.anchorFound} shifted=${overlayResult.shiftedDownPt.toFixed(1)}pt`,
+      );
+    }
+
     // 5b. Ueberlauf-Kompensation DEAKTIVIERT nach Rollback 2026-08-06.
     // Die ganze Kompensation existierte nur, weil die inzwischen entfernte
     // Inline-Konvertierung 60pt zusätzlichen Platz frass. Mit floating QR
@@ -596,6 +656,7 @@ export async function renderViaDocsApi(
       qrReplaced: qrTarget !== null && qrBunnyUrl !== null,
       thumbReplaced: thumbObjectId !== null && thumbBunnyUrl !== null,
       copyDocId,
+      qrOverlayApplied,
     };
   } finally {
     // 6. Cleanup — auch bei Fehlern.
