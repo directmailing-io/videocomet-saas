@@ -132,26 +132,48 @@ export interface TtsInput {
   speed?: number;
 }
 
+/**
+ * Retry bei 429/5xx: Best-of-N-Kandidaten × parallele Preview-Leads
+ * überschreiten schnell das Fish-Concurrency-Limit — mit Backoff lösen
+ * sich die Kollisionen auf, statt dass der Lead scheitert.
+ */
+const TTS_RETRY_ATTEMPTS = 5;
+const TTS_RETRY_BASE_MS = 3_000;
+
 /** Synthetisiert `text` mit dem Voice-Clone; liefert WAV-Bytes. */
 export async function tts(input: TtsInput): Promise<Buffer> {
-  const res = await fetch(`${FISH_API_BASE}/v1/tts`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey()}`,
-      "Content-Type": "application/json",
-      model: FISH_TTS_MODEL,
-    },
-    body: JSON.stringify({
-      text: input.text,
-      reference_id: input.referenceId,
-      format: "wav",
-      ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
-      ...(input.topP !== undefined ? { top_p: input.topP } : {}),
-      ...(input.speed !== undefined ? { prosody: { speed: input.speed } } : {}),
-    }),
-  });
-  await assertOk(res, "tts");
-  return Buffer.from(await res.arrayBuffer());
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await fetch(`${FISH_API_BASE}/v1/tts`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey()}`,
+          "Content-Type": "application/json",
+          model: FISH_TTS_MODEL,
+        },
+        body: JSON.stringify({
+          text: input.text,
+          reference_id: input.referenceId,
+          format: "wav",
+          ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
+          ...(input.topP !== undefined ? { top_p: input.topP } : {}),
+          ...(input.speed !== undefined ? { prosody: { speed: input.speed } } : {}),
+        }),
+      });
+      await assertOk(res, "tts");
+      return Buffer.from(await res.arrayBuffer());
+    } catch (err) {
+      const retryable =
+        err instanceof FishAudioError && err.retryable && attempt < TTS_RETRY_ATTEMPTS;
+      if (!retryable) throw err;
+      const delayMs =
+        TTS_RETRY_BASE_MS * 2 ** (attempt - 1) + Math.random() * 1_000;
+      console.warn(
+        `[fish-audio] tts retry ${attempt}/${TTS_RETRY_ATTEMPTS - 1} in ${Math.round(delayMs)}ms: ${(err as Error).message.slice(0, 120)}`,
+      );
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
 }
 
 export interface AsrSegment {
