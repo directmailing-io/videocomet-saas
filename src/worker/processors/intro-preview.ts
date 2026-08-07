@@ -226,7 +226,9 @@ export async function processIntroPreviewJob(job: {
         }
         const upload = await uploadIntroFile({
           userId: run.userId,
-          fileName: `preview-${runId}-${cand.leadId}.mp4`,
+          // Nonce gegen den Bunny-CDN-Cache: bei Regenerierung würde die
+          // alte URL sonst weiter das alte Video ausliefern.
+          fileName: `preview-${runId}-${cand.leadId}-${Date.now()}.mp4`,
           buffer: await readFile(result.outputPath),
           contentType: "video/mp4",
         });

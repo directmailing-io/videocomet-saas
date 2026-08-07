@@ -615,16 +615,20 @@ export async function generatePersonalizedWebcam(
     }
 
     // ── 6. Segment-Upload (sync.so braucht öffentliche URLs) ────────────
+    // Nonce im Dateinamen: der Bunny-CDN-Cache hat sync.so sonst bei
+    // Regenerierungen die ALTEN Segmente unter gleicher URL ausgeliefert
+    // (lipsync_duration_mismatch mit exakt den alten Segment-Längen).
+    const segNonce = Date.now();
     const segVideoUpload = await uploadIntroFile({
       userId: opts.userId,
-      fileName: `seg-${tag}.mp4`,
+      fileName: `seg-${tag}-${segNonce}.mp4`,
       buffer: await readFile(segmentVideoPath),
       contentType: "video/mp4",
     });
     uploadedUrls.push(segVideoUpload.url);
     const segAudioUpload = await uploadIntroFile({
       userId: opts.userId,
-      fileName: `seg-${tag}.wav`,
+      fileName: `seg-${tag}-${segNonce}.wav`,
       buffer: await readFile(segmentAudioPath),
       contentType: "audio/wav",
     });

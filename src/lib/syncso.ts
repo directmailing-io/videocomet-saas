@@ -137,24 +137,44 @@ function parseGeneration(raw: unknown): SyncsoGeneration {
  */
 export type SyncsoSyncMode = "cut_off" | "bounce" | "loop" | "silence" | "remap";
 
+/**
+ * Account-weites Concurrency-Limit (Plan: 3 parallele Generations).
+ * 429 concurrency_limit_reached ist bei parallelen Preview-Leads normal —
+ * wir warten auf einen freien Slot statt den Lead scheitern zu lassen.
+ */
+const CONCURRENCY_RETRY_INTERVAL_MS = 15_000;
+const CONCURRENCY_RETRY_DEADLINE_MS = 8 * 60_000;
+
 export async function createGeneration(input: {
   videoUrl: string;
   audioUrl: string;
   syncMode?: SyncsoSyncMode;
 }): Promise<SyncsoGeneration> {
-  const raw = await syncsoRequest({
-    method: "POST",
-    path: "/generate",
-    body: {
-      model: "lipsync-2",
-      input: [
-        { type: "video", url: input.videoUrl },
-        { type: "audio", url: input.audioUrl },
-      ],
-      options: { sync_mode: input.syncMode ?? "cut_off" },
-    },
-  });
-  return parseGeneration(raw);
+  const deadline = Date.now() + CONCURRENCY_RETRY_DEADLINE_MS;
+  for (;;) {
+    try {
+      const raw = await syncsoRequest({
+        method: "POST",
+        path: "/generate",
+        body: {
+          model: "lipsync-2",
+          input: [
+            { type: "video", url: input.videoUrl },
+            { type: "audio", url: input.audioUrl },
+          ],
+          options: { sync_mode: input.syncMode ?? "cut_off" },
+        },
+      });
+      return parseGeneration(raw);
+    } catch (err) {
+      const msg = (err as Error).message ?? "";
+      const isConcurrency =
+        msg.includes("HTTP 429") && msg.includes("concurrency_limit");
+      if (!isConcurrency || Date.now() > deadline) throw err;
+      console.warn("[syncso] concurrency limit reached — waiting for a slot");
+      await new Promise((r) => setTimeout(r, CONCURRENCY_RETRY_INTERVAL_MS));
+    }
+  }
 }
 
 export async function getGeneration(id: string): Promise<SyncsoGeneration> {

@@ -205,7 +205,8 @@ export async function processIntroCalibrationJob(job: {
     ]);
     const roomtoneUpload = await uploadIntroFile({
       userId: row.calibration.userId,
-      fileName: `roomtone-${row.calibration.mediaItemId}.wav`,
+      // Nonce gegen den Bunny-CDN-Cache bei Re-Kalibrierung.
+      fileName: `roomtone-${row.calibration.mediaItemId}-${Date.now()}.wav`,
       buffer: await readFile(roomtonePath),
       contentType: "audio/wav",
     });
