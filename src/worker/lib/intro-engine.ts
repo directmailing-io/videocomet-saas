@@ -28,13 +28,17 @@
 
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tts } from "@/lib/fish-audio";
+import { asr, tts } from "@/lib/fish-audio";
 import { createGeneration, getGeneration } from "@/lib/syncso";
 import {
   uploadIntroFile,
   deleteIntroFileByUrl,
 } from "@/lib/bunny/intro-storage";
-import { DEFAULT_TTS_TEMPLATE, parseGreetingTemplate } from "@/lib/intro";
+import {
+  DEFAULT_TTS_TEMPLATE,
+  countGreetingMentions,
+  parseGreetingTemplate,
+} from "@/lib/intro";
 import { probeVideoDuration } from "@/lib/ffprobe";
 import { runFfmpeg } from "./ffmpeg";
 import {
@@ -44,6 +48,7 @@ import {
   computeSpectralRef,
   SPECTRAL_BAND_CENTERS_HZ,
 } from "./intro-audio";
+import { computeEnvelopeDb, findTtsCutMs } from "./intro-structure";
 
 const SAMPLE_RATE = 48000;
 const FPS = 30;
@@ -59,6 +64,20 @@ const MAX_EXTENSION_MS = 5000;
 /** sync.so Poll-Intervall / Gesamt-Timeout. */
 const SYNCSO_POLL_INTERVAL_MS = 10_000;
 const SYNCSO_TIMEOUT_MS = 6 * 60 * 1000;
+/** Die TTS-Anrede endet so viele ms VOR dem Original-Satzbeginn. */
+const TTS_GAP_BEFORE_SENTENCE_MS = 150;
+/** Gültige Anrede-Dauer nach dem Carrier-Schnitt. */
+const TTS_GREETING_MIN_MS = 350;
+const TTS_GREETING_MAX_MS = 3200;
+/** Best-of-N: Anzahl parallel generierter TTS-Kandidaten. */
+const TTS_CANDIDATES = 3;
+/** Fish-Temperature — niedriger als Default für stabile kurze Anreden. */
+const TTS_TEMPERATURE = 0.45;
+/**
+ * Max. Zeitstreckung durch sync.so remap im Overflow-Fall. Darüber wird
+ * die verlangsamte Körperbewegung sichtbar.
+ */
+const MAX_REMAP_STRETCH = 1.3;
 
 /**
  * Struktureller Kalibrierungs-Ausschnitt — kompatibel mit der DB-Row
@@ -229,45 +248,24 @@ export async function generatePersonalizedWebcam(
     return fail(opts.tag, "calibration_incomplete");
   }
 
-  // Template-Modus: bei kurzem Anrede-Template („Hi {vorname}") cutten wir
-  // NUR die Anrede raus und lassen die bewusste Pause + den ersten Satz
-  // des Users stehen. Bei einem klassischen Volltext-Template
-  // (Legacy, „Hallo {vorname}! Schön, dass ...") ersetzt der TTS den
-  // ganzen ersten Satz — Anker bleibt dann anchorEndMs.
+  // Template-Modus: bei kurzem Anrede-Template („Hi {vorname}") ersetzt
+  // die TTS NUR die Anrede; der erste Satz des Users bleibt original und
+  // läuft INNERHALB des Lipsync-Segments weiter (Langsegment-Rezept).
+  // Bei einem klassischen Volltext-Template (Legacy, „Hallo {vorname}!
+  // Schön, dass ...") ersetzt die TTS den ganzen ersten Satz — Anker
+  // bleibt anchorEndMs.
   //
-  // KEIN silent-Sentence-Fallback mehr: wenn der User „Hi {vorname}"
-  // gewählt hat und die Kalibrierung liefert einen zu kleinen Anker
-  // (False-Positive am Aufnahme-Start), skippen wir das Intro komplett
-  // (Fallback auf Original-Video, 1 Credit). Andernfalls würden wir
-  // heimlich den ganzen ersten Satz des Users ersetzen — semantisch
-  // eine Lüge gegenüber der UI-Wahl. Die Kalibrierung ist Nutzer-sichtbar
-  // reparierbar (deutliche Pause nach „Hi!" bei Neu-Aufnahme).
+  // KEIN silent-Sentence-Fallback: fehlt dem greeting-only-Modus der
+  // Satz-Anker (sentence_start_ms, Altbestand vor der adaptiven
+  // Kalibrierung), skippen wir das Intro komplett (Fallback Original-
+  // Video). Die Kalibrierung ist Nutzer-sichtbar reparierbar
+  // (Neu-Analyse in der Kampagnen-Bearbeitung).
   const template = cal.ttsTemplate?.trim() || DEFAULT_TTS_TEMPLATE;
-  const wantsGreeting = parseGreetingTemplate(template) !== null;
-  if (wantsGreeting) {
-    if (cal.greetingEndMs === null) {
-      return fail(opts.tag, "greeting_anchor_missing");
-    }
-    // Untergrenze bewusst niedrig: 300ms sind das absolute Minimum für
-    // ein natürlich gesprochenes „Hi". Alles darunter ist ein
-    // Silence-False-Positive. Wenn die TTS länger ist als greeting_end,
-    // wird das Video unten am Anfang verlängert (sync.so bounce).
-    if ((cal.greetingEndMs as number) < 300) {
-      return fail(
-        opts.tag,
-        `greeting_anchor_too_small_${cal.greetingEndMs}ms`,
-      );
-    }
+  const isGreetingOnly = parseGreetingTemplate(template) !== null;
+  if (isGreetingOnly && typeof cal.sentenceStartMs !== "number") {
+    return fail(opts.tag, "calibration_missing_sentence_start");
   }
-  const isGreetingOnly = wantsGreeting;
-  // Initialer anchorEndMs — kann in der TTS-Phase noch nach hinten
-  // wandern, wenn Fish TTS länger als die Original-Anrede-Zone spricht
-  // (siehe unten „effectiveAnchorMs"). Als let, damit die Assembly-
-  // Berechnung unten den angepassten Wert verwendet.
-  let anchorEndMs = isGreetingOnly
-    ? (cal.greetingEndMs as number)
-    : cal.anchorEndMs;
-  let resumeMs = 0; // wird nach TTS-Länge unten korrekt gesetzt
+  let resumeMs = 0; // wird in der Timing-Phase gesetzt
   const RESIDUAL_PAUSE_MS = 300;
 
   const dir = opts.workDir;
@@ -287,41 +285,102 @@ export async function generatePersonalizedWebcam(
       text = `${text.trim()}!`;
     }
     const ttsRawPath = join(dir, `tts-raw-${tag}.wav`);
-    const ttsBuffer = await tts({ text, referenceId: opts.fishModelId });
-    await writeFile(ttsRawPath, ttsBuffer);
-
-    const ttsRawDurSec = await probeVideoDuration(ttsRawPath);
-    if (!ttsRawDurSec || ttsRawDurSec <= 0.2) {
-      return fail(tag, "tts_unmeasurable");
-    }
-
-    // KEIN Speed-up mehr: die TTS spielt IMMER in natürlicher
-    // Geschwindigkeit. Passt sie nicht in die Original-Anrede-Zone, wird
-    // das Video am Anfang verlängert (Timing unten + sync.so bounce) —
-    // atempo klang gehetzt/robotisch und hat Content-Verschiebungen
-    // erzeugt, genau das Gegenteil der Produkt-Anforderung.
-    const ttsDurMs = ttsRawDurSec * 1000;
-    const HEADROOM_MS = 50;
-    // Cut-Zone: wenn sentence_start_ms bekannt ist, dürfen wir bis DORT
-    // cutten (Ende der bewussten Pause im Original) — die TTS-Sprache
-    // ersetzt dann Anrede + die kurze User-Pause. Original-Content
-    // bleibt unversehrt.
-    let extendedAnchorMs = anchorEndMs;
-    if (isGreetingOnly && typeof cal.sentenceStartMs === "number") {
-      extendedAnchorMs = Math.max(anchorEndMs, cal.sentenceStartMs);
-      anchorEndMs = extendedAnchorMs;
-    }
-    const targetMs = extendedAnchorMs - HEADROOM_MS;
-    // Resume auf sentence_start (Ende der User-Pause) — dort setzt der
-    // Original-Content sauber ein. Ohne dynamische Anchor-Erweiterung.
+    // KEIN Speed-up: die TTS spielt IMMER in natürlicher Geschwindigkeit.
+    // Passt sie nicht in die Zone vor dem Original-Satz, wird das Video am
+    // Anfang verlängert (Timing unten + sync.so remap) — atempo klang
+    // gehetzt/robotisch.
+    let ttsDurMs: number;
     if (isGreetingOnly) {
-      const base =
-        typeof cal.sentenceStartMs === "number"
-          ? Math.max(anchorEndMs + 120, cal.sentenceStartMs - RESIDUAL_PAUSE_MS)
-          : anchorEndMs + 120;
-      resumeMs = Math.round(Math.ceil(base / FRAME_MS) * FRAME_MS);
+      // Carrier-Satz: Fish spricht isolierte 2-Wort-Anreden monoton/
+      // robotisch. Im Satz-Kontext („Hi Julia! Schön, dass du
+      // reinschaust.") bekommt die Anrede natürliche Prosodie — wir
+      // schneiden sie in der Sprechlücke nach dem Ausruf wieder heraus.
+      // Best-of-N: mehrere Kandidaten parallel; gewählt wird der Median
+      // der Anrede-Dauern (Ausreißer = Nuschler oder Hänger).
+      const formal = template.includes("{anrede}");
+      const carrierText = `${text.trim()} ${formal ? "Schön, dass Sie reinschauen." : "Schön, dass du reinschaust."}`;
+      const settled = await Promise.allSettled(
+        Array.from({ length: TTS_CANDIDATES }, () =>
+          tts({
+            text: carrierText,
+            referenceId: opts.fishModelId,
+            temperature: TTS_TEMPERATURE,
+          }),
+        ),
+      );
+      const candidates: Array<{ path: string; cutMs: number }> = [];
+      for (let i = 0; i < settled.length; i++) {
+        const s = settled[i];
+        if (s.status !== "fulfilled") continue;
+        const candPath = join(dir, `tts-cand-${i}-${tag}.wav`);
+        await writeFile(candPath, s.value);
+        const candPcm = await runFfmpegCaptureStdout([
+          "-i", candPath,
+          "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", String(SAMPLE_RATE),
+          "-",
+        ]);
+        const cutMs = findTtsCutMs(computeEnvelopeDb(candPcm, SAMPLE_RATE), 10);
+        if (
+          cutMs !== null &&
+          cutMs >= TTS_GREETING_MIN_MS &&
+          cutMs <= TTS_GREETING_MAX_MS
+        ) {
+          candidates.push({ path: candPath, cutMs });
+        }
+      }
+      let cutMsChosen: number | null = null;
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => a.cutMs - b.cutMs);
+        const medianCutMs =
+          candidates[Math.floor((candidates.length - 1) / 2)].cutMs;
+        const ordered = [...candidates].sort(
+          (a, b) =>
+            Math.abs(a.cutMs - medianCutMs) - Math.abs(b.cutMs - medianCutMs),
+        );
+        for (const cand of ordered) {
+          const cutSec = cand.cutMs / 1000;
+          await runFfmpeg([
+            "-y", "-i", cand.path,
+            "-af",
+            `atrim=end=${cutSec.toFixed(3)},afade=t=out:st=${Math.max(0, cutSec - 0.03).toFixed(3)}:d=0.03`,
+            "-ac", "1", "-ar", String(SAMPLE_RATE),
+            ttsRawPath,
+          ]);
+          // ASR-Gegenprobe: der Schnitt darf nichts vom Carrier-Satz
+          // enthalten — sonst war die gefundene Lücke nicht die Lücke
+          // nach der Anrede (Fish hat durchgesprochen). Best effort:
+          // liefert die ASR nichts, akzeptieren wir den Kandidaten.
+          try {
+            const cutAsr = await asr({ audioPath: ttsRawPath });
+            const cutText = cutAsr?.text?.toLowerCase() ?? "";
+            if (/sch(ö|oe)n|reinschau/.test(cutText)) continue;
+          } catch {
+            // ASR nicht verfügbar → Kandidat ungeprüft akzeptieren.
+          }
+          cutMsChosen = cand.cutMs;
+          break;
+        }
+      }
+      if (cutMsChosen !== null) {
+        ttsDurMs = cutMsChosen;
+      } else {
+        // Alle Carrier-Kandidaten unbrauchbar → plain-TTS der puren Anrede.
+        const buf = await tts({
+          text,
+          referenceId: opts.fishModelId,
+          temperature: TTS_TEMPERATURE,
+        });
+        await writeFile(ttsRawPath, buf);
+        const durSec = await probeVideoDuration(ttsRawPath);
+        if (!durSec || durSec <= 0.2) return fail(tag, "tts_unmeasurable");
+        ttsDurMs = durSec * 1000;
+      }
     } else {
-      resumeMs = cal.resumeMs;
+      const ttsBuffer = await tts({ text, referenceId: opts.fishModelId });
+      await writeFile(ttsRawPath, ttsBuffer);
+      const durSec = await probeVideoDuration(ttsRawPath);
+      if (!durSec || durSec <= 0.2) return fail(tag, "tts_unmeasurable");
+      ttsDurMs = durSec * 1000;
     }
 
     // ── 2. Auto-EQ + Loudness-Match ─────────────────────────────────────
@@ -359,39 +418,79 @@ export async function generatePersonalizedWebcam(
     }
 
     // ── 3. Timing (ms, 30fps-frame-aligned) ─────────────────────────────
-    // Fit-Fall: TTS passt in die Anrede-Zone → TTS endet an anchorEnd,
-    // totes Vorlauf-Material vor der Sprache wird getrimmt (LEAD_IN bleibt).
-    // Overflow-Fall: TTS ist länger → TTS startet am Original-Sprachbeginn
-    // und das Intro-Segment wird um extensionMs LÄNGER als das Quell-
-    // material. sync.so (sync_mode=bounce) liefert dazu lippensynchrones
-    // Video; der Original-Content ab resume bleibt 1:1 unverändert und
-    // rutscht als Ganzes um extensionMs nach hinten.
     let startTrimMs: number;
     let ttsAtMs: number;
     let extensionMs = 0;
-    if (ttsDurMs <= targetMs) {
-      startTrimMs =
-        Math.floor(Math.max(0, anchorEndMs - ttsDurMs - LEAD_IN_MS) / FRAME_MS) *
-        FRAME_MS;
-      ttsAtMs = anchorEndMs - ttsDurMs - startTrimMs;
+    /** Nur greeting-only: Position des Original-Satzbeginns im Segment. */
+    let sentenceInSegMs: number | null = null;
+
+    if (isGreetingOnly) {
+      // LANGSEGMENT-Rezept: das Lipsync-Segment reicht bis HINTER den
+      // ersten Original-Satz (resume = Atempause danach). Die TTS-Anrede
+      // endet TTS_GAP_BEFORE_SENTENCE_MS vor dem Original-Satzbeginn; ab
+      // dort läuft das ORIGINAL-Audio innerhalb des gelipsyncten
+      // Materials weiter. Vorteile: (a) der Anrede→Satz-Übergang liegt
+      // nicht an einem Video-Schnitt, (b) sync.so lipsync-2 sieht echtes
+      // Sprechmaterial im Segment — Kurz-Segmente mit überwiegend
+      // stummem Gesicht lieferten keine sichtbare Mundbewegung.
+      const sentenceStartMs = cal.sentenceStartMs as number;
+      resumeMs = cal.resumeMs;
+      const desiredTtsStartMs =
+        sentenceStartMs - TTS_GAP_BEFORE_SENTENCE_MS - ttsDurMs;
+      if (desiredTtsStartMs >= 0) {
+        startTrimMs =
+          Math.floor(Math.max(0, desiredTtsStartMs - LEAD_IN_MS) / FRAME_MS) *
+          FRAME_MS;
+        ttsAtMs = desiredTtsStartMs - startTrimMs;
+      } else {
+        // TTS länger als der Platz vor dem Satz → Segment vorne um
+        // extension verlängern; sync.so remap streckt das Video sanft
+        // (bounce spielte Material rückwärts — sichtbares Artefakt).
+        startTrimMs = 0;
+        extensionMs =
+          Math.ceil((-desiredTtsStartMs + 400) / FRAME_MS) * FRAME_MS;
+        ttsAtMs = extensionMs + desiredTtsStartMs;
+        if (extensionMs > MAX_EXTENSION_MS) {
+          return fail(
+            tag,
+            `tts_extension_too_long: ${extensionMs.toFixed(0)}ms Verlängerung nötig (tts=${ttsDurMs.toFixed(0)}ms, max ${MAX_EXTENSION_MS}ms)`,
+          );
+        }
+      }
+      sentenceInSegMs = sentenceStartMs - startTrimMs + extensionMs;
     } else {
-      const speechStartMs =
-        typeof cal.speechStartMs === "number" && cal.speechStartMs > 0
-          ? cal.speechStartMs
-          : LEAD_IN_MS;
-      startTrimMs =
-        Math.floor(Math.max(0, speechStartMs - LEAD_IN_MS) / FRAME_MS) *
-        FRAME_MS;
-      ttsAtMs = speechStartMs - startTrimMs;
-      const desiredSegMs =
-        Math.ceil((ttsAtMs + ttsDurMs + RESIDUAL_PAUSE_MS) / FRAME_MS) *
-        FRAME_MS;
-      extensionMs = Math.max(0, desiredSegMs - (resumeMs - startTrimMs));
-      if (extensionMs > MAX_EXTENSION_MS) {
-        return fail(
-          tag,
-          `tts_extension_too_long: ${extensionMs.toFixed(0)}ms Verlängerung nötig (tts=${ttsDurMs.toFixed(0)}ms, max ${MAX_EXTENSION_MS}ms)`,
-        );
+      // LEGACY-Volltext-Template: TTS ersetzt den ganzen ersten Satz.
+      // Fit-Fall: TTS endet an anchorEnd, totes Vorlauf-Material wird
+      // getrimmt (LEAD_IN bleibt). Overflow: TTS startet am Original-
+      // Sprachbeginn, Segment wird um extension verlängert (remap).
+      const anchorEndMs = cal.anchorEndMs as number;
+      const HEADROOM_MS = 50;
+      resumeMs = cal.resumeMs;
+      if (ttsDurMs <= anchorEndMs - HEADROOM_MS) {
+        startTrimMs =
+          Math.floor(
+            Math.max(0, anchorEndMs - ttsDurMs - LEAD_IN_MS) / FRAME_MS,
+          ) * FRAME_MS;
+        ttsAtMs = anchorEndMs - ttsDurMs - startTrimMs;
+      } else {
+        const speechStartMs =
+          typeof cal.speechStartMs === "number"
+            ? cal.speechStartMs
+            : LEAD_IN_MS;
+        startTrimMs =
+          Math.floor(Math.max(0, speechStartMs - LEAD_IN_MS) / FRAME_MS) *
+          FRAME_MS;
+        ttsAtMs = speechStartMs - startTrimMs;
+        const desiredSegMs =
+          Math.ceil((ttsAtMs + ttsDurMs + RESIDUAL_PAUSE_MS) / FRAME_MS) *
+          FRAME_MS;
+        extensionMs = Math.max(0, desiredSegMs - (resumeMs - startTrimMs));
+        if (extensionMs > MAX_EXTENSION_MS) {
+          return fail(
+            tag,
+            `tts_extension_too_long: ${extensionMs.toFixed(0)}ms Verlängerung nötig (tts=${ttsDurMs.toFixed(0)}ms, max ${MAX_EXTENSION_MS}ms)`,
+          );
+        }
       }
     }
     /** Dauer des geschnittenen Quell-Videosegments [startTrim, resume]. */
@@ -401,32 +500,92 @@ export async function generatePersonalizedWebcam(
     if (ttsAtMs < 0 || segVideoMs <= 0) {
       return fail(tag, "timing_invalid");
     }
+    if (extensionMs > 0 && segEndMs / segVideoMs > MAX_REMAP_STRETCH) {
+      return fail(
+        tag,
+        `lipsync_stretch_too_large (${(segEndMs / segVideoMs).toFixed(2)}x)`,
+      );
+    }
 
     // ── 4. Raumton-Bett + TTS-Mix ───────────────────────────────────────
     const roomtonePath = opts.roomtoneLocalPath ?? join(dir, `roomtone-${tag}.wav`);
     if (!opts.roomtoneLocalPath) {
       await downloadTo(cal.roomtoneUrl!, roomtonePath);
     }
-    const bedPath = join(dir, `bed-${tag}.wav`);
+    // Palindrom (vorwärts+rückwärts) statt hartem Loop: die stream_loop-
+    // Naht des ~300ms-Roomtones hat als periodisches Klicken/„DUM" im
+    // KI-Segment durchgeschlagen. Beim Palindrom ist jede Naht stetig.
+    const palindromePath = join(dir, `roomtone-pal-${tag}.wav`);
     await runFfmpeg([
-      "-y",
-      "-stream_loop", "-1",
-      "-i", roomtonePath,
-      "-t", (segEndMs / 1000).toFixed(3),
+      "-y", "-i", roomtonePath,
+      "-filter_complex", "[0:a]areverse[r];[0:a][r]concat=n=2:v=0:a=1[p]",
+      "-map", "[p]",
       "-ac", "1", "-ar", String(SAMPLE_RATE),
-      bedPath,
+      palindromePath,
     ]);
     const segmentAudioPath = join(dir, `segment-audio-${tag}.wav`);
-    await runFfmpeg([
-      "-y",
-      "-i", bedPath,
-      "-i", ttsFinalPath,
-      "-filter_complex",
-      `[1:a]adelay=${Math.round(ttsAtMs)}:all=1[g];[0:a][g]amix=inputs=2:duration=first:normalize=0[a]`,
-      "-map", "[a]",
-      "-ac", "1", "-ar", String(SAMPLE_RATE),
-      segmentAudioPath,
-    ]);
+    if (sentenceInSegMs !== null && isGreetingOnly) {
+      // Composite: Roomtone-Bett (+TTS) NUR bis zum Original-Satzbeginn,
+      // ab dort das unveränderte Original-Audio [sentenceStart, resume].
+      // Kurze 25ms-Fades entschärfen die Bett→Original-Naht; der TTS
+      // endet TTS_GAP_BEFORE_SENTENCE_MS davor und überlappt nie.
+      const bedPath = join(dir, `bed-${tag}.wav`);
+      await runFfmpeg([
+        "-y",
+        "-stream_loop", "-1",
+        "-i", palindromePath,
+        "-t", (sentenceInSegMs / 1000).toFixed(3),
+        "-af",
+        `afade=t=out:st=${Math.max(0, (sentenceInSegMs - 25) / 1000).toFixed(3)}:d=0.025`,
+        "-ac", "1", "-ar", String(SAMPLE_RATE),
+        bedPath,
+      ]);
+      const sentAudioPath = join(dir, `sent-audio-${tag}.wav`);
+      await runFfmpeg([
+        "-y",
+        "-i", opts.webcamLocalPath,
+        "-ss", ((cal.sentenceStartMs as number) / 1000).toFixed(4),
+        "-to", (resumeMs / 1000).toFixed(4),
+        "-vn",
+        "-af", "afade=t=in:st=0:d=0.025",
+        "-ac", "1", "-ar", String(SAMPLE_RATE),
+        sentAudioPath,
+      ]);
+      await runFfmpeg([
+        "-y",
+        "-i", bedPath,
+        "-i", sentAudioPath,
+        "-i", ttsFinalPath,
+        "-filter_complex",
+        `[0:a][1:a]concat=n=2:v=0:a=1[base];` +
+          `[2:a]adelay=${Math.round(ttsAtMs)}:all=1[g];` +
+          `[base][g]amix=inputs=2:duration=first:normalize=0[a]`,
+        "-map", "[a]",
+        "-ac", "1", "-ar", String(SAMPLE_RATE),
+        segmentAudioPath,
+      ]);
+    } else {
+      // Legacy: Bett über das ganze Segment, TTS via adelay eingemischt.
+      const bedPath = join(dir, `bed-${tag}.wav`);
+      await runFfmpeg([
+        "-y",
+        "-stream_loop", "-1",
+        "-i", palindromePath,
+        "-t", (segEndMs / 1000).toFixed(3),
+        "-ac", "1", "-ar", String(SAMPLE_RATE),
+        bedPath,
+      ]);
+      await runFfmpeg([
+        "-y",
+        "-i", bedPath,
+        "-i", ttsFinalPath,
+        "-filter_complex",
+        `[1:a]adelay=${Math.round(ttsAtMs)}:all=1[g];[0:a][g]amix=inputs=2:duration=first:normalize=0[a]`,
+        "-map", "[a]",
+        "-ac", "1", "-ar", String(SAMPLE_RATE),
+        segmentAudioPath,
+      ]);
+    }
 
     // ── 5. Video-Segment schneiden ──────────────────────────────────────
     // trim-`end` ist ABSOLUT in der Quelle (= resume), nicht relativ.
@@ -472,14 +631,14 @@ export async function generatePersonalizedWebcam(
     uploadedUrls.push(segAudioUpload.url);
 
     // ── 7. sync.so Lip-Sync ─────────────────────────────────────────────
-    // bounce nur wenn das Audio länger ist als das Video-Segment: sync.so
-    // spiegelt dann Video-Material am Ende (vor/zurück) und generiert
-    // darauf lippensynchrone Mundbewegungen — die Verlängerung fällt in
-    // die Original-Pause (stilles Gesicht), daher unauffällig.
+    // remap nur wenn das Audio länger ist als das Video-Segment: sync.so
+    // streckt das Video dann zeitlich (Faktor oben auf MAX_REMAP_STRETCH
+    // gedeckelt) und generiert lippensynchrone Mundbewegungen. bounce
+    // (spiegeln) hatte sichtbare Rückwärts-Artefakte erzeugt.
     const generation = await createGeneration({
       videoUrl: segVideoUpload.url,
       audioUrl: segAudioUpload.url,
-      syncMode: extensionMs > 0 ? "bounce" : "cut_off",
+      syncMode: extensionMs > 0 ? "remap" : "cut_off",
     });
     if (!generation.id) return fail(tag, "lipsync_create_failed");
 
@@ -583,6 +742,42 @@ export async function generatePersonalizedWebcam(
     const st = await stat(outPath);
     if (st.size < 100 * 1024) {
       return fail(tag, `qa_file_too_small (${st.size} bytes)`);
+    }
+
+    // QA: ASR-Gegenprobe auf den Video-Kopf — es darf GENAU EINE Anrede
+    // zu hören sein. Mehr = die Original-Anrede hat den Cut überlebt
+    // (Doppel-Begrüßung, Incident 2026-08-07), keine = TTS fehlt/stumm.
+    // Best effort: liefert die ASR nichts, wird das Gate übersprungen.
+    try {
+      const headPath = join(dir, `qa-head-${tag}.wav`);
+      await runFfmpeg([
+        "-y",
+        "-i", outPath,
+        "-t", ((segEndMs + 500) / 1000).toFixed(3),
+        "-vn", "-ac", "1", "-ar", "16000",
+        headPath,
+      ]);
+      const headAsr = await asr({ audioPath: headPath });
+      const headText = headAsr?.text?.trim() || null;
+      if (headText) {
+        const greetings = countGreetingMentions(headText);
+        if (greetings > 1) {
+          return fail(
+            tag,
+            `qa_double_greeting (asr="${headText.slice(0, 120)}")`,
+          );
+        }
+        if (greetings === 0) {
+          return fail(
+            tag,
+            `qa_greeting_missing (asr="${headText.slice(0, 120)}")`,
+          );
+        }
+      }
+    } catch (asrErr) {
+      console.warn(
+        `[intro-engine:${tag}] qa-asr skipped: ${(asrErr as Error).message?.slice(0, 120)}`,
+      );
     }
 
     console.log(

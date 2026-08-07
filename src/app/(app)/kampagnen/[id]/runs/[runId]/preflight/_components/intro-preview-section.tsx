@@ -45,7 +45,12 @@ function calibrationHint(error: string | null | undefined): string {
     case "no_pause_detected":
       return "Wir haben keine deutliche Pause nach deiner Anrede gefunden. Nimm neu auf: erst „Hi!“ sagen, dann 1 Sekunde Stille, dann der erste Satz.";
     case "no_speech_detected":
+    case "audio_flat":
       return "Wir konnten keine Sprache am Anfang des Videos erkennen.";
+    case "greeting_inaudible":
+      return "Deine Anrede am Anfang war zu leise oder nicht erkennbar. Nimm neu auf und sprich die Anrede klar und deutlich.";
+    case "no_sentence_after_pause":
+      return "Nach der Pause hinter deiner Anrede kommt keine Sprache mehr. Sprich nach der kurzen Pause einen ersten Satz weiter.";
     default:
       return "Die Anrede im Webcam-Video war zu kurz oder die bewusste Pause danach zu knapp. Neu aufnehmen oder mit Original-Video (1 Credit pro Lead) starten — deine Wahl.";
   }

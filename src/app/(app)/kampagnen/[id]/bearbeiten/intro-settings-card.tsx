@@ -73,7 +73,12 @@ function calibrationErrorHint(code: string | null): string {
     case "greeting_too_late":
       return "Deine Anrede beginnt zu spät oder du hast durchgesprochen. Nimm neu auf und starte SOFORT mit der kurzen Anrede („Hi!“), dann 1 Sekunde Stille, dann der erste Satz. Ohne diese Struktur hat die KI keinen sauberen Cut-Punkt.";
     case "no_speech_detected":
+    case "audio_flat":
       return "Wir konnten keine Sprache am Anfang des Videos erkennen. Bitte prüfe die Tonspur des Videos.";
+    case "greeting_inaudible":
+      return "Deine Anrede am Anfang war zu leise oder nicht erkennbar. Sprich die Anrede („Hi!“) klar und in normaler Lautstärke, dann eine kurze Pause, dann der erste Satz.";
+    case "no_sentence_after_pause":
+      return "Nach der Pause hinter deiner Anrede kommt keine Sprache mehr. Sprich nach der kurzen Pause bitte einen ersten Satz weiter.";
     case "no_breath_gap_detected":
       return "Der erste Satz nach der Anrede geht ohne Atempause weiter. Sprich nach dem ersten kompletten Satz kurz ein und atme durch, dann weiter.";
     case "sentence_too_short":

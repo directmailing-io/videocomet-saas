@@ -53,38 +53,6 @@ export function runFfmpegCaptureStdout(args: string[]): Promise<Buffer> {
   });
 }
 
-export interface SilenceInterval {
-  /** Sekunden. */
-  start: number;
-  /** Sekunden. `Infinity` wenn die Datei in Stille endet (kein silence_end). */
-  end: number;
-}
-
-/**
- * Parst `silencedetect`-Output. Zeilenformat:
- *   [silencedetect @ …] silence_start: 1.234
- *   [silencedetect @ …] silence_end: 2.345 | silence_duration: 1.111
- */
-export function parseSilenceIntervals(stderr: string): SilenceInterval[] {
-  const intervals: SilenceInterval[] = [];
-  let pendingStart: number | null = null;
-  const re = /silence_(start|end):\s*(-?\d+(?:\.\d+)?)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(stderr))) {
-    const value = parseFloat(m[2]);
-    if (m[1] === "start") {
-      pendingStart = value;
-    } else if (pendingStart !== null) {
-      intervals.push({ start: Math.max(0, pendingStart), end: value });
-      pendingStart = null;
-    }
-  }
-  if (pendingStart !== null) {
-    intervals.push({ start: Math.max(0, pendingStart), end: Infinity });
-  }
-  return intervals;
-}
-
 /**
  * Parst den Integrated-Loudness-Wert aus dem ebur128-Summary:
  *   Integrated loudness:

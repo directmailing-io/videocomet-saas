@@ -20,6 +20,21 @@ export const GREETING_PREFIXES = [
 export type GreetingPrefix = (typeof GREETING_PREFIXES)[number];
 
 /**
+ * Zählt Anrede-Vorkommen (word-boundary, case-insensitive) in einem
+ * ASR-Transkript. Das Engine-QA-Gate erwartet im fertigen Video genau
+ * EINE Anrede — mehr = die Original-Anrede hat den Cut überlebt
+ * (Doppel-Begrüßung), keine = die TTS fehlt/ist stumm.
+ */
+export function countGreetingMentions(text: string): number {
+  let count = 0;
+  for (const prefix of GREETING_PREFIXES) {
+    const pattern = `(?:^|[^\\p{L}])${prefix.replace(/\s+/g, "\\s+")}(?=[^\\p{L}]|$)`;
+    count += (text.match(new RegExp(pattern, "giu")) ?? []).length;
+  }
+  return count;
+}
+
+/**
  * Zwei Namens-Muster. „firstName" ist informell (Du-Kunden), „formal" ist
  * die Herr/Frau-Variante (Sie-Kunden). Die Platzhalter werden im Worker
  * aus den Lead-Daten befüllt (Vorname, Anrede, Nachname).
