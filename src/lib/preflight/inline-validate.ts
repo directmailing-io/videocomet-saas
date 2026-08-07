@@ -92,11 +92,22 @@ function isValidUrl(raw: string): boolean {
  */
 export function validateLeadInline(
   leadData: Record<string, unknown>,
+  opts?: {
+    /**
+     * `true`, wenn das Placeholder-Mapping des Runs einen leeren Vornamen
+     * abdeckt (Fallback / „leer lassen" / is_empty-Regel) — dann ist ein
+     * fehlender Vorname KEIN Disqualifikations-Grund. Siehe
+     * `firstNameCoveredWhenEmpty()` in lib/placeholders/substitute.
+     */
+    firstNameOptional?: boolean;
+  },
 ): InlineValidationResult {
   const issues: InlineValidationIssue[] = [];
 
   const firstName = pick(leadData, ["firstName", "Vorname", "first_name"]);
-  if (!firstName) issues.push("missing_firstName");
+  if (!firstName && opts?.firstNameOptional !== true) {
+    issues.push("missing_firstName");
+  }
 
   const websiteUrl = pick(leadData, [
     "websiteUrl",

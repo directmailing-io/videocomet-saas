@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { Queue, type ConnectionOptions } from "bullmq";
 import { requireUserApi } from "@/lib/auth-guard";
+import { firstNameCoveredWhenEmpty } from "@/lib/placeholders/substitute";
 import { getRedisConnection } from "@/worker/queue";
 import {
   bulkSetPreflightStatus,
@@ -113,6 +114,15 @@ export async function POST(
     );
   }
 
+  // Fallback / „leer lassen" / is_empty-Regel für den Vornamen im Mapping?
+  // Dann ist ein leerer Vorname kein Disqualifikations-Grund.
+  const storedCm = (run.columnMapping ?? null) as {
+    placeholderMapping?: import("@/lib/placeholders/types").PlaceholderMapping;
+  } | null;
+  const firstNameOptional = firstNameCoveredWhenEmpty(
+    storedCm?.placeholderMapping,
+  );
+
   // ── Inline-Validation: disqualifizierte Leads direkt markieren ───────
   const updates: PreflightStatusUpdate[] = [];
   const skipIds = new Set<string>();
@@ -132,7 +142,7 @@ export async function POST(
       skipIds.add(lead.id);
       continue;
     }
-    const v = validateLeadInline(lead.data);
+    const v = validateLeadInline(lead.data, { firstNameOptional });
     if (!v.ok) {
       // Bei kombinierten Issues priorisieren wir missing_field, weil das
       // dem Operator den eindeutigsten Hinweis liefert. invalid_url wird

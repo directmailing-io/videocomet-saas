@@ -125,12 +125,28 @@ export async function GET(
     if (!detectedKeys.has(k)) delete finalSuggested[k];
   }
 
+  // Füllstand pro Spalte — die UI warnt bei komplett leeren gemappten
+  // Spalten (z. B. „Vorname"-Spalte vorhanden, aber ohne Werte).
+  const parsedRows = cm.parsed?.rows ?? [];
+  const columnFillCounts: Record<string, number> = {};
+  for (const col of csvColumns) columnFillCounts[col] = 0;
+  for (const row of parsedRows) {
+    for (const col of csvColumns) {
+      const v = row[col];
+      if (typeof v === "string" && v.trim().length > 0) {
+        columnFillCounts[col] += 1;
+      }
+    }
+  }
+
   const response: RunPlaceholdersResponse = {
     placeholders,
     csvColumns,
     suggestedMapping: finalSuggested,
     reusedFromPreviousRun:
       !!priorMapping && Object.keys(priorMapping).length > 0,
+    columnFillCounts,
+    rowCount: parsedRows.length,
   };
 
   return NextResponse.json(response);

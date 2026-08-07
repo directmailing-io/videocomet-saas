@@ -25,6 +25,7 @@ import type {
   LegacyMapping,
   PlaceholderFormat,
   PlaceholderMapping,
+  PlaceholderMappingEntry,
 } from "./types";
 import { findMatchingRule } from "./rules";
 
@@ -454,6 +455,44 @@ export function toLegacyMapping(mapping: PlaceholderMapping): LegacyMapping {
     if (v.column && v.column.length > 0) out[k] = v.column;
   }
   return out;
+}
+
+/**
+ * `true`, wenn der Mapping-Eintrag eine LEERE CSV-Zelle abdeckt — d. h.
+ * beim Rendern trotzdem ein (ggf. bewusst leerer) Wert entsteht:
+ *   - nicht-leerer Fallback,
+ *   - explizites „leer lassen" (`empty: true`),
+ *   - eine `is_empty`-Wenn-Dann-Regel.
+ * Validierungs-Schichten (Start-Import, Preflight) dürfen solche Leads
+ * NICHT als „unvollständig" aussortieren.
+ */
+export function coversEmptyValue(
+  entry: PlaceholderMappingEntry | undefined,
+): boolean {
+  return (
+    entry !== undefined &&
+    ((typeof entry.fallback === "string" && entry.fallback.length > 0) ||
+      entry.empty === true ||
+      (entry.rules ?? []).some((r) => r.op === "is_empty"))
+  );
+}
+
+const FIRSTNAME_KEYS = new Set(["vorname", "firstname", "first_name"]);
+
+/**
+ * `true`, wenn IRGENDEIN Vorname-Platzhalter im Mapping eine leere Zelle
+ * abdeckt (Fallback / „leer lassen" / is_empty-Regel). Dann darf die
+ * Pflichtfeld-Prüfung `missing_firstName` nicht mehr hart greifen.
+ */
+export function firstNameCoveredWhenEmpty(
+  mapping: PlaceholderMapping | null | undefined,
+): boolean {
+  if (!mapping) return false;
+  for (const [key, entry] of Object.entries(mapping)) {
+    if (!FIRSTNAME_KEYS.has(key.toLowerCase())) continue;
+    if (coversEmptyValue(entry)) return true;
+  }
+  return false;
 }
 
 /**

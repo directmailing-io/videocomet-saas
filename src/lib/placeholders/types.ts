@@ -161,4 +161,12 @@ export interface RunPlaceholdersResponse {
    * „Aus voriger Runde übernommen"-Banner.
    */
   reusedFromPreviousRun?: boolean;
+  /**
+   * Anzahl nicht-leerer Zellen pro CSV-Spalte. Die UI warnt, wenn eine
+   * gemappte Spalte komplett leer ist (Wert 0) — sonst tappt der User in
+   * die „alle Leads aussortiert"-Falle erst beim Start.
+   */
+  columnFillCounts?: Record<string, number>;
+  /** Gesamtzahl der Rows in der hochgeladenen Liste. */
+  rowCount?: number;
 }

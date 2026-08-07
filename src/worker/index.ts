@@ -511,7 +511,7 @@ async function preflightRecovery(): Promise<void> {
               level: "error",
               stage: "watchdog",
               message:
-                "Runde gestoppt: Es gibt keinen einzigen freigegebenen Lead zum Produzieren — alle Leads wurden entfernt oder abgelehnt (z.B. Duplikate aus früheren Runden oder unvollständige Daten). Bitte prüfe deine Liste und starte eine neue Runde.",
+                "Runde gestoppt: Es gibt keinen einzigen freigegebenen Lead zum Produzieren — alle Leads wurden entfernt oder abgelehnt (z.B. Duplikate innerhalb der Liste oder fehlende Vornamen). Bitte prüfe deine Liste und starte eine neue Runde.",
             });
             // eslint-disable-next-line no-console
             console.error(

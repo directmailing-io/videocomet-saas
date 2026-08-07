@@ -35,6 +35,7 @@ import {
   validateLeadInline,
   type DuplicateInput,
 } from "./inline-validate";
+import { firstNameCoveredWhenEmpty } from "@/lib/placeholders/substitute";
 import {
   bulkSetPreflightStatus,
   getLeadsForPreflightStart,
@@ -191,11 +192,25 @@ export async function enqueueForPreflight(
   const rows = await getLeadsForPreflightStart(runId, userId);
   const total = rows.length;
 
+  // Deckt das Mapping einen leeren Vornamen ab (Fallback / „leer lassen" /
+  // is_empty-Regel)? Dann ist missing_firstName kein K.-o.-Kriterium.
+  const [cmRow] = await db
+    .select({ cm: runs.columnMapping })
+    .from(runs)
+    .where(eq(runs.id, runId))
+    .limit(1);
+  const storedCm = (cmRow?.cm ?? null) as {
+    placeholderMapping?: import("@/lib/placeholders/types").PlaceholderMapping;
+  } | null;
+  const firstNameOptional = firstNameCoveredWhenEmpty(
+    storedCm?.placeholderMapping,
+  );
+
   // 2) Inline-Validation pro Lead.
   const updates: PreflightStatusUpdate[] = [];
   const eligibleForDupCheck: DuplicateInput[] = [];
   for (const r of rows) {
-    const v = validateLeadInline(r.data);
+    const v = validateLeadInline(r.data, { firstNameOptional });
     if (v.ok) {
       eligibleForDupCheck.push({ id: r.id, data: r.data });
       continue;

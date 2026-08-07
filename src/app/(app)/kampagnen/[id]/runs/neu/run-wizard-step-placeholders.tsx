@@ -136,6 +136,10 @@ export function RunWizardStepPlaceholders({
   const [csvColumns, setCsvColumns] = React.useState<string[]>([]);
   const [suggestedMapping, setSuggestedMapping] = React.useState<PlaceholderMapping>({});
   const [reusedFromPrevious, setReusedFromPrevious] = React.useState(false);
+  const [columnFillCounts, setColumnFillCounts] = React.useState<
+    Record<string, number>
+  >({});
+  const [rowCount, setRowCount] = React.useState(0);
 
   // ── State: Eigenes Mapping (Working Copy) ──────────────────────────────
   const [mapping, setMapping] = React.useState<PlaceholderMapping>({});
@@ -254,6 +258,8 @@ export function RunWizardStepPlaceholders({
         setCsvColumns(data.csvColumns ?? []);
         setSuggestedMapping(data.suggestedMapping ?? {});
         setReusedFromPrevious(Boolean(data.reusedFromPreviousRun));
+        setColumnFillCounts(data.columnFillCounts ?? {});
+        setRowCount(data.rowCount ?? 0);
         // Vorbelegen mit suggestedMapping — der User kann jederzeit überschreiben.
         const sm = data.suggestedMapping ?? {};
         // Auto-Vorschlag für die reservierte E-Mail-Spalte (Outreach):
@@ -744,6 +750,8 @@ export function RunWizardStepPlaceholders({
                     placeholder={p}
                     entry={mapping[p.key]}
                     csvColumns={csvColumns}
+                    columnFillCounts={columnFillCounts}
+                    rowCount={rowCount}
                     similarUnmapped={similarKeys(p.key)}
                     onSelectColumn={(col, empty) =>
                       patchEntry(p.key, {
@@ -792,6 +800,8 @@ interface PlaceholderRowProps {
   placeholder: DetectedPlaceholder;
   entry: PlaceholderMappingEntry | undefined;
   csvColumns: string[];
+  columnFillCounts: Record<string, number>;
+  rowCount: number;
   similarUnmapped: string[];
   onSelectColumn: (column: string | undefined, empty: boolean) => void;
   onChangeFallback: (fallback: string) => void;
@@ -805,6 +815,8 @@ function PlaceholderRow({
   placeholder,
   entry,
   csvColumns,
+  columnFillCounts,
+  rowCount,
   similarUnmapped,
   onSelectColumn,
   onChangeFallback,
@@ -821,6 +833,14 @@ function PlaceholderRow({
   // Regeln nur für echte CSV-Spalten — System-Werte (@system:…) werden
   // vor dem Mapping aufgelöst, dort greifen Regeln nie.
   const canHaveRules = !!column && !column.startsWith("@system:");
+  // Warnung: gemappte Spalte existiert, ist aber in ALLEN Rows leer —
+  // ohne Fallback tappt der User sonst erst beim Start in die
+  // „alle Leads aussortiert"-Falle (DigiSpace 2026-08-07).
+  const columnCompletelyEmpty =
+    !!column &&
+    !column.startsWith("@system:") &&
+    rowCount > 0 &&
+    (columnFillCounts[column] ?? 0) === 0;
 
   // Aktueller Select-Wert (mit Sentinel-Mapping).
   // System-Werte (@system:…) werden 1:1 gezeigt — der Select-Eintrag
@@ -923,6 +943,15 @@ function PlaceholderRow({
               ))}
             </SelectContent>
           </Select>
+          {columnCompletelyEmpty && (
+            <p className="mt-1.5 flex items-start gap-1 text-[11px] font-medium text-warn">
+              <AlertTriangle className="size-3 mt-0.5 shrink-0" />
+              <span>
+                Diese Spalte ist in deiner Liste komplett leer — trage einen
+                Standardwert ein oder wähle eine andere Spalte.
+              </span>
+            </p>
+          )}
           {canHaveRules && (
             <button
               type="button"

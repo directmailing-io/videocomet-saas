@@ -27,6 +27,7 @@ import {
 import { sql } from "drizzle-orm";
 import { detectDuplicates } from "@/lib/dedupe/engine";
 import type { DedupeConfig } from "@/lib/dedupe/types";
+import { coversEmptyValue } from "@/lib/placeholders/substitute";
 
 /**
  * Looks up the active Custom-LP-Version-ID for a campaign at the moment a run
@@ -55,7 +56,7 @@ async function resolveActiveCustomLpVersionId(
 
 interface StoredColumnMapping {
   mapping?: Record<string, string>;
-  placeholderMapping?: Record<string, unknown>;
+  placeholderMapping?: import("@/lib/placeholders/types").PlaceholderMapping;
   parsed?: {
     headers: string[];
     rows: Record<string, string>[];
@@ -372,9 +373,16 @@ export async function POST(
   for (const [placeholderKey, columnName] of Object.entries(mapping)) {
     if (typeof columnName !== "string" || columnName.trim() === "") continue;
     if (columnName.startsWith("@system:")) continue;
-    if (VORNAME_PLACEHOLDER_KEYS.has(placeholderKey.toLowerCase())) {
-      requiredCols.push(columnName);
-    }
+    if (!VORNAME_PLACEHOLDER_KEYS.has(placeholderKey.toLowerCase())) continue;
+    // 2026-08-07: Wenn der User im Mapping für den Vornamen einen Fallback,
+    // „leer lassen" oder eine is_empty-Regel hinterlegt hat, ist eine leere
+    // Zelle abgedeckt — der Renderer substituiert dann. Solche Leads dürfen
+    // NICHT als incomplete_data aussortiert werden (DigiSpace 2026-08-07:
+    // komplett leere Vorname-Spalte killte alle 8 Leads ohne Ausweg).
+    if (coversEmptyValue(cm.placeholderMapping?.[placeholderKey])) continue;
+    // Mehrere Vorname-Keys (vorname + firstName) zeigen meist auf dieselbe
+    // Spalte — nicht doppelt in missingColumns listen.
+    if (!requiredCols.includes(columnName)) requiredCols.push(columnName);
   }
   if (requiredCols.length > 0) {
     const incompleteByRowIndex = new Map<number, string[]>();
@@ -439,6 +447,31 @@ export async function POST(
         }),
       );
     }
+  }
+
+  // Gemeinsamer Fehlertext für „alle Leads aussortiert" (beide Start-Pfade).
+  // WICHTIG: Dedupe prüft NUR innerhalb der hochgeladenen Liste — es gibt
+  // keine rundenübergreifende Duplikat-Prüfung. Frühere Formulierung
+  // („Duplikate aus früheren Runden") war falsch und hat Support-Verwirrung
+  // ausgelöst (DigiSpace 2026-08-07).
+  function buildAllRemovedError(inserted: number): string {
+    const parts: string[] = [];
+    if (dedupeRemovedCount > 0) {
+      parts.push(
+        `${dedupeRemovedCount} ${dedupeRemovedCount === 1 ? "Duplikat" : "Duplikate"} innerhalb dieser Liste`,
+      );
+    }
+    if (incompleteCount > 0) {
+      parts.push(
+        `${incompleteCount} ohne Vornamen (Spalte ${requiredCols.map((c) => `„${c}“`).join(", ")} ist leer)`,
+      );
+    }
+    const detail = parts.length > 0 ? ` (${parts.join(", ")})` : "";
+    const hint =
+      incompleteCount > 0
+        ? " Tipp: Wähle im Spalten-Mapping eine gefüllte Spalte für den Vornamen oder hinterlege dort einen Standardwert."
+        : " Bitte prüfe deine Liste und starte eine neue Runde.";
+    return `Alle ${inserted} Leads wurden beim Import aussortiert${detail}.${hint}`;
   }
 
   // Snapshot the campaign's active Custom-LP version onto the run, so future
@@ -568,12 +601,12 @@ export async function POST(
         runId: params.id,
         level: "error",
         stage: "start",
-        message: `Runde gestoppt: Alle ${inserted} Leads wurden beim Import aussortiert (${dedupeRemovedCount} Duplikate aus früheren Runden, ${incompleteCount} mit unvollständigen Pflichtfeldern).`,
+        message: `Runde gestoppt: ${buildAllRemovedError(inserted)}`,
       });
       return NextResponse.json(
         {
           ok: false,
-          error: `Alle ${inserted} Leads wurden beim Import aussortiert (${dedupeRemovedCount} Duplikate aus früheren Runden, ${incompleteCount} mit unvollständigen Pflichtfeldern). Es gibt nichts zu produzieren — bitte prüfe deine Liste und starte eine neue Runde.`,
+          error: buildAllRemovedError(inserted),
           totalLeads: inserted,
           dedupeRemoved: dedupeRemovedCount,
           incomplete: incompleteCount,
