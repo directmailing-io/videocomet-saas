@@ -118,10 +118,24 @@ export async function POST(req: NextRequest) {
   if (body.introEnabled && body.webcamMediaId) {
     try {
       const [existing] = await db
-        .select({ status: introCalibrations.status })
+        .select({
+          id: introCalibrations.id,
+          status: introCalibrations.status,
+          voiceStatus: introCalibrations.voiceStatus,
+        })
         .from(introCalibrations)
         .where(eq(introCalibrations.mediaItemId, body.webcamMediaId))
         .limit(1);
+      if (existing && existing.status === "ready" && existing.voiceStatus !== "ready") {
+        // Kalibrierung fertig, aber noch keine Kampagnen-Stimme (Video aus
+        // der Zeit vor per-Video-Training oder Trainings-Fehler) → Job neu
+        // anstoßen; der Processor misst neu und trainiert die Stimme mit.
+        await introCalibrationQueue().add(
+          "intro-calibration",
+          { calibrationId: existing.id },
+          { jobId: `intro-calibration-${existing.id}-${Date.now()}` },
+        );
+      }
       // Fertige oder laufende Kalibrierung nicht zurücksetzen.
       if (!existing || existing.status === "failed") {
         const initialTemplate = introTtsTemplate ?? DEFAULT_TTS_TEMPLATE;

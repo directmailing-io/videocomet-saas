@@ -117,11 +117,15 @@ export async function processIntroPreviewJob(job: {
     .from(introCalibrations)
     .where(eq(introCalibrations.mediaItemId, campaign.webcamMediaId))
     .limit(1);
-  if (
-    voiceProfile?.status !== "ready" ||
-    !voiceProfile.fishModelId ||
-    calibration?.status !== "ready"
-  ) {
+  // Kampagnen-Stimme (aus dem Webcam-Video trainiert) bevorzugen;
+  // Account-Profil nur als Fallback (z.B. Video-Ton < 30s).
+  const introFishModelId =
+    calibration?.voiceStatus === "ready" && calibration.voiceFishModelId
+      ? calibration.voiceFishModelId
+      : voiceProfile?.status === "ready"
+        ? voiceProfile.fishModelId
+        : null;
+  if (!introFishModelId || calibration?.status !== "ready") {
     return { status: "skipped", reason: "intro_not_ready" };
   }
 
@@ -205,7 +209,7 @@ export async function processIntroPreviewJob(job: {
     // die Wall-Time näher an ein einzelnes Rendering. Erfolge werden
     // sofort atomar an `intro_preview` angehängt, damit die UI live
     // wächst statt am Ende „alle drei auf einmal" zu bekommen.
-    const fishModelId = voiceProfile.fishModelId; // narrow für Closures
+    const fishModelId = introFishModelId; // narrow für Closures
     const outcomes = await Promise.allSettled(
       eligible.map(async (cand) => {
         const result = await generatePersonalizedWebcam({

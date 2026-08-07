@@ -559,11 +559,16 @@ export async function pipelineProcessor(
                 .limit(1)
             : [];
 
-          if (
-            voiceProfile?.status !== "ready" ||
-            !voiceProfile.fishModelId ||
-            calibration?.status !== "ready"
-          ) {
+          // Kampagnen-Stimme (aus dem Webcam-Video trainiert) bevorzugen;
+          // Account-Profil nur als Fallback (z.B. Video-Ton < 30s).
+          const introFishModelId =
+            calibration?.voiceStatus === "ready" && calibration.voiceFishModelId
+              ? calibration.voiceFishModelId
+              : voiceProfile?.status === "ready"
+                ? voiceProfile.fishModelId
+                : null;
+
+          if (!introFishModelId || calibration?.status !== "ready") {
             await updateLeadStatus(data.leadId, { introStatus: "disabled" });
             await insertPipelineEvent({
               runId: data.runId,
@@ -623,7 +628,7 @@ export async function pipelineProcessor(
                     tag: data.leadId.slice(0, 8),
                     substitutions: substResult.substitutions,
                     calibration,
-                    fishModelId: voiceProfile.fishModelId!,
+                    fishModelId: introFishModelId,
                     webcamLocalPath: introWebcamPath,
                     workDir: introDir,
                   }),

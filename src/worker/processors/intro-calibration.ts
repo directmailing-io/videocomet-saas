@@ -33,7 +33,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { introCalibrations, mediaItems } from "@/lib/db/schema";
+import { introCalibrations, mediaItems, voiceProfiles } from "@/lib/db/schema";
 import { asr } from "@/lib/fish-audio";
 import { uploadIntroFile } from "@/lib/bunny/intro-storage";
 import { runFfmpeg } from "../lib/ffmpeg";
@@ -50,6 +50,7 @@ import {
   type IntroStructure,
 } from "../lib/intro-structure";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
+import { trainVoiceFromWav, VoiceTrainError } from "../lib/voice-clone";
 import { DEFAULT_TTS_TEMPLATE } from "@/lib/intro";
 import type { IntroCalibrationJobData } from "../intro-queue";
 
@@ -211,8 +212,51 @@ export async function processIntroCalibrationJob(job: {
       contentType: "audio/wav",
     });
 
+    // 7. Voice-Clone PRO VIDEO: gleiche Tonquelle wie das Video, an das
+    // die TTS später nahtlos anschließen muss (je Kampagne können andere
+    // Sprecher/Mikros im Spiel sein). Consent bleibt Account-weit am
+    // voice_profiles-Eintrag verankert; ohne Consent kein Training.
+    // Fehler hier lassen die Kalibrierung trotzdem ready werden — die
+    // Pipeline fällt dann auf die Account-Stimme zurück.
+    let voicePatch: Partial<typeof introCalibrations.$inferInsert>;
+    const [consentProfile] = await db
+      .select({
+        consentVoiceAt: voiceProfiles.consentVoiceAt,
+        consentAiAt: voiceProfiles.consentAiAt,
+      })
+      .from(voiceProfiles)
+      .where(eq(voiceProfiles.userId, row.calibration.userId))
+      .limit(1);
+    if (!consentProfile?.consentVoiceAt || !consentProfile.consentAiAt) {
+      voicePatch = { voiceStatus: "failed", voiceError: "consent_missing" };
+    } else {
+      try {
+        const trained = await trainVoiceFromWav({
+          wavPath,
+          tmpDir,
+          title: `videocomet-${row.calibration.userId}-${row.calibration.mediaItemId.slice(0, 8)}`,
+          previousModelId: row.calibration.voiceFishModelId,
+        });
+        voicePatch = {
+          voiceStatus: "ready",
+          voiceFishModelId: trained.modelId,
+          voiceError: null,
+        };
+      } catch (err) {
+        const voiceCode =
+          err instanceof VoiceTrainError
+            ? err.code
+            : ((err as Error).message?.slice(0, 300) ?? "unknown");
+        voicePatch = { voiceStatus: "failed", voiceError: voiceCode };
+        console.warn(
+          `[intro-calibration] per-video voice training failed (${voiceCode}) — Account-Stimme bleibt Fallback`,
+        );
+      }
+    }
+
     await setStatus(calibrationId, {
       status: "ready",
+      ...voicePatch,
       transcriptSentence,
       ttsTemplate: row.calibration.ttsTemplate ?? DEFAULT_TTS_TEMPLATE,
       speechStartMs: structure.speechStartMs,

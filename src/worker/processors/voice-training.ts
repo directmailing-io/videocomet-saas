@@ -18,20 +18,10 @@ import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { voiceProfiles } from "@/lib/db/schema";
-import { createVoiceModel, deleteVoiceModel } from "@/lib/fish-audio";
-import { probeVideoDuration } from "@/lib/ffprobe";
 import { runFfmpeg } from "../lib/ffmpeg";
-import { runFfmpegCaptureStderr, parseIntegratedLufs } from "../lib/intro-audio";
+import { trainVoiceFromWav, VoiceTrainError } from "../lib/voice-clone";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
 import type { VoiceTrainingJobData } from "../intro-queue";
-
-const MIN_SAMPLE_SECONDS = 30;
-/** Fish-Limit 270s Gesamtmaterial — wir trimmen mit Puffer auf 260s. */
-const TRIM_TO_SECONDS = 260;
-const MAX_SAMPLE_SECONDS = 270;
-const MIN_LUFS = -40;
-const NORMALIZE_BELOW_LUFS = -25;
-const TARGET_LUFS = -19;
 
 async function setFailed(voiceProfileId: string, error: string): Promise<void> {
   await db
@@ -72,62 +62,20 @@ export async function processVoiceTrainingJob(job: {
     const wavPath = join(tmpDir, "sample.wav");
     await runFfmpeg(["-y", "-i", rawPath, "-vn", "-ac", "1", "-ar", "44100", wavPath]);
 
-    // 2. Quality-Gate
-    const durationSec = await probeVideoDuration(wavPath);
-    if (durationSec === null || durationSec < MIN_SAMPLE_SECONDS) {
-      await setFailed(voiceProfileId, "too_short");
-      return { status: "failed", error: "too_short" };
-    }
-
-    const lufsStderr = await runFfmpegCaptureStderr([
-      "-i", wavPath, "-af", "ebur128", "-f", "null", "-",
-    ]);
-    const lufs = parseIntegratedLufs(lufsStderr);
-    if (lufs === null || lufs <= MIN_LUFS) {
-      await setFailed(voiceProfileId, "too_quiet");
-      return { status: "failed", error: "too_quiet" };
-    }
-
-    let trainPath = wavPath;
-    const filters: string[] = [];
-    if (lufs < NORMALIZE_BELOW_LUFS) {
-      const gainDb = Math.round((TARGET_LUFS - lufs) * 10) / 10;
-      filters.push(`volume=${gainDb}dB`);
-    }
-
-    // 3. Trim aufs Fish-Limit
-    const trimArgs: string[] =
-      durationSec > MAX_SAMPLE_SECONDS ? ["-t", String(TRIM_TO_SECONDS)] : [];
-
-    if (filters.length > 0 || trimArgs.length > 0) {
-      const processedPath = join(tmpDir, "sample-train.wav");
-      const args = ["-y", "-i", wavPath, ...trimArgs];
-      if (filters.length > 0) args.push("-af", filters.join(","));
-      args.push(processedPath);
-      await runFfmpeg(args);
-      trainPath = processedPath;
-    }
-
-    // 4. Fish-Model erstellen. Altes Model (Re-Training) best-effort löschen.
-    if (profile.fishModelId) {
-      await deleteVoiceModel(profile.fishModelId).catch((err) => {
-        console.warn(
-          `[voice-training] old model delete failed (continuing): ${(err as Error).message}`,
-        );
-      });
-    }
-    const model = await createVoiceModel({
+    // 2.-4. Quality-Gate + Normalisierung + Fish-Training (voice-clone.ts)
+    const trained = await trainVoiceFromWav({
+      wavPath,
+      tmpDir,
       title: `videocomet-${profile.userId}`,
-      audioFilePaths: [trainPath],
-      totalDurationSec: Math.min(durationSec, TRIM_TO_SECONDS),
+      previousModelId: profile.fishModelId,
     });
 
     await db
       .update(voiceProfiles)
       .set({
         status: "ready",
-        fishModelId: model._id,
-        sampleDurationSec: Math.round(durationSec),
+        fishModelId: trained.modelId,
+        sampleDurationSec: Math.round(trained.durationSec),
         error: null,
         updatedAt: new Date(),
       })
@@ -135,7 +83,10 @@ export async function processVoiceTrainingJob(job: {
 
     return { status: "ready" };
   } catch (err) {
-    const message = (err as Error).message?.slice(0, 500) ?? "unknown";
+    const message =
+      err instanceof VoiceTrainError
+        ? err.code
+        : ((err as Error).message?.slice(0, 500) ?? "unknown");
     await setFailed(voiceProfileId, message);
     return { status: "failed", error: message };
   } finally {

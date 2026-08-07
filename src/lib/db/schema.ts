@@ -1777,6 +1777,8 @@ export type VoiceProfile = typeof voiceProfiles.$inferSelect;
 
 export type IntroCalibrationStatus = "pending" | "running" | "ready" | "failed";
 
+export type IntroVoiceStatus = "pending" | "ready" | "failed";
+
 /**
  * Kalibrierung eines Webcam-Videos für das Intro-Feature (eine Row pro
  * Media-Item). Der Worker (`processors/intro-calibration.ts`) analysiert
@@ -1806,6 +1808,13 @@ export const introCalibrations = pgTable("intro_calibrations", {
   lufsRef: real("lufs_ref"),
   spectralRef: jsonb("spectral_ref").$type<Record<string, number> | null>(),
   roomtoneUrl: text("roomtone_url"),
+  // Migration 0046 — Voice-Clone PRO VIDEO: gleiche Tonquelle wie das
+  // Video, an das die TTS nahtlos anschließen muss (andere Sprecher/Mikros
+  // je Kampagne). Trainiert der Kalibrierungs-Processor mit; Account-
+  // Profil (voice_profiles) bleibt Consent-Anker und Fallback.
+  voiceStatus: text("voice_status").notNull().default("pending").$type<IntroVoiceStatus>(),
+  voiceFishModelId: text("voice_fish_model_id"),
+  voiceError: text("voice_error"),
   error: text("error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
