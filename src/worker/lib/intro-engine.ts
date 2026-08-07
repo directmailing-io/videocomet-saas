@@ -130,6 +130,12 @@ export interface GeneratePersonalizedWebcamOpts {
   roomtoneLocalPath?: string;
   /** Preview-Modus: Endergebnis nach der Assembly auf N Sekunden kürzen. */
   trimToSec?: number;
+  /**
+   * TTS-Provider-Override (A/B-Test-Scripts): ersetzt die Fish-TTS durch
+   * eine eigene Synthese (z.B. ElevenLabs). Muss dekodierbares Audio
+   * (WAV/MP3) liefern; EQ/Loudness-Matching läuft danach identisch.
+   */
+  ttsOverride?: (text: string) => Promise<Buffer>;
 }
 
 export type GeneratePersonalizedWebcamResult =
@@ -301,11 +307,13 @@ export async function generatePersonalizedWebcam(
       const carrierText = `${text.trim()} ${formal ? "Schön, dass Sie reinschauen." : "Schön, dass du reinschaust."}`;
       const settled = await Promise.allSettled(
         Array.from({ length: TTS_CANDIDATES }, () =>
-          tts({
-            text: carrierText,
-            referenceId: opts.fishModelId,
-            temperature: TTS_TEMPERATURE,
-          }),
+          opts.ttsOverride
+            ? opts.ttsOverride(carrierText)
+            : tts({
+                text: carrierText,
+                referenceId: opts.fishModelId,
+                temperature: TTS_TEMPERATURE,
+              }),
         ),
       );
       const candidates: Array<{ path: string; cutMs: number }> = [];
@@ -365,18 +373,22 @@ export async function generatePersonalizedWebcam(
         ttsDurMs = cutMsChosen;
       } else {
         // Alle Carrier-Kandidaten unbrauchbar → plain-TTS der puren Anrede.
-        const buf = await tts({
-          text,
-          referenceId: opts.fishModelId,
-          temperature: TTS_TEMPERATURE,
-        });
+        const buf = opts.ttsOverride
+          ? await opts.ttsOverride(text)
+          : await tts({
+              text,
+              referenceId: opts.fishModelId,
+              temperature: TTS_TEMPERATURE,
+            });
         await writeFile(ttsRawPath, buf);
         const durSec = await probeVideoDuration(ttsRawPath);
         if (!durSec || durSec <= 0.2) return fail(tag, "tts_unmeasurable");
         ttsDurMs = durSec * 1000;
       }
     } else {
-      const ttsBuffer = await tts({ text, referenceId: opts.fishModelId });
+      const ttsBuffer = opts.ttsOverride
+        ? await opts.ttsOverride(text)
+        : await tts({ text, referenceId: opts.fishModelId });
       await writeFile(ttsRawPath, ttsBuffer);
       const durSec = await probeVideoDuration(ttsRawPath);
       if (!durSec || durSec <= 0.2) return fail(tag, "tts_unmeasurable");
