@@ -15,7 +15,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowRight, CheckCircle2, ListChecks, Rocket } from "lucide-react";
+import { ArrowRight, CheckCircle2, ListChecks } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -117,8 +117,7 @@ export function OnboardingChecklist() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="xl" className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Rocket className="size-5 text-brand" />
+            <DialogTitle>
               {status.allDone ? "Alles startklar!" : "Schnell startklar werden"}
             </DialogTitle>
             <DialogDescription>
