@@ -29,13 +29,14 @@ import { Queue, type ConnectionOptions } from "bullmq";
 import IORedis from "ioredis";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { leads, runs } from "@/lib/db/schema";
+import { campaigns, leads, runs } from "@/lib/db/schema";
 import {
   findDuplicates,
   validateLeadInline,
   type DuplicateInput,
 } from "./inline-validate";
 import { firstNameCoveredWhenEmpty } from "@/lib/placeholders/substitute";
+import { leadJobPriority } from "@/lib/queue-priority";
 import {
   bulkSetPreflightStatus,
   getLeadsForPreflightStart,
@@ -44,6 +45,10 @@ import {
 
 export const PREFLIGHT_QUEUE_NAME = "lead-preflight";
 export const PIPELINE_QUEUE_NAME = "lead-pipeline";
+// Muss mit `INTRO_GENERATION_QUEUE_NAME` in `src/worker/intro-queue.ts`
+// übereinstimmen — lokal dupliziert aus demselben Grund wie
+// PIPELINE_QUEUE_NAME (kein Import aus dem worker-tree).
+export const INTRO_GENERATION_QUEUE_NAME = "intro-generation";
 
 /**
  * Wire-Format für einen Preflight-Job. Agent 2's Worker liest diese Felder
@@ -67,6 +72,15 @@ interface PipelineJobData {
   runId: string;
   userId: string;
   campaignId: string;
+}
+
+/**
+ * Wire-Format für einen Intro-Staging-Job. Spiegelt `IntroGenerationJobData`
+ * aus `src/worker/intro-queue.ts` — lokal dupliziert (siehe Modul-Header).
+ */
+interface IntroGenerationJobData {
+  leadId: string;
+  runId: string;
 }
 
 // ── Redis-Verbindung (lazy, geteilt zwischen preflight + pipeline) ─────────
@@ -105,6 +119,7 @@ function getConnectionOpts(): ConnectionOptions {
 
 let _preflightQueue: Queue<PreflightJobData> | null = null;
 let _pipelineQueueForApproval: Queue<PipelineJobData> | null = null;
+let _introGenerationQueueLocal: Queue<IntroGenerationJobData> | null = null;
 
 /**
  * Liefert die `lead-preflight`-Queue. Lazy-instanziiert; einmal pro Prozess.
@@ -146,6 +161,71 @@ function pipelineQueueLocal(): Queue<PipelineJobData> {
     },
   });
   return _pipelineQueueForApproval;
+}
+
+/**
+ * Lokale Instanz der `intro-generation`-Queue (Intro-Staging). Job-Options
+ * spiegeln `introGenerationQueue()` in `src/worker/intro-queue.ts` —
+ * 4 Attempts mit 30s-Backoff, weil sync.so-Concurrency-Limits sich in
+ * Minuten lösen.
+ */
+function introGenerationQueueLocal(): Queue<IntroGenerationJobData> {
+  if (_introGenerationQueueLocal) return _introGenerationQueueLocal;
+  _introGenerationQueueLocal = new Queue<IntroGenerationJobData>(
+    INTRO_GENERATION_QUEUE_NAME,
+    {
+      connection: getConnectionOpts(),
+      defaultJobOptions: {
+        attempts: 4,
+        backoff: { type: "exponential", delay: 30_000 },
+        removeOnComplete: 200,
+        removeOnFail: 500,
+      },
+    },
+  );
+  return _introGenerationQueueLocal;
+}
+
+/**
+ * Markiert Leads als `introStatus='queued'` und enqueued ihre Intro-
+ * Staging-Jobs (jobId `intro-gen-${leadId}`, Purge-before-Add). Wird von
+ * `enqueueApprovedLeadsForPhase2` und dem Resume-Endpoint benutzt.
+ *
+ * `startedAt` wird als Zeitanker für den Intro-Watchdog gesetzt (queued
+ * älter als 5 min ohne Fortschritt → Re-Enqueue im Worker).
+ */
+export async function enqueueLeadsForIntroStaging(
+  leadIds: string[],
+  runId: string,
+): Promise<void> {
+  if (leadIds.length === 0) return;
+  await db
+    .update(leads)
+    .set({ introStatus: "queued", startedAt: new Date() })
+    .where(inArray(leads.id, leadIds));
+
+  // Fairness (W3): Priorität = Zeilen-Reihenfolge, damit kleine Runs anderer
+  // Kunden nicht hinter einem 500er-Batch verhungern.
+  const rowIndexRows = await db
+    .select({ id: leads.id, rowIndex: leads.rowIndex })
+    .from(leads)
+    .where(inArray(leads.id, leadIds));
+  const rowIndexById = new Map(rowIndexRows.map((r) => [r.id, r.rowIndex]));
+
+  const queue = introGenerationQueueLocal();
+  await Promise.all(
+    leadIds.map((id) => queue.remove(`intro-gen-${id}`).catch(() => undefined)),
+  );
+  await queue.addBulk(
+    leadIds.map((leadId) => ({
+      name: "intro-generation",
+      data: { leadId, runId },
+      opts: {
+        jobId: `intro-gen-${leadId}`,
+        priority: leadJobPriority(rowIndexById.get(leadId)),
+      },
+    })),
+  );
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -312,11 +392,15 @@ export async function enqueueApprovedLeadsForPhase2(
   runId: string,
   userId: string,
 ): Promise<EnqueueApprovedResult> {
-  // 1) Lade alle approved + nicht-removed Leads des Runs, plus campaignId.
+  // 1) Lade alle approved + nicht-removed Leads des Runs, plus campaignId
+  //    und introStatus (für den Intro-Staging-Branch unten).
   const rows = await db
     .select({
       leadId: leads.id,
       campaignId: runs.campaignId,
+      introStatus: leads.introStatus,
+      introResult: leads.introResult,
+      rowIndex: leads.rowIndex,
     })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
@@ -358,24 +442,57 @@ export async function enqueueApprovedLeadsForPhase2(
     return { queued: 0, transitioned: false, campaignId };
   }
 
-  // 3) Stale-Job-Purge + bulk-add in pipeline-queue. Ein Retry nach kurzem
-  //    Delay: mit `enableOfflineQueue: false` schlägt der allererste Redis-
-  //    Befehl nach einem frischen Prozess-Boot fehl, solange die Verbindung
-  //    noch im Aufbau ist — der zweite Versuch sitzt dann. Wirft erst nach
-  //    dem zweiten Fehlschlag; der Run bleibt in `generating` und wird vom
-  //    Orphaned-Pending-Recovery im Worker aufgesammelt.
+  // 3) Intro-Staging-Branch: bei aktivem Intro-Feature laufen Leads OHNE
+  //    terminales Intro-Ergebnis zuerst durch die `intro-generation`-Queue
+  //    (Staging), die nach Abschluss selbst den Render-Job enqueued. Nur
+  //    Leads mit terminalem introStatus (bzw. bei deaktiviertem Feature
+  //    alle) gehen direkt in die `lead-pipeline`.
+  const [campaignRow] = await db
+    .select({ introEnabled: campaigns.introEnabled })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId))
+    .limit(1);
+  const introEnabled = campaignRow?.introEnabled === true;
+
+  const isTerminalIntro = (r: (typeof rows)[number]): boolean =>
+    r.introStatus === "fallback_name" ||
+    r.introStatus === "fallback_error" ||
+    r.introStatus === "disabled" ||
+    // 'generated' zählt nur mit persistiertem Ergebnis als terminal —
+    // Alt-Leads aus der Inline-Ära (introResult=null) müssen neu stagen.
+    (r.introStatus === "generated" && r.introResult != null);
+
+  const stagingLeadIds = introEnabled
+    ? rows.filter((r) => !isTerminalIntro(r)).map((r) => r.leadId)
+    : [];
+  const stagingSet = new Set(stagingLeadIds);
+  const directLeadIds = leadIds.filter((id) => !stagingSet.has(id));
+
+  // 4) Stale-Job-Purge + bulk-add. Ein Retry nach kurzem Delay: mit
+  //    `enableOfflineQueue: false` schlägt der allererste Redis-Befehl nach
+  //    einem frischen Prozess-Boot fehl, solange die Verbindung noch im
+  //    Aufbau ist — der zweite Versuch sitzt dann. Wirft erst nach dem
+  //    zweiten Fehlschlag; der Run bleibt in `generating` und wird vom
+  //    Orphaned-Pending-Recovery bzw. Intro-Watchdog im Worker aufgesammelt.
+  const rowIndexById = new Map(rows.map((r) => [r.leadId, r.rowIndex]));
   const queue = pipelineQueueLocal();
   const purgeAndAdd = async (): Promise<void> => {
-    await Promise.all(
-      leadIds.map((id) => queue.remove(id).catch(() => undefined)),
-    );
-    await queue.addBulk(
-      leadIds.map((leadId) => ({
-        name: "lead-pipeline",
-        data: { leadId, runId, userId, campaignId },
-        opts: { jobId: leadId },
-      })),
-    );
+    if (directLeadIds.length > 0) {
+      await Promise.all(
+        directLeadIds.map((id) => queue.remove(id).catch(() => undefined)),
+      );
+      await queue.addBulk(
+        directLeadIds.map((leadId) => ({
+          name: "lead-pipeline",
+          data: { leadId, runId, userId, campaignId },
+          opts: {
+            jobId: leadId,
+            priority: leadJobPriority(rowIndexById.get(leadId)),
+          },
+        })),
+      );
+    }
+    await enqueueLeadsForIntroStaging(stagingLeadIds, runId);
   };
   try {
     await purgeAndAdd();
@@ -434,11 +551,17 @@ export async function closePreflightEnqueueModule(): Promise<void> {
     /* ignore */
   }
   try {
+    if (_introGenerationQueueLocal) await _introGenerationQueueLocal.close();
+  } catch {
+    /* ignore */
+  }
+  try {
     if (_redisConnection) await _redisConnection.quit();
   } catch {
     /* ignore */
   }
   _preflightQueue = null;
   _pipelineQueueForApproval = null;
+  _introGenerationQueueLocal = null;
   _redisConnection = null;
 }

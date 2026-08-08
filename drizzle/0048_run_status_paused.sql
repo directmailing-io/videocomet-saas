@@ -1,0 +1,11 @@
+-- 0048: Neuer Run-Status 'paused' (Intro-Notbremse).
+--
+-- Wird gesetzt, wenn während der Generierung zu viele personalisierte
+-- Begrüßungen fehlschlagen (fallback_error-Quote über Schwellwert) — der
+-- Run hält an, statt still dutzende Leads ohne Intro auszuspielen.
+-- Fortsetzen via POST /api/runs/[id]/resume (paused → generating).
+--
+-- WICHTIG: ALTER TYPE ... ADD VALUE darf in Postgres NICHT innerhalb einer
+-- Transaktion laufen, in der der neue Wert bereits verwendet wird — deshalb
+-- eigene Migration ohne BEGIN/COMMIT (gleiches Muster wie 0006).
+ALTER TYPE "run_status" ADD VALUE IF NOT EXISTS 'paused';--> statement-breakpoint

@@ -14,6 +14,7 @@ import {
   type RunAbConfig,
 } from "@/lib/db/schema";
 import { getRun, updateRun } from "@/lib/db/queries/runs";
+import { sendRunFailureNotification } from "@/lib/run-notifications";
 import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
 import {
   bulkInsertLeads,
@@ -603,6 +604,7 @@ export async function POST(
         stage: "start",
         message: `Runde gestoppt: ${buildAllRemovedError(inserted)}`,
       });
+      void sendRunFailureNotification(params.id, buildAllRemovedError(inserted));
       return NextResponse.json(
         {
           ok: false,
@@ -709,6 +711,9 @@ export async function POST(
       approvedLeadCount: inserted - incompleteCount - dedupeRemovedCount,
       customLpVersionId,
       abConfig,
+      // Retry-Pfad (failed → Neustart): Abschluss-Mail-Claim re-armen,
+      // damit der neue Durchlauf wieder genau eine Mail bekommt.
+      completionEmailSentAt: null,
     });
 
     await db
@@ -772,6 +777,10 @@ export async function POST(
       stage: "start",
       message: `Runde gestoppt: Alle ${inserted} Leads wurden beim Import aussortiert (${dedupeRemovedCount} Duplikate aus früheren Runden, ${incompleteCount} mit unvollständigen Pflichtfeldern).`,
     });
+    void sendRunFailureNotification(
+      params.id,
+      `Alle ${inserted} Leads wurden beim Import aussortiert (${dedupeRemovedCount} Duplikate aus früheren Runden, ${incompleteCount} mit unvollständigen Pflichtfeldern). Es gibt nichts zu produzieren. Bitte prüfe deine Liste und starte eine neue Runde.`,
+    );
     return NextResponse.json(
       {
         ok: false,
@@ -790,6 +799,8 @@ export async function POST(
     totalLeads: inserted,
     customLpVersionId,
     abConfig,
+    // Retry-Pfad (failed → preflighting): Abschluss-Mail-Claim re-armen.
+    completionEmailSentAt: null,
   });
 
   await db

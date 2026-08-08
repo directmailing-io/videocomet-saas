@@ -14,6 +14,7 @@ import {
   type PipelineEvent,
 } from "@/lib/db/queries/pipeline-events";
 import { createSSEResponse } from "@/lib/sse";
+import { getRunEta } from "@/lib/run-eta-read";
 
 const POLL_INTERVAL_MS = 1500;
 const CHANGED_LEAD_LIMIT = 200;
@@ -87,6 +88,8 @@ export async function GET(
       counts: initialCounts,
       leads: initialLeads,
       pipelineEvents: initialEvents.map(projectPipelineEvent),
+      eta:
+        initialRun.status === "generating" ? await getRunEta(runId) : null,
     });
 
     if (isTerminal(initialRun.status)) {
@@ -131,11 +134,17 @@ export async function GET(
           eventCursor = newPipelineEvents[newPipelineEvents.length - 1]!.ts;
         }
 
+        // ETA (W3): vom Worker berechneter Redis-Cache — reiner Read, darf
+        // nie den Tick blockieren oder brechen.
+        const eta =
+          runRow.status === "generating" ? await getRunEta(runId) : null;
+
         send("tick", {
           runStatus: runRow.status,
           counts,
           recentEvents,
           pipelineEvents: newPipelineEvents.map(projectPipelineEvent),
+          eta,
         });
 
         if (isTerminal(runRow.status)) {

@@ -140,28 +140,57 @@ export interface TtsInput {
 const TTS_RETRY_ATTEMPTS = 5;
 const TTS_RETRY_BASE_MS = 3_000;
 
+/**
+ * TTS-Drossel (W2, Skalierungs-Paket): Best-of-3-Kandidaten × parallele
+ * Leads feuern sonst 9+ TTS-Requests gleichzeitig gegen das Fish-
+ * Concurrency-Limit — die 429-Backoffs kosten mehr Zeit als das Warten
+ * auf einen freien Slot. Prozessweite FIFO-Semaphore; der Slot wird nur
+ * für den Request selbst gehalten, nicht während des Retry-Backoffs.
+ */
+function ttsMaxConcurrent(): number {
+  const parsed = Number(process.env.FISH_TTS_MAX_CONCURRENT);
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : 4;
+}
+let activeTts = 0;
+const ttsWaiters: Array<() => void> = [];
+async function withTtsSlot<T>(fn: () => Promise<T>): Promise<T> {
+  while (activeTts >= ttsMaxConcurrent()) {
+    await new Promise<void>((resolve) => ttsWaiters.push(resolve));
+  }
+  activeTts += 1;
+  try {
+    return await fn();
+  } finally {
+    activeTts -= 1;
+    const next = ttsWaiters.shift();
+    if (next) next();
+  }
+}
+
 /** Synthetisiert `text` mit dem Voice-Clone; liefert WAV-Bytes. */
 export async function tts(input: TtsInput): Promise<Buffer> {
   for (let attempt = 1; ; attempt++) {
     try {
-      const res = await fetch(`${FISH_API_BASE}/v1/tts`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey()}`,
-          "Content-Type": "application/json",
-          model: FISH_TTS_MODEL,
-        },
-        body: JSON.stringify({
-          text: input.text,
-          reference_id: input.referenceId,
-          format: "wav",
-          ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
-          ...(input.topP !== undefined ? { top_p: input.topP } : {}),
-          ...(input.speed !== undefined ? { prosody: { speed: input.speed } } : {}),
-        }),
+      return await withTtsSlot(async () => {
+        const res = await fetch(`${FISH_API_BASE}/v1/tts`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey()}`,
+            "Content-Type": "application/json",
+            model: FISH_TTS_MODEL,
+          },
+          body: JSON.stringify({
+            text: input.text,
+            reference_id: input.referenceId,
+            format: "wav",
+            ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
+            ...(input.topP !== undefined ? { top_p: input.topP } : {}),
+            ...(input.speed !== undefined ? { prosody: { speed: input.speed } } : {}),
+          }),
+        });
+        await assertOk(res, "tts");
+        return Buffer.from(await res.arrayBuffer());
       });
-      await assertOk(res, "tts");
-      return Buffer.from(await res.arrayBuffer());
     } catch (err) {
       const retryable =
         err instanceof FishAudioError && err.retryable && attempt < TTS_RETRY_ATTEMPTS;

@@ -8,6 +8,7 @@ import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
 import { pipelineQueue } from "@/worker/queue";
+import { leadJobPriority } from "@/lib/queue-priority";
 
 /**
  * POST /api/leads/[id]/regenerate
@@ -63,6 +64,7 @@ export async function POST(
       campaignId: runs.campaignId,
       userId: runs.userId,
       runStatus: runs.status,
+      rowIndex: leads.rowIndex,
     })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
@@ -130,7 +132,7 @@ export async function POST(
         ...(skipVideo ? { skipVideo: true } : {}),
         ...(skipPdf ? { skipPdf: true } : {}),
       },
-      { jobId },
+      { jobId, priority: leadJobPriority(row.rowIndex) },
     );
   } catch (err) {
     return NextResponse.json(

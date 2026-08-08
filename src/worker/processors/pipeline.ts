@@ -42,12 +42,10 @@ import type { Job } from "bullmq";
 import { db } from "@/lib/db";
 import {
   campaigns,
-  introCalibrations,
   leads,
   mediaItems,
   runs,
   userDomains,
-  voiceProfiles,
 } from "@/lib/db/schema";
 import type { RunAbConfig } from "@/lib/db/schema";
 import { updateLeadStatus } from "@/lib/db/queries/leads";
@@ -83,9 +81,7 @@ import { trackAndRefAsset } from "../lib/bunny-asset-tracking";
 import { runThumbnailGenerate } from "./thumbnail-generate";
 import { runLandingpageScreenshot } from "./landingpage-screenshot";
 import { hasPersonalization } from "../lib/has-personalization";
-import { checkFirstName, resolveIntroSubstitutions } from "@/lib/intro-name-check";
-import { DEFAULT_TTS_TEMPLATE } from "@/lib/intro";
-import { generatePersonalizedWebcam } from "../lib/intro-engine";
+import { enqueueIntroGenerationJobs } from "../intro-queue";
 import {
   getSharedThumbnailUrl,
   setSharedThumbnailUrl,
@@ -102,10 +98,11 @@ import { parseStorageUrl } from "@/lib/bunny/storage";
  * pipeline timeout in `src/worker/index.ts`.
  */
 const STAGE_TIMEOUTS_MS = {
-  // Personalisierte Video-Begrüßung: TTS + EQ + Segment-Encode + sync.so-
-  // Lip-Sync (Poll bis 6 min) + finale Assembly. Timeout ⇒ FALLBACK aufs
-  // Original-Video, NIE ein Lead-Fail (siehe Stage-Code).
-  personalizeIntro: 480_000,
+  // Personalisierte Video-Begrüßung: das fertige Video liegt seit dem
+  // Intro-Staging (intro-generation-Queue) bereits in Bunny — hier wird es
+  // nur noch heruntergeladen. Timeout/Fehler ⇒ RETRYABLE throw, KEIN
+  // stiller Fallback (das Ergebnis existiert ja).
+  fetchIntroSegment: 60_000,
   // PPTX-basierte Segmente (gslide/canva) sind teuer: LibreOffice (5-15s)
   // + pdftoppm + ffmpeg-Loop, multiplied with parallel leads under
   // BullMQ concurrency=16. 300s gibt realistischen Puffer auch fuer
@@ -506,11 +503,12 @@ export async function pipelineProcessor(
       lead.customThumbnailUrl ?? null;
     let runSharedThumbnailUrlForCustom: string | null = null;
     // Personalisierte Video-Begrüßung (Intro-Feature): lokaler Pfad des
-    // personalisierten Webcam-Videos + validierter Vorname. null = Feature
+    // in der Staging-Queue vor-generierten Webcam-Videos. null = Feature
     // aus ODER Fallback aufs Original — in dem Fall bleiben die Video-
     // Stages exakt wie bisher.
     let personalizedWebcamPath: string | null = null;
-    let introFirstName: string | null = null;
+    // Bunny-URL des gestagten Intro-Videos (Content-Hash-Bestandteil).
+    let introSourceUrl: string | null = null;
     // Start-Trim der Intro-Engine in ms: das personalisierte Video ist um
     // diesen Betrag kürzer als das Original. Der Presentation-Renderer
     // kürzt die vorderen Segmente um exakt denselben Betrag, damit die
@@ -533,182 +531,97 @@ export async function pipelineProcessor(
         );
       }
 
-      // ── Stage 0: Personalisierte Video-Begrüßung (Intro-Feature) ──
-      // Ersetzt den ersten Satz der Webcam durch eine KI-Begrüßung mit dem
-      // Vornamen des Leads (Fish-TTS + sync.so-Lip-Sync). Läuft VOR beiden
-      // Video-Pfaden und tauscht bei Erfolg die Webcam-Quelle gegen das
-      // personalisierte lokale File. JEDER Fehlschlag (fehlende Voice/
-      // Kalibrierung, unbrauchbarer Vorname, Engine-Fehler, Timeout) ist
-      // ein Fallback aufs Original-Video — niemals ein Lead-Fail.
+      // ── Stage 0: Personalisierte Video-Begrüßung (Intro-Staging) ──
+      // Die eigentliche Generierung (Fish-TTS + sync.so-Lip-Sync) läuft
+      // seit dem Intro-Staging NICHT mehr hier, sondern vorgelagert in der
+      // `intro-generation`-Queue (processors/intro-generation.ts). Diese
+      // Stage lädt nur noch das persistierte Ergebnis (`leads.intro_
+      // result`) herunter. Terminale Fallback-Stati (fallback_name /
+      // fallback_error / disabled) laufen unverändert mit dem Original.
       if (campaign.introEnabled) {
-        await setCurrentStage(data.leadId, "personalizeIntro");
-        const introStart = Date.now();
-        try {
-          const [voiceProfile] = await db
-            .select()
-            .from(voiceProfiles)
-            .where(eq(voiceProfiles.userId, run.userId))
-            .limit(1);
-          const [calibration] = campaign.webcamMediaId
-            ? await db
-                .select()
-                .from(introCalibrations)
-                .where(
-                  eq(introCalibrations.mediaItemId, campaign.webcamMediaId),
-                )
-                .limit(1)
-            : [];
-
-          // Kampagnen-Stimme (aus dem Webcam-Video trainiert) bevorzugen;
-          // Account-Profil nur als Fallback (z.B. Video-Ton < 30s).
-          const introFishModelId =
-            calibration?.voiceStatus === "ready" && calibration.voiceFishModelId
-              ? calibration.voiceFishModelId
-              : voiceProfile?.status === "ready"
-                ? voiceProfile.fishModelId
-                : null;
-
-          if (!introFishModelId || calibration?.status !== "ready") {
-            await updateLeadStatus(data.leadId, { introStatus: "disabled" });
-            await insertPipelineEvent({
-              runId: data.runId,
-              leadId: data.leadId,
-              level: "warn",
-              stage: "render",
-              message: `${leadLabel}: Intro übersprungen — Voice-Profil oder Webcam-Kalibrierung nicht bereit; Original-Video wird verwendet`,
-            });
-          } else {
-            const template = calibration.ttsTemplate?.trim() || DEFAULT_TTS_TEMPLATE;
-            const substResult = resolveIntroSubstitutions(
-              template,
-              (lead.data ?? {}) as Record<string, string>,
-            );
-            if (!substResult.ok) {
-              await updateLeadStatus(data.leadId, {
-                introStatus: "fallback_name",
-              });
-              await insertPipelineEvent({
-                runId: data.runId,
-                leadId: data.leadId,
-                level: "info",
-                stage: "render",
-                message: `${leadLabel}: Intro-Fallback — Namensdaten nicht brauchbar (${substResult.reason}); Original-Video wird verwendet`,
-              });
-            } else {
-              // Webcam lokal materialisieren (eigener Unterordner, damit
-              // die Engine-Artefakte den Lead-workDir nicht zumüllen).
+        const introResult = lead.introResult;
+        const isTerminalFallback =
+          lead.introStatus === "fallback_name" ||
+          lead.introStatus === "fallback_error" ||
+          lead.introStatus === "disabled";
+        if (lead.introStatus === "generated" && introResult) {
+          await setCurrentStage(data.leadId, "fetchIntroSegment");
+          const fetchStart = Date.now();
+          // Download-Fehler sind RETRYABLE (throw) — NIEMALS ein stiller
+          // Fallback aufs Original: das personalisierte Video existiert
+          // bereits, der User hat dafür 2 Credits verdient bezahlt.
+          await withStageTimeout(
+            async () => {
               const introDir = join(workDir, "intro");
               await mkdir(introDir, { recursive: true });
-              const introWebcamPath = join(introDir, "webcam-src.mp4");
+              const stagedPath = join(introDir, "webcam-personalized.mp4");
               // Referer mitschicken — Bunny-CDN-Hotlink-Protection blockt
               // sonst (gleiche Header wie fetchToFile in video-render.ts).
               const introReferer =
                 process.env.APP_URL ?? "https://app.videocomet.de";
-              const webcamRes = await fetch(webcam.publicUrl, {
+              const res = await fetch(introResult.url, {
                 headers: {
                   Referer: introReferer,
                   Origin: introReferer,
                   "User-Agent": "videocomet-worker/1.0",
                 },
               });
-              if (!webcamRes.ok) {
+              if (!res.ok) {
                 throw new Error(
-                  `webcam download HTTP ${webcamRes.status} for intro stage`,
+                  `[pipeline:fetchIntroSegment] HTTP ${res.status} for staged intro of lead=${data.leadId}`,
                 );
               }
               await writeFile(
-                introWebcamPath,
-                Buffer.from(await webcamRes.arrayBuffer()),
+                stagedPath,
+                Buffer.from(await res.arrayBuffer()),
               );
-
-              const result = await withStageTimeout(
-                () =>
-                  generatePersonalizedWebcam({
-                    userId: data.userId,
-                    tag: data.leadId.slice(0, 8),
-                    substitutions: substResult.substitutions,
-                    calibration,
-                    fishModelId: introFishModelId,
-                    webcamLocalPath: introWebcamPath,
-                    workDir: introDir,
-                  }),
-                STAGE_TIMEOUTS_MS.personalizeIntro,
-                "personalizeIntro",
-              );
-              const introMs = Date.now() - introStart;
-              // Log-Label bevorzugt Vorname, fällt auf die formale Variante
-              // zurück, damit content_hash + Log-Zeilen sprechend bleiben.
-              const introDisplayName =
-                substResult.substitutions.vorname ??
-                [
-                  substResult.substitutions.anrede,
-                  substResult.substitutions.nachname,
-                ]
-                  .filter(Boolean)
-                  .join(" ");
-              if (result.ok) {
-                personalizedWebcamPath = result.outputPath;
-                introFirstName = introDisplayName;
-                introStartTrimMs = result.startTrimMs;
-                await updateLeadStatus(data.leadId, {
-                  introStatus: "generated",
-                });
-                await insertPipelineEvent({
-                  runId: data.runId,
-                  leadId: data.leadId,
-                  level: "info",
-                  stage: "render",
-                  message: `${leadLabel}: personalisierte Begrüßung ("${introDisplayName}") in ${(introMs / 1000).toFixed(1)}s erzeugt`,
-                  durationMs: introMs,
-                });
-              } else {
-                await updateLeadStatus(data.leadId, {
-                  introStatus: "fallback_error",
-                });
-                await insertPipelineEvent({
-                  runId: data.runId,
-                  leadId: data.leadId,
-                  level: "warn",
-                  stage: "render",
-                  message: `${leadLabel}: Intro-Fallback — ${result.reason.slice(0, 300)}; Original-Video wird verwendet`,
-                  durationMs: introMs,
-                });
-              }
-            }
-          }
-        } catch (err) {
-          // Retryable Provider-Fehler (Fish 429/5xx) explizit durchleiten,
-          // damit BullMQ retried statt SILENT auf Fallback zu gehen —
-          // sonst zahlt der User 1 Credit obwohl das Feature nur transient
-          // nicht verfügbar war.
-          if (
-            err instanceof Error &&
-            (err as { retryable?: boolean }).retryable === true
-          ) {
-            await insertPipelineEvent({
-              runId: data.runId,
-              leadId: data.leadId,
-              level: "warn",
-              stage: "render",
-              message: `${leadLabel}: Intro-Provider-Fehler — wird automatisch wiederholt: ${err.message.slice(0, 200)}`,
-              durationMs: Date.now() - introStart,
-            }).catch(() => undefined);
-            throw err;
-          }
-          // Nicht-retryable (Timeout, Logic-Fehler) → Fallback auf
-          // Original-Video, kein Lead-Fail.
-          const message = err instanceof Error ? err.message : String(err);
-          await updateLeadStatus(data.leadId, {
-            introStatus: "fallback_error",
-          }).catch(() => undefined);
+              personalizedWebcamPath = stagedPath;
+            },
+            STAGE_TIMEOUTS_MS.fetchIntroSegment,
+            "fetchIntroSegment",
+          );
+          introSourceUrl = introResult.url;
+          introStartTrimMs = introResult.startTrimMs;
           await insertPipelineEvent({
             runId: data.runId,
             leadId: data.leadId,
-            level: "warn",
+            level: "info",
             stage: "render",
-            message: `${leadLabel}: Intro-Fallback — ${message.slice(0, 300)}; Original-Video wird verwendet`,
-            durationMs: Date.now() - introStart,
+            message: `${leadLabel}: personalisierte Begrüßung ("${introResult.firstName}") aus Staging geladen`,
+            durationMs: Date.now() - fetchStart,
+          });
+        } else if (!isTerminalFallback) {
+          // Intro gewollt, aber (noch) nicht gestaged — Alt-Job aus der
+          // Inline-Ära, Regenerate-Pfad oder Race mit der Staging-Queue.
+          // KEIN throw: die Render-Queue hat nur attempts=3 mit 5s-Backoff,
+          // drei schnelle Fails würden den Lead endgültig auf failed setzen.
+          // Stattdessen Lead sauber auf pending zurücksetzen (inkl. Attempt-
+          // Rollback) und den Staging-Job nachschieben — der enqueued den
+          // Render nach Abschluss selbst (Purge-before-Add auf jobId=leadId).
+          await updateLeadStatus(data.leadId, {
+            status: "pending",
+            startedAt: null,
+            attempts: lead.attempts ?? 0,
+          });
+          // introStatus nur zurück auf 'queued', wenn nicht parallel gerade
+          // die Staging-Queue ein Ergebnis geschrieben hat (Race-Schutz).
+          await db
+            .update(leads)
+            .set({ introStatus: "queued" })
+            .where(
+              sql`${leads.id} = ${data.leadId} AND ${leads.introResult} IS NULL AND ${leads.introStatus} IS DISTINCT FROM 'generated'`,
+            );
+          await enqueueIntroGenerationJobs([
+            { leadId: data.leadId, runId: data.runId },
+          ]);
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "info",
+            stage: "render",
+            message: `${leadLabel}: Begrüßung noch nicht fertig — Render zurückgestellt, Staging neu eingereiht`,
           }).catch(() => undefined);
+          return { ok: false, skipped: "intro_not_staged" };
         }
       }
 
@@ -804,9 +717,11 @@ export async function pipelineProcessor(
             pipShape: campaign.pipShape ?? null,
             // Intro-Feature: personalisierte Begrüßung macht das Video pro
             // Lead unique — Resume darf ein altes Video ohne (oder mit
-            // anderem) Intro nicht weiterverwenden.
+            // anderem) Intro nicht weiterverwenden. Die Staging-URL ist
+            // pro Generierung eindeutig und ersetzt den früheren
+            // firstName-Anker.
             intro: personalizedWebcamPath
-              ? { firstName: introFirstName, startTrimMs: introStartTrimMs }
+              ? { introUrl: introSourceUrl, startTrimMs: introStartTrimMs }
               : null,
           }),
         )

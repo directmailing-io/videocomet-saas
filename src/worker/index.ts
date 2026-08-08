@@ -28,25 +28,34 @@ import {
   voiceTrainingWorker,
   introCalibrationWorker,
   introPreviewWorker,
+  introGenerationWorker,
+  introGenerationQueue,
   enqueueIntroPreviewJob,
+  enqueueIntroGenerationJobs,
   type VoiceTrainingJobData,
   type IntroCalibrationJobData,
   type IntroPreviewJobData,
+  type IntroGenerationJobData,
 } from "./intro-queue";
 import { processVoiceTrainingJob } from "./processors/voice-training";
 import { processIntroCalibrationJob } from "./processors/intro-calibration";
 import { processIntroPreviewJob } from "./processors/intro-preview";
+import {
+  introGenerationProcessor,
+  checkEmergencyBrake,
+} from "./processors/intro-generation";
 import { refreshStalePreviews } from "@/lib/media-urls/stale-refresh";
 import {
   WEBHOOK_DELIVERY_QUEUE,
   type WebhookDeliveryJob,
 } from "./webhook-queue";
-import { Worker, type ConnectionOptions } from "bullmq";
+import { DelayedError, Worker, type ConnectionOptions } from "bullmq";
 import { pipelineProcessor } from "./processors/pipeline";
 import { screenshotProcessor } from "./processors/screenshot";
 import { processCrmSyncJob } from "./processors/crm-sync";
 import { processWebhookDelivery } from "./processors/webhook-delivery";
 import { closeBrowserPool } from "./lib/browser-pool";
+import { computeAndCacheRunEtas } from "./lib/run-eta";
 import { startDomainVerifier } from "./jobs/domain-verifier";
 import { startDomainMonitor } from "./jobs/domain-monitor";
 import { startBunnyPurger } from "./processors/bunny-purge";
@@ -68,6 +77,8 @@ import {
 } from "@/lib/preflight/job-enqueue";
 import { PREFLIGHT_TERMINAL_STATUSES } from "@/lib/preflight/types";
 import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
+import { leadJobPriority } from "@/lib/queue-priority";
+import { sendRunFailureNotification } from "@/lib/run-notifications";
 import type { LeadJobData } from "./types";
 import type { Job } from "bullmq";
 
@@ -97,6 +108,7 @@ async function stuckLeadRecovery(): Promise<void> {
       runId: leads.runId,
       userId: runs.userId,
       campaignId: runs.campaignId,
+      rowIndex: leads.rowIndex,
     })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
@@ -108,6 +120,10 @@ async function stuckLeadRecovery(): Promise<void> {
         // Ohne diesen Filter holt die Recovery alle 2 min auch die im
         // Preflight rejecteten Leads zurück in die Pipeline.
         sql`${leads.removedAt} IS NULL`,
+        // Intro-Staging: Leads die gerade in der intro-generation-Queue
+        // hängen sind NICHT orphaned — sie bekommen ihren Render-Job erst
+        // nach dem Staging. Für diese greift introStagingRecovery().
+        sql`(${leads.introStatus} IS NULL OR ${leads.introStatus} NOT IN ('queued', 'generating'))`,
       ),
     )
     .limit(2000);
@@ -134,7 +150,7 @@ async function stuckLeadRecovery(): Promise<void> {
             userId: s.userId,
             campaignId: s.campaignId,
           },
-          opts: { jobId: s.id },
+          opts: { jobId: s.id, priority: leadJobPriority(s.rowIndex) },
         })),
       );
       // eslint-disable-next-line no-console
@@ -158,6 +174,7 @@ async function stuckLeadRecovery(): Promise<void> {
       userId: runs.userId,
       campaignId: runs.campaignId,
       attempts: leads.attempts,
+      rowIndex: leads.rowIndex,
     })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
@@ -235,12 +252,185 @@ async function stuckLeadRecovery(): Promise<void> {
           userId: s.userId,
           campaignId: s.campaignId,
         },
-        opts: { jobId: s.id },
+        opts: { jobId: s.id, priority: leadJobPriority(s.rowIndex) },
       })),
     );
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(`[worker:${WORKER_ID}] stuck-recovery enqueue failed:`, err);
+  }
+}
+
+/**
+ * Intro-Staging-Recovery (Watchdog für die `intro-generation`-Queue).
+ *
+ *  (A) `introStatus='generating'` älter als 20 min (startedAt-Anker):
+ *      Worker-Crash/verlorener Job mitten im Staging.
+ *        - introAttempts < 3 → Staging-Job re-enqueuen (Purge-before-Add).
+ *        - introAttempts >= 3 → expliziter `fallback_error` + pipeline_event
+ *          + Render-Job direkt enqueuen (Original-Video wird ausgespielt).
+ *  (B) `introStatus='queued'` älter als 5 min: Enqueue ging verloren
+ *      (Redis-Blip beim Approve) → Staging-Job re-enqueuen.
+ *
+ * Nur Leads in Runs mit status='generating' — pausierte Runs werden vom
+ * Resume-Endpoint neu angestoßen.
+ */
+async function introStagingRecovery(): Promise<void> {
+  const generatingThreshold = new Date(Date.now() - 20 * 60 * 1000);
+  const queuedThreshold = new Date(Date.now() - 5 * 60 * 1000);
+
+  // (A) Hängende 'generating'-Leads.
+  const stuckGenerating = await db
+    .select({
+      id: leads.id,
+      runId: leads.runId,
+      userId: runs.userId,
+      campaignId: runs.campaignId,
+      introAttempts: leads.introAttempts,
+      rowIndex: leads.rowIndex,
+    })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        eq(leads.status, "pending"),
+        sql`${leads.introStatus} = 'generating'`,
+        lt(leads.startedAt, generatingThreshold),
+        eq(runs.status, "generating"),
+        sql`${leads.removedAt} IS NULL`,
+      ),
+    )
+    .limit(500);
+
+  const retryable = stuckGenerating.filter((l) => (l.introAttempts ?? 0) < 3);
+  const exhausted = stuckGenerating.filter((l) => (l.introAttempts ?? 0) >= 3);
+
+  if (retryable.length > 0) {
+    try {
+      // startedAt neu ankern, damit der Watchdog nicht alle 2 min erneut
+      // feuert, solange der re-enqueued Job noch in der Queue wartet.
+      await db
+        .update(leads)
+        .set({ startedAt: new Date() })
+        .where(inArray(leads.id, retryable.map((l) => l.id)));
+      await enqueueIntroGenerationJobs(
+        retryable.map((l) => ({ leadId: l.id, runId: l.runId })),
+      );
+      log(
+        "info",
+        `intro-recovery: re-enqueued ${retryable.length} stuck generating intro leads`,
+      );
+    } catch (err) {
+      log("error", "intro-recovery re-enqueue (generating) failed:", err);
+    }
+  }
+
+  if (exhausted.length > 0) {
+    const exIds = exhausted.map((l) => l.id);
+    await db
+      .update(leads)
+      .set({ introStatus: "fallback_error", introResult: null })
+      .where(inArray(leads.id, exIds));
+    for (const l of exhausted) {
+      await insertPipelineEvent({
+        runId: l.runId,
+        leadId: l.id,
+        level: "warn",
+        stage: "render",
+        message:
+          "Intro-Fallback — Staging nach 3 Versuchen aufgegeben (Watchdog); Original-Video wird verwendet",
+      }).catch(() => undefined);
+    }
+    // Notbremse auch hier prüfen — sonst würde der Watchdog-Pfad die
+    // fallback_error-Quote am Brake vorbei hochtreiben und trotzdem
+    // rendern. Pausierte Runs bekommen KEINEN Render-Enqueue mehr; der
+    // Resume-Endpoint reiht die Leads später neu ein.
+    const pausedRuns = new Set<string>();
+    for (const runId of Array.from(new Set(exhausted.map((l) => l.runId)))) {
+      try {
+        if (await checkEmergencyBrake(runId)) pausedRuns.add(runId);
+      } catch (err) {
+        log("error", `intro-recovery brake check failed for run=${runId}:`, err);
+      }
+    }
+    const toRender = exhausted.filter((l) => !pausedRuns.has(l.runId));
+    // Render direkt anstoßen — Original-Video, explizit ausgewiesen.
+    if (toRender.length > 0) {
+      try {
+        const queue = pipelineQueue();
+        await Promise.all(
+          toRender.map((l) => queue.remove(l.id).catch(() => undefined)),
+        );
+        await queue.addBulk(
+          toRender.map((l) => ({
+            name: "lead-pipeline",
+            data: {
+              leadId: l.id,
+              runId: l.runId,
+              userId: l.userId,
+              campaignId: l.campaignId,
+            },
+            opts: { jobId: l.id, priority: leadJobPriority(l.rowIndex) },
+          })),
+        );
+        log(
+          "warn",
+          `intro-recovery: ${toRender.length} intro leads exhausted (>=3 attempts) → fallback_error + render enqueued` +
+            (pausedRuns.size > 0
+              ? ` (${pausedRuns.size} run(s) paused by emergency brake)`
+              : ""),
+        );
+      } catch (err) {
+        log("error", "intro-recovery render enqueue failed:", err);
+      }
+    }
+  }
+
+  // (B) Verlorene 'queued'-Leads.
+  const staleQueued = await db
+    .select({ id: leads.id, runId: leads.runId })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        eq(leads.status, "pending"),
+        sql`${leads.introStatus} = 'queued'`,
+        lt(leads.startedAt, queuedThreshold),
+        eq(runs.status, "generating"),
+        sql`${leads.removedAt} IS NULL`,
+      ),
+    )
+    .limit(500);
+  if (staleQueued.length > 0) {
+    try {
+      // startedAt für ALLE re-ankern (verhindert erneutes Feuern alle 2 min),
+      // aber nur wirklich VERLORENE Jobs neu enqueuen: existiert der Staging-
+      // Job noch in der Queue (waiting/delayed/active), würde ein blindes
+      // Re-Enqueue mit Purge-before-Add einen wartenden Job zerstören.
+      await db
+        .update(leads)
+        .set({ startedAt: new Date() })
+        .where(inArray(leads.id, staleQueued.map((l) => l.id)));
+      const queue = introGenerationQueue();
+      const lost: Array<{ leadId: string; runId: string }> = [];
+      for (const l of staleQueued) {
+        const existing = await queue.getJob(`intro-gen-${l.id}`).catch(() => null);
+        if (existing) {
+          const state = await existing.getState().catch(() => "unknown");
+          if (state !== "completed" && state !== "failed") continue;
+        }
+        lost.push({ leadId: l.id, runId: l.runId });
+      }
+      if (lost.length > 0) {
+        await enqueueIntroGenerationJobs(lost);
+        log(
+          "info",
+          `intro-recovery: re-enqueued ${lost.length}/${staleQueued.length} stale queued intro leads`,
+        );
+      }
+    } catch (err) {
+      log("error", "intro-recovery re-enqueue (queued) failed:", err);
+    }
   }
 }
 
@@ -517,6 +707,10 @@ async function preflightRecovery(): Promise<void> {
             console.error(
               `[worker:${WORKER_ID}] approved-run-watchdog: marked run=${r.id} as failed (approved >10min without any approved leads)`,
             );
+            void sendRunFailureNotification(
+              r.id,
+              "Es gab keinen einzigen freigegebenen Lead zum Produzieren. Alle Leads wurden entfernt oder abgelehnt, zum Beispiel Duplikate innerhalb der Liste oder fehlende Vornamen. Bitte prüfe deine Liste und starte eine neue Runde.",
+            );
           }
         }
       } catch (err) {
@@ -570,6 +764,18 @@ async function main(): Promise<void> {
   }, 120_000);
   recoveryTimer.unref();
 
+  // Intro-Staging-Watchdog: verlorene queued/generating Intro-Leads
+  // re-enqueuen bzw. nach 3 Versuchen explizit auf Fallback setzen.
+  await introStagingRecovery().catch((err) => {
+    log("error", "initial intro-staging-recovery failed:", err);
+  });
+  const introRecoveryTimer = setInterval(() => {
+    introStagingRecovery().catch((err) => {
+      log("error", "periodic intro-staging-recovery failed:", err);
+    });
+  }, 120_000);
+  introRecoveryTimer.unref();
+
   // Preflight-Recovery: orphaned-pending / stuck-running / exhausted /
   // run-finalization für die Phase-1-Pipeline. Eigenständige Timer-Schleife,
   // damit ein Fehler im Preflight-Recovery den klassischen Pipeline-Recovery
@@ -583,6 +789,16 @@ async function main(): Promise<void> {
     });
   }, 120_000);
   preflightRecoveryTimer.unref();
+
+  // Run-ETA (W3): auslastungsbewusste Restzeit für alle laufenden Runs,
+  // alle 12 s frisch nach Redis. Reine Anzeige-Hilfe — Fehler loggen, nie
+  // den Worker mitreißen.
+  const etaTimer = setInterval(() => {
+    computeAndCacheRunEtas().catch((err) => {
+      log("error", "run-eta tick failed:", err);
+    });
+  }, 12_000);
+  etaTimer.unref();
 
   // Custom-Domain-Verifier: läuft alle 30s, checkt pending/verifying/
   // issuing_cert Domains gegen DNS+TXT und schreibt Traefik-YAMLs nach
@@ -632,8 +848,11 @@ async function main(): Promise<void> {
   // videoRender 300 + videoCompress 90 + videoUpload 330 (inkl. Bunny-
   // Encoding-Wait) + landingPage 10 + thumb 15 + qr 5 + thumbnailGenerate 30
   // + lpScreenshot 45 + docsNativeRender 270 + pdfCompress 20 + pdfUpload 30
-  // ≈ 1145s (~19 min) plus Orchestration-Headroom.
-  const PIPELINE_HARD_TIMEOUT_MS = 20 * 60 * 1000;
+  // ≈ 1145s (~19 min) plus Orchestration-Headroom. Env-Override für
+  // Sonderfälle (z.B. langsame Bunny-Encoding-Phasen bei Groß-Runs).
+  const PIPELINE_HARD_TIMEOUT_MS = Number(
+    process.env.PIPELINE_HARD_TIMEOUT_MS ?? String(20 * 60 * 1000),
+  );
   const worker = pipelineWorker(async (job: Job<LeadJobData>) => {
     incrementInFlight();
     try {
@@ -949,6 +1168,52 @@ async function main(): Promise<void> {
     log("error", "intro-preview worker error:", err.message);
   });
 
+  // Intro-Staging-Worker: personalisierte Begrüßung pro Lead VOR dem
+  // Render (eigene Queue, Concurrency = sync.so-Limit). Enqueued nach
+  // Abschluss selbst den Render-Job — siehe processors/intro-generation.ts.
+  const introGenerationW = introGenerationWorker(
+    async (job: Job<IntroGenerationJobData>, token?: string) => {
+      incrementInFlight();
+      try {
+        log(
+          "info",
+          `intro-generation start job=${job.id} lead=${job.data.leadId}`,
+        );
+        const result = await introGenerationProcessor(job, token);
+        log(
+          "info",
+          `intro-generation done  job=${job.id} lead=${job.data.leadId}` +
+            (result.introStatus ? ` status=${String(result.introStatus)}` : "") +
+            (result.skipped ? ` skipped=${String(result.skipped)}` : ""),
+        );
+        return result;
+      } catch (err) {
+        if (err instanceof DelayedError) {
+          // Dedup-Wartender: Job wurde nach delayed verschoben — kein Fehler.
+          log(
+            "info",
+            `intro-generation wait  job=${job.id} lead=${job.data.leadId} (dedup)`,
+          );
+          throw err;
+        }
+        log(
+          "error",
+          `intro-generation fail  job=${job?.id} lead=${job?.data?.leadId}`,
+          err,
+        );
+        throw err;
+      } finally {
+        decrementInFlight();
+      }
+    },
+  );
+  introGenerationW.on("failed", (job, err) => {
+    log("error", `intro-generation job ${job?.id} failed:`, err?.message);
+  });
+  introGenerationW.on("error", (err) => {
+    log("error", "intro-generation worker error:", err.message);
+  });
+
   // URL-Preview-Stale-Refresh-Tick. 1×/h scannt nach Preview-Eintraegen
   // deren TTL ueberfaellig ist und enqueued Refresh-Jobs (max 50 pro Tick).
   // Beim Boot 1× sofort, damit ein langer Container-Outage Stale-Backlog
@@ -1034,6 +1299,11 @@ async function main(): Promise<void> {
       await introPreviewW.close();
     } catch (err) {
       log("error", "intro-preview worker close failed:", err);
+    }
+    try {
+      await introGenerationW.close();
+    } catch (err) {
+      log("error", "intro-generation worker close failed:", err);
     }
     try {
       await closeBrowserPool();

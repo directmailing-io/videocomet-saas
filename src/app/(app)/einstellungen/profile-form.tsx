@@ -4,6 +4,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 export interface ProfileFormValues {
   email: string;
@@ -125,6 +126,75 @@ export function ProfileForm({ initialValues }: ProfileFormProps) {
         </Button>
       </div>
     </form>
+  );
+}
+
+export interface NotificationsFormProps {
+  initialNotifyRunEmails: boolean;
+}
+
+/**
+ * Toggle für die Abschluss-Mail pro Produktions-Runde (W3). Speichert
+ * sofort beim Umschalten — kein separater Speichern-Button nötig.
+ */
+export function NotificationsForm({
+  initialNotifyRunEmails,
+}: NotificationsFormProps) {
+  const [enabled, setEnabled] = React.useState(initialNotifyRunEmails);
+  const [saving, setSaving] = React.useState(false);
+  const [message, setMessage] = React.useState<string | null>(null);
+
+  async function handleToggle(next: boolean) {
+    setEnabled(next);
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notifyRunEmails: next }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setEnabled(!next);
+        setMessage(data?.error ?? "Speichern fehlgeschlagen.");
+      } else {
+        setMessage(
+          next
+            ? "E-Mail-Benachrichtigung aktiviert."
+            : "E-Mail-Benachrichtigung deaktiviert.",
+        );
+      }
+    } catch (err) {
+      setEnabled(!next);
+      setMessage(err instanceof Error ? err.message : "Fehler beim Speichern.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-sm font-semibold">Benachrichtigungen</h2>
+      <div className="flex items-center justify-between gap-6">
+        <div>
+          <Label htmlFor="notifyRunEmails">
+            E-Mail, wenn eine Produktions-Runde fertig ist
+          </Label>
+          <p className="mt-1 text-sm text-ink-muted">
+            Du bekommst eine Zusammenfassung mit Ergebnis und eventuellen
+            Fehlern, sobald alle Videos und Briefe einer Runde erstellt wurden.
+          </p>
+        </div>
+        <Switch
+          id="notifyRunEmails"
+          checked={enabled}
+          disabled={saving}
+          onCheckedChange={handleToggle}
+        />
+      </div>
+      {message && <p className="text-sm text-ink-muted">{message}</p>}
+    </div>
   );
 }
 

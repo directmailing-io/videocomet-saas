@@ -15,6 +15,7 @@ import {
 import { countByStatus } from "@/lib/db/queries/leads";
 import { removeBunnyAssetRefsForOwner } from "@/lib/db/queries/bunny-assets";
 import { triggerBunnyPurgeTick } from "@/lib/bunny/purge-trigger";
+import { getRunEta } from "@/lib/run-eta-read";
 
 const patchSchema = z.object({
   name: z.string().min(1).max(120).optional(),
@@ -26,7 +27,8 @@ const patchSchema = z.object({
 });
 
 /**
- * GET /api/runs/[id] — returns the run + per-status lead counts.
+ * GET /api/runs/[id] — returns the run + per-status lead counts + server ETA
+ * (W3, Redis-Cache; nur bei laufender Generierung, sonst null).
  */
 export async function GET(
   _req: NextRequest,
@@ -38,7 +40,8 @@ export async function GET(
   try {
     const run = await getRun(params.id, auth.user.id);
     const counts = await countByStatus(params.id, auth.user.id);
-    return NextResponse.json({ run, counts });
+    const eta = run.status === "generating" ? await getRunEta(run.id) : null;
+    return NextResponse.json({ run, counts, eta });
   } catch {
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }

@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VIDEOCOMET · Skalierungs-Pitch: 1.000 Videos in unter 5 Stunden</title>
+<style>
+  :root {
+    --ink: #1c1a27;
+    --ink-muted: #6b6880;
+    --brand: #7c5cfc;
+    --brand-deep: #5b3df0;
+    --brand-soft: #efeafe;
+    --canvas: #f3f0fa;
+    --surface: #ffffff;
+    --ok: #1d9d6f;
+    --ok-soft: #e3f6ee;
+    --warn: #b97f10;
+    --warn-soft: #fdf3dd;
+    --danger: #d4384c;
+    --danger-soft: #fdeaed;
+    --line: #e6e2f2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--canvas); color: var(--ink); line-height: 1.65;
+    padding: 40px 20px 80px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  .card {
+    background: var(--surface); border-radius: 20px; padding: 32px 36px;
+    margin-bottom: 24px; box-shadow: 0 2px 16px rgba(60, 40, 140, 0.07);
+  }
+  h1 { font-size: 28px; line-height: 1.3; margin-bottom: 8px; }
+  h2 { font-size: 20px; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+  h3 { font-size: 15px; margin: 18px 0 8px; }
+  p, li { font-size: 15px; color: var(--ink); }
+  .muted { color: var(--ink-muted); }
+  .small { font-size: 13px; }
+  .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 50%; background: var(--brand);
+    color: #fff; font-size: 14px; font-weight: 700; flex-shrink: 0;
+  }
+  .kicker {
+    display: inline-block; background: var(--brand-soft); color: var(--brand-deep);
+    font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    padding: 4px 12px; border-radius: 99px; margin-bottom: 14px;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th { text-align: left; padding: 8px 10px; background: var(--brand-soft); color: var(--brand-deep); font-size: 13px; }
+  th:first-child { border-radius: 8px 0 0 8px; }
+  th:last-child { border-radius: 0 8px 8px 0; }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.danger { background: var(--danger-soft); color: var(--danger); }
+  .pill.brand { background: var(--brand-soft); color: var(--brand-deep); }
+  .callout { border-radius: 14px; padding: 16px 20px; margin: 14px 0; font-size: 14px; }
+  .callout.danger { background: var(--danger-soft); border: 1px solid #f5c6cd; }
+  .callout.ok { background: var(--ok-soft); border: 1px solid #bde8d6; }
+  .callout.warn { background: var(--warn-soft); border: 1px solid #f2e0b5; }
+  .callout.brand { background: var(--brand-soft); border: 1px solid #ded2fb; }
+  .big { font-size: 34px; font-weight: 800; line-height: 1.1; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 16px 0; }
+  .stat { background: var(--canvas); border-radius: 14px; padding: 18px 20px; }
+  .stat .big { font-size: 26px; color: var(--brand-deep); }
+  ul, ol { padding-left: 22px; margin: 8px 0; }
+  li { margin-bottom: 6px; }
+  .bar-row { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
+  .bar-label { width: 240px; font-size: 13px; flex-shrink: 0; }
+  .bar-track { flex: 1; background: var(--canvas); border-radius: 99px; height: 22px; position: relative; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 99px; display: flex; align-items: center; padding-left: 10px; font-size: 12px; font-weight: 700; color: #fff; white-space: nowrap; }
+  .footer { text-align: center; color: var(--ink-muted); font-size: 12px; margin-top: 30px; }
+  code { background: var(--canvas); padding: 1px 6px; border-radius: 6px; font-size: 13px; }
+  .plan-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 16px 0; }
+  .plan-card { border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .plan-card.reco { border: 2px solid var(--brand); background: var(--brand-soft); }
+  .plan-card h4 { font-size: 15px; margin-bottom: 4px; }
+  .plan-price { font-size: 22px; font-weight: 800; color: var(--brand-deep); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="card" style="background: linear-gradient(135deg, #2a2440 0%, #443680 60%, #7c5cfc 100%); color: #fff;">
+    <span class="kicker" style="background: rgba(255,255,255,0.15); color: #fff;">Finaler Plan · 08.08.2026 · Version 4 · nach zweitem unabhängigem Review</span>
+    <h1 style="color:#fff;">Der finale Plan: bereit für 10 aktive Nutzer</h1>
+    <p style="color: rgba(255,255,255,0.85); margin-top: 8px;">
+      Ausgelegt auf den Ziel-Zustand: ~10 aktive Nutzer, je 300 bis 1.000 Videos alle 2 Wochen
+      (inkl. Brief, Landingpage &amp; Co.), Budget ca. +50 €/Monat, Priorität auf reibungslosem
+      Nutzererlebnis. Ein zweites, unabhängiges Review-Team (Staff-Engineer, Infra/DB-Engineer,
+      kaufmännischer Prüfer) hat Code, Server und den Plan aus Version 3 kontrolliert und
+      <strong>5 echte Fehler bzw. Lücken gefunden</strong> — alle sind hier eingearbeitet
+      (Abschnitt „Zweites Review").
+    </p>
+  </div>
+
+  <!-- TL;DR -->
+  <div class="card">
+    <h2><span class="num">✓</span> Die Entscheidung, konkret</h2>
+    <table>
+      <tr><th>Baustein</th><th>Was</th><th>Kosten</th></tr>
+      <tr><td><strong>1. Software-Paket komplett</strong> <span class="pill ok">ab sofort</span></td><td>P0-Fix (Intro-Warteschlange VOR dem Render, sauber persistiert), Preview-Kosten-Limit, Kodier-Limit konfigurierbar, Beispielvideo-Speedup, Server-Härtung (Swap, Backups), auslastungsbewusste ETA, Abschluss-Mail, Anrede-Wiederverwendung. ~16 Entwicklungstage in 4 Wochen.</td><td>0 € laufend</td></tr>
+      <tr><td><strong>2. sync.so: bei Creator bleiben</strong> <span class="pill brand">Growth per Auslöser</span></td><td>Korrektur aus dem zweiten Review: Bei ~0 aktiven Nutzern bringt Growth nichts. Auslöser für den Klick auf Growth (+~28 €/Monat): erste terminierte Kampagne mit 300+ KI-Begrüßungen ODER zwei Intro-Kunden gleichzeitig aktiv.</td><td>0 € jetzt</td></tr>
+      <tr><td><strong>3. Hetzner-Resize auf Abruf</strong> <span class="pill brand">vorbereitet</span></td><td>Playbook liegt bereit, Resize auf 16 Kerne dauert ~15 Min. Auslöser: erste terminierte 1.000er-Kampagne ODER zwei Groß-Runs im selben Monat. Vorher: Reboot-Testlauf + Disk-Status in der Hetzner-Console prüfen (Details im Review-Abschnitt).</td><td>0 € jetzt, +~34 €/Monat ab Auslöser</td></tr>
+      <tr><td><strong>4. Scale nur bei Spitzen</strong> <span class="pill brand">vorbereitet</span></td><td>In Monaten mit 1.000er-Brief-Kampagnen, die noch am selben Tag gedruckt werden sollen: ein Klick auf Scale (15 Slots), danach wieder runter.</td><td>+~$200 nur in solchen Monaten</td></tr>
+    </table>
+    <div class="callout ok">
+      <strong>Ergebnis:</strong> Heute 0 € Mehrkosten, im Zielausbau ~62 €/Monat — im Budget.
+      Eine typische 300er-Kampagne ist damit in <strong>~2 bis 2,5 Stunden</strong> komplett fertig, eine
+      1.000er über Nacht bzw. mit Resize + Scale in <strong>~4 bis 4,5 Stunden</strong>. Dazu ehrliche ETA
+      im Dashboard und eine Mail, sobald alles fertig ist. Kein stiller Begrüßungs-Ausfall mehr, und das
+      einzige gefundene Verlust-Szenario (Gratis-Previews ohne Limit) wird geschlossen.
+    </div>
+    <h3>Rechnet das für 10 aktive Nutzer?</h3>
+    <p class="small">
+      10 Nutzer × ~650 Videos alle 2 Wochen ≈ <strong>460 Videos pro Tag im Schnitt</strong>, aber stoßweise.
+      Mit Growth + Anrede-Wiederverwendung schafft die Begrüßungs-Bahn ~100 Videos/h (Ø-Tageslast in ~4,5 h),
+      der Render ~139/h. Einzelne Kampagnen laufen also bequem am selben Tag durch. Kritisch wird nur der
+      Fall „zwei 1.000er-Runs gleichzeitig": dafür stehen Resize + Scale auf Knopfdruck bereit, und die
+      ETA-Anzeige sagt beiden Kunden ehrlich, wann sie dran sind.
+    </p>
+  </div>
+
+  <!-- Antwort auf Daniels Fragen -->
+  <div class="card">
+    <h2><span class="num">1</span> Deine Fragen, direkt beantwortet</h2>
+    <h3>„Macht das 16-Kerne-Upgrade Sinn, wenn wir gar nicht ausgelastet sind?"</h3>
+    <p>
+      Ehrliche Antwort: <strong>Noch nicht, aber mit festem Auslöser.</strong> Wichtig ist die
+      Unterscheidung: <em>Während</em> eines Voll-Render-Runs sind alle 8 Kerne am Anschlag (das haben
+      wir gemessen), <em>zwischen</em> Runs ist der Server fast leer. Mehr Kerne kaufen also nur
+      Geschwindigkeit während eines Runs. Der Auslöser für das dauerhafte Upgrade: erste terminierte
+      1.000er-Kampagne oder zwei Groß-Runs im selben Monat.
+    </p>
+    <div class="callout ok">
+      <strong>Der Trick: Hetzner-Resize ist ein 15-Minuten-Vorgang.</strong> Wir machen das Upgrade
+      nicht auf Vorrat, sondern <em>am Tag</em> einer angekündigten Groß-Kampagne (Herunterfahren,
+      Resize auf 16 Kerne/32 GB, Hochfahren). Voraussetzung: Das Kodier-Limit (heute fest auf 4
+      einprogrammiert) muss vorher per Einstellung änderbar sein. Das bauen wir jetzt, kostet nichts.
+      Wichtig beim Resize: Festplatte NICHT mitvergrößern, dann können wir später auch wieder
+      zurückverkleinern.
+    </div>
+    <h3>„Was ist die Batch API?"</h3>
+    <p>
+      Damit kann man hunderte Lipsync-Aufträge <strong>mit einem einzigen API-Aufruf</strong> einreichen,
+      statt jeden einzeln zu schicken. Für uns wenig relevant: Unsere Warteschlange (BullMQ) macht genau
+      das bereits selbst, sie reicht Aufträge automatisch nach, sobald ein Slot frei ist. Die Batch API
+      bringt laut sync.so-Doku keine höhere Parallelität und keinen besseren Preis. <strong>Der Grund
+      für Scale sind die 15 Slots und der 20-%-Rabatt, nicht die Batch API.</strong>
+    </p>
+    <h3>„Wie würden sich Growth und Scale bemerkbar machen?"</h3>
+    <p>Siehe nächster Abschnitt mit konkreten Zahlen.</p>
+  </div>
+
+  <!-- sync.so Tarife -->
+  <div class="card">
+    <h2><span class="num">2</span> sync.so-Tarife durchgerechnet (echte Zahlen)</h2>
+    <p class="small muted">
+      Grundlage: Unser Lipsync-Segment ist im Schnitt <strong>6,8 Sekunden</strong> lang (aus der
+      Produktions-Datenbank gemessen, Spanne 4,7 bis 15,8 s). sync.so berechnet ~$0,05 pro generierter
+      Sekunde. Ein Auftrag belegt einen Slot ca. 3,5 Minuten (inkl. Verarbeitung beim Anbieter).
+    </p>
+    <div class="plan-cards">
+      <div class="plan-card">
+        <h4>Creator <span class="pill brand">aktuell</span></h4>
+        <div class="plan-price">$19/Monat</div>
+        <ul class="small">
+          <li>3 parallele Slots</li>
+          <li>1.000 Begrüßungen: <strong>~19 h</strong></li>
+          <li>Usage 1.000 Stück: ~$340</li>
+        </ul>
+        <p class="small muted">Reicht für heute: Beispielvideos + kleine Runs.</p>
+      </div>
+      <div class="plan-card reco">
+        <h4>Growth <span class="pill ok">per Auslöser buchen</span></h4>
+        <div class="plan-price">$49/Monat</div>
+        <ul class="small">
+          <li>6 parallele Slots</li>
+          <li>1.000 Begrüßungen: <strong>~10 h</strong>, mit Anrede-Wiederverwendung <strong>~5–7 h</strong></li>
+          <li>Usage 1.000 Stück: ~$323 (5 % Rabatt)</li>
+        </ul>
+        <p class="small muted">Der wichtigste UX-Gewinn: Beispielvideos konkurrieren nicht mehr mit laufenden Kampagnen um dieselben Slots. Bei mehreren aktiven Intro-Kunden Pflicht — bei ~0 aktiven Nutzern aber verschenkt (Korrektur des zweiten Reviews: der 5-%-Rabatt allein rechnet sich erst ab ~1.750 Intros/Monat). Deshalb: erst ab Auslöser buchen, der Wechsel dauert Minuten.</p>
+      </div>
+      <div class="plan-card">
+        <h4>Scale <span class="pill brand">nur in Spitzen-Monaten</span></h4>
+        <div class="plan-price">$249/Monat</div>
+        <ul class="small">
+          <li>15 parallele Slots</li>
+          <li>1.000 Begrüßungen: <strong>~4 h ✓</strong></li>
+          <li>Usage 1.000 Stück: ~$272 (20 % Rabatt, spart ~$68)</li>
+        </ul>
+        <p class="small muted">Monatlich kündbar. Buchen wir per Klick, wenn eine 1.000er-Brief-Kampagne noch am selben Tag gedruckt werden soll oder mehrere Groß-Runs kollidieren. Netto-Mehrkosten gegenüber Growth in so einem Monat: ~$150.</p>
+      </div>
+    </div>
+    <div class="callout brand">
+      <strong>Finale Team-Empfehlung (nach zweitem Review):</strong> Bei Creator bleiben, 0 € jetzt.
+      Growth buchen, sobald die erste Kampagne mit 300+ KI-Begrüßungen terminiert ist oder zwei
+      Intro-Kunden gleichzeitig aktiv sind (ein Klick im sync.so-Dashboard, kein Vertragsgespräch).
+      Scale bleibt die vorbereitete Eskalationsstufe für Spitzen-Monate.
+    </div>
+  </div>
+
+  <!-- Gemessene Zahlen -->
+  <div class="card">
+    <h2><span class="num">3</span> Echte Messwerte aus der Produktion (keine Schätzung)</h2>
+    <div class="grid3">
+      <div class="stat"><div class="big">139</div><div class="small muted">Videos/Stunde bei Voll-Render<br>(Run vom 04.08., 245 Leads, Ø 131 s/Lead)</div></div>
+      <div class="stat"><div class="big">18 s</div><div class="small muted">pro Lead bei Video-Wiederverwendung<br>(Runs vom 06.–07.08.)</div></div>
+      <div class="stat"><div class="big">6,8 s</div><div class="small muted">Ø Lipsync-Segment<br>(nur die Begrüßung wird synchronisiert, nicht das ganze Video)</div></div>
+    </div>
+    <h3>1.000 Leads (4-min-Videos, alles neu) je nach Ausbaustufe</h3>
+    <div class="bar-row"><div class="bar-label">Heute (Creator, 8 Kerne)</div><div class="bar-track"><div class="bar-fill" style="width:100%; background:#d4384c;">~19–20 h + stille Begrüßungs-Ausfälle ⚠️</div></div></div>
+    <div class="bar-row"><div class="bar-label">Sofort-Paket (Growth + Software-Fixes + Anrede-Dedup)</div><div class="bar-track"><div class="bar-fill" style="width:37%; background:#8f7bf0;">~7 h (jetzt limitiert der Render)</div></div></div>
+    <div class="bar-row"><div class="bar-label">+ Hetzner-Resize (auf Abruf)</div><div class="bar-track"><div class="bar-fill" style="width:23%; background:#1d9d6f;">~4–4,5 h ✓</div></div></div>
+    <div class="bar-row"><div class="bar-label">Spitzen-Monat mit Scale</div><div class="bar-track"><div class="bar-fill" style="width:21%; background:#1d9d6f;">~4 h, auch bei Parallel-Last stabil</div></div></div>
+    <div class="bar-row"><div class="bar-label"><strong>Typische 300er-Kampagne (Sofort-Paket)</strong></div><div class="bar-track"><div class="bar-fill" style="width:13%; background:#1d9d6f;">~2–2,5 h ✓</div></div></div>
+    <p class="small muted" style="margin-top:10px;">Render-Bahn und Begrüßungs-Bahn laufen parallel, die langsamere bestimmt die Gesamtzeit. Schon das Sofort-Paket macht die typische Kampagne zum Selbe-Vormittag-Erlebnis; Resize und Scale sind die vorbereiteten Stufen für 1.000er-Spitzen.</p>
+  </div>
+
+  <!-- Der kritische Fund -->
+  <div class="card">
+    <h2><span class="num">!</span> Kritischster Fund: Der stille KI-Begrüßungs-Ausfall <span class="pill danger">P0, wird zuerst gefixt</span></h2>
+    <p>
+      Bei großen Runs konkurrieren bis zu 16 Leads gleichzeitig um die sync.so-Slots.
+      Wer länger als 8 Minuten auf einen Slot wartet, gibt auf und fällt <strong>stillschweigend
+      auf das Original-Video ohne KI-Begrüßung zurück</strong>. Kein Fehler, keine Warnung.
+    </p>
+    <div class="callout danger">
+      <strong>Konkretes Risiko:</strong> Ein Kunde startet 1.000 Leads mit KI-Begrüßung, druckt 1.000
+      Briefe und verschickt sie per Post. Der Großteil der Videos hätte aber gar keine persönliche
+      Begrüßung. Gedruckt und verschickt heißt: unwiderruflich. Das wäre bei der ersten großen
+      Kampagne <strong>garantiert</strong> passiert.
+      <span class="small">(Korrektur des zweiten Reviews: Finanziell zahlt der Kunde für solche
+      Fallback-Videos automatisch nur 1 statt 2 Credits — das ist im Code sauber gelöst. Das
+      Reputations-Risiko bleibt davon aber völlig unberührt.)</span>
+    </div>
+    <p><strong>Der Fix (präzisiert durch das zweite Review):</strong> Die KI-Begrüßung bekommt eine
+    eigene Warteschlange, die exakt so viele Begrüßungen parallel bearbeitet, wie sync.so Slots
+    hergibt. Wichtig, weil das Begrüßungs-Video ein <em>Baustein</em> des fertigen Videos ist: Pro
+    Lead gilt immer „erst Begrüßung, dann Render" — die Parallelität entsteht <em>über die Leads
+    hinweg</em> (während Lead A rendert, wird die Begrüßung von Lead B, C, D generiert).</p>
+    <ul>
+      <li><strong>Korrektheit:</strong> Kein Video verliert mehr still seine Begrüßung. Ergebnisse werden dauerhaft gespeichert, sodass Wiederholungen nichts doppelt generieren (spart auch sync.so-Kosten bei Retries).</li>
+      <li><strong>Geschwindigkeit:</strong> Die 4 wertvollen Render-Slots werden nicht mehr von Leads blockiert, die nur auf einen sync.so-Slot warten.</li>
+      <li><strong>Notbremse:</strong> Zusätzlich kommt ein Schwellwert: Wenn zu viele Begrüßungen fehlschlagen, wird der Run mit Warnung angehalten, BEVOR 1.000 Briefe gedruckt werden.</li>
+    </ul>
+  </div>
+
+  <!-- Weitere Speedups -->
+  <div class="card">
+    <h2><span class="num">4</span> Was geht noch? Alle Beschleunigungs-Hebel, ehrlich bewertet</h2>
+    <p class="muted">Deine Logik teilen wir voll: schnellere Videos → zufriedenere Kunden → mehr Credits → mehr Umsatz. Hier alles, was das Team gefunden hat, sortiert nach Nutzen pro Aufwand:</p>
+    <table>
+      <tr><th>Hebel</th><th>Wirkung</th><th>Aufwand</th><th>Einschätzung</th></tr>
+      <tr>
+        <td><strong>Begrüßung/Render entkoppeln</strong> (Teil des P0-Fix)</td>
+        <td>Begrüßungen laufen über eine eigene Warteschlange, während andere Leads rendern; Render-Slots nie mehr durch Warten blockiert</td>
+        <td>im P0-Fix enthalten</td>
+        <td><span class="pill ok">sicher, machen</span></td>
+      </tr>
+      <tr>
+        <td><strong>Beispielvideo-Speedup</strong> (720p-Vorschau, TTS-Drossel, schnelleres Polling, nur Intro-Teil encodieren)</td>
+        <td>Beispielvideos in ~1,5–2,5 min statt 5 min. Genau der Moment, in dem Neukunden abspringen könnten</td>
+        <td>~1–1,5 Tage</td>
+        <td><span class="pill ok">sicher, machen</span></td>
+      </tr>
+      <tr>
+        <td><strong>Schnelleres sync.so-Polling</strong> (alle 3–4 s statt 10 s nachfragen, Warte-Intervall 5 s statt 15 s)</td>
+        <td>Spart pro Begrüßung im Schnitt ~10–15 s Leerlauf; bei 1.000 Stück summiert sich das auf Slot-Zeit</td>
+        <td>~0,5 Tage</td>
+        <td><span class="pill ok">sicher, machen</span></td>
+      </tr>
+      <tr>
+        <td><strong>Anrede-Wiederverwendung:</strong> „Hi Herr Müller!" nur EINMAL generieren, für alle Müllers wiederverwenden</td>
+        <td>30–50 % weniger sync.so-Generierungen bei typischen deutschen B2B-Listen. Spart Zeit UND ~$100–170 Usage pro 1.000er-Kampagne, dauerhaft</td>
+        <td>~2–3 Tage</td>
+        <td><span class="pill brand">bester ROI-Hebel, Teil des Sofort-Pakets (Woche 3)</span></td>
+      </tr>
+      <tr>
+        <td><strong>Statische Szenen vor-encodieren:</strong> Video-Teile, die bei allen Leads identisch sind (z. B. Abspann), einmal pro Kampagne rendern und nur zusammenfügen</td>
+        <td>Geschätzt 15–30 % weniger Encode-Zeit pro Lead, je nach Video-Aufbau</td>
+        <td>~3–5 Tage, mittleres Risiko (Codec-Nahtstellen müssen exakt passen)</td>
+        <td><span class="pill warn">prüfenswert, aber erst nach den sicheren Hebeln</span></td>
+      </tr>
+      <tr>
+        <td><strong>Encoder-Preset prüfen</strong> (ffmpeg-Geschwindigkeitsstufe vs. Dateigröße)</td>
+        <td>Möglich 10–20 % schnellerer Encode, ggf. minimal größere Dateien</td>
+        <td>~0,5 Tage Messung</td>
+        <td><span class="pill warn">quick check, Ergebnis offen</span></td>
+      </tr>
+      <tr>
+        <td><strong>Eigenes Lipsync-Modell auf Miet-GPU</strong></td>
+        <td>Hebt das sync.so-Limit komplett auf</td>
+        <td>2–4 Wochen + Qualitätsrisiko</td>
+        <td><span class="pill danger">aufschieben, lohnt erst bei dauerhaft hohem Volumen</span></td>
+      </tr>
+    </table>
+    <div class="callout ok">
+      <strong>Bereits eingebaut und stark:</strong> die Video-Wiederverwendung per Fingerprint.
+      Runs, bei denen Leads dieselbe Website teilen, liefen mit 18 s/Lead statt 131 s. Reale
+      Kampagnen sind dadurch oft deutlich schneller als jede Worst-Case-Rechnung hier.
+    </div>
+  </div>
+
+  <!-- ETA -->
+  <div class="card">
+    <h2><span class="num">5</span> Ehrliche Zeitschätzung (ETA), auslastungsbewusst</h2>
+    <p>
+      Der Worker misst <strong>schon heute</strong> die Dauer jedes Arbeitsschritts pro Lead und
+      speichert sie in der Datenbank (<code>pipeline_events</code>). Darauf bauen wir, und zwar mit
+      deinem Zusatz: <strong>die Schätzung schaut auch, was auf dem Server sonst gerade los ist.</strong>
+    </p>
+    <ol>
+      <li><strong>Lernend statt geraten:</strong> Median der letzten echten Durchlaufzeiten, bevorzugt aus dem laufenden Run selbst. Wiederverwendungs-Runs (18 s/Lead) werden getrennt behandelt, damit sie Voll-Render-Schätzungen nicht verfälschen.</li>
+      <li><strong>Auslastung fließt ein:</strong> Vor der Schätzung wird geprüft: Wie viele Leads anderer Kunden sind gerade aktiv? Wie viele der 4 Kodier-Slots und der sync.so-Slots sind belegt? Wie viele Aufträge stehen in der Warteschlange davor? Die ETA rechnet dann: <em>Wartezeit bis Slots frei werden + eigene Arbeit ÷ verfügbarer Anteil an den Slots</em>. Die Warteschlangen-Daten sind dafür verlässlicher als eine CPU-Momentaufnahme.</li>
+      <li><strong>Zwei Bahnen getrennt:</strong> Render-Bahn und Begrüßungs-Bahn werden einzeln geschätzt, die langsamere bestimmt die Anzeige. Wichtig: Die sync.so-Slots gelten pro Account, also über <em>alle</em> Kunden hinweg. Genau deshalb muss die Begrüßungs-Warteschlange (P0-Fix) zuerst existieren, sonst kann niemand seriös schätzen.</li>
+      <li><strong>Anzeige:</strong> „Noch ~2 Std. 10 Min. · fertig ca. zwischen 16:45 und 17:30 Uhr", bewusst als Spanne. Aktualisiert sich live, springt aber nicht nervös hin und her. Sichtbar auf Run-Detailseite, Runs-Liste und Dashboard.</li>
+    </ol>
+    <p class="small muted">Spätere Ausbaustufe, wenn mehrere Kunden gleichzeitig rendern: faire Verteilung der Slots (Round-Robin), damit ein 1.000er-Run einen kleinen 50er-Run nicht stundenlang blockiert.</p>
+  </div>
+
+  <!-- Mail -->
+  <div class="card">
+    <h2><span class="num">6</span> E-Mail-Benachrichtigung bei Fertigstellung &amp; Fehlern</h2>
+    <p>Baut auf der bestehenden Resend-Infrastruktur (no-reply@videocomet.de) auf. Genau <strong>eine</strong> Mail pro Run (technisch gegen Doppel-Versand abgesichert):</p>
+    <table>
+      <tr><th>Fall</th><th>Inhalt der Mail</th></tr>
+      <tr><td><span class="pill ok">Fertig</span></td><td>„Deine Runde ‚Herbst-Kampagne' ist fertig: 987 Videos generiert." + Link zum Run. <strong>Genau das Signal für Kunden, die Briefe drucken und zur Post bringen.</strong></td></tr>
+      <tr><td><span class="pill warn">Fertig mit Fehlern</span></td><td>Zusätzlich: Liste der fehlgeschlagenen Leads mit Name + <strong>exakter technischer Fehlermeldung</strong> (steht bereits pro Lead in der Datenbank) + betroffener Arbeitsschritt. Bei mehr als 20 Fehlern: die ersten 20 + „und N weitere". KI-Begrüßungs-Ausfälle werden separat als Warnhinweis gelistet.</td></tr>
+      <tr><td><span class="pill danger">Fehlgeschlagen</span></td><td>Sofort-Mail mit exakter Fehlermeldung, wichtig fürs Debugging.</td></tr>
+    </table>
+    <p class="small muted">Abschaltbar pro User in den Einstellungen (Opt-out). Textliche Vorgabe ist notiert: keine em-Dashes in den Mail-Texten.</p>
+  </div>
+
+  <!-- Zweites Review -->
+  <div class="card">
+    <h2><span class="num">✓✓</span> Zweites, unabhängiges Review: Was korrigiert wurde</h2>
+    <p>
+      Auf deinen Wunsch hat ein zweites Team (Senior-Entwickler, Infrastruktur, Wirtschaftlichkeit)
+      zuerst den kompletten Code, Server und Stack reviewt und danach diesen Plan zerpflückt.
+      Ergebnis: Die Richtung stimmt, aber <strong>5 echte Fehler</strong> wurden gefunden und sind
+      jetzt eingearbeitet. Volle Transparenz:
+    </p>
+    <table>
+      <tr><th>Fehler im ersten Plan</th><th>Korrektur</th></tr>
+      <tr>
+        <td>„Begrüßung läuft parallel zum Render" — falsch: Die Begrüßung ist ein <em>Baustein</em> des fertigen Videos, pro Lead geht das nicht parallel.</td>
+        <td>Fix umformuliert und technisch neu geplant: Begrüßungs-Ergebnis wird dauerhaft gespeichert, Parallelität entsteht über die Leads hinweg. Nebeneffekt: Abgebrochene Runs können sauber fortgesetzt werden, ohne Begrüßungen doppelt zu bezahlen.</td>
+      </tr>
+      <tr>
+        <td>Behauptung, Kunden zahlten 2 Credits auch ohne gelieferte Begrüßung.</td>
+        <td>Im Code verifiziert: Fallback-Videos kosten automatisch nur 1 Credit. Finanziell ist nichts kaputt — das Reputations-Risiko (Briefe im Druck) bleibt der eigentliche P0.</td>
+      </tr>
+      <tr>
+        <td>„Growth sofort buchen" — unwirtschaftlich bei aktuell ~0 aktiven Nutzern (360 € im Jahr für leere Slots).</td>
+        <td>Growth wird erst per Auslöser gebucht (erste Kampagne mit 300+ KI-Begrüßungen oder 2 Intro-Kunden parallel). Der Klick dauert 2 Minuten und wirkt sofort — Vorab-Buchung bringt null Vorteil.</td>
+      </tr>
+      <tr>
+        <td>Übersehenes Verlust-Szenario: Beispielvideos (Previews) sind gratis, aber jede kostet uns echte sync.so-Usage. Ohne Limit könnte ein einzelner Neugieriger ~375 €/Monat Kosten erzeugen, ohne je einen Credit zu kaufen.</td>
+        <td>Preview-Tageslimit (~5 pro Nutzer und Tag) kommt mit ins Paket. Das war das <strong>einzige</strong> gefundene Szenario, in dem wir an einem Nutzer Geld verlieren können.</td>
+      </tr>
+      <tr>
+        <td>Server-Lücken nicht im Plan: kein Swap (RAM-Spitzen können den Worker killen), Backups nur lokal auf demselben Server, 68 Tage Uptime ohne Reboot-Test.</td>
+        <td>Server-Härtung als eigener Block: Swapfile + Speicher-Limit für den Worker, Offsite-Backup (tägliche Datenbank-Sicherung nach Bunny), Hetzner-Auto-Backups, Reboot-Probelauf vor dem ersten Resize.</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Kosten & Empfehlung -->
+  <div class="card">
+    <h2><span class="num">7</span> Finaler Umsetzungsplan (~16 Arbeitstage, 4 Wochen)</h2>
+    <table>
+      <tr><th>Woche</th><th>Was wird gebaut</th><th>Ergebnis für den Nutzer</th></tr>
+      <tr>
+        <td><strong>Woche 1</strong><br><span class="small muted">~4–5 Tage<br>P0: Korrektheit</span></td>
+        <td>Eigene Begrüßungs-Warteschlange VOR dem Render (Slot-Zahl konfigurierbar) · Begrüßungs-Ergebnisse dauerhaft speichern (kein Doppelt-Generieren bei Wiederholungen) · Notbremse: zu viele Begrüßungs-Fehler stoppen den Run VOR dem Briefdruck · drei versteckte Code-Fallen entschärft (blindes Wiederholen bei sync.so-Überlast, zu knapper Job-Timeout, Absturz-Wächter kennen die neue Warteschlange) · Kodier-Limits konfigurierbar · Preview-Tageslimit</td>
+        <td>Kein stiller Begrüßungs-Ausfall mehr, kein Gratis-Preview-Verlustszenario, Wiederholungen kosten keine doppelte sync.so-Usage</td>
+      </tr>
+      <tr>
+        <td><strong>Woche 2</strong><br><span class="small muted">~4–5 Tage<br>Speed + Server</span></td>
+        <td>Beispielvideo-Speedup (kleinere Auflösung, nur der nötige Videoteil wird geschnitten, vorsichtig schnelleres Statusabfragen) · Server-Härtung: Swap + Speicher-Limit, tägliches Offsite-Backup, Hetzner-Auto-Backups, Reboot-Probelauf</td>
+        <td>Beispielvideos in ~1,5–2,5 min statt ~5; Server übersteht RAM-Spitzen und einen Totalausfall ohne Datenverlust</td>
+      </tr>
+      <tr>
+        <td><strong>Woche 3</strong><br><span class="small muted">~4 Tage<br>Transparenz</span></td>
+        <td>Auslastungsbewusste ETA (berücksichtigt andere laufende Runs, sync.so-Slot-Belegung, Warteschlangen-Tiefe; alle 10–15 s aktualisiert) · faire Reihenfolge, wenn mehrere Kunden gleichzeitig generieren · E-Mail bei Fertig/Fehler mit exakten Fehlermeldungen (ohne em-Dashes, an/abwählbar)</td>
+        <td>Ehrliche Zeitangabe statt Raten; Kunde kann den Tab schließen und bekommt Bescheid, sobald die Briefe gedruckt werden können</td>
+      </tr>
+      <tr>
+        <td><strong>Woche 4</strong><br><span class="small muted">~3 Tage<br>Kosten + Skalierung</span></td>
+        <td>Anrede-Wiederverwendung („Hi Herr Müller!" nur einmal generieren — spart Lipsync-Usage UND Schnitt-Zeit) · Resize-Playbook (inkl. Festplatten-Check für Downgrade-Fähigkeit) · Lasttest mit den neuen Einstellungen</td>
+        <td>30–50 % schnellere Begrüßungs-Bahn, dauerhaft ~40 % weniger sync.so-Kosten bei großen Runs; Server-Upgrade in ~15 Min per Knopfdruck</td>
+      </tr>
+    </table>
+    <div class="callout ok">
+      <strong>Finale Empfehlung (beide Teams, nach Diskussion einstimmig):</strong> Software-Paket
+      komplett umsetzen (0 € laufende Mehrkosten), sync.so bei Creator lassen und Growth/Scale nur
+      per Auslöser buchen, Hetzner-Resize als getestete Knopfdruck-Stufe. Heute +0 €/Monat; erst
+      wenn echte Groß-Kampagnen laufen ~62 €/Monat — und dann sind sie durch Einnahmen längst
+      gedeckt. Damit: 300er-Kampagne in ~2–2,5 h, 1.000er in ~4–4,5 h, immer mit ehrlicher ETA
+      und Abschluss-Mail.
+    </div>
+    <h3>Checkliste: Was wir von dir brauchen</h3>
+    <ol>
+      <li><strong>Go für das finale Paket</strong> (ein „Go" reicht, dann starte ich mit Woche 1).</li>
+      <li><strong>Bei sync.so: nichts tun.</strong> Creator bleibt. Growth buchst du erst, wenn ich dir den Auslöser melde (erste Kampagne mit 300+ KI-Begrüßungen oder 2 Intro-Kunden parallel) — der Klick dauert 2 Minuten.</li>
+      <li><strong>Hetzner:</strong> Auto-Backups in der Cloud-Console aktivieren (+20 % Serverpreis, ~7 €/Monat) und mir entweder kurz Zugang geben oder einen API-Token erstellen, damit ich Resize + Festplatten-Check selbst durchführen kann.</li>
+      <li><strong>Bescheid geben, sobald die erste Groß-Kampagne terminiert ist</strong> (dann entscheiden wir Resize/Scale für den Monat).</li>
+      <li><strong>Eine Entscheidung:</strong> Abschluss-Mails standardmäßig AN? (Mein Vorschlag: ja, mit Abwahl-Möglichkeit in den Einstellungen.)</li>
+    </ol>
+  </div>
+
+  <!-- Wirtschaftlichkeit -->
+  <div class="card">
+    <h2><span class="num">8</span> Was verdienen wir daran? Beispiel-Rechnung, genau geprüft</h2>
+    <div class="callout brand">
+      <strong>Szenario:</strong> Ein Kunde generiert 3 Monate lang jeden Monat 1.000 Videos, jedes
+      5 Minuten lang, mit KI-Begrüßung, Brief + Umschlag, Landingpage. Alle Zahlen netto (19 % USt
+      kommt bei uns oben drauf und wird durchgereicht). Umrechnung $1 ≈ 0,92 €.
+    </div>
+
+    <h3>Einnahmen (3 Monate)</h3>
+    <table>
+      <tr><th>Position</th><th>Rechnung</th><th>Betrag</th></tr>
+      <tr><td>Credits</td><td>2 Credits pro Video (KI-Begrüßung, im Code verifiziert) × 1.000 Videos × 3 Monate = 6.000 Credits. Günstigster Einkauf für den Kunden: 5.000er-Paket (4.000 €) + 1.000er-Paket (850 €)</td><td><strong>4.850 €</strong></td></tr>
+      <tr><td>Plattform-Zugang</td><td>Abo 120 € pro 3 Monate</td><td><strong>120 €</strong></td></tr>
+      <tr><td colspan="2"><strong>Einnahmen gesamt</strong> <span class="small muted">(kauft der Kunde stattdessen monatlich 2 × 1.000er-Pakete, sind es 5.220 €)</span></td><td><strong>4.970 €</strong></td></tr>
+    </table>
+
+    <h3>Kosten pro Monat (bei 1.000 Videos, ohne Anrede-Wiederverwendung)</h3>
+    <table>
+      <tr><th>Posten</th><th>Rechnung / Quelle</th><th>Betrag</th></tr>
+      <tr><td>sync.so Grundgebühr (Growth)</td><td>$49, Tarifliste</td><td>~45 €</td></tr>
+      <tr><td>sync.so Usage (Lipsync)</td><td>Ø 6,8 s Segment (Prod-DB) × $0,0475/s (5 % Growth-Rabatt) × 1.000 × ~10 % Retry-Aufschlag ≈ $355</td><td><strong>~330 €</strong></td></tr>
+      <tr><td>Fish Audio (KI-Stimme + QA-Transkription)</td><td>TTS $15 pro Mio. Zeichen (Begrüßungen sind winzig) + ASR $0,0002/s ≈ $5</td><td>~5 €</td></tr>
+      <tr><td>Bunny (Video-Hosting + CDN + PDFs)</td><td>Real gemessen: 39 MB pro Video-Minute inkl. Qualitätsstufen → ~0,2 GB pro 5-min-Video → ~200 GB/Monat neu × $0,01/GB + Abrufe + PDF-Zone</td><td>~6 € <span class="small muted">(kumuliert: Altbestand bleibt gehostet, +~2 €/Monat je weiterem Kampagnen-Monat)</span></td></tr>
+      <tr><td>Hetzner-Server</td><td>16 Kerne/32 GB (Auslöser „monatliche 1.000er" ist erfüllt, also Dauer-Upgrade)</td><td>~62 €</td></tr>
+      <tr><td>Resend (Mails), Turnstile, Domains</td><td>Free-Tier reicht / anteilig</td><td>~2 €</td></tr>
+      <tr><td colspan="2"><strong>Laufende Kosten pro Monat</strong></td><td><strong>~450 €</strong></td></tr>
+    </table>
+
+    <h3>Gesamtrechnung über 3 Monate</h3>
+    <table>
+      <tr><th></th><th>Ohne Anrede-Wiederverwendung</th><th>Mit Anrede-Wiederverwendung (~40 % weniger Lipsyncs)</th></tr>
+      <tr><td>Einnahmen</td><td>4.970 €</td><td>4.970 €</td></tr>
+      <tr><td>Laufende Kosten (3 Monate)</td><td>~1.350 €</td><td>~950 €</td></tr>
+      <tr><td>Stripe-Gebühren (1,5 % + 0,25 € je Zahlung, 3 Transaktionen)</td><td>~75 €</td><td>~75 €</td></tr>
+      <tr><td><strong>Gewinn</strong></td><td><strong>~3.545 €</strong></td><td><strong>~3.945 €</strong></td></tr>
+      <tr><td><strong>Marge</strong></td><td><strong>~71 %</strong></td><td><strong>~79 %</strong></td></tr>
+    </table>
+
+    <div class="callout ok">
+      <strong>Pro Video heruntergebrochen:</strong> Einnahmen ~1,66 €, Kosten ~0,475 € (davon ~0,33 €
+      sync.so), Gewinn <strong>~1,18 € pro Video</strong>. Größter Kostenhebel ist mit Abstand die
+      Lipsync-Usage. Genau deshalb lohnt die Anrede-Wiederverwendung doppelt: schneller UND ~0,13 €
+      mehr Gewinn pro Video. Der Server ist mit ~2 Cent pro Video fast irrelevant.
+    </div>
+
+    <h3>Und wenn ein Nutzer nur wenig generiert? (Denkfehler-Check)</h3>
+    <p>
+      Deine Frage aus dem zweiten Review: Machen wir Verlust, wenn jemand nur 20 KI-Begrüßungen
+      macht oder nur einmalig 200 Videos in 3 Monaten Laufzeit? <strong>Nein.</strong> Nachgerechnet:
+    </p>
+    <table>
+      <tr><th>Szenario (3 Monate Abo-Laufzeit)</th><th>Einnahmen</th><th>Direkte Kosten</th><th>Deckungsbeitrag</th></tr>
+      <tr>
+        <td>Nur 20 Videos mit KI-Begrüßung, sonst nichts</td>
+        <td>120 € Abo + 40 € Credits (40 Credits aus 50er-Paket, anteilig) ≈ <strong>170 €</strong></td>
+        <td>~11 € (Lipsync-Usage ~7 €, Rest Bunny/Fish/Stripe)</td>
+        <td><strong>+159 € (≈ 93 %)</strong></td>
+      </tr>
+      <tr>
+        <td>Einmalig 200 Videos mit KI-Begrüßung in 3 Monaten</td>
+        <td>120 € Abo + 390 € Credits (400 Credits: 250er + 100er + 50er) = <strong>510 €</strong></td>
+        <td>~83 € (Lipsync ~66 €, Bunny/Fish/Stripe ~17 €)</td>
+        <td><strong>+427 € (≈ 84 %)</strong></td>
+      </tr>
+    </table>
+    <p class="small">
+      Der Grund: Fast alle unsere Kosten sind <em>nutzungsabhängig</em> (sync.so, Bunny, Fish
+      zahlen wir nur, wenn wirklich generiert wird). Wer wenig generiert, kostet uns fast nichts,
+      zahlt aber das volle Abo. Kleine Nutzer haben dadurch sogar die <em>höchste</em> Marge.
+      Die echten Fixkosten (Server ~28 €, Domains, Tools: zusammen ~35–40 €/Monat) sind ab
+      <strong>2–3 Abo-Nutzern</strong> komplett gedeckt — unabhängig davon, ob sie generieren.
+    </p>
+    <div class="callout warn">
+      <strong>Das einzige gefundene Verlust-Szenario:</strong> Gratis-Beispielvideos (Previews).
+      Jede Preview kostet uns echte sync.so-Usage (~0,34 €), der Nutzer zahlt dafür nichts — und
+      aktuell gibt es kein Tageslimit. Ein einzelner Vieltester könnte so ~375 €/Monat Kosten
+      erzeugen, ohne je einen Credit zu kaufen. Fix ist Teil von Woche 1: ~5 Previews pro Nutzer
+      und Tag (für ehrliche Interessenten mehr als genug).
+    </div>
+    <p class="small muted">
+      Ehrliche Fußnoten: (1) Läuft die Kampagne im Scale-Monat ($249 statt $49), steigen die Kosten
+      um ~185 €/Monat, die Usage sinkt durch den 20-%-Rabatt um ~55 € — Marge bleibt über 65 %.
+      (2) Die Bunny-Speicherkosten wachsen mit jedem Monat, weil alte Videos für die Landingpages
+      online bleiben (~2 €/Monat je 1.000 gehosteter 5-min-Videos) — bei Kampagnen-Ende greift der
+      bestehende Aufräum-Job. (3) Rechenbasis Video-Größe: echte Messung aus unserer
+      Bunny-Library (1.055 Videos). (4) Fish-Audio-Kosten sind so klein, dass selbst eine
+      Verzehnfachung die Rechnung nicht bewegt.
+    </p>
+  </div>
+
+  <div class="footer">
+    VIDEOCOMET · Skalierungs-Review 08.08.2026 · Version 4 (finaler Plan) · Grundlage: Code-Audit
+    (Pipeline, Worker, Queues), echte Produktions-Messwerte (Postgres + Worker-Logs + Bunny-API),
+    sync.so-Preisliste, Hetzner-/Hostinger-Bestandsaufnahme · 4 Review-Rollen + zweites unabhängiges
+    3er-Team mit Gegenkontrolle
+  </div>
+
+</div>
+</body>
+</html>

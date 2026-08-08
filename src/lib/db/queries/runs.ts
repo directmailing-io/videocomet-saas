@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { analyticsEvents, leadEvents, leads, runs } from "@/lib/db/schema";
 import type { RunAbConfig } from "@/lib/db/schema";
 import { enqueueWebhooksForRunFinalized } from "@/lib/webhooks/lead-event-hook";
+import { sendRunCompletionNotification } from "@/lib/run-notifications";
 
 /**
  * Erlaubte Run-Status-Übergänge für die Preflight-Pipeline.
@@ -23,7 +24,10 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   preflighting: ["awaiting_approval", "cancelled", "failed"],
   awaiting_approval: ["approved", "cancelled"],
   approved: ["generating", "cancelled"],
-  generating: ["completed", "failed", "cancelled"],
+  // paused = Intro-Notbremse (Migration 0048): zu viele fallback_error-Intros
+  // → Run hält an. Fortsetzen via POST /api/runs/[id]/resume.
+  generating: ["completed", "failed", "cancelled", "paused"],
+  paused: ["generating", "cancelled"],
   failed: ["preflighting", "cancelled"],
   completed: [],
   cancelled: [],
@@ -99,7 +103,10 @@ export async function finalizeRunIfAllLeadsDone(runId: string): Promise<{
     .where(
       and(
         eq(runs.id, runId),
-        sql`${runs.status} NOT IN ('completed', 'failed', 'cancelled')`,
+        // 'paused' ist bewusst ausgeschlossen: ein angehaltener Run darf
+        // nicht durch nebenläufig fertig werdende Leads „completed" werden —
+        // der User soll erst prüfen und explizit fortsetzen.
+        sql`${runs.status} NOT IN ('completed', 'failed', 'cancelled', 'paused')`,
       ),
     )
     .returning({ id: runs.id });
@@ -110,6 +117,10 @@ export async function finalizeRunIfAllLeadsDone(runId: string): Promise<{
   // Row und feuert. Fire-and-forget; nie blocking.
   if (finalized) {
     void enqueueWebhooksForRunFinalized({ runId, kind: "run.completed" });
+    // Abschluss-Mail (W3): gleicher Idempotenz-Gedanke, aber mit eigenem
+    // atomarem Claim auf runs.completion_email_sent_at — falls mehrere
+    // Pfade finalisieren, verschickt trotzdem nur einer.
+    void sendRunCompletionNotification(runId);
   }
   return { finalized, total, done };
 }
@@ -250,6 +261,7 @@ export async function setRunStatus(
             "awaiting_approval",
             "approved",
             "generating",
+            "paused",
           ]),
         )
       : validPredecessors;

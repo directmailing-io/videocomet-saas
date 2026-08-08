@@ -3,7 +3,7 @@ import { getUserById } from "@/lib/db/queries/users";
 import { PageHeader } from "@/components/ui/page-header";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import { ProfileForm, BillingForm } from "./profile-form";
+import { ProfileForm, BillingForm, NotificationsForm } from "./profile-form";
 import { PasswordForm } from "./password-form";
 import { DomainsTab } from "./domains-tab";
 import { MailboxesTab } from "./mailboxes-tab";
@@ -83,6 +83,13 @@ export default async function EinstellungenPage({
                   companyName: user.companyName ?? "",
                   vatId: user.vatId ?? "",
                 }}
+              />
+            </CardContent>
+          </Card>
+          <Card className="mt-6">
+            <CardContent className="p-6">
+              <NotificationsForm
+                initialNotifyRunEmails={user.notifyRunEmails}
               />
             </CardContent>
           </Card>

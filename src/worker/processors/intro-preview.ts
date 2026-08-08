@@ -34,9 +34,11 @@ import {
   leads,
   mediaItems,
   runs,
+  users,
   voiceProfiles,
   type IntroPreviewEntry,
 } from "@/lib/db/schema";
+import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
 import { resolveIntroSubstitutions } from "@/lib/intro-name-check";
 import { DEFAULT_TTS_TEMPLATE, INTRO_PREVIEW_TARGET } from "@/lib/intro";
 import { uploadIntroFile } from "@/lib/bunny/intro-storage";
@@ -59,11 +61,26 @@ const PREVIEW_PARALLEL = INTRO_PREVIEW_TARGET + 1;
 /**
  * Warte-Retry, wenn Kalibrierung/Voice-Training beim Runden-Start noch
  * läuft (Race: Preflight kleiner Listen ist oft schneller fertig als die
- * Kalibrierung des gerade hochgeladenen Webcam-Videos). 40 × 15s = 10 min
- * Geduld, danach gilt das Intro als endgültig nicht bereit.
+ * Kalibrierung des gerade hochgeladenen Webcam-Videos). 120 × 5s = 10 min
+ * Geduld, danach gilt das Intro als endgültig nicht bereit. 5s statt 15s
+ * (W2-Speedup): die Preview startet im Schnitt ~7s früher, sobald die
+ * Kalibrierung fertig ist — reine DB-Reads, kein API-Traffic.
  */
-const INTRO_WAIT_DELAY_MS = 15_000;
-const INTRO_WAIT_MAX_ATTEMPTS = 40;
+const INTRO_WAIT_DELAY_MS = 5_000;
+const INTRO_WAIT_MAX_ATTEMPTS = 120;
+
+/**
+ * Kostenbremse: Jede Preview kostet echte sync.so-Usage (~0,34 €), der User
+ * zahlt dafür nichts. Ohne Limit könnte ein einzelner Vieltester ~375 €/Monat
+ * Kosten erzeugen, ohne je einen Credit zu kaufen. Rollierendes 24h-Fenster
+ * statt Kalendertag, damit die Server-Zeitzone (UTC) keine Rolle spielt.
+ * Zählt nur Runs, bei denen wirklich Previews generiert wurden — Skips
+ * (Kalibrierung nicht bereit etc.) verbrauchen das Limit nicht.
+ */
+function introPreviewDailyLimit(): number {
+  const parsed = Number(process.env.INTRO_PREVIEW_DAILY_LIMIT);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : 5;
+}
 
 /**
  * Endgültiger Skip nach der Promotion: Abschluss-Marker setzen, damit die
@@ -128,6 +145,38 @@ export async function processIntroPreviewJob(job: {
     .limit(1);
   if (!campaign?.introEnabled || !campaign.webcamMediaId) {
     return { status: "skipped", reason: "intro_not_enabled" };
+  }
+
+  // Preview-Limit (siehe introPreviewDailyLimit): Admins ausgenommen.
+  const [previewUser] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, run.userId))
+    .limit(1);
+  if (previewUser?.role !== "admin") {
+    const limit = introPreviewDailyLimit();
+    const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [usage] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(runs)
+      .where(
+        and(
+          eq(runs.userId, run.userId),
+          sql`${runs.introPreviewCompletedAt} >= ${windowStart}`,
+          sql`jsonb_array_length(COALESCE(${runs.introPreview}, '[]'::jsonb)) > 0`,
+          sql`${runs.id} <> ${runId}`,
+        ),
+      );
+    if ((usage?.count ?? 0) >= limit) {
+      await insertPipelineEvent({
+        runId,
+        level: "warn",
+        stage: "intro_preview",
+        message: `Limit für Beispielvideos erreicht (${limit} Durchläufe in 24 Stunden). Die Freigabe des Runs ist weiterhin möglich — neue Beispielvideos gibt es wieder ab morgen.`,
+      });
+      await markPreviewCompleted(runId);
+      return { status: "skipped", reason: "daily_limit_reached" };
+    }
   }
 
   // Voice-Profil + Kalibrierung müssen ready sein — sonst NULL lassen
@@ -266,16 +315,44 @@ export async function processIntroPreviewJob(job: {
       leadId: string;
       substitutions: Record<string, string>;
     }): Promise<IntroPreviewEntry | null> => {
-      const result = await generatePersonalizedWebcam({
-        userId: run.userId,
-        tag: `pv-${cand.leadId.slice(0, 8)}`,
-        substitutions: cand.substitutions,
-        calibration,
-        fishModelId,
-        webcamLocalPath,
-        workDir: tmpDir,
-        trimToSec: PREVIEW_TRIM_SEC,
-      });
+      // Die Engine RETHROWT seit dem Intro-Staging retryable Fehler
+      // (Fish 429/5xx, sync.so-Concurrency) statt sie als {ok:false} zu
+      // schlucken. Previews bleiben never-fatal: begrenzter Retry (3×,
+      // 20s Pause), danach Fallback (null) — die Freigabe blockiert nie.
+      const MAX_ENGINE_ATTEMPTS = 3;
+      const RETRY_DELAY_MS = 20_000;
+      let result: Awaited<ReturnType<typeof generatePersonalizedWebcam>>;
+      let attempt = 1;
+      for (;;) {
+        try {
+          result = await generatePersonalizedWebcam({
+            userId: run.userId,
+            tag: `pv-${cand.leadId.slice(0, 8)}`,
+            substitutions: cand.substitutions,
+            calibration,
+            fishModelId,
+            webcamLocalPath,
+            workDir: tmpDir,
+            trimToSec: PREVIEW_TRIM_SEC,
+          });
+          break;
+        } catch (err) {
+          const retryable =
+            (err as { retryable?: boolean }).retryable === true;
+          const message = err instanceof Error ? err.message : String(err);
+          if (!retryable || attempt >= MAX_ENGINE_ATTEMPTS) {
+            console.warn(
+              `[intro-preview:${runId}] lead ${cand.leadId} engine error (attempt ${attempt}): ${message.slice(0, 200)}`,
+            );
+            return null;
+          }
+          console.warn(
+            `[intro-preview:${runId}] lead ${cand.leadId} retryable engine error (attempt ${attempt}/${MAX_ENGINE_ATTEMPTS}) — retry in ${RETRY_DELAY_MS / 1000}s: ${message.slice(0, 200)}`,
+          );
+          attempt += 1;
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        }
+      }
       if (!result.ok) {
         console.warn(
           `[intro-preview:${runId}] lead ${cand.leadId} fallback: ${result.reason}`,

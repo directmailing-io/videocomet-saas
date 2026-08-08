@@ -829,3 +829,237 @@ export async function sendAccountCleanupDoneMail(
   // nachweislich raus sein, bevor der Sweep Timestamps setzt (Loesch-Gate).
   if (sendResult.error) throw new Error(`Resend: ${sendResult.error.message}`);
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// ── Run-Abschluss-Benachrichtigungen (W3) ──────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────
+
+export interface RunMailFailedLead {
+  /** Anzeigename (Vorname/Nachname/Firma aus den Lead-Daten, Fallback Zeile). */
+  name: string;
+  /** Fehlergrund (lead.errorMessage bzw. Stage des letzten error-Events). */
+  reason: string;
+}
+
+export interface SendRunCompletedMailInput {
+  to: string;
+  firstName?: string | null;
+  runName: string;
+  campaignId: string;
+  runId: string;
+  completedCount: number;
+  failedCount: number;
+  totalCount: number;
+  /** Max. 20 Einträge; Rest steckt in failedMoreCount. */
+  failedLeads: RunMailFailedLead[];
+  /** Anzahl weiterer fehlgeschlagener Leads jenseits der Liste. */
+  failedMoreCount: number;
+  /** Leads, die ohne personalisierte Begrüßung (Original-Video) liefen. */
+  introFallbackCount: number;
+}
+
+/**
+ * Systemmail nach Run-Abschluss (alle Leads terminal). Genau EINE Mail pro
+ * Run; der atomare Claim passiert im Caller (run-notifications.ts).
+ * Hinweis Texte: keine em-Dashes verwenden.
+ */
+export async function sendRunCompletedMail(
+  input: SendRunCompletedMailInput,
+): Promise<void> {
+  const detailUrl = `${appUrl()}/kampagnen/${input.campaignId}/runs/${input.runId}`;
+  const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
+  const allOk = input.failedCount === 0;
+
+  const failedRowsHtml = input.failedLeads
+    .map(
+      (l) => `
+      <p style="margin:0 0 6px 0;font-size:13px;line-height:1.6;color:${BRAND_INK};">
+        <strong>${escapeHtml(l.name)}</strong>: ${escapeHtml(l.reason)}
+      </p>`,
+    )
+    .join("");
+  const failedBlockHtml = allOk
+    ? ""
+    : `
+    <div style="background:#FDF2F2;border-radius:14px;padding:16px 18px;margin:0 0 24px 0;">
+      <p style="margin:0 0 10px 0;font-size:14px;font-weight:600;line-height:1.5;color:${BRAND_INK};">
+        ${input.failedCount} ${input.failedCount === 1 ? "Lead ist" : "Leads sind"} fehlgeschlagen:
+      </p>
+      ${failedRowsHtml}
+      ${
+        input.failedMoreCount > 0
+          ? `<p style="margin:6px 0 0 0;font-size:13px;line-height:1.6;color:${BRAND_MUTED};">und ${input.failedMoreCount} weitere.</p>`
+          : ""
+      }
+      <p style="margin:10px 0 0 0;font-size:13px;line-height:1.6;color:${BRAND_MUTED};">
+        Du kannst fehlgeschlagene Leads in der Runden-Ansicht über &bdquo;Neu generieren&ldquo; erneut versuchen.
+      </p>
+    </div>`;
+
+  const introBlockHtml =
+    input.introFallbackCount > 0
+      ? `
+    <div style="background:#FFF8E6;border-radius:14px;padding:16px 18px;margin:0 0 24px 0;">
+      <p style="margin:0;font-size:13px;line-height:1.6;color:${BRAND_INK};">
+        Hinweis: Bei ${input.introFallbackCount} ${input.introFallbackCount === 1 ? "Video" : "Videos"} konnte die personalisierte Begrüßung nicht erzeugt werden. Diese Videos verwenden dein Original-Video und sind trotzdem vollständig nutzbar.
+      </p>
+    </div>`
+      : "";
+
+  const body = `
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:${BRAND_INK};line-height:1.25;">
+      ${allOk ? "Deine Videos sind fertig" : "Deine Runde ist abgeschlossen"}
+    </h1>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${escapeHtml(greeting)}
+    </p>
+    <p style="margin:0 0 20px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      deine Runde <strong>${escapeHtml(input.runName)}</strong> ist fertig. Hier die Zusammenfassung:
+    </p>
+    <div style="background:${BRAND_SOFT};border-radius:14px;padding:18px 20px;margin:0 0 24px 0;">
+      <p style="margin:0 0 6px 0;font-size:14px;line-height:1.6;color:${BRAND_INK};">
+        Erfolgreich: <strong>${input.completedCount} von ${input.totalCount}</strong>
+      </p>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND_INK};">
+        Fehlgeschlagen: <strong>${input.failedCount}</strong>
+      </p>
+    </div>
+    ${failedBlockHtml}
+    ${introBlockHtml}
+    <p style="margin:0 0 28px 0;">
+      <a href="${detailUrl}" style="display:inline-block;background:${BRAND_ACCENT};color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;">
+        Runde ansehen
+      </a>
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Funktioniert der Button nicht? Öffne diesen Link in deinem Browser:<br />
+      <a href="${detailUrl}" style="color:${BRAND_ACCENT};text-decoration:underline;">${escapeHtml(detailUrl)}</a><br /><br />
+      Du möchtest keine Abschluss-Mails mehr? In den <a href="${appUrl()}/einstellungen" style="color:${BRAND_ACCENT};text-decoration:underline;">Einstellungen</a> kannst du sie deaktivieren.
+    </p>
+  `;
+
+  const subject = allOk
+    ? `Deine Videos sind fertig: ${input.runName}`
+    : `Runde abgeschlossen mit ${input.failedCount} ${input.failedCount === 1 ? "Fehler" : "Fehlern"}: ${input.runName}`;
+
+  const html = shellHtml({
+    headline: subject,
+    preheader: `${input.completedCount} von ${input.totalCount} Leads erfolgreich.`,
+    body,
+  });
+
+  const textFailedLines = input.failedLeads.map((l) => `- ${l.name}: ${l.reason}`);
+  if (input.failedMoreCount > 0) {
+    textFailedLines.push(`... und ${input.failedMoreCount} weitere.`);
+  }
+  const text = [
+    greeting,
+    "",
+    `deine Runde „${input.runName}" ist fertig.`,
+    "",
+    `Erfolgreich: ${input.completedCount} von ${input.totalCount}`,
+    `Fehlgeschlagen: ${input.failedCount}`,
+    ...(textFailedLines.length > 0 ? ["", ...textFailedLines] : []),
+    ...(input.introFallbackCount > 0
+      ? [
+          "",
+          `Hinweis: ${input.introFallbackCount} Video(s) ohne personalisierte Begrüßung (Original-Video verwendet).`,
+        ]
+      : []),
+    "",
+    `Runde ansehen: ${detailUrl}`,
+    "",
+    "VIDEOCOMET",
+  ].join("\n");
+
+  const resend = getResend();
+  if (!resend) {
+    console.log("[mail:dev] sendRunCompletedMail -> %s", input.to);
+    console.log("[mail:dev] subject: %s", subject);
+    return;
+  }
+
+  await resend.emails.send({
+    from: fromAddress(),
+    to: input.to,
+    subject,
+    html,
+    text,
+  });
+}
+
+export interface SendRunFailedMailInput {
+  to: string;
+  firstName?: string | null;
+  runName: string;
+  campaignId: string;
+  runId: string;
+  /** Klartext-Grund (z.B. Watchdog oder 0-Lead-Guard). */
+  reason: string;
+}
+
+/** Systemmail, wenn ein ganzer Run fatal fehlschlägt (status='failed'). */
+export async function sendRunFailedMail(
+  input: SendRunFailedMailInput,
+): Promise<void> {
+  const detailUrl = `${appUrl()}/kampagnen/${input.campaignId}/runs/${input.runId}`;
+  const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
+
+  const body = `
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:${BRAND_INK};line-height:1.25;">
+      Deine Runde konnte nicht abgeschlossen werden
+    </h1>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${escapeHtml(greeting)}
+    </p>
+    <p style="margin:0 0 20px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      deine Runde <strong>${escapeHtml(input.runName)}</strong> wurde leider abgebrochen.
+    </p>
+    <div style="background:#FDF2F2;border-radius:14px;padding:16px 18px;margin:0 0 24px 0;">
+      <p style="margin:0;font-size:13px;line-height:1.6;color:${BRAND_INK};">
+        ${escapeHtml(input.reason)}
+      </p>
+    </div>
+    <p style="margin:0 0 28px 0;">
+      <a href="${detailUrl}" style="display:inline-block;background:${BRAND_ACCENT};color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;">
+        Runde ansehen
+      </a>
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Es wurden nur Credits für erfolgreich erzeugte Videos verwendet. Bei Fragen erreichst du uns unter <a href="mailto:info@videocomet.de" style="color:${BRAND_ACCENT};text-decoration:underline;">info@videocomet.de</a>.
+    </p>
+  `;
+
+  const subject = `Runde abgebrochen: ${input.runName}`;
+  const html = shellHtml({
+    headline: subject,
+    preheader: "Deine Runde konnte nicht abgeschlossen werden.",
+    body,
+  });
+  const text = [
+    greeting,
+    "",
+    `deine Runde „${input.runName}" wurde leider abgebrochen.`,
+    "",
+    `Grund: ${input.reason}`,
+    "",
+    `Runde ansehen: ${detailUrl}`,
+    "",
+    "VIDEOCOMET",
+  ].join("\n");
+
+  const resend = getResend();
+  if (!resend) {
+    console.log("[mail:dev] sendRunFailedMail -> %s", input.to);
+    console.log("[mail:dev] subject: %s", subject);
+    return;
+  }
+
+  await resend.emails.send({
+    from: fromAddress(),
+    to: input.to,
+    subject,
+    html,
+    text,
+  });
+}

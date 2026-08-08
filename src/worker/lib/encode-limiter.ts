@@ -16,10 +16,18 @@
  *
  * Beide runFfmpeg-Implementierungen (ffmpeg.ts, video-compress.ts) rufen
  * das zentral auf — neue Encode-Callsites sind automatisch abgedeckt.
+ *
+ * Beide Werte per Env übersteuerbar (MAX_CONCURRENT_ENCODES,
+ * LIBX264_THREADS), z.B. nach Hetzner-Resize auf 16 Kerne: 8/3.
  */
 
-const MAX_CONCURRENT_ENCODES = 4;
-const LIBX264_THREADS = 3;
+function envInt(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : fallback;
+}
+
+const MAX_CONCURRENT_ENCODES = envInt("MAX_CONCURRENT_ENCODES", 4);
+const LIBX264_THREADS = envInt("LIBX264_THREADS", 3);
 
 let activeEncodes = 0;
 const waiters: Array<() => void> = [];

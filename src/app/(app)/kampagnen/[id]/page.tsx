@@ -13,6 +13,7 @@ import {
 import { db } from "@/lib/db";
 import { mediaItems, type EmailBlast } from "@/lib/db/schema";
 import { listCampaignEmailBlasts } from "@/lib/db/queries/email-blasts";
+import { getRunEtas } from "@/lib/run-eta-read";
 import { listMailboxConnections } from "@/lib/db/queries/mailboxes";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -139,6 +140,12 @@ export default async function CampaignDetailPage({
       : Promise.resolve(null),
   ]);
 
+  // Server-ETA (W3) für laufende Runden, damit die Tabelle direkt beim
+  // ersten Paint eine Restzeit zeigt (Polling übernimmt danach).
+  const etaMap = await getRunEtas(
+    runsWithCounts.filter((r) => r.status === "generating").map((r) => r.id),
+  );
+
   const initialRuns: RunRow[] = runsWithCounts.map((r) => ({
     id: r.id,
     name: r.name,
@@ -159,6 +166,7 @@ export default async function CampaignDetailPage({
           viewedB: r.abViewedB,
         }
       : null,
+    eta: etaMap.get(r.id) ?? null,
   }));
 
   // Aggregates aus getCampaignDeepDive ODER aus allLeads als Fallback

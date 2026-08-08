@@ -14,7 +14,8 @@ export type RunStatus =
   | "generating"
   | "completed"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "paused";
 
 export type RunStatusVariant = "brand" | "success" | "warn" | "danger" | "neutral";
 
@@ -28,6 +29,7 @@ const LABELS: Record<RunStatus, string> = {
   completed: "Fertig",
   failed: "Fehlgeschlagen",
   cancelled: "Abgebrochen",
+  paused: "Angehalten — bitte prüfen",
 };
 
 const VARIANTS: Record<RunStatus, RunStatusVariant> = {
@@ -40,6 +42,7 @@ const VARIANTS: Record<RunStatus, RunStatusVariant> = {
   completed: "success",
   failed: "danger",
   cancelled: "neutral",
+  paused: "warn",
 };
 
 export function runStatusLabel(status: string): string {

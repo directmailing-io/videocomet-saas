@@ -61,8 +61,18 @@ const LEAD_IN_MS = 1200;
  * mehr deutet auf einen TTS-Ausreißer hin, der als Fallback endet.
  */
 const MAX_EXTENSION_MS = 5000;
-/** sync.so Poll-Intervall / Gesamt-Timeout. */
-const SYNCSO_POLL_INTERVAL_MS = 10_000;
+/**
+ * sync.so Poll-Intervall / Gesamt-Timeout. 3,5s statt früher 10s (W2-
+ * Speedup): spart pro Begrüßung im Schnitt ~10-15s Slot-Leerlauf nach
+ * Fertigstellung. Mit 3 parallelen Generierungen ≈ 1 Request/s — weit
+ * unter jedem Rate-Limit; Jitter unten verhindert synchronisierte
+ * Request-Wellen gegen die Cloudflare-Front. Env-Override für den
+ * Notfall (Cloudflare-Blocks → Wert hochdrehen ohne Deploy).
+ */
+const SYNCSO_POLL_INTERVAL_MS = (() => {
+  const parsed = Number(process.env.SYNCSO_POLL_INTERVAL_MS);
+  return Number.isFinite(parsed) && parsed >= 1000 ? parsed : 3_500;
+})();
 const SYNCSO_TIMEOUT_MS = 6 * 60 * 1000;
 /** Die TTS-Anrede endet so viele ms VOR dem Original-Satzbeginn. */
 const TTS_GAP_BEFORE_SENTENCE_MS = 150;
@@ -128,7 +138,10 @@ export interface GeneratePersonalizedWebcamOpts {
    * `calibration.roomtoneUrl` nicht heruntergeladen.
    */
   roomtoneLocalPath?: string;
-  /** Preview-Modus: Endergebnis nach der Assembly auf N Sekunden kürzen. */
+  /**
+   * Preview-Modus: Teil-Assembly — nur das benötigte Material wird
+   * encodiert (720p, schnelleres Preset), Output auf N Sekunden begrenzt.
+   */
   trimToSec?: number;
   /**
    * TTS-Provider-Override (A/B-Test-Scripts): ersetzt die Fish-TTS durch
@@ -671,7 +684,7 @@ export async function generatePersonalizedWebcam(
     const deadline = Date.now() + SYNCSO_TIMEOUT_MS;
     let outputUrl: string | null = null;
     for (;;) {
-      await sleep(SYNCSO_POLL_INTERVAL_MS);
+      await sleep(SYNCSO_POLL_INTERVAL_MS + Math.random() * 500);
       const status = await getGeneration(generation.id);
       if (status.status === "COMPLETED" && status.outputUrl) {
         outputUrl = status.outputUrl;
@@ -714,6 +727,27 @@ export async function generatePersonalizedWebcam(
     // in der Rest-Pause (RESIDUAL_PAUSE_MS=300 vor/nach dem Übergang).
     const FADE_MS = 120;
     const fadeOutStartSec = ((segEndMs - FADE_MS) / 1000).toFixed(4);
+    // Preview-Modus (trimToSec): Teil-Assembly statt Voll-Encode. Früher
+    // wurde hier das KOMPLETTE Webcam-Video (bis zu Minuten) in voller
+    // Auflösung encodiert und danach auf N Sekunden geschnitten — der
+    // teuerste Einzelschritt der Preview. Jetzt wird nur das benötigte
+    // Material geschnitten (Segment + kleiner Original-Tail), auf 720p
+    // skaliert und mit schnellerem Preset encodiert. Fürs finale Video
+    // (Staging-Queue) bleibt alles unverändert bei voller Qualität.
+    const isPreview = !!(opts.trimToSec && opts.trimToSec > 0);
+    const previewMs = isPreview ? (opts.trimToSec as number) * 1000 : 0;
+    const tailEndSec = isPreview
+      ? ((resumeMs + Math.max(0, previewMs - segEndMs) + 1500) / 1000).toFixed(4)
+      : null;
+    const vTailTrim = tailEndSec
+      ? `trim=start=${resumeSec}:end=${tailEndSec}`
+      : `trim=start=${resumeSec}`;
+    const aTailTrim = tailEndSec
+      ? `atrim=start=${resumeSec}:end=${tailEndSec}`
+      : `atrim=start=${resumeSec}`;
+    const vFinal = isPreview
+      ? `[vc]scale=-2:'trunc(min(720,ih)/2)*2'[v];`
+      : `[vc]null[v];`;
     await runFfmpeg([
       "-y",
       "-i", syncedPath,
@@ -721,16 +755,18 @@ export async function generatePersonalizedWebcam(
       "-i", opts.webcamLocalPath,
       "-filter_complex",
       `[0:v]fps=${FPS},setpts=PTS-STARTPTS[v0];` +
-        `[2:v]trim=start=${resumeSec},fps=${FPS},setpts=PTS-STARTPTS[v1];` +
-        `[v0][v1]concat=n=2:v=1:a=0[v];` +
+        `[2:v]${vTailTrim},fps=${FPS},setpts=PTS-STARTPTS[v1];` +
+        `[v0][v1]concat=n=2:v=1:a=0[vc];` +
+        vFinal +
         `[1:a]afade=t=out:st=${fadeOutStartSec}:d=${(FADE_MS / 1000).toFixed(3)},aresample=${SAMPLE_RATE},pan=mono|c0=c0[a0];` +
-        `[2:a]atrim=start=${resumeSec},asetpts=PTS-STARTPTS,aresample=${SAMPLE_RATE},pan=mono|c0=c0,afade=t=in:st=0:d=${(FADE_MS / 1000).toFixed(3)}[a1];` +
+        `[2:a]${aTailTrim},asetpts=PTS-STARTPTS,aresample=${SAMPLE_RATE},pan=mono|c0=c0,afade=t=in:st=0:d=${(FADE_MS / 1000).toFixed(3)}[a1];` +
         `[a0][a1]concat=n=2:v=0:a=1[a]`,
       "-map", "[v]",
       "-map", "[a]",
+      ...(isPreview ? ["-t", (opts.trimToSec as number).toFixed(2)] : []),
       "-c:v", "libx264",
-      "-preset", "medium",
-      "-crf", "18",
+      "-preset", isPreview ? "veryfast" : "medium",
+      "-crf", isPreview ? "23" : "18",
       "-pix_fmt", "yuv420p",
       "-c:a", "aac",
       "-b:a", "192k",
@@ -744,7 +780,13 @@ export async function generatePersonalizedWebcam(
     if (outDurSec === null || webcamDurSec === null) {
       return fail(tag, "qa_duration_unmeasurable");
     }
-    const expectedSec = webcamDurSec - startTrimMs / 1000 + extensionMs / 1000;
+    // Preview: Output ist per Teil-Assembly + `-t` auf trimToSec gekappt —
+    // die Erwartung ist dann das Minimum aus voller Länge und Kappung.
+    const fullExpectedSec =
+      webcamDurSec - startTrimMs / 1000 + extensionMs / 1000;
+    const expectedSec = isPreview
+      ? Math.min(fullExpectedSec, opts.trimToSec as number)
+      : fullExpectedSec;
     if (Math.abs(outDurSec - expectedSec) > 0.5) {
       return fail(
         tag,
@@ -814,25 +856,18 @@ export async function generatePersonalizedWebcam(
 
     // Netto-Zeitversatz des Original-Contents: positiv = vorne getrimmt
     // (Content früher), negativ = vorne verlängert (Content später).
+    // Im Preview-Modus ist der Output bereits durch die Teil-Assembly
+    // gekürzt — kein nachgelagerter Trim-Schritt mehr nötig.
     const netTrimMs = startTrimMs - extensionMs;
-
-    // Preview-Modus: auf die ersten N Sekunden kürzen (nach Assembly + QA).
-    if (opts.trimToSec && opts.trimToSec > 0) {
-      const trimmedPath = join(dir, `intro-out-${tag}-trimmed.mp4`);
-      await runFfmpeg([
-        "-y",
-        "-i", outPath,
-        "-t", opts.trimToSec.toFixed(2),
-        "-c", "copy",
-        "-movflags", "+faststart",
-        trimmedPath,
-      ]);
-      return { ok: true, outputPath: trimmedPath, startTrimMs: netTrimMs };
-    }
-
     return { ok: true, outputPath: outPath, startTrimMs: netTrimMs };
   } catch (err) {
-    // Transiente/externe Fehler (Fish, sync.so, Bunny, ffmpeg) → Fallback.
+    // Retryable-Fehler (FishAudioError bei 429/5xx, SyncsoConcurrencyError)
+    // werden RETHROWN — der Caller (Intro-Staging-Queue bzw. Preview-
+    // Processor) entscheidet über Retry mit Backoff. Alles andere
+    // (dauerhafte/unerwartete Fehler) → Fallback-Result.
+    if ((err as { retryable?: boolean }).retryable === true) {
+      throw err;
+    }
     const message = err instanceof Error ? err.message : String(err);
     return fail(tag, `error: ${message.slice(0, 300)}`);
   } finally {

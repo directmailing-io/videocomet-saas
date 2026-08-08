@@ -17,6 +17,9 @@ export const runStatusEnum = pgEnum("run_status", [
   "preflighting",
   "awaiting_approval",
   "approved",
+  // Migration 0048: Intro-Notbremse — Run angehalten wegen zu vieler
+  // fehlgeschlagener personalisierter Begrüßungen (fallback_error-Quote).
+  "paused",
 ]);
 export const leadStatusEnum = pgEnum("lead_status", ["pending", "rendering", "uploading", "completed", "failed"]);
 export const mediaTypeEnum = pgEnum("media_type", ["webcam", "image", "video", "logo"]);
@@ -103,6 +106,12 @@ export const users = pgTable("users", {
   onboardingDismissedAt: timestamp("onboarding_dismissed_at", {
     withTimezone: true,
   }),
+
+  /**
+   * Run-Abschluss-/Fehler-Mails (Migration 0050). Default AN, Opt-out in
+   * den Einstellungen. Steuert NUR die Runden-Mails, keine Auth-Mails.
+   */
+  notifyRunEmails: boolean("notify_run_emails").notNull().default(true),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -506,6 +515,14 @@ export const runs = pgTable("runs", {
 
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  /**
+   * Dedup-Guard fuer die Abschluss-/Fehler-Mail (Migration 0050): genau
+   * eine Mail pro Run. Wird atomar geclaimt (UPDATE ... WHERE IS NULL
+   * RETURNING), bevor die Mail rausgeht.
+   */
+  completionEmailSentAt: timestamp("completion_email_sent_at", {
+    withTimezone: true,
+  }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   campaignIdx: index("runs_campaign_idx").on(t.campaignId),
@@ -582,10 +599,29 @@ export const leads = pgTable("leads", {
    *   'fallback_name'  → kein brauchbarer Vorname → Original ausgespielt
    *   'fallback_error' → TTS/Lip-Sync-Fehler → Original ausgespielt
    *   'disabled'       → Intro zur Renderzeit deaktiviert
+   *
+   * Seit Migration 0049 (Intro-Staging) zusätzlich zwei NICHT-terminale
+   * Zwischenzustände der vorgelagerten Intro-Queue:
+   *   'queued'         → Staging-Job eingereiht, wartet auf Worker
+   *   'generating'     → Staging-Job läuft (TTS + Lip-Sync)
    */
   introStatus: text("intro_status").$type<
-    "generated" | "fallback_name" | "fallback_error" | "disabled" | null
+    | "generated"
+    | "fallback_name"
+    | "fallback_error"
+    | "disabled"
+    | "queued"
+    | "generating"
+    | null
   >(),
+  /**
+   * Persistiertes Ergebnis der Intro-Staging-Queue (Migration 0049).
+   * Gesetzt bei introStatus='generated'; die Render-Pipeline lädt das
+   * fertige personalisierte Webcam-Video nur noch von `url` herunter.
+   */
+  introResult: jsonb("intro_result").$type<LeadIntroResult | null>(),
+  /** Zähler der Intro-Staging-Versuche (Watchdog-Grenze: 3). */
+  introAttempts: integer("intro_attempts").notNull().default(0),
 
   // ── Video-Dimensionen (Migration 0015) ─────────────────────────────────
   // Vom Bunny-Resolver berechnet & gecached, damit Player + PDF-Thumbnail-
@@ -1476,6 +1512,22 @@ export type RemovedDetail =
     };
 
 /**
+ * Ergebnis der Intro-Staging-Queue in `leads.intro_result` (Migration 0049).
+ * Vom Staging-Processor geschrieben (introStatus='generated'), von der
+ * Render-Pipeline (Stage 0) nur noch gelesen/heruntergeladen.
+ */
+export interface LeadIntroResult {
+  /** Bunny-URL des fertigen personalisierten Webcam-Videos. */
+  url: string;
+  /** Schnittpunkt: so viele ms des Original-Webcams werden übersprungen. */
+  startTrimMs: number;
+  /** Verwendeter Vorname (für Content-Hash/Debugging). */
+  firstName: string;
+  /** ISO-Timestamp der Generierung. */
+  generatedAt: string;
+}
+
+/**
  * Persistierte Duplikat-Erkennungs-Regeln pro Run (`runs.dedupe_config`).
  *
  * TODO Paket A: Diese lokale Definition wird durch den Import aus
@@ -1828,3 +1880,29 @@ export const introCalibrations = pgTable("intro_calibrations", {
 }));
 
 export type IntroCalibration = typeof introCalibrations.$inferSelect;
+
+// ── Intro-Dedup-Cache (Migration 0051, W4) ──────────────────────────────────
+//
+// Identische Begrüßungen (gleicher aufgelöster TTS-Text + Stimme + Webcam-
+// Video + Kalibrierungs-Stand) werden nur EINMAL generiert (TTS + sync.so
+// kosten echtes Geld); weitere Leads verweisen auf dasselbe fertige Video.
+//
+// Claim-Protokoll: INSERT (status='pending') ON CONFLICT DO NOTHING — der
+// Gewinner generiert und setzt status='ready' + result; Verlierer verzögern
+// ihren Job (moveToDelayed) bis das Ergebnis da ist. Ein pending-Claim, der
+// älter ist als der Engine-Hard-Timeout, gilt als verwaist und darf
+// übernommen werden.
+export const introCache = pgTable("intro_cache", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** sha256 über aufgelösten TTS-Text + fishModelId + webcamMediaId + Kalibrierungs-Version. */
+  cacheKey: text("cache_key").notNull(),
+  status: text("status").notNull().default("pending").$type<"pending" | "ready">(),
+  result: jsonb("result").$type<LeadIntroResult | null>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userKeyUq: uniqueIndex("intro_cache_user_key_uq").on(t.userId, t.cacheKey),
+}));
+
+export type IntroCacheRow = typeof introCache.$inferSelect;

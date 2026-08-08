@@ -80,30 +80,30 @@ const RENDER_STEPS: Array<{
   icon: React.ComponentType<{ className?: string }>;
   endSec: number;
 }> = [
-  { label: "Deine KI-Stimme wird geladen", icon: AudioLines, endSec: 10 },
+  { label: "Deine KI-Stimme wird geladen", icon: AudioLines, endSec: 8 },
   {
     label: "Begrüßung wird eingesprochen",
     detail: "Wir nehmen mehrere Varianten auf und wählen die natürlichste.",
     icon: Mic,
-    endSec: 55,
+    endSec: 35,
   },
   {
     label: "Aussprache wird geprüft",
     detail: "Eine zweite KI hört gegen: Klingt der Name richtig?",
     icon: Ear,
-    endSec: 85,
+    endSec: 55,
   },
   {
     label: "Klang wird an dein Video angepasst",
     detail: "Lautstärke und Raumklang, damit man keinen Übergang hört.",
     icon: SlidersHorizontal,
-    endSec: 110,
+    endSec: 70,
   },
   {
     label: "Lippenbewegungen werden synchronisiert",
     detail: "Der aufwendigste Schritt: dein Mund bewegt sich passend zum neuen Ton.",
     icon: ScanFace,
-    endSec: 260,
+    endSec: 150,
   },
   {
     label: "Feinschliff und Qualitäts-Check",
@@ -112,7 +112,9 @@ const RENDER_STEPS: Array<{
     endSec: Number.POSITIVE_INFINITY,
   },
 ];
-const TOTAL_EST_SEC = 300;
+// W2-Speedup (Teil-Assembly, 720p, schnelleres Polling): Previews brauchen
+// jetzt typischerweise ~1,5-2,5 min statt ~5 — Schätzung entsprechend.
+const TOTAL_EST_SEC = 170;
 
 function useRenderElapsed(storageKey: string): number {
   const [elapsed, setElapsed] = React.useState(0);

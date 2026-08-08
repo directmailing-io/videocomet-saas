@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { BundleDialog } from "./bundle-dialog";
 import { LeadEditDialog } from "./lead-edit-dialog";
+import { formatRunEta, type RunEtaEntry } from "@/lib/run-eta-format";
 
 interface LeadRow {
   id: string;
@@ -260,6 +261,7 @@ export function LiveTable({
   });
   const [leads, setLeads] = React.useState<LeadRow[]>(initialLeads);
   const [regenerating, setRegenerating] = React.useState(false);
+  const [resuming, setResuming] = React.useState(false);
 
   // Live-Log state
   const [events, setEvents] = React.useState<PipelineEventDTO[]>([]);
@@ -385,6 +387,54 @@ export function LiveTable({
     [isTerminal, regenerating, runId, router, toast, counts.failed],
   );
 
+  // Fortsetzen nach Intro-Notbremse: der Server hat den Run pausiert, weil zu
+  // viele personalisierte Begrüßungen fehlgeschlagen sind. POST /resume setzt
+  // paused → generating und reiht die hängenden Leads wieder ein.
+  const resumeRun = React.useCallback(async () => {
+    if (runStatus !== "paused" || resuming) return;
+    setResuming(true);
+    try {
+      const res = await fetch(`/api/runs/${runId}/resume`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+          const j = (await res.json()) as { error?: string };
+          if (j.error) msg = j.error;
+        } catch {
+          /* ignore */
+        }
+        toast({
+          title: "Fortsetzen fehlgeschlagen",
+          description: msg,
+          variant: "danger",
+        });
+        return;
+      }
+      toast({
+        title: "Lauf fortgesetzt",
+        description: "Die verbleibenden Leads werden jetzt weiterverarbeitet.",
+      });
+      setRunStatus("generating");
+      router.refresh();
+    } catch (err) {
+      toast({
+        title: "Fortsetzen fehlgeschlagen",
+        description: err instanceof Error ? err.message : "Netzwerkfehler.",
+        variant: "danger",
+      });
+    } finally {
+      setResuming(false);
+    }
+  }, [runStatus, resuming, runId, router, toast]);
+
+  // Server-berechnete ETA (W3, Worker → Redis → SSE). Hat Vorrang vor der
+  // naiven Rate-Schätzung; formatRunEta liefert null, sobald der Eintrag
+  // veraltet ist, dann greift der Fallback.
+  const [serverEta, setServerEta] = React.useState<RunEtaEntry | null>(null);
+
   // True while we were live-streaming — the terminal transition then owes the
   // table one final snapshot, because the live EventSource gets closed by the
   // effect cleanup before the last lead-status patches arrive.
@@ -468,6 +518,7 @@ export function LiveTable({
             ),
           );
         }
+        setServerEta((payload.eta as RunEtaEntry | null) ?? null);
       } catch {
         // ignore
       }
@@ -496,6 +547,7 @@ export function LiveTable({
             mergePipelineEvents(prev, payload.pipelineEvents as PipelineEventDTO[]),
           );
         }
+        setServerEta((payload.eta as RunEtaEntry | null) ?? null);
       } catch {
         // ignore
       }
@@ -542,11 +594,18 @@ export function LiveTable({
   });
   const startedAtLabel = startedAt ? formatClock(startedAt) : null;
 
-  // ETA: gewichtetes "noch ~X min" basierend auf bisher fertigen Leads pro ms.
-  // Erst sichtbar, wenn der Run läuft, mindestens 30 s alt ist und schon
-  // mindestens einen Completion-Event hatte (sonst Division durch 0).
+  // ETA: bevorzugt die Server-ETA (Worker berechnet lastbewusst, W3) —
+  // formatRunEta liefert bereits "Noch ~X Min. · fertig ca. …" und wird
+  // null, sobald der Cache-Eintrag >3 min alt ist. Fallback: naive
+  // Rate-Schätzung (fertige Leads pro ms), erst nach 30 s + 1 Completion.
   const etaLabel = React.useMemo(() => {
     if (isTerminal) return null;
+    const remaining = counts.pending + counts.rendering + counts.uploading;
+    if (remaining <= 0) return null;
+    if (serverEta) {
+      const label = formatRunEta(serverEta, nowTick);
+      if (label) return label;
+    }
     if (!startedAt) return null;
     const startMs = new Date(startedAt).getTime();
     if (Number.isNaN(startMs)) return null;
@@ -555,12 +614,11 @@ export function LiveTable({
     if (counts.completed <= 0) return null;
     const completedRate = counts.completed / elapsedMs; // leads pro ms
     if (completedRate <= 0) return null;
-    const remaining = counts.pending + counts.rendering + counts.uploading;
-    if (remaining <= 0) return null;
     const etaMs = remaining / completedRate;
-    return formatEta(etaMs);
+    return `Noch ${formatEta(etaMs)}`;
   }, [
     isTerminal,
+    serverEta,
     startedAt,
     nowTick,
     counts.completed,
@@ -722,6 +780,21 @@ export function LiveTable({
               </span>
             </div>
             <div className="flex items-center gap-2">
+              {runStatus === "paused" && (
+                <Button
+                  onClick={() => void resumeRun()}
+                  disabled={resuming}
+                  iconLeft={
+                    resuming ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Play className="size-4" />
+                    )
+                  }
+                >
+                  {resuming ? "Wird fortgesetzt…" : "Fortsetzen"}
+                </Button>
+              )}
               {isTerminal && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -796,6 +869,22 @@ export function LiveTable({
             </div>
           </div>
 
+          {runStatus === "paused" && (
+            <div className="mt-4 rounded-squircle bg-warn-soft p-4 text-sm text-ink">
+              <p className="font-semibold">
+                Lauf angehalten — zu viele personalisierte Begrüßungen
+                fehlgeschlagen.
+              </p>
+              <p className="mt-1 text-ink-muted">
+                Die Notbremse hat den Lauf pausiert, damit nicht massenhaft
+                Videos ohne persönliche Begrüßung erzeugt werden. Prüfe das
+                technische Log (z.&nbsp;B. Stimmprofil oder Webcam-Video) und
+                setze den Lauf anschließend fort. Bereits fehlgeschlagene
+                Begrüßungen nutzen den Fallback ohne Personalisierung.
+              </p>
+            </div>
+          )}
+
           <div className="mt-6 flex flex-wrap items-end justify-between gap-6">
             <div className="flex items-center gap-5">
               {runStatus === "completed" && counts.failed === 0 ? (
@@ -820,7 +909,7 @@ export function LiveTable({
                       ? `${counts.failed} fehlgeschlagen — über „Neu generieren" erneut versuchen.`
                       : "Videos, Landingpages und Briefe sind bereit."
                     : etaLabel
-                      ? `Noch ${etaLabel} — Deine persönlichen Videos und Briefe entstehen gerade.`
+                      ? `${etaLabel} — Deine persönlichen Videos und Briefe entstehen gerade.`
                       : "Deine persönlichen Videos und Briefe entstehen gerade."}
                 </p>
                 {runStatus === "completed" &&

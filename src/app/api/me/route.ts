@@ -55,11 +55,16 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Ungültiges JSON." }, { status: 400 });
   }
 
-  const patch: Partial<Record<AllowedField, string | null>> = {};
+  const patch: Partial<Record<AllowedField, string | null>> & {
+    notifyRunEmails?: boolean;
+  } = {};
   for (const key of ALLOWED_FIELDS) {
     if (key in body) {
       patch[key] = sanitizeString(body[key]);
     }
+  }
+  if ("notifyRunEmails" in body && typeof body.notifyRunEmails === "boolean") {
+    patch.notifyRunEmails = body.notifyRunEmails;
   }
 
   if (Object.keys(patch).length === 0) {

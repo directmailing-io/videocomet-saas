@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { listUserCampaigns } from "@/lib/db/queries/campaigns";
 import { runStatusLabel, runStatusVariant } from "@/lib/run-status";
+import { getRunEtas } from "@/lib/run-eta-read";
+import { formatRunEta } from "@/lib/run-eta-format";
 
 function formatDate(d: Date | null): string {
   if (!d) return "";
@@ -66,6 +68,12 @@ export default async function DashboardPage() {
     .where(eq(runs.userId, userId))
     .orderBy(desc(runs.createdAt))
     .limit(5);
+
+  // Server-ETA (W3) für laufende Runden — reiner Redis-Read, Momentaufnahme
+  // beim Seitenaufbau (kein Live-Countdown nötig auf dem Dashboard).
+  const etaMap = await getRunEtas(
+    recentRuns.filter((r) => r.status === "generating").map((r) => r.id),
+  );
 
   const firstName = user.firstName?.trim() || user.email;
   const runningCount = openRuns?.count ?? 0;
@@ -136,7 +144,11 @@ export default async function DashboardPage() {
               </p>
             ) : (
               <ul className="divide-y divide-line-soft">
-                {recentRuns.map((r) => (
+                {recentRuns.map((r) => {
+                  const etaEntry =
+                    r.status === "generating" ? etaMap.get(r.id) : undefined;
+                  const etaLabel = etaEntry ? formatRunEta(etaEntry) : null;
+                  return (
                   <li
                     key={r.id}
                     className="flex items-center justify-between gap-4 py-3"
@@ -151,13 +163,15 @@ export default async function DashboardPage() {
                       <p className="text-xs text-ink-muted mt-0.5">
                         {r.completedLeads} / {r.totalLeads} Leads &middot;{" "}
                         {formatDate(r.createdAt)}
+                        {etaLabel ? <> &middot; {etaLabel}</> : null}
                       </p>
                     </div>
                     <Badge variant={runStatusVariant(r.status)} dot>
                       {runStatusLabel(r.status)}
                     </Badge>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </CardContent>

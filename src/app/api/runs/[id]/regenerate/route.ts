@@ -9,6 +9,7 @@ import { campaigns, customLpTemplates, leads } from "@/lib/db/schema";
 import { removeStreamAssetRefsForGuids } from "@/lib/db/queries/bunny-assets";
 import { getRun, updateRun } from "@/lib/db/queries/runs";
 import { pipelineQueue } from "@/worker/queue";
+import { leadJobPriority } from "@/lib/queue-priority";
 
 async function resolveActiveCustomLpVersionId(
   campaignId: string,
@@ -304,7 +305,10 @@ export async function POST(
           ...(skipPdf ? { skipPdf: true } : {}),
         },
         // WICHTIG: BullMQ verbietet ":" in Custom-jobIds — deshalb "-" statt ":"
-        opts: { jobId: `${lr.id}-regen-${nowStamp}` },
+        opts: {
+          jobId: `${lr.id}-regen-${nowStamp}`,
+          priority: leadJobPriority(lr.rowIndex),
+        },
       })),
     );
   } catch (err) {

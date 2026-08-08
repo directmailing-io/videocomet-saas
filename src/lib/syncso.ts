@@ -138,42 +138,46 @@ function parseGeneration(raw: unknown): SyncsoGeneration {
 export type SyncsoSyncMode = "cut_off" | "bounce" | "loop" | "silence" | "remap";
 
 /**
- * Account-weites Concurrency-Limit (Plan: 3 parallele Generations).
- * 429 concurrency_limit_reached ist bei parallelen Preview-Leads normal —
- * wir warten auf einen freien Slot statt den Lead scheitern zu lassen.
+ * Account-weites Concurrency-Limit erreicht (429 concurrency_limit_reached).
+ *
+ * Früher hat `createGeneration` hier bis zu 8 Minuten blind gepollt und
+ * damit den Render-Worker blockiert. Jetzt wird der Fehler typisiert nach
+ * oben gereicht (`retryable = true`) — die Intro-Staging-Queue retryt mit
+ * BullMQ-Backoff, statt einen Worker-Slot zu belegen.
  */
-const CONCURRENCY_RETRY_INTERVAL_MS = 15_000;
-const CONCURRENCY_RETRY_DEADLINE_MS = 8 * 60_000;
+export class SyncsoConcurrencyError extends Error {
+  readonly retryable = true;
+  constructor(message: string) {
+    super(message);
+    this.name = "SyncsoConcurrencyError";
+  }
+}
 
 export async function createGeneration(input: {
   videoUrl: string;
   audioUrl: string;
   syncMode?: SyncsoSyncMode;
 }): Promise<SyncsoGeneration> {
-  const deadline = Date.now() + CONCURRENCY_RETRY_DEADLINE_MS;
-  for (;;) {
-    try {
-      const raw = await syncsoRequest({
-        method: "POST",
-        path: "/generate",
-        body: {
-          model: "lipsync-2",
-          input: [
-            { type: "video", url: input.videoUrl },
-            { type: "audio", url: input.audioUrl },
-          ],
-          options: { sync_mode: input.syncMode ?? "cut_off" },
-        },
-      });
-      return parseGeneration(raw);
-    } catch (err) {
-      const msg = (err as Error).message ?? "";
-      const isConcurrency =
-        msg.includes("HTTP 429") && msg.includes("concurrency_limit");
-      if (!isConcurrency || Date.now() > deadline) throw err;
-      console.warn("[syncso] concurrency limit reached — waiting for a slot");
-      await new Promise((r) => setTimeout(r, CONCURRENCY_RETRY_INTERVAL_MS));
+  try {
+    const raw = await syncsoRequest({
+      method: "POST",
+      path: "/generate",
+      body: {
+        model: "lipsync-2",
+        input: [
+          { type: "video", url: input.videoUrl },
+          { type: "audio", url: input.audioUrl },
+        ],
+        options: { sync_mode: input.syncMode ?? "cut_off" },
+      },
+    });
+    return parseGeneration(raw);
+  } catch (err) {
+    const msg = (err as Error).message ?? "";
+    if (msg.includes("HTTP 429") && msg.includes("concurrency_limit")) {
+      throw new SyncsoConcurrencyError(msg);
     }
+    throw err;
   }
 }
 

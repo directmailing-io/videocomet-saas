@@ -45,6 +45,7 @@ import {
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { runStatusLabel, runStatusVariant } from "@/lib/run-status";
+import { formatRunEta, type RunEtaEntry } from "@/lib/run-eta-format";
 import { BulkExportDialog } from "./bulk-export-dialog";
 import { ResetTrackingDialog } from "./reset-tracking-dialog";
 
@@ -58,6 +59,7 @@ export interface RunRow {
     | "awaiting_approval"
     | "approved"
     | "generating"
+    | "paused"
     | "completed"
     | "failed"
     | "cancelled";
@@ -76,6 +78,8 @@ export interface RunRow {
     viewedA: number;
     viewedB: number;
   } | null;
+  /** Server-ETA (W3) — nur bei status=generating gefüllt. */
+  eta?: RunEtaEntry | null;
 }
 
 function abModeLabel(mode: "random" | "sequential"): string {
@@ -158,6 +162,9 @@ const ACTIVE_STATUSES = new Set<RunRow["status"]>([
   "awaiting_approval",
   "approved",
   "generating",
+  // Notbremse-Pause zählt als aktiv: Run kann fortgesetzt werden und darf
+  // nicht bulk-gelöscht werden.
+  "paused",
 ]);
 const POLL_INTERVAL_MS = 5000;
 
@@ -345,6 +352,7 @@ export function RunsTable({
                 completedAt: string | null;
               };
               counts: Record<string, number>;
+              eta?: RunEtaEntry | null;
             };
             return data;
           } catch {
@@ -367,6 +375,7 @@ export function RunsTable({
             failedLeads: match.counts.failed ?? 0,
             startedAt: match.run.startedAt ?? existing.startedAt,
             completedAt: match.run.completedAt ?? existing.completedAt,
+            eta: match.eta ?? null,
           };
         }),
       );
@@ -584,6 +593,14 @@ export function RunsTable({
                       {pct}%
                     </span>
                   </div>
+                  {r.status === "generating" && r.eta
+                    ? (() => {
+                        const label = formatRunEta(r.eta);
+                        return label ? (
+                          <p className="mt-1 text-xs text-ink-muted">{label}</p>
+                        ) : null;
+                      })()
+                    : null}
                 </TableCell>
                 {anyAb && (
                   <TableCell>
