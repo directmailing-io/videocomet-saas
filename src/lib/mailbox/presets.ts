@@ -47,7 +47,7 @@ export const MAILBOX_PRESETS: MailboxPreset[] = [
     imapHost: "imap.strato.de",
     imapPort: 993,
     domains: [],
-    hint: "Strato begrenzt den Versand auf 100 E-Mails pro Stunde. Der VideoComet-Drip-Versand (max. 50/Tag) bleibt deutlich darunter.",
+    hint: "Strato begrenzt den Versand auf 100 E-Mails pro Stunde. Der VIDEOCOMET-Drip-Versand (max. 50/Tag) bleibt deutlich darunter.",
   },
   {
     id: "all-inkl",

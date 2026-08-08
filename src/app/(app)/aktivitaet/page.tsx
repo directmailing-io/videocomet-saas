@@ -4,7 +4,7 @@ import { ActivityCenter } from "./activity-center";
 import { AnalyticsSectionNav } from "../_components/analytics-section-nav";
 
 export const metadata: Metadata = {
-  title: "Aktivität · VideoComet",
+  title: "Aktivität · VIDEOCOMET",
   description:
     "Live-Übersicht aller Lead-Aktivitäten — Page-Views, Video-Plays und CTA-Klicks.",
 };

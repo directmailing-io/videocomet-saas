@@ -232,8 +232,8 @@ export function AddMailboxModal({
           </DialogTitle>
           <DialogDescription>
             {stage === 1
-              ? "Verbinden Sie ein Postfach auf Ihrer eigenen Domain. VideoComet versendet später direkt über dieses Postfach."
-              : `Zugangsdaten für ${trimmedEmail}. Wir prüfen die Verbindung mit einer echten Testmail an Ihre eigene Adresse.`}
+              ? "Verbinde ein Postfach auf deiner eigenen Domain. VIDEOCOMET versendet später direkt über dieses Postfach."
+              : `Zugangsdaten für ${trimmedEmail}. Wir prüfen die Verbindung mit einer echten Testmail an deine eigene Adresse.`}
           </DialogDescription>
         </DialogHeader>
 

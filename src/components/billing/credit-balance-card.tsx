@@ -125,27 +125,30 @@ export function CreditBalanceCard() {
               {creditsLabel(balance)}
             </span>
           </div>
-          <div className="mb-2 rounded-md border border-white/15 bg-white/10 backdrop-blur-sm divide-y divide-white/10">
-            <div className="flex items-center justify-between gap-2 px-2 py-1 text-[10px] text-white/85 whitespace-nowrap">
-              <span className="flex items-center gap-1.5 min-w-0">
-                <Clapperboard className="size-3 shrink-0" /> Video
-              </span>
-              <span className="font-semibold tabular-nums">1</span>
+          <div className="mb-2 rounded-md border border-white/15 bg-white/10 backdrop-blur-sm">
+            <div className="divide-y divide-white/10">
+              <div className="flex items-center justify-between gap-2 px-2 py-1 text-[10px] text-white/85 whitespace-nowrap">
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <Clapperboard className="size-3 shrink-0" /> Video-Paket
+                </span>
+                <span className="font-semibold tabular-nums">1</span>
+              </div>
+              <div className="flex items-center justify-between gap-2 px-2 py-1 text-[10px] text-white/85 whitespace-nowrap">
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <Sparkles className="size-3 shrink-0" /> mit KI-Begrüßung
+                </span>
+                <span className="font-semibold tabular-nums">2</span>
+              </div>
+              <div className="flex items-center justify-between gap-2 px-2 py-1 text-[10px] text-white/85 whitespace-nowrap">
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <Mail className="size-3 shrink-0" /> 10 E-Mails
+                </span>
+                <span className="font-semibold tabular-nums">1</span>
+              </div>
             </div>
-            <div className="flex items-center justify-between gap-2 px-2 py-1 text-[10px] text-white/85 whitespace-nowrap">
-              <span className="flex items-center gap-1.5 min-w-0">
-                <Sparkles className="size-3 shrink-0" /> KI-Video
-              </span>
-              <span className="font-semibold tabular-nums">2</span>
-            </div>
-            <div className="flex items-center justify-between gap-2 px-2 py-1 text-[10px] text-white/85 whitespace-nowrap">
-              <span className="flex items-center gap-1.5 min-w-0">
-                <Mail className="size-3 shrink-0" /> 10 E-Mails
-              </span>
-              <span className="font-semibold tabular-nums">1</span>
-            </div>
-            <div className="px-2 py-0.5 text-[9px] uppercase tracking-wider text-white/50 text-right">
-              Credits pro Aktion
+            <div className="border-t border-white/10 px-2 py-1 text-[9px] leading-snug text-white/60">
+              Paket = Video + Landingpage + Brief + Umschlag pro Kontakt.
+              Preis in Credits.
             </div>
           </div>
           {unlimited ? (

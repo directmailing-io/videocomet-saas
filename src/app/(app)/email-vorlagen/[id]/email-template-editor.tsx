@@ -474,7 +474,7 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
                   patch({ signatureHtml: e.target.value })
                 }
                 rows={4}
-                placeholder={"Viele Grüße\nDaniel Kurzeja\nVideoComet GmbH"}
+                placeholder={"Viele Grüße\nDaniel Kurzeja\nVIDEOCOMET GmbH"}
               />
               <p className="text-[11px] text-ink-muted">
                 Optional. Zeilenumbrüche und einfaches HTML sind erlaubt.

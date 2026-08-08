@@ -401,8 +401,8 @@ export function WebhooksList({
             title="Noch keine Webhooks angelegt"
             subtitle={
               campaignFilterId
-                ? "Legen Sie einen Webhook an, um Events dieser Kampagne an einen externen Service zu schicken."
-                : "Verbinden Sie VideoComet mit Zapier, Make.com oder Ihrem eigenen HTTPS-Endpunkt, um Lead- und Run-Events automatisch zu erhalten."
+                ? "Leg einen Webhook an, um Events dieser Kampagne an einen externen Service zu schicken."
+                : "Verbinde VIDEOCOMET mit Zapier, Make.com oder deinem eigenen HTTPS-Endpunkt, um Lead- und Run-Events automatisch zu erhalten."
             }
             action={
               <Button

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export const metadata = { title: "Zapier einrichten — Doku · VideoComet" };
+export const metadata = { title: "Zapier einrichten — Doku · VIDEOCOMET" };
 
 export default function ZapierDocsPage() {
   return (
@@ -12,7 +12,7 @@ export default function ZapierDocsPage() {
           <Link href="/docs/webhooks">Zurück zur Übersicht</Link>
         </Button>
         <p className="text-xs font-semibold uppercase tracking-wider text-brand-deep">Zapier-Setup</p>
-        <h1 className="text-3xl font-bold text-ink mt-1">VideoComet mit Zapier verbinden</h1>
+        <h1 className="text-3xl font-bold text-ink mt-1">VIDEOCOMET mit Zapier verbinden</h1>
         <p className="text-ink-muted mt-2">
           Ergebnis: Sobald ein Lead deine Landingpage öffnet oder den CTA
           klickt, kannst du es in Zapier weiterverarbeiten — z.&nbsp;B.
@@ -59,9 +59,9 @@ export default function ZapierDocsPage() {
         </p>
       </Step>
 
-      <Step n={4} title="In VideoComet einfügen">
+      <Step n={4} title="In VIDEOCOMET einfügen">
         <p>
-          Wechsle in den VideoComet-Tab → <strong>Einstellungen → Webhooks</strong> →{" "}
+          Wechsle in den VIDEOCOMET-Tab → <strong>Einstellungen → Webhooks</strong> →{" "}
           <strong>„Neuer Webhook"</strong>.
         </p>
         <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
@@ -90,7 +90,7 @@ export default function ZapierDocsPage() {
 
       <Step n={5} title="Test-Daten an Zapier schicken">
         <p>
-          Im VideoComet-Webhook → <strong>„Test"</strong> klicken. Du siehst
+          Im VIDEOCOMET-Webhook → <strong>„Test"</strong> klicken. Du siehst
           „Erfolgreich (HTTP 200)".
         </p>
         <p className="mt-2">
@@ -142,7 +142,7 @@ export default function ZapierDocsPage() {
         <p className="text-sm font-semibold text-ink mb-2">Troubleshooting</p>
         <ul className="text-xs text-ink-muted space-y-1.5">
           <li>
-            <strong>Zapier sieht keine Daten?</strong> → VideoComet-Webhook
+            <strong>Zapier sieht keine Daten?</strong> → VIDEOCOMET-Webhook
             öffnen → „Auslieferungen ansehen" → prüfen ob unsere Calls 200
             zurückbekommen.
           </li>

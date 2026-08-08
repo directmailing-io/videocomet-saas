@@ -357,7 +357,7 @@ export function WebhookFormDialog({
             {mode === "create" ? "Neuer Webhook" : "Webhook bearbeiten"}
           </DialogTitle>
           <DialogDescription>
-            VideoComet-Events (z.&nbsp;B. „Lead hat Landingpage geöffnet") an
+            VIDEOCOMET-Events (z.&nbsp;B. „Lead hat Landingpage geöffnet") an
             Zapier, Make oder eine eigene URL schicken.
           </DialogDescription>
         </DialogHeader>
@@ -514,7 +514,7 @@ export function WebhookFormDialog({
                   Zusätzliche HTTP-Header, die mit jedem Push gesendet werden.
                   Z. B.{" "}
                   <span className="font-mono">Authorization: Bearer …</span>{" "}
-                  für gesicherte Endpoints. Die VideoComet-Signatur (
+                  für gesicherte Endpoints. Die VIDEOCOMET-Signatur (
                   <span className="font-mono">X-VC-Signature</span>) wird
                   zusätzlich automatisch gesetzt.
                 </p>

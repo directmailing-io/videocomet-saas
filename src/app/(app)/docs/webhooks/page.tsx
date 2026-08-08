@@ -3,7 +3,7 @@ import { ArrowRight, Globe, Lock, Repeat2, Zap } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-export const metadata = { title: "Webhooks — Doku · VideoComet" };
+export const metadata = { title: "Webhooks — Doku · VIDEOCOMET" };
 
 export default function WebhooksDocsPage() {
   return (
@@ -14,7 +14,7 @@ export default function WebhooksDocsPage() {
         </p>
         <h1 className="text-3xl font-bold text-ink mt-1">Webhooks</h1>
         <p className="text-ink-muted mt-2">
-          Schicke jedes Lead- und Run-Event aus VideoComet automatisch an
+          Schicke jedes Lead- und Run-Event aus VIDEOCOMET automatisch an
           dein eigenes Tool — egal ob Zapier, Make.com, n8n oder eine
           eigene API.
         </p>
@@ -52,7 +52,7 @@ export default function WebhooksDocsPage() {
         <h2 className="text-lg font-semibold text-ink mb-3">Was sind Webhooks?</h2>
         <p className="text-ink leading-relaxed">
           Ein Webhook ist eine URL, die <strong>du irgendwo erstellst</strong>{" "}
-          (z.&nbsp;B. in Zapier oder Make). Sobald in VideoComet etwas
+          (z.&nbsp;B. in Zapier oder Make). Sobald in VIDEOCOMET etwas
           passiert — ein Lead öffnet seine Landingpage, klickt auf den CTA
           oder startet das Video — schicken wir{" "}
           <strong>sofort eine kleine Nachricht (JSON) an deine URL</strong>.

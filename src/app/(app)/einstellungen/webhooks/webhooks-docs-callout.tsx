@@ -12,7 +12,7 @@ export function WebhooksDocsCallout() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-ink">
-            Verbinde VideoComet mit Zapier, Make oder jedem HTTPS-Endpunkt.
+            Verbinde VIDEOCOMET mit Zapier, Make oder jedem HTTPS-Endpunkt.
           </p>
           <p className="text-xs text-ink-soft mt-0.5">
             Schritt-für-Schritt-Anleitungen mit Screenshots — in 3 Minuten

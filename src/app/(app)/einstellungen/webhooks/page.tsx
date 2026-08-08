@@ -18,7 +18,7 @@ export default async function WebhooksPage() {
     <>
       <PageHeader
         title="Webhooks"
-        subtitle="Senden Sie VideoComet-Events automatisch an Make.com, Zapier oder einen eigenen HTTPS-Endpunkt."
+        subtitle="Schick VIDEOCOMET-Events automatisch an Make.com, Zapier oder einen eigenen HTTPS-Endpunkt."
       />
 
       <div className="flex flex-col gap-6">

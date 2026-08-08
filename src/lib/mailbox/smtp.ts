@@ -118,12 +118,12 @@ export async function verifyConnection(
     await transporter.sendMail({
       from: config.emailAddress,
       to: config.emailAddress,
-      subject: "VideoComet Verbindungstest",
+      subject: "VIDEOCOMET Verbindungstest",
       text: [
-        "Dieser Verbindungstest wurde von VideoComet ausgelöst.",
+        "Dieser Verbindungstest wurde von VIDEOCOMET ausgelöst.",
         "",
-        "Wenn Sie diese E-Mail sehen, funktioniert der Versand über Ihr Postfach.",
-        "Sie können die Nachricht löschen.",
+        "Wenn du diese E-Mail siehst, funktioniert der Versand über dein Postfach.",
+        "Du kannst die Nachricht löschen.",
       ].join("\n"),
     });
   } catch (err) {

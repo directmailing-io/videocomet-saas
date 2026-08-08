@@ -991,7 +991,7 @@ export function RunWizard({
           <div className="mx-auto w-full max-w-md [filter:drop-shadow(0_14px_30px_rgba(60,50,110,0.16))]">
             <div className="rounded-t-squircle-md bg-surface px-6 pt-6 pb-5">
               <p className="text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-ink-muted">
-                VideoComet
+                VIDEOCOMET
               </p>
               <p className="mt-1.5 text-center text-sm font-semibold text-ink">
                 {campaignName}

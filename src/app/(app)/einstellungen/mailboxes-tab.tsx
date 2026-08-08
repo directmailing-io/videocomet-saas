@@ -405,7 +405,7 @@ export function MailboxesTab({
                 <span className="font-mono text-ink">
                   {deleteTarget?.emailAddress}
                 </span>{" "}
-                wird entfernt. Ihre Zugangsdaten werden aus VideoComet
+                wird entfernt. Deine Zugangsdaten werden aus VIDEOCOMET
                 gelöscht. Läuft aktuell ein Versand über dieses Postfach, wird
                 das Löschen abgelehnt.
               </DialogDescription>
@@ -798,9 +798,9 @@ function EditWindowDialog({
         <DialogHeader>
           <DialogTitle>Sendefenster &amp; Limits</DialogTitle>
           <DialogDescription>
-            Wann darf VideoComet über{" "}
+            Wann darf VIDEOCOMET über{" "}
             <span className="font-mono text-ink">{target?.emailAddress}</span>{" "}
-            versenden? Das Tageslimit ist zum Schutz Ihrer Domain auf maximal
+            versenden? Das Tageslimit ist zum Schutz deiner Domain auf maximal
             50 begrenzt.
           </DialogDescription>
         </DialogHeader>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export const metadata = { title: "Make.com einrichten — Doku · VideoComet" };
+export const metadata = { title: "Make.com einrichten — Doku · VIDEOCOMET" };
 
 export default function MakeDocsPage() {
   return (
@@ -12,9 +12,9 @@ export default function MakeDocsPage() {
           <Link href="/docs/webhooks">Zurück zur Übersicht</Link>
         </Button>
         <p className="text-xs font-semibold uppercase tracking-wider text-brand-deep">Make.com-Setup</p>
-        <h1 className="text-3xl font-bold text-ink mt-1">VideoComet mit Make.com verbinden</h1>
+        <h1 className="text-3xl font-bold text-ink mt-1">VIDEOCOMET mit Make.com verbinden</h1>
         <p className="text-ink-muted mt-2">
-          Ergebnis: Sobald in VideoComet etwas passiert (Lead öffnet
+          Ergebnis: Sobald in VIDEOCOMET etwas passiert (Lead öffnet
           Landingpage, klickt CTA, …), startet automatisch dein Make-Szenario
           und macht damit, was du willst.
         </p>
@@ -42,7 +42,7 @@ export default function MakeDocsPage() {
         </p>
         <p className="mt-2">
           Im Pop-up: <strong>„Add"</strong> → vergib einen Namen (z.&nbsp;B.
-          „VideoComet"). Make erzeugt jetzt deine eindeutige URL — ähnlich:
+          „VIDEOCOMET"). Make erzeugt jetzt deine eindeutige URL — ähnlich:
         </p>
         <pre className="rounded-squircle-sm bg-surface shadow-card p-3 text-xs font-mono mt-2 overflow-x-auto">
           https://hook.eu2.make.com/abc123def456ghi789
@@ -52,9 +52,9 @@ export default function MakeDocsPage() {
         </p>
       </Step>
 
-      <Step n={3} title="In VideoComet einfügen">
+      <Step n={3} title="In VIDEOCOMET einfügen">
         <p>
-          Wechsle in den VideoComet-Tab → <strong>Einstellungen → Webhooks</strong> →{" "}
+          Wechsle in den VIDEOCOMET-Tab → <strong>Einstellungen → Webhooks</strong> →{" "}
           <strong>„Neuer Webhook"</strong>.
         </p>
         <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
@@ -87,7 +87,7 @@ export default function MakeDocsPage() {
           <em>„Successfully determined."</em> oder eine wartende Animation.
         </p>
         <p className="mt-2">
-          Zurück bei VideoComet → in deinem Webhook auf <strong>„Test"</strong>{" "}
+          Zurück bei VIDEOCOMET → in deinem Webhook auf <strong>„Test"</strong>{" "}
           klicken.
         </p>
         <p className="mt-2">
@@ -141,7 +141,7 @@ export default function MakeDocsPage() {
         <ul className="text-xs text-ink-muted space-y-1.5">
           <li>
             <strong>Make „Determining data structure" hängt?</strong> →
-            VideoComet → Webhook → „Test" nochmal drücken. Make wartet auf den
+            VIDEOCOMET → Webhook → „Test" nochmal drücken. Make wartet auf den
             ersten echten Aufruf.
           </li>
           <li>

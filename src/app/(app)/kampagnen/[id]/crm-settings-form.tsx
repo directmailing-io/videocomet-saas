@@ -89,26 +89,26 @@ const EVENT_LABEL: Record<EventKey, string> = {
 };
 
 const EVENT_DEFAULT_FIELD_LABEL: Record<EventKey, string> = {
-  page_view: "Videocomet — Letzter Landingpage-Aufruf",
-  video_play: "Videocomet — Letzter Video-Play",
-  cta_click: "Videocomet — Letzter CTA-Klick",
+  page_view: "VIDEOCOMET — Letzter Landingpage-Aufruf",
+  video_play: "VIDEOCOMET — Letzter Video-Play",
+  cta_click: "VIDEOCOMET — Letzter CTA-Klick",
 };
 
 const STATIC_FIELDS = [
   {
     id: "lastCampaignRound",
     label: "Letzte Kampagne + Runde",
-    crmDefault: "Videocomet — Letzte Kampagne",
+    crmDefault: "VIDEOCOMET — Letzte Kampagne",
   },
   {
     id: "lastSendRound",
     label: "Letzte Versandrunde",
-    crmDefault: "Videocomet — Letzte Versandrunde",
+    crmDefault: "VIDEOCOMET — Letzte Versandrunde",
   },
   {
     id: "lastLandingUrl",
     label: "Letzte Landingpage-URL",
-    crmDefault: "Videocomet — Letzte Landingpage-URL",
+    crmDefault: "VIDEOCOMET — Letzte Landingpage-URL",
   },
 ] as const;
 
@@ -463,7 +463,7 @@ export function CrmSettingsForm({
   function openCreateForStatic(id: StaticFieldId) {
     const def = STATIC_FIELDS.find((s) => s.id === id);
     setCreateFieldDefaults({
-      label: def?.crmDefault ?? "Videocomet — Custom-Feld",
+      label: def?.crmDefault ?? "VIDEOCOMET — Custom-Feld",
       type: "text",
       assignTo: { kind: "static", key: id },
     });

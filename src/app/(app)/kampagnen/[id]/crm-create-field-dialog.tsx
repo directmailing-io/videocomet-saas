@@ -179,7 +179,7 @@ export function CrmCreateFieldDialog({
                 id="crm-field-label"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                placeholder="z.B. Videocomet — letzter Aufruf"
+                placeholder="z.B. VIDEOCOMET — letzter Aufruf"
                 disabled={submitting}
                 autoComplete="off"
               />
