@@ -12,9 +12,12 @@ import { WebhooksList } from "./webhooks/webhooks-list";
 import { WebhooksDocsCallout } from "./webhooks/webhooks-docs-callout";
 import { BillingTab } from "./billing-tab";
 import { KiStimmeTab } from "./ki-stimme-tab";
+import { SetupTab } from "./setup-tab";
+import { getSetupStatus } from "@/lib/setup-status";
 import { buildAdminConsentUrl, isM365Configured } from "@/lib/msgraph/client";
 
 const TAB_VALUES = new Set([
+  "setup",
   "profil",
   "passwort",
   "abrechnung",
@@ -32,7 +35,10 @@ export default async function EinstellungenPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { user: sessionUser } = await requireUser();
-  const user = await getUserById(sessionUser.id);
+  const [user, setupStatus] = await Promise.all([
+    getUserById(sessionUser.id),
+    getSetupStatus(sessionUser.id),
+  ]);
   const params = await searchParams;
 
   const tabParam = typeof params.tab === "string" ? params.tab : "";
@@ -44,11 +50,12 @@ export default async function EinstellungenPage({
     <>
       <PageHeader
         title="Einstellungen"
-        subtitle="Verwalten Sie Profil, Passwort, Rechnungsadresse, Custom-Domains und E-Mail-Postfächer."
+        subtitle="Hier verwaltest du Profil, Passwort, Rechnungsadresse, Domains und E-Mail-Postfächer."
       />
 
       <Tabs defaultValue={defaultTab}>
         <TabsList>
+          <TabsTrigger value="setup">Setup</TabsTrigger>
           <TabsTrigger value="profil">Profil</TabsTrigger>
           <TabsTrigger value="passwort">Passwort</TabsTrigger>
           <TabsTrigger value="abrechnung">Abrechnung</TabsTrigger>
@@ -59,6 +66,10 @@ export default async function EinstellungenPage({
           <TabsTrigger value="crm">CRM-Integrationen</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="setup">
+          <SetupTab status={setupStatus} />
+        </TabsContent>
 
         <TabsContent value="profil">
           <Card>

@@ -22,6 +22,7 @@ import {
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { CreditBalanceCard } from "@/components/billing/credit-balance-card";
+import { OnboardingChecklist } from "@/components/onboarding/onboarding-checklist";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -313,6 +314,8 @@ export function AppShell({
           <div className="mx-auto w-full max-w-7xl p-6 sm:p-8">{children}</div>
         </main>
       </div>
+
+      <OnboardingChecklist />
     </div>
   );
 }

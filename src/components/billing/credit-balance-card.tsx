@@ -15,7 +15,7 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { Clapperboard, Loader2, Mail } from "lucide-react";
+import { Clapperboard, Loader2, Mail, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   creditsLabel,
@@ -131,6 +131,12 @@ export function CreditBalanceCard() {
                 <Clapperboard className="size-3" /> 1 Video
               </span>
               <span className="font-semibold">1 Credit</span>
+            </div>
+            <div className="flex items-center justify-between rounded-md border border-white/15 bg-white/10 px-2 py-1 text-[10px] text-white/85 backdrop-blur-sm">
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="size-3" /> 1 Video mit KI-Begrüßung
+              </span>
+              <span className="font-semibold">2 Credits</span>
             </div>
             <div className="flex items-center justify-between rounded-md border border-white/15 bg-white/10 px-2 py-1 text-[10px] text-white/85 backdrop-blur-sm">
               <span className="flex items-center gap-1.5">

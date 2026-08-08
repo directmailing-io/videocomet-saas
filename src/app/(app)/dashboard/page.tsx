@@ -10,43 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { listUserCampaigns } from "@/lib/db/queries/campaigns";
-
-function runStatusBadgeVariant(
-  status: string,
-): "brand" | "success" | "warn" | "danger" | "neutral" {
-  switch (status) {
-    case "completed":
-      return "success";
-    case "generating":
-    case "mapping":
-      return "brand";
-    case "failed":
-      return "danger";
-    case "cancelled":
-      return "warn";
-    default:
-      return "neutral";
-  }
-}
-
-function runStatusLabel(status: string): string {
-  switch (status) {
-    case "draft":
-      return "Entwurf";
-    case "mapping":
-      return "Mapping";
-    case "generating":
-      return "Generierung";
-    case "completed":
-      return "Fertig";
-    case "failed":
-      return "Fehler";
-    case "cancelled":
-      return "Abgebrochen";
-    default:
-      return status;
-  }
-}
+import { runStatusLabel, runStatusVariant } from "@/lib/run-status";
 
 function formatDate(d: Date | null): string {
   if (!d) return "";
@@ -189,7 +153,7 @@ export default async function DashboardPage() {
                         {formatDate(r.createdAt)}
                       </p>
                     </div>
-                    <Badge variant={runStatusBadgeVariant(r.status)} dot>
+                    <Badge variant={runStatusVariant(r.status)} dot>
                       {runStatusLabel(r.status)}
                     </Badge>
                   </li>

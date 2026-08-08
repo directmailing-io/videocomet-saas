@@ -3,14 +3,11 @@ import { cn } from "@/lib/utils";
 
 /**
  * Sprech-Hinweis für den ersten Satz einer Webcam-Aufnahme mit
- * personalisierter KI-Begrüßung. Grün/Rot-Beispiele machen deutlich,
- * warum ein elliptischer Fragment-Anfang („Hi, kurzes Video für dich
- * auf...") in der Vertonung mit einem Vornamen nicht funktioniert, ein
- * vollständiger Satz nach der Anrede dagegen sauber greift.
+ * personalisierter KI-Begrüßung. Kernbotschaft: nach der Anrede („Hi!")
+ * kurz Luft holen, denn genau in diese Lücke bauen wir später den Namen
+ * ein. Die Beispiele zeigen den Unterschied mit/ohne Pause.
  *
- * `compact` blendet die Erklärung aus und zeigt nur die Beispiel-Karten
- * — für Kontexte, in denen der Hauptzweck der Seite schon offensichtlich
- * ist (z. B. Wizard-Schritt „KI-Begrüßung").
+ * `compact` blendet die Erklärung aus und zeigt nur die Beispiel-Karten.
  */
 export function RecordingHint({
   compact = false,
@@ -31,14 +28,14 @@ export function RecordingHint({
           <Info className="size-4 text-brand shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-ink">
-              Sprich einfach natürlich
+              Wichtig: kurze Pause nach dem „Hi!"
             </p>
             <p className="mt-1 text-xs text-ink-muted leading-relaxed">
-              Fang direkt mit einer kurzen Anrede an („Hi!", „Hallo!",
-              „Guten Tag!") und sprich dann ganz normal weiter mit einem
-              vollständigen Satz. Die kleine Sprech-Pause die dabei
-              automatisch zwischen Anrede und Satz entsteht, reicht der
-              Analyse völlig aus — du musst nicht bewusst warten.
+              Sag am Anfang nur „Hi!" oder „Hallo!" und hol dann einmal kurz
+              Luft (etwa 1 bis 2 Sekunden). Danach sprichst du ganz normal
+              weiter. In genau diese Pause setzen wir später den Namen ein,
+              aus deinem „Hi!" wird dann zum Beispiel „Hi Sebastian!". Ohne
+              Pause klingt das später gequetscht.
             </p>
           </div>
         </div>
@@ -46,10 +43,16 @@ export function RecordingHint({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="rounded-squircle-sm bg-ok-soft px-3 py-2.5">
           <p className="flex items-center gap-1.5 text-xs font-semibold text-ok mb-1.5">
-            <Check className="size-3" /> Passt
+            <Check className="size-3" /> So passt es
           </p>
-          <p className="text-sm text-ink italic leading-snug">
-            „Hi! Ich habe dir kurz ein Video aufgenommen, weil..."
+          <p className="text-sm text-ink leading-snug">
+            <span className="italic">„Hi!"</span>{" "}
+            <span className="mx-1 inline-flex items-center rounded-full bg-ok/15 px-2 py-0.5 text-[10px] font-semibold text-ok whitespace-nowrap align-middle">
+              kurz Luft holen, 1 bis 2 Sek.
+            </span>{" "}
+            <span className="italic">
+              „Ich hab dir ein kurzes Video aufgenommen, weil ..."
+            </span>
           </p>
         </div>
         <div className="rounded-squircle-sm bg-danger-soft px-3 py-2.5">
@@ -57,7 +60,10 @@ export function RecordingHint({
             <X className="size-3" /> Bitte nicht
           </p>
           <p className="text-sm text-ink italic leading-snug">
-            Ohne klare Anrede: „Kurzes Video für dich aufgenommen..."
+            „Hi ich hab dir ein kurzes Video aufgenommen ..."
+          </p>
+          <p className="mt-1 text-[11px] text-ink-muted leading-snug">
+            Ohne Pause nach dem „Hi" passt der Name später nicht rein.
           </p>
         </div>
       </div>

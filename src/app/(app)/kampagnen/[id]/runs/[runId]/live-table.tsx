@@ -30,6 +30,7 @@ import { useToast } from "@/components/ui/toaster";
 import { LeadAnalyticsDrawer } from "./lead-analytics-drawer";
 import { buildLeadPublicUrl } from "@/lib/lead-public-url";
 import { cn } from "@/lib/utils";
+import { runStatusLabel, runStatusVariant } from "@/lib/run-status";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -703,7 +704,7 @@ export function LiveTable({
                     ? counts.completed === 0
                       ? "danger"
                       : "warn"
-                    : statusVariant(runStatus)
+                    : runStatusVariant(runStatus)
                 }
                 dot
               >
@@ -711,7 +712,7 @@ export function LiveTable({
                   ? counts.completed === 0
                     ? "Fehlgeschlagen"
                     : "Fertig mit Fehlern"
-                  : statusLabel(runStatus)}
+                  : runStatusLabel(runStatus)}
               </Badge>
               <span className="text-xs text-ink-muted">
                 {startedAtLabel ? `Gestartet ${startedAtLabel}` : null}

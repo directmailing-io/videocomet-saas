@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  CheckCircle2,
   Keyboard,
+  Loader2,
   Play,
   RefreshCcw,
   TriangleAlert,
@@ -298,9 +300,9 @@ export function PreflightReviewClient({
             setRunStatus("awaiting_approval");
             toast({
               variant: "success",
-              title: "Phase 1 abgeschlossen",
+              title: "Prüfung fertig",
               description:
-                "Sie können jetzt entscheiden, welche Leads in die Vollproduktion gehen.",
+                "Schau kurz drüber und starte dann die Videos.",
             });
             es?.close();
           }
@@ -383,7 +385,7 @@ export function PreflightReviewClient({
           variant: "success",
           title: `${data.rejectedCount} Lead${data.rejectedCount === 1 ? "" : "s"} entfernt`,
           description:
-            "Die Leads wandern nicht in die Vollproduktion. Sie können den Schritt rückgängig machen, indem Sie den Lead erneut auswählen.",
+            "Diese Leads bekommen kein Video. Du kannst sie über den Filter „Entfernt“ jederzeit zurückholen.",
         });
       } catch {
         // Rollback bei Fehler.
@@ -396,7 +398,7 @@ export function PreflightReviewClient({
           variant: "danger",
           title: "Entfernen fehlgeschlagen",
           description:
-            "Die Aktion konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.",
+            "Das hat gerade nicht geklappt. Bitte versuch es gleich nochmal.",
         });
       }
     },
@@ -504,8 +506,8 @@ export function PreflightReviewClient({
       if (res.status === 409) {
         toast({
           variant: "danger",
-          title: "Run ist bereits in Produktion",
-          description: "Wir leiten Sie zur Run-Übersicht weiter.",
+          title: "Die Videos werden schon erstellt",
+          description: "Wir bringen dich zur Übersicht.",
         });
         router.push(`/kampagnen/${campaignId}/runs/${runId}`);
         return;
@@ -527,8 +529,8 @@ export function PreflightReviewClient({
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast({
         variant: "success",
-        title: "Vollproduktion gestartet",
-        description: "Sie werden zur Run-Übersicht weitergeleitet.",
+        title: "Los geht's, die Videos werden erstellt",
+        description: "Wir bringen dich zur Übersicht.",
       });
       // Lokalen Selection-Cache räumen — Run wechselt jetzt seine Phase.
       selection.clear();
@@ -538,7 +540,7 @@ export function PreflightReviewClient({
         variant: "danger",
         title: "Start fehlgeschlagen",
         description:
-          "Die Vollproduktion konnte nicht gestartet werden. Bitte später erneut versuchen.",
+          "Das hat gerade nicht geklappt. Bitte versuch es in ein paar Minuten nochmal.",
       });
     } finally {
       setConfirmLoading(false);
@@ -769,12 +771,12 @@ export function PreflightReviewClient({
               </Button>
               <div className="flex flex-col min-w-0">
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted leading-tight">
-                  Pre-Flight Review
+                  Leads prüfen
                 </div>
                 <h1 className="text-base sm:text-lg font-bold text-ink leading-tight truncate">
-                  Run · {runName}
+                  {runName}
                   <span className="text-ink-muted font-medium">
-                    {" "}— {campaignName}
+                    {" "}· {campaignName}
                   </span>
                 </h1>
                 <p className="text-xs text-ink-muted tabular-nums mt-0.5">
@@ -809,7 +811,7 @@ export function PreflightReviewClient({
                     onClick={() => {
                       if (
                         window.confirm(
-                          "Pre-Flight überspringen: ALLE Leads (auch problematische) gehen direkt in die Vollproduktion. Sicher?",
+                          "Prüfung überspringen: Alle Leads gehen sofort in die Produktion, auch die auffälligen. Sicher?",
                         )
                       ) {
                         void handleApprove({ approveAlsoProblematic: true });
@@ -823,12 +825,11 @@ export function PreflightReviewClient({
                       confirmLoading
                     }
                   >
-                    Pre-Flight überspringen
+                    Prüfung überspringen
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  Phase 2 sofort starten — überspringt die Qualitätsprüfung
-                  und nimmt auch problematische Leads mit.
+                  Startet sofort mit allen Leads, auch mit den auffälligen.
                 </TooltipContent>
               </Tooltip>
               <Tooltip>
@@ -845,11 +846,11 @@ export function PreflightReviewClient({
                       runStatus === "completed"
                     }
                   >
-                    Vollproduktion starten
+                    Videos jetzt erstellen
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  Phase 2 starten. Tastatur:{" "}
+                  Erstellt die Videos für alle behaltenen Leads. Tastatur:{" "}
                   <span className="font-mono">R</span> entfernt,{" "}
                   <span className="font-mono">/</span> sucht.
                 </TooltipContent>
@@ -863,10 +864,10 @@ export function PreflightReviewClient({
               <div className="flex-1">
                 <div className="flex items-center justify-between text-[11px] text-ink-muted mb-1.5">
                   <span className="font-semibold uppercase tracking-wider">
-                    Phase 1 läuft
+                    Leads werden geprüft
                   </span>
                   <span className="tabular-nums">
-                    {progressPercent}% geprüft — Sie können bereits prüfen
+                    {progressPercent} % fertig. Du kannst dir die Leads schon anschauen.
                   </span>
                 </div>
                 <Progress value={progressPercent} />
@@ -874,6 +875,20 @@ export function PreflightReviewClient({
             </div>
           )}
         </div>
+
+        {/* "Was ist zu tun?"-Karte: adaptive Schritte je nach Zustand */}
+        {hasInitialLoad &&
+          counts.total > 0 &&
+          runStatus !== "approved" &&
+          runStatus !== "generating" &&
+          runStatus !== "completed" && (
+            <NextStepsCard
+              phase1Running={phase1Running}
+              counts={counts}
+              intro={intro}
+              introChecked={introChecked}
+            />
+          )}
 
         {/* Filter-Toolbar (Sticky direkt unter Topbar) */}
         <div
@@ -915,11 +930,12 @@ export function PreflightReviewClient({
             <TriangleAlert className="size-4 shrink-0 mt-0.5" />
             <div className="text-sm">
               <p className="font-semibold">
-                Hohe Fehlerquote — alle Leads sind problematisch.
+                Alle Leads sind auffällig.
               </p>
               <p className="text-xs mt-0.5">
-                Tipp: Statt einzeln zu reviewen, bereinigen Sie die CSV und
-                starten eine neue Runde.
+                Tipp: Prüf deine CSV-Datei (stimmen die Website-Adressen?) und
+                starte dann eine neue Runde. Das geht meist schneller, als
+                jeden Lead einzeln anzuschauen.
               </p>
             </div>
             <Button
@@ -956,8 +972,8 @@ export function PreflightReviewClient({
             />
           ) : visibleLeads.length === 0 ? (
             <EmptyState
-              title="Keine Leads in dieser Sicht"
-              subtitle="Passen Sie Ihre Filter an oder löschen Sie das Suchfeld, um andere Leads zu sehen."
+              title="Hier ist gerade nichts"
+              subtitle="Ändere den Filter oder leere das Suchfeld, dann siehst du wieder Leads."
               action={
                 <Button
                   variant="ghost"
@@ -1048,6 +1064,137 @@ export function PreflightReviewClient({
         onConfirm={() => void handleApprove()}
       />
     </TooltipProvider>
+  );
+}
+
+/**
+ * "Was ist zu tun?"-Karte: zeigt 2-3 adaptive Schritte, damit sofort klar
+ * ist, was der User in dieser Ansicht machen soll.
+ */
+function NextStepsCard({
+  phase1Running,
+  counts,
+  intro,
+  introChecked,
+}: {
+  phase1Running: boolean;
+  counts: CountsPayload;
+  intro: IntroPreviewInfo | null;
+  introChecked: boolean;
+}) {
+  type StepState = "running" | "todo" | "done" | "warn";
+  interface Step {
+    state: StepState;
+    title: string;
+    hint: string;
+  }
+
+  const steps: Step[] = [];
+
+  // Schritt 1: Auffällige Leads aussortieren.
+  if (phase1Running) {
+    steps.push({
+      state: "running",
+      title: "Auffällige Leads aussortieren",
+      hint: "Die Prüfung läuft noch. Du kannst dir die Leads aber schon anschauen.",
+    });
+  } else if (counts.problematic > 0) {
+    steps.push({
+      state: "todo",
+      title: "Auffällige Leads aussortieren",
+      hint: `${counts.problematic} Lead${counts.problematic === 1 ? " ist" : "s sind"} auffällig. Schau kurz drüber und entferne, was kein Video bekommen soll.`,
+    });
+  } else {
+    steps.push({
+      state: "done",
+      title: "Auffällige Leads aussortieren",
+      hint: "Alles sauber. Hier musst du nichts machen.",
+    });
+  }
+
+  // Schritt 2 (nur mit aktiver KI-Begrüßung): Beispielvideos freigeben.
+  if (intro?.enabled && intro.voiceReady) {
+    if (!intro.previewsGenerated) {
+      steps.push({
+        state: "running",
+        title: "Beispielvideos freigeben",
+        hint: "Wir erstellen gerade ein paar Beispielvideos mit deiner KI-Begrüßung. Dauert ein bis zwei Minuten.",
+      });
+    } else if (intro.previews.length === 0) {
+      steps.push({
+        state: "warn",
+        title: "Beispielvideos freigeben",
+        hint: "Das hat leider nicht geklappt. Details stehen in der Karte unten. Deine Videos laufen sonst ohne KI-Begrüßung.",
+      });
+    } else if (intro.previewApprovedAt !== null || introChecked) {
+      steps.push({
+        state: "done",
+        title: "Beispielvideos freigeben",
+        hint: "Erledigt, die Beispielvideos sind freigegeben.",
+      });
+    } else {
+      steps.push({
+        state: "todo",
+        title: "Beispielvideos freigeben",
+        hint: "Schau dir die Beispielvideos unten an und setz das Häkchen, wenn sie gut klingen.",
+      });
+    }
+  }
+
+  // Letzter Schritt: Videos erstellen.
+  steps.push({
+    state: "todo",
+    title: "Auf „Videos jetzt erstellen“ klicken",
+    hint: "Der Knopf ist oben rechts. Danach erstellen wir die Videos für alle behaltenen Leads.",
+  });
+
+  return (
+    <div className="bg-surface rounded-squircle-md shadow-card p-5">
+      <h2 className="text-base font-semibold text-ink mb-3">
+        {phase1Running
+          ? "Wir prüfen gerade deine Leads"
+          : "Prüfung fertig. So geht es weiter:"}
+      </h2>
+      <ol className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+        {steps.map((step, idx) => (
+          <li key={step.title} className="flex items-start gap-3 sm:flex-1 min-w-0">
+            {step.state === "done" ? (
+              <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-ok-soft text-ok">
+                <CheckCircle2 className="size-4" />
+              </span>
+            ) : step.state === "running" ? (
+              <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand">
+                <Loader2 className="size-4 animate-spin" />
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                  step.state === "warn"
+                    ? "bg-warn-soft text-warn"
+                    : "bg-brand-soft text-brand",
+                )}
+              >
+                {idx + 1}
+              </span>
+            )}
+            <div className="min-w-0">
+              <p
+                className={cn(
+                  "text-sm font-semibold leading-tight",
+                  step.state === "done" ? "text-ink-muted" : "text-ink",
+                )}
+              >
+                {step.title}
+              </p>
+              <p className="text-xs text-ink-muted mt-1 leading-relaxed">
+                {step.hint}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 

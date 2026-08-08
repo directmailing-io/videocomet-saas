@@ -227,7 +227,7 @@ function LightboxBody({
           {isPendingOrRunning ? (
             <div className="flex flex-col items-center gap-2 text-ink-muted">
               <Loader2 className="size-6 animate-spin text-brand" />
-              <span className="text-sm font-medium">Phase 1 läuft…</span>
+              <span className="text-sm font-medium">Wird noch geprüft ...</span>
             </div>
           ) : hasScreenshot ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -243,8 +243,8 @@ function LightboxBody({
                 Kein Screenshot verfügbar
               </p>
               <p className="text-xs text-ink-muted">
-                Phase 1 hat für diesen Lead keinen Screenshot erzeugt. Sie
-                können es erneut versuchen oder den Lead entfernen.
+                Für diesen Lead gibt es noch keinen Screenshot. Du kannst
+                es nochmal versuchen oder den Lead entfernen.
               </p>
               <Button
                 variant="ghost"

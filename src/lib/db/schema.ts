@@ -99,6 +99,11 @@ export const users = pgTable("users", {
   // Bestandskunden wurden per Backfill als verifiziert markiert.
   emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
 
+  // Onboarding-Checkliste dauerhaft ausgeblendet (Migration 0047).
+  onboardingDismissedAt: timestamp("onboarding_dismissed_at", {
+    withTimezone: true,
+  }),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),

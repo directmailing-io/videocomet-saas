@@ -83,7 +83,6 @@ export function ConfirmModal({
   // tatsächlichen Compute-Kosten erst beim Render-Worker kennen. Format
   // bleibt absichtlich verbal („~ 8 Min Dauer").
   const estDurationMin = Math.max(1, Math.round(summary.targetCount * 0.08));
-  const estStorageGB = Math.max(0.5, +(summary.targetCount * 0.012).toFixed(1));
 
   return (
     <Dialog
@@ -94,18 +93,17 @@ export function ConfirmModal({
     >
       <DialogContent size="xl" showClose={!loading} className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Vollproduktion starten</DialogTitle>
+          <DialogTitle>Videos jetzt erstellen?</DialogTitle>
           <DialogDescription>
-            Sie starten die Phase-2-Pipeline für die behaltenen Leads. Die
-            entfernten Leads bleiben als Soft-Delete erhalten, werden aber
-            nicht produziert.
+            Wir erstellen jetzt die Videos für alle behaltenen Leads.
+            Entfernte Leads bleiben gespeichert, bekommen aber kein Video.
           </DialogDescription>
         </DialogHeader>
 
         {/* Stats-Row */}
         <div className="grid grid-cols-3 gap-3 mt-1">
           <SummaryStat
-            label="Werden produziert"
+            label="Bekommen ein Video"
             value={summary.targetCount}
             tone="brand"
           />
@@ -127,9 +125,10 @@ export function ConfirmModal({
             <ShieldAlert className="size-4 shrink-0 mt-0.5" />
             <p className="text-xs leading-relaxed">
               <span className="font-semibold">Hinweis:</span>{" "}
-              {summary.pendingCount} Lead{summary.pendingCount === 1 ? "" : "s"}{" "}
-              wird in Phase 1 noch geprüft. Diese werden bei Start in den
-              aktuellen Zustand übernommen.
+              {summary.pendingCount === 1
+                ? "1 Lead ist noch in der Prüfung. Er wird"
+                : `${summary.pendingCount} Leads sind noch in der Prüfung. Sie werden`}{" "}
+              so übernommen, wie sie gerade sind.
             </p>
           </div>
         )}
@@ -137,7 +136,7 @@ export function ConfirmModal({
         {Object.keys(summary.byStatus).length > 0 && (
           <div className="mt-2">
             <div className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
-              Aufgliederung
+              Details
             </div>
             <ul className="flex flex-col gap-1.5">
               {(Object.keys(summary.byStatus) as PreflightStatus[]).map((s) => {
@@ -172,10 +171,6 @@ export function ConfirmModal({
           </div>
         )}
 
-        <div className="mt-2 text-xs text-ink-muted">
-          Geschätzter Bunny-Storage-Verbrauch: ~ {estStorageGB} GB
-        </div>
-
         <DialogFooter>
           <Button variant="ghost" onClick={onCancel} disabled={loading}>
             Abbrechen
@@ -187,7 +182,7 @@ export function ConfirmModal({
             onClick={onConfirm}
             disabled={summary.targetCount === 0}
           >
-            Produktion starten
+            Jetzt erstellen
           </Button>
         </DialogFooter>
       </DialogContent>

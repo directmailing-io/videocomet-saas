@@ -52,7 +52,7 @@ function calibrationHint(error: string | null | undefined): string {
     case "no_sentence_after_pause":
       return "Nach der Pause hinter deiner Anrede kommt keine Sprache mehr. Sprich nach der kurzen Pause einen ersten Satz weiter.";
     default:
-      return "Die Anrede im Webcam-Video war zu kurz oder die bewusste Pause danach zu knapp. Neu aufnehmen oder mit Original-Video (1 Credit pro Lead) starten — deine Wahl.";
+      return "Die Anrede im Webcam-Video war zu kurz oder die Pause danach zu knapp. Du kannst neu aufnehmen oder einfach ohne KI-Begrüßung starten (1 Credit pro Video).";
   }
 }
 
@@ -73,10 +73,20 @@ export function IntroPreviewSection({
   // Kein ready-Voice-Profil → Feature fällt für diese Runde aus.
   if (!intro.voiceReady) {
     return (
-      <div className="flex items-center gap-2">
-        <Badge variant="neutral">
-          Ohne personalisierte Begrüßung, 1 Credit pro Video
-        </Badge>
+      <div className="flex items-start gap-3 px-4 py-3 rounded-squircle-sm bg-surface border border-line-soft shadow-card">
+        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-squircle-sm bg-surface-soft text-ink-muted">
+          <Sparkles className="size-4" />
+        </span>
+        <div className="text-sm">
+          <p className="font-semibold text-ink">
+            Diesmal ohne KI-Begrüßung
+          </p>
+          <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+            Deine KI-Stimme ist für diese Runde noch nicht bereit. Kein
+            Problem: Die Videos starten ganz normal und kosten nur 1 Credit
+            pro Video.
+          </p>
+        </div>
       </div>
     );
   }
@@ -104,18 +114,18 @@ export function IntroPreviewSection({
             <p className="text-xs text-ink-muted mt-1 leading-relaxed">
               {intro.calibrationStatus === "failed"
                 ? calibrationHint(intro.calibrationError)
-                : "Die Kalibrierung deines Webcam-Videos ist noch nicht bereit oder das Rendering ist fehlgeschlagen. Neu aufnehmen oder mit Original-Video (1 Credit pro Lead) starten — deine Wahl."}
+                : "Beim Vorbereiten deines Webcam-Videos ist etwas schiefgelaufen. Du kannst neu aufnehmen oder einfach ohne KI-Begrüßung starten (1 Credit pro Video)."}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
                 href={`/kampagnen/${campaignId}/bearbeiten`}
                 className="inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-deep transition-colors"
               >
-                Zur Kampagne — Webcam neu aufnehmen
+                Webcam-Video neu aufnehmen
               </Link>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-soft px-3 py-1.5 text-xs font-medium text-ink-muted">
-                Alternativ: oben „Vollproduktion starten" — läuft dann ohne
-                KI-Begrüßung
+                Oder klick oben auf „Videos jetzt erstellen", dann läuft es
+                ohne KI-Begrüßung
               </span>
             </div>
           </div>
@@ -142,8 +152,8 @@ export function IntroPreviewSection({
       </div>
       <p className="text-sm text-ink-muted leading-relaxed">
         {rendering
-          ? `${readyCount} von ${expected} fertig — die Videos erscheinen einzeln, sobald sie gerendert sind. Das dauert ein bis zwei Minuten.`
-          : "So klingt deine personalisierte Begrüßung. Prüfe die Beispiele, bevor die gesamte Produktion startet."}
+          ? `${readyCount} von ${expected} fertig. Die Videos tauchen hier einzeln auf, das dauert ein bis zwei Minuten.`
+          : "So klingt deine persönliche Begrüßung. Schau dir die Beispiele an, bevor alle Videos erstellt werden."}
       </p>
 
       {rendering && (

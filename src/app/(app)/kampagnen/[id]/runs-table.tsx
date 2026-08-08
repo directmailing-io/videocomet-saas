@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
+import { runStatusLabel, runStatusVariant } from "@/lib/run-status";
 import { BulkExportDialog } from "./bulk-export-dialog";
 import { ResetTrackingDialog } from "./reset-tracking-dialog";
 
@@ -177,54 +178,9 @@ function formatDate(iso: string | null): string {
   }
 }
 
-function statusLabel(status: RunRow["status"]): string {
-  switch (status) {
-    case "draft":
-      return "Entwurf";
-    case "mapping":
-      return "Mapping";
-    case "preflighting":
-      return "Prüft Leads ...";
-    case "awaiting_approval":
-      return "Freigabe ausstehend";
-    case "approved":
-      return "Freigegeben";
-    case "generating":
-      return "Wird erzeugt ...";
-    case "completed":
-      return "Fertig";
-    case "failed":
-      return "Fehlgeschlagen";
-    case "cancelled":
-      return "Abgebrochen";
-  }
-}
-
-function statusVariant(
-  status: RunRow["status"],
-): "brand" | "success" | "warn" | "danger" | "neutral" {
-  switch (status) {
-    case "completed":
-      return "success";
-    case "generating":
-    case "approved":
-      return "brand";
-    case "mapping":
-    case "preflighting":
-    case "awaiting_approval":
-      return "warn";
-    case "failed":
-      return "danger";
-    case "cancelled":
-    case "draft":
-    default:
-      return "neutral";
-  }
-}
-
 function StatusBadge({ status }: { status: RunRow["status"] }) {
-  const variant = statusVariant(status);
-  const label = statusLabel(status);
+  const variant = runStatusVariant(status);
+  const label = runStatusLabel(status);
   if (status === "generating" || status === "preflighting") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold leading-5 whitespace-nowrap bg-brand-soft text-brand-deep">

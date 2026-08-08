@@ -34,6 +34,9 @@ import {
   X,
   Monitor,
   Smartphone,
+  Eye,
+  EyeOff,
+  ScrollText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RecordingHint } from "@/components/intro/recording-hint";
@@ -135,6 +138,12 @@ async function verifyAvailability(
   return false;
 }
 
+/** LocalStorage-Key fürs Teleprompter-Skript — überlebt Neu-Aufnahmen und
+ *  Seitenwechsel, damit niemand seinen Text zweimal tippen muss. */
+const PROMPTER_STORAGE_KEY = "vc-teleprompter-script";
+
+const PROMPTER_FONT_SIZES = ["text-sm", "text-lg", "text-2xl"] as const;
+
 function formatTime(seconds: number): string {
   const safe = Math.max(0, Math.floor(seconds));
   const mm = Math.floor(safe / 60).toString().padStart(2, "0");
@@ -151,6 +160,36 @@ export function WebcamRecorder({
 }: WebcamRecorderProps) {
   const hasLimit = typeof maxDurationSec === "number" && maxDurationSec > 0;
   const [kiHintOpen, setKiHintOpen] = React.useState(false);
+
+  // ── Teleprompter (optional) ──────────────────────────────────────────
+  const [script, setScript] = React.useState("");
+  const [prompterEditorOpen, setPrompterEditorOpen] = React.useState(false);
+  const [prompterVisible, setPrompterVisible] = React.useState(true);
+  const [prompterFontIdx, setPrompterFontIdx] = React.useState(1);
+
+  React.useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(PROMPTER_STORAGE_KEY);
+      if (saved) setScript(saved);
+    } catch {
+      /* private mode etc. */
+    }
+  }, []);
+
+  const updateScript = React.useCallback((value: string) => {
+    setScript(value);
+    try {
+      if (value.trim()) {
+        window.localStorage.setItem(PROMPTER_STORAGE_KEY, value);
+      } else {
+        window.localStorage.removeItem(PROMPTER_STORAGE_KEY);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const prompterActive = script.trim().length > 0;
 
   const liveVideoRef = React.useRef<HTMLVideoElement | null>(null);
   const reviewVideoRef = React.useRef<HTMLVideoElement | null>(null);
@@ -556,6 +595,53 @@ export function WebcamRecorder({
             </div>
           )}
 
+          {state === "preview" && (
+            <div className="rounded-squircle-md border border-line bg-surface">
+              <button
+                type="button"
+                onClick={() => setPrompterEditorOpen((v) => !v)}
+                aria-expanded={prompterEditorOpen}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-ink hover:bg-surface-soft transition-colors"
+              >
+                <ScrollText className="size-4 text-ink-muted" aria-hidden />
+                <span className="flex-1">
+                  Teleprompter: Schreib dir auf, was du sagen willst (optional)
+                </span>
+                {prompterActive && !prompterEditorOpen && (
+                  <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[10px] font-semibold text-ok">
+                    Skript gespeichert
+                  </span>
+                )}
+                <span
+                  className={cn(
+                    "text-ink-muted text-xs transition-transform",
+                    prompterEditorOpen && "rotate-180",
+                  )}
+                  aria-hidden
+                >
+                  ▾
+                </span>
+              </button>
+              {prompterEditorOpen && (
+                <div className="border-t border-line-soft p-3 space-y-2">
+                  <textarea
+                    value={script}
+                    onChange={(e) => updateScript(e.target.value)}
+                    rows={4}
+                    placeholder={
+                      "Tipp hier deinen Text ein.\nEr wird dir während der Aufnahme oben im Videobild angezeigt."
+                    }
+                    className="w-full rounded-squircle-sm border border-line bg-surface-soft p-3 text-sm text-ink leading-relaxed resize-y focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                  />
+                  <p className="text-[11px] text-ink-muted">
+                    Nur du siehst den Text. Er landet nicht im Video und bleibt
+                    gespeichert, falls du neu aufnimmst.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {state === "recording" && (
             <div className="flex items-center justify-center gap-4 rounded-squircle-md border border-danger/20 bg-danger/5 px-5 py-4">
               <span className="inline-flex items-center gap-2 text-sm font-semibold text-danger">
@@ -685,8 +771,72 @@ export function WebcamRecorder({
               />
             )}
 
+            {/* Teleprompter-Overlay: oben (nah an der Kamera), damit der
+              * Blick beim Ablesen fast in die Linse geht. */}
+            {state === "recording" && prompterActive && prompterVisible && (
+              <div className="absolute inset-x-0 top-0 z-10 max-h-[45%] overflow-y-auto bg-ink/80 backdrop-blur-sm">
+                <div className="sticky top-0 flex items-center justify-end gap-1 px-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPrompterFontIdx((i) => Math.max(0, i - 1))
+                    }
+                    aria-label="Skript-Text kleiner"
+                    className="rounded-full bg-white/15 px-2 py-1 text-[10px] font-bold text-white hover:bg-white/25"
+                  >
+                    A-
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPrompterFontIdx((i) =>
+                        Math.min(PROMPTER_FONT_SIZES.length - 1, i + 1),
+                      )
+                    }
+                    aria-label="Skript-Text größer"
+                    className="rounded-full bg-white/15 px-2 py-1 text-xs font-bold text-white hover:bg-white/25"
+                  >
+                    A+
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrompterVisible(false)}
+                    aria-label="Skript ausblenden"
+                    className="rounded-full bg-white/15 p-1.5 text-white hover:bg-white/25"
+                  >
+                    <EyeOff className="size-3.5" />
+                  </button>
+                </div>
+                <p
+                  className={cn(
+                    "whitespace-pre-wrap px-4 pb-3 pt-1 text-white leading-relaxed",
+                    PROMPTER_FONT_SIZES[prompterFontIdx],
+                  )}
+                >
+                  {script}
+                </p>
+              </div>
+            )}
+            {state === "recording" && prompterActive && !prompterVisible && (
+              <button
+                type="button"
+                onClick={() => setPrompterVisible(true)}
+                className="absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-ink/85"
+              >
+                <Eye className="size-3.5" />
+                Skript zeigen
+              </button>
+            )}
+
             {state === "recording" && (
-              <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
+              <div
+                className={cn(
+                  "absolute left-3 flex items-center gap-2 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur",
+                  // Bei sichtbarem Teleprompter unten parken, damit das
+                  // Badge den Skript-Text nicht überlagert.
+                  prompterActive && prompterVisible ? "bottom-3" : "top-3",
+                )}
+              >
                 <span className="inline-block size-2 animate-pulse rounded-full bg-danger" />
                 REC
                 <span className="font-mono tabular-nums">{formatTime(elapsed)}</span>
