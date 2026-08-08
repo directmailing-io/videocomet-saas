@@ -16,9 +16,12 @@
  *     der User soll 3 VERSCHIEDENE Namen hören.
  *   - Fehlgeschlagene Leads werden übersprungen (max. ~6 Versuche),
  *     Preview-Fehler sind nie fatal.
- *   - Feature nicht bereit (Intro aus, Voice/Kalibrierung fehlt): Job endet
- *     ohne Schreiben — `intro_preview` bleibt NULL, das Approve-Gate greift
- *     dann nicht.
+ *   - Kalibrierung/Voice läuft noch (Race beim Runden-Start): Delayed-
+ *     Retry bis 10 min statt endgültigem Skip.
+ *   - Feature endgültig nicht bereit: `intro_preview_completed_at` wird
+ *     gesetzt, damit die UI nicht ewig im Fortschritts-Zustand hängt.
+ *     Intro deaktiviert: Job endet ohne Schreiben (`intro_preview` NULL,
+ *     Approve-Gate greift nicht).
  */
 
 import { readFile, writeFile } from "node:fs/promises";
@@ -39,7 +42,7 @@ import { DEFAULT_TTS_TEMPLATE, INTRO_PREVIEW_TARGET } from "@/lib/intro";
 import { uploadIntroFile } from "@/lib/bunny/intro-storage";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
 import { generatePersonalizedWebcam } from "../lib/intro-engine";
-import type { IntroPreviewJobData } from "../intro-queue";
+import { enqueueIntroPreviewJob, type IntroPreviewJobData } from "../intro-queue";
 
 /** Vorschau-Länge in Sekunden. Kurz genug fuer schnelles sync.so-Rendering,
  *  lang genug damit der User die Anrede + Beginn des ersten Satzes bewerten
@@ -53,6 +56,26 @@ const PREVIEW_TRIM_SEC = 8;
  * verdoppelt damit die Wall-Time für den User.
  */
 const PREVIEW_PARALLEL = INTRO_PREVIEW_TARGET + 1;
+/**
+ * Warte-Retry, wenn Kalibrierung/Voice-Training beim Runden-Start noch
+ * läuft (Race: Preflight kleiner Listen ist oft schneller fertig als die
+ * Kalibrierung des gerade hochgeladenen Webcam-Videos). 40 × 15s = 10 min
+ * Geduld, danach gilt das Intro als endgültig nicht bereit.
+ */
+const INTRO_WAIT_DELAY_MS = 15_000;
+const INTRO_WAIT_MAX_ATTEMPTS = 40;
+
+/**
+ * Endgültiger Skip nach der Promotion: Abschluss-Marker setzen, damit die
+ * UI nicht ewig „Beispielvideos werden erstellt" zeigt. Guard auf NULL,
+ * um parallel gelaufene Jobs nicht zu überstempeln.
+ */
+async function markPreviewCompleted(runId: string): Promise<void> {
+  await db
+    .update(runs)
+    .set({ introPreviewCompletedAt: new Date() })
+    .where(and(eq(runs.id, runId), isNull(runs.introPreviewCompletedAt)));
+}
 
 export async function processIntroPreviewJob(job: {
   data: IntroPreviewJobData;
@@ -128,6 +151,30 @@ export async function processIntroPreviewJob(job: {
         ? voiceProfile.fishModelId
         : null;
   if (!introFishModelId || calibration?.status !== "ready") {
+    // Läuft die Vorbereitung noch? Dann NICHT endgültig skippen (die UI
+    // würde sonst ewig „wird erstellt" zeigen), sondern per Delayed-Retry
+    // warten, bis Kalibrierung/Voice-Training durch sind.
+    const stillPreparing =
+      !calibration ||
+      calibration.status === "pending" ||
+      calibration.status === "running" ||
+      (calibration.status === "ready" &&
+        !introFishModelId &&
+        (calibration.voiceStatus === "pending" ||
+          voiceProfile?.status === "processing" ||
+          voiceProfile?.status === "pending_sample"));
+    const waitAttempt = job.data.waitAttempt ?? 0;
+    if (stillPreparing && waitAttempt < INTRO_WAIT_MAX_ATTEMPTS) {
+      await enqueueIntroPreviewJob(runId, {
+        delayMs: INTRO_WAIT_DELAY_MS,
+        jobIdSuffix: `-wait-${waitAttempt + 1}`,
+        waitAttempt: waitAttempt + 1,
+      });
+      return { status: "skipped", reason: "intro_not_ready_waiting" };
+    }
+    // Endgültig nicht bereit → Abschluss markieren, damit die UI vom
+    // Fortschritts- in den Fehler-/Fallback-Zustand wechselt.
+    await markPreviewCompleted(runId);
     return { status: "skipped", reason: "intro_not_ready" };
   }
 
@@ -137,6 +184,7 @@ export async function processIntroPreviewJob(job: {
     .where(eq(mediaItems.id, campaign.webcamMediaId))
     .limit(1);
   if (!webcam?.publicUrl) {
+    await markPreviewCompleted(runId);
     return { status: "skipped", reason: "webcam_missing" };
   }
 
@@ -167,6 +215,7 @@ export async function processIntroPreviewJob(job: {
       },
     });
     if (!res.ok) {
+      await markPreviewCompleted(runId);
       return { status: "skipped", reason: `webcam_download_http_${res.status}` };
     }
     const webcamLocalPath = join(tmpDir, "webcam-src.mp4");

@@ -34,6 +34,8 @@ export interface IntroCalibrationJobData {
 
 export interface IntroPreviewJobData {
   runId: string;
+  /** Zähler für Warte-Retries (Kalibrierung noch nicht ready). */
+  waitAttempt?: number;
 }
 
 function getConnectionOpts(): ConnectionOptions {
@@ -117,13 +119,20 @@ export function introPreviewQueue(): Queue<IntroPreviewJobData> {
 
 /**
  * Enqueue best-effort: Previews duerfen die awaiting_approval-Promotion
- * niemals blockieren. Dedup via jobId pro Run.
+ * niemals blockieren. Dedup via jobId pro Run — Retries/Nachzügler brauchen
+ * einen `jobIdSuffix`, weil BullMQ auch gegen completed Jobs dedupt.
  */
-export async function enqueueIntroPreviewJob(runId: string): Promise<void> {
+export async function enqueueIntroPreviewJob(
+  runId: string,
+  opts?: { delayMs?: number; jobIdSuffix?: string; waitAttempt?: number },
+): Promise<void> {
   await introPreviewQueue().add(
     "intro-preview",
-    { runId },
-    { jobId: `intro-preview-${runId}` },
+    { runId, waitAttempt: opts?.waitAttempt },
+    {
+      jobId: `intro-preview-${runId}${opts?.jobIdSuffix ?? ""}`,
+      delay: opts?.delayMs,
+    },
   );
 }
 
