@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle2,
+  Info,
   Keyboard,
   Loader2,
   Play,
@@ -921,6 +922,7 @@ export function PreflightReviewClient({
             checked={introChecked}
             onCheckedChange={setIntroChecked}
             campaignId={campaignId}
+            runId={runId}
           />
         )}
 
@@ -950,6 +952,17 @@ export function PreflightReviewClient({
             </Button>
           </div>
         )}
+
+        {/* Cookie-Banner-Hinweis für die Screenshot-Kontrolle */}
+        <div className="flex items-start gap-2.5 px-4 py-2.5 rounded-squircle-sm bg-surface-soft border border-line-soft text-ink-muted">
+          <Info className="size-4 shrink-0 mt-0.5" />
+          <p className="text-xs leading-relaxed">
+            Cookie- und Popup-Banner auf den Screenshots? Kein Grund zur
+            Sorge: Beim fertigen Video werden sie in der Regel automatisch
+            ausgeblendet. Das klappt bei fast allen Seiten, garantieren
+            können wir es aber nicht.
+          </p>
+        </div>
 
         {/* Grid */}
         <div className="min-h-[400px] pb-24">
@@ -1118,7 +1131,7 @@ function NextStepsCard({
       steps.push({
         state: "running",
         title: "Beispielvideos freigeben",
-        hint: "Wir erstellen gerade ein paar Beispielvideos mit deiner KI-Begrüßung. Dauert ein bis zwei Minuten.",
+        hint: "Wir erstellen gerade ein paar Beispielvideos mit deiner KI-Begrüßung. Das dauert etwa 5 Minuten.",
       });
     } else if (intro.previews.length === 0) {
       steps.push({

@@ -6,17 +6,28 @@
  *
  *   1. Voice-Profil fehlt → neutraler Chip: Intro fällt automatisch aus,
  *      Original-Video mit 1 Credit.
- *   2. Previews werden noch generiert → Spinner-Karte (Status-Polling
- *      läuft im Parent).
+ *   2. Previews werden noch generiert → Prozess-Animation mit echten
+ *      Pipeline-Schritten + Zeitschätzung (Status-Polling läuft im Parent).
  *   3. Previews vorhanden → bis zu 3 Player + Pflicht-Checkbox, ohne die
  *      die Freigabe der Vollproduktion blockiert ist.
  */
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  AudioLines,
+  Check,
+  Ear,
+  Mic,
+  ScanFace,
+  SlidersHorizontal,
+  Sparkles,
+  Wand2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
 export interface IntroPreviewInfo {
   enabled: boolean;
@@ -56,17 +67,180 @@ function calibrationHint(error: string | null | undefined): string {
   }
 }
 
+/**
+ * Prozess-Anzeige während des Renderings: spiegelt die echten Pipeline-
+ * Schritte (TTS-Varianten, ASR-Check, EQ, sync.so-Lipsync, QA) zeitbasiert
+ * wider. Der Start-Zeitpunkt liegt in sessionStorage, damit ein Reload den
+ * Fortschritt nicht zurücksetzt. Der letzte Schritt bleibt aktiv, bis der
+ * Server wirklich fertig meldet.
+ */
+const RENDER_STEPS: Array<{
+  label: string;
+  detail?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  endSec: number;
+}> = [
+  { label: "Deine KI-Stimme wird geladen", icon: AudioLines, endSec: 10 },
+  {
+    label: "Begrüßung wird eingesprochen",
+    detail: "Wir nehmen mehrere Varianten auf und wählen die natürlichste.",
+    icon: Mic,
+    endSec: 55,
+  },
+  {
+    label: "Aussprache wird geprüft",
+    detail: "Eine zweite KI hört gegen: Klingt der Name richtig?",
+    icon: Ear,
+    endSec: 85,
+  },
+  {
+    label: "Klang wird an dein Video angepasst",
+    detail: "Lautstärke und Raumklang, damit man keinen Übergang hört.",
+    icon: SlidersHorizontal,
+    endSec: 110,
+  },
+  {
+    label: "Lippenbewegungen werden synchronisiert",
+    detail: "Der aufwendigste Schritt: dein Mund bewegt sich passend zum neuen Ton.",
+    icon: ScanFace,
+    endSec: 260,
+  },
+  {
+    label: "Feinschliff und Qualitäts-Check",
+    detail: "Jedes Video wird nochmal automatisch gegengehört.",
+    icon: Wand2,
+    endSec: Number.POSITIVE_INFINITY,
+  },
+];
+const TOTAL_EST_SEC = 300;
+
+function useRenderElapsed(storageKey: string): number {
+  const [elapsed, setElapsed] = React.useState(0);
+  React.useEffect(() => {
+    let startedAt = Number(window.sessionStorage.getItem(storageKey));
+    if (!startedAt || Number.isNaN(startedAt)) {
+      startedAt = Date.now();
+      window.sessionStorage.setItem(storageKey, String(startedAt));
+    }
+    const tick = () =>
+      setElapsed(Math.max(0, (Date.now() - startedAt) / 1000));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [storageKey]);
+  return elapsed;
+}
+
+function RenderingProgress({
+  storageKey,
+  readyCount,
+  expected,
+}: {
+  storageKey: string;
+  readyCount: number;
+  expected: number;
+}) {
+  const elapsedSec = useRenderElapsed(storageKey);
+  let activeIdx = RENDER_STEPS.findIndex((s) => elapsedSec < s.endSec);
+  if (activeIdx === -1) activeIdx = RENDER_STEPS.length - 1;
+
+  const timePct = Math.min(94, (elapsedSec / TOTAL_EST_SEC) * 100);
+  const donePct = (readyCount / expected) * 100;
+  const pct = Math.round(Math.max(timePct, Math.min(donePct, 94)));
+
+  const remainSec = TOTAL_EST_SEC - elapsedSec;
+  const remainLabel =
+    remainSec <= 0
+      ? "Gleich fertig, dauert heute einen Moment länger ..."
+      : remainSec < 75
+        ? "Noch ungefähr eine Minute"
+        : `Noch ungefähr ${Math.ceil(remainSec / 60)} Minuten`;
+
+  return (
+    <div className="mt-4 rounded-squircle-sm bg-gradient-to-br from-brand-soft/70 via-surface-soft to-surface-soft border border-brand/10 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <span className="text-xs font-semibold text-ink">
+          {readyCount > 0
+            ? `${readyCount} von ${expected} Videos fertig`
+            : "Deine Beispielvideos entstehen gerade"}
+        </span>
+        <span className="text-xs text-ink-muted tabular-nums">
+          {remainLabel}
+        </span>
+      </div>
+
+      <div className="mb-5 h-1.5 w-full overflow-hidden rounded-full bg-white/60">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-brand to-brand-deep transition-[width] duration-1000 ease-linear"
+          style={{ width: `${pct}%` }}
+          aria-hidden
+        />
+      </div>
+
+      <ol className="flex flex-col gap-2.5">
+        {RENDER_STEPS.map((step, idx) => {
+          const state =
+            idx < activeIdx ? "done" : idx === activeIdx ? "active" : "todo";
+          const Icon = step.icon;
+          return (
+            <li key={step.label} className="flex items-start gap-3">
+              <span
+                className={cn(
+                  "relative inline-flex size-7 shrink-0 items-center justify-center rounded-full",
+                  state === "done" && "bg-ok/15 text-ok",
+                  state === "active" && "bg-brand text-white shadow-brand",
+                  state === "todo" && "bg-white/60 text-ink-muted/50",
+                )}
+              >
+                {state === "active" && (
+                  <span className="absolute inset-0 rounded-full bg-brand/40 animate-ping" />
+                )}
+                {state === "done" ? (
+                  <Check className="size-3.5" />
+                ) : (
+                  <Icon className="relative size-3.5" />
+                )}
+              </span>
+              <span className="min-w-0 pt-0.5">
+                <span
+                  className={cn(
+                    "block text-sm leading-snug",
+                    state === "active" && "font-semibold text-ink",
+                    state === "done" && "font-medium text-ink-muted",
+                    state === "todo" && "text-ink-muted/60",
+                  )}
+                >
+                  {step.label}
+                  {state === "active" && " ..."}
+                </span>
+                {state === "active" && step.detail && (
+                  <span className="mt-0.5 block text-xs text-ink-muted leading-relaxed">
+                    {step.detail}
+                  </span>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
 export function IntroPreviewSection({
   intro,
   checked,
   onCheckedChange,
   campaignId,
+  runId,
 }: {
   intro: IntroPreviewInfo;
   checked: boolean;
   onCheckedChange: (v: boolean) => void;
   /** Für den Direkt-Link zur Bearbeiten-Seite mit Webcam-Karte. */
   campaignId: string;
+  /** Für die Fortschritts-Persistenz über Reloads (sessionStorage-Key). */
+  runId: string;
 }) {
   if (!intro.enabled) return null;
 
@@ -134,11 +308,6 @@ export function IntroPreviewSection({
     );
   }
 
-  // Sichtbare Slots: bereits fertige Videos + Skeleton für die noch
-  // laufenden (Progress-Feedback: „X von N").
-  const skeletonCount = rendering ? Math.max(0, expected - readyCount) : 0;
-  const progressPercent = Math.round((readyCount / expected) * 100);
-
   return (
     <div className="bg-surface rounded-squircle-md shadow-card p-5">
       <div className="flex flex-wrap items-center gap-2 mb-1.5">
@@ -152,51 +321,40 @@ export function IntroPreviewSection({
       </div>
       <p className="text-sm text-ink-muted leading-relaxed">
         {rendering
-          ? `${readyCount} von ${expected} fertig. Die Videos tauchen hier einzeln auf, das dauert ein bis zwei Minuten.`
+          ? `Wir erstellen gerade ${expected} Beispielvideos mit deiner KI-Begrüßung. Das dauert insgesamt etwa 5 Minuten, die fertigen Videos tauchen hier automatisch auf.`
           : "So klingt deine persönliche Begrüßung. Schau dir die Beispiele an, bevor alle Videos erstellt werden."}
       </p>
 
       {rendering && (
-        <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-surface-soft">
-          <div
-            className="h-full bg-brand transition-[width] duration-500 ease-out"
-            style={{ width: `${progressPercent}%` }}
-            aria-hidden
-          />
-        </div>
+        <RenderingProgress
+          storageKey={`vc-intro-progress-${runId}`}
+          readyCount={readyCount}
+          expected={expected}
+        />
       )}
 
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {intro.previews.slice(0, expected).map((p) => (
-          <div key={p.leadId} className="min-w-0">
-            <div className="overflow-hidden rounded-squircle-sm bg-ink aspect-video">
-              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-              <video
-                src={p.videoUrl}
-                controls
-                controlsList="nodownload"
-                preload="metadata"
-                playsInline
-                className="h-full w-full object-contain"
-              />
-            </div>
-            <p className="mt-2 text-sm font-semibold text-ink truncate">
-              {p.firstName ?? "Ohne Vornamen"}
-            </p>
-          </div>
-        ))}
-        {Array.from({ length: skeletonCount }).map((_, idx) => (
-          <div key={`skeleton-${idx}`} className="min-w-0">
-            <div className="relative overflow-hidden rounded-squircle-sm bg-surface-muted aspect-video">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="inline-block size-5 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      {readyCount > 0 && (
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {intro.previews.slice(0, expected).map((p) => (
+            <div key={p.leadId} className="min-w-0">
+              <div className="overflow-hidden rounded-squircle-sm bg-ink aspect-video">
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video
+                  src={p.videoUrl}
+                  controls
+                  controlsList="nodownload"
+                  preload="metadata"
+                  playsInline
+                  className="h-full w-full object-contain"
+                />
               </div>
-              <div className="absolute inset-0 bg-gradient-to-br from-surface-muted via-line-soft to-surface-muted opacity-40 animate-pulse" />
+              <p className="mt-2 text-sm font-semibold text-ink truncate">
+                {p.firstName ?? "Ohne Vornamen"}
+              </p>
             </div>
-            <p className="mt-2 text-xs text-ink-muted">Wird gerendert ...</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {alreadyApproved ? (
         <p className="mt-4 text-xs text-ok font-medium">

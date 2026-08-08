@@ -46,9 +46,11 @@ import type { IntroPreviewJobData } from "../intro-queue";
  *  kann. */
 const PREVIEW_TRIM_SEC = 8;
 /**
- * Wie viele Kandidaten wir parallel rendern — Ziel + Puffer für Fallbacks.
- * Größer wäre schneller, würde aber Fish/sync.so unnötig belasten und die
- * Kosten hochtreiben. 4 = Ziel 3 + ein Reserve-Lead für Fehlgeschlagene.
+ * Wie viele Kandidaten wir insgesamt vorhalten — Ziel + Puffer für Fallbacks.
+ * Gerendert wird in zwei Wellen: erst INTRO_PREVIEW_TARGET parallel (passt
+ * exakt in die 3 sync.so-Slots), die Reserve nur wenn Erfolge fehlen. Alle
+ * 4 gleichzeitig hieße: der vierte wartet auf einen freien sync.so-Slot und
+ * verdoppelt damit die Wall-Time für den User.
  */
 const PREVIEW_PARALLEL = INTRO_PREVIEW_TARGET + 1;
 
@@ -204,66 +206,83 @@ export async function processIntroPreviewJob(job: {
       .set({ introPreview: [] })
       .where(eq(runs.id, runId));
 
-    // Parallel rendern — sync.so-Lipsync ist der Flaschenhals (~30-60s
-    // pro Video). Serieller Lauf hat ~3 Minuten gedauert; parallel fällt
-    // die Wall-Time näher an ein einzelnes Rendering. Erfolge werden
-    // sofort atomar an `intro_preview` angehängt, damit die UI live
-    // wächst statt am Ende „alle drei auf einmal" zu bekommen.
+    // Zwei-Wellen-Rendering — sync.so-Lipsync ist der Flaschenhals (1-4 min
+    // pro Video) und erlaubt nur 3 parallele Generierungen. Welle 1 rendert
+    // exakt INTRO_PREVIEW_TARGET Kandidaten (füllt die Slots ohne Stau),
+    // die Reserve läuft nur an, wenn Erfolge fehlen. Erfolge werden sofort
+    // atomar an `intro_preview` angehängt, damit die UI live wächst statt
+    // am Ende „alle drei auf einmal" zu bekommen.
     const fishModelId = introFishModelId; // narrow für Closures
-    const outcomes = await Promise.allSettled(
-      eligible.map(async (cand) => {
-        const result = await generatePersonalizedWebcam({
-          userId: run.userId,
-          tag: `pv-${cand.leadId.slice(0, 8)}`,
-          substitutions: cand.substitutions,
-          calibration,
-          fishModelId,
-          webcamLocalPath,
-          workDir: tmpDir,
-          trimToSec: PREVIEW_TRIM_SEC,
-        });
-        if (!result.ok) {
+    const renderOne = async (cand: {
+      leadId: string;
+      substitutions: Record<string, string>;
+    }): Promise<IntroPreviewEntry | null> => {
+      const result = await generatePersonalizedWebcam({
+        userId: run.userId,
+        tag: `pv-${cand.leadId.slice(0, 8)}`,
+        substitutions: cand.substitutions,
+        calibration,
+        fishModelId,
+        webcamLocalPath,
+        workDir: tmpDir,
+        trimToSec: PREVIEW_TRIM_SEC,
+      });
+      if (!result.ok) {
+        console.warn(
+          `[intro-preview:${runId}] lead ${cand.leadId} fallback: ${result.reason}`,
+        );
+        return null;
+      }
+      const upload = await uploadIntroFile({
+        userId: run.userId,
+        // Nonce gegen den Bunny-CDN-Cache: bei Regenerierung würde die
+        // alte URL sonst weiter das alte Video ausliefern.
+        fileName: `preview-${runId}-${cand.leadId}-${Date.now()}.mp4`,
+        buffer: await readFile(result.outputPath),
+        contentType: "video/mp4",
+      });
+      const entry: IntroPreviewEntry = {
+        leadId: cand.leadId,
+        videoUrl: upload.url,
+      };
+      // Atomarer JSONB-Append — mehrere parallele Renderings können
+      // gleichzeitig committen, ohne sich gegenseitig zu überschreiben.
+      // Der JSON-String wird von Drizzle parametrisiert, Postgres castet
+      // ihn via ::jsonb (kein Injection-Risiko trotz Strings aus API-URLs).
+      const entryJson = JSON.stringify([entry]);
+      await db
+        .update(runs)
+        .set({
+          introPreview: sql`COALESCE(${runs.introPreview}, '[]'::jsonb) || ${entryJson}::jsonb`,
+        })
+        .where(eq(runs.id, runId));
+      return entry;
+    };
+
+    const countAndLog = (outcomes: PromiseSettledResult<IntroPreviewEntry | null>[]) => {
+      for (const o of outcomes) {
+        if (o.status === "rejected") {
           console.warn(
-            `[intro-preview:${runId}] lead ${cand.leadId} fallback: ${result.reason}`,
+            `[intro-preview:${runId}] render error: ${(o.reason as Error).message}`,
           );
-          return null;
         }
-        const upload = await uploadIntroFile({
-          userId: run.userId,
-          // Nonce gegen den Bunny-CDN-Cache: bei Regenerierung würde die
-          // alte URL sonst weiter das alte Video ausliefern.
-          fileName: `preview-${runId}-${cand.leadId}-${Date.now()}.mp4`,
-          buffer: await readFile(result.outputPath),
-          contentType: "video/mp4",
-        });
-        const entry: IntroPreviewEntry = {
-          leadId: cand.leadId,
-          videoUrl: upload.url,
-        };
-        // Atomarer JSONB-Append — mehrere parallele Renderings können
-        // gleichzeitig committen, ohne sich gegenseitig zu überschreiben.
-        // Der JSON-String wird von Drizzle parametrisiert, Postgres castet
-        // ihn via ::jsonb (kein Injection-Risiko trotz Strings aus API-URLs).
-        const entryJson = JSON.stringify([entry]);
-        await db
-          .update(runs)
-          .set({
-            introPreview: sql`COALESCE(${runs.introPreview}, '[]'::jsonb) || ${entryJson}::jsonb`,
-          })
-          .where(eq(runs.id, runId));
-        return entry;
-      }),
+      }
+      return outcomes.filter(
+        (o) => o.status === "fulfilled" && o.value !== null,
+      ).length;
+    };
+
+    const firstWave = eligible.slice(0, INTRO_PREVIEW_TARGET);
+    const reserve = eligible.slice(INTRO_PREVIEW_TARGET);
+    let successful = countAndLog(
+      await Promise.allSettled(firstWave.map(renderOne)),
     );
 
-    const successful = outcomes.filter(
-      (o) => o.status === "fulfilled" && o.value !== null,
-    ).length;
-    for (const o of outcomes) {
-      if (o.status === "rejected") {
-        console.warn(
-          `[intro-preview:${runId}] render error: ${(o.reason as Error).message}`,
-        );
-      }
+    const missing = INTRO_PREVIEW_TARGET - successful;
+    if (missing > 0 && reserve.length > 0) {
+      successful += countAndLog(
+        await Promise.allSettled(reserve.slice(0, missing).map(renderOne)),
+      );
     }
 
     // Abschluss-Marker setzen — die UI weiß jetzt „fertig, das ist alles".
