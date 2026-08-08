@@ -527,10 +527,20 @@ export async function generatePersonalizedWebcam(
     // Palindrom (vorwärts+rückwärts) statt hartem Loop: die stream_loop-
     // Naht des ~300ms-Roomtones hat als periodisches Klicken/„DUM" im
     // KI-Segment durchgeschlagen. Beim Palindrom ist jede Naht stetig.
+    // Zusätzlich vor dem Palindrom entrumpeln: Thumps IM Schnipsel selbst
+    // (90-300Hz-Transienten aus dem Webcam-Roomtone) werden durch den Loop
+    // sonst rhythmisch ("DUMDUMDUM"). Highpass + Compander wirken NUR auf
+    // das Bett; die TTS-Stimme wird erst danach separat drübergemischt.
     const palindromePath = join(dir, `roomtone-pal-${tag}.wav`);
+    const DE_THUMP =
+      "highpass=f=120," +
+      "compand=attacks=0.003:decays=0.12:" +
+      "points=-80/-80|-50/-50|-40/-46|-20/-45:soft-knee=4:volume=-50";
     await runFfmpeg([
       "-y", "-i", roomtonePath,
-      "-filter_complex", "[0:a]areverse[r];[0:a][r]concat=n=2:v=0:a=1[p]",
+      "-filter_complex",
+      `[0:a]${DE_THUMP}[f];[f]asplit[a][b];` +
+        "[b]areverse[r];[a][r]concat=n=2:v=0:a=1[p]",
       "-map", "[p]",
       "-ac", "1", "-ar", String(SAMPLE_RATE),
       palindromePath,
