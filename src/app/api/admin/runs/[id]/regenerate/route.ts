@@ -2,27 +2,23 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireUserApi } from "@/lib/auth-guard";
-import { getRun } from "@/lib/db/queries/runs";
+import { and, eq, isNull } from "drizzle-orm";
+import { requireAdminApi } from "@/lib/auth-guard";
+import { db } from "@/lib/db";
+import { runs } from "@/lib/db/schema";
 import {
   regenerateRunCore,
   type RunRegenMode,
 } from "@/lib/regenerate";
 
 /**
- * POST /api/runs/[id]/regenerate
+ * POST /api/admin/runs/[id]/regenerate
  *
- * Setzt eine abgeschlossene (oder fehlgeschlagene) Runde teilweise oder
- * komplett zurück und schickt Leads erneut durch die Pipeline.
- * Kern-Logik in @/lib/regenerate (geteilt mit der Admin-Route).
+ * Admin-Variante von /api/runs/[id]/regenerate: gleicher Kern
+ * (@/lib/regenerate), aber ohne Tenant-Scope — der Admin stößt die
+ * Generierung im Namen des Run-Owners neu an (Support-Fall).
  *
  * Body (optional): { mode?: "all" | "video" | "pdf" | "failed" }
- *   - "all"    (Default): alle Outputs zurücksetzen, volle Pipeline.
- *   - "video": nur Video + Landingpage neu (skipPdf).
- *   - "pdf":   nur Brief-PDF neu (skipVideo).
- *   - "failed": nur Leads mit status='failed', volle Pipeline.
- *
- * Ein laufender Run wird mit 409 abgelehnt.
  */
 
 function parseMode(input: unknown): RunRegenMode {
@@ -41,7 +37,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = await requireUserApi();
+  const auth = await requireAdminApi();
   if (!auth.ok) return auth.response;
 
   let mode: RunRegenMode = "all";
@@ -55,10 +51,18 @@ export async function POST(
     // Leerer / kaputter Body → Default behalten.
   }
 
-  let run;
-  try {
-    run = await getRun(params.id, auth.user.id);
-  } catch {
+  const [run] = await db
+    .select({
+      id: runs.id,
+      userId: runs.userId,
+      campaignId: runs.campaignId,
+      status: runs.status,
+      sharedBunnyVideoId: runs.sharedBunnyVideoId,
+    })
+    .from(runs)
+    .where(and(eq(runs.id, params.id), isNull(runs.deletedAt)))
+    .limit(1);
+  if (!run) {
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
 

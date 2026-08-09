@@ -34,15 +34,16 @@ export function RevealOnScroll({
           obs.unobserve(el);
         }
       },
-      // Positive Bottom-Margin: Elemente starten kurz bevor sie im
-      // Viewport sind — bei schnellem Scrollen wirkt nichts verspätet.
-      { threshold: 0, rootMargin: "0px 0px 15% 0px" },
+      // Positive Bottom-Margin: Elemente starten deutlich bevor sie im
+      // Viewport sind — bei schnellem Scrollen wirkt nichts verspätet
+      // (Daniel-Feedback 2026-08-09: Cards erschienen noch zu spät).
+      { threshold: 0, rootMargin: "0px 0px 30% 0px" },
     );
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
 
-  const effectiveDelay = Math.min(delay * 0.3, 240);
+  const effectiveDelay = Math.min(delay * 0.2, 120);
 
   return (
     <Tag
@@ -50,8 +51,8 @@ export function RevealOnScroll({
       className={className}
       style={{
         opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(16px)",
-        transition: `opacity 420ms cubic-bezier(0.2,0.8,0.2,1) ${effectiveDelay}ms, transform 420ms cubic-bezier(0.2,0.8,0.2,1) ${effectiveDelay}ms`,
+        transform: visible ? "translateY(0)" : "translateY(12px)",
+        transition: `opacity 360ms cubic-bezier(0.2,0.8,0.2,1) ${effectiveDelay}ms, transform 360ms cubic-bezier(0.2,0.8,0.2,1) ${effectiveDelay}ms`,
         // Layer nur waehrend der Animation vorhalten, danach freigeben —
         // sonst haelt jede Card dauerhaft einen Compositor-Layer.
         willChange: visible ? "auto" : "opacity, transform",

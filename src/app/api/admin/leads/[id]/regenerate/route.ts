@@ -3,24 +3,20 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
-import { requireUserApi } from "@/lib/auth-guard";
+import { eq } from "drizzle-orm";
+import { requireAdminApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
 import { regenerateLeadCore, type LeadRegenScope } from "@/lib/regenerate";
 
 /**
- * POST /api/leads/[id]/regenerate
+ * POST /api/admin/leads/[id]/regenerate
  *
- * Reprozessiert EINEN Lead — Video, Brief-PDF, Umschlag, oder alles.
- * Kern-Logik in @/lib/regenerate (geteilt mit der Admin-Route).
+ * Admin-Variante von /api/leads/[id]/regenerate: gleicher Kern
+ * (@/lib/regenerate), aber ohne Tenant-Scope — der Admin regeneriert
+ * einen Lead im Namen des Run-Owners (Support-Fall).
  *
- * Body (optional):
- *   { scope?: "all" | "video" | "pdf" | "envelope" }
- *
- * Guards:
- *   - Tenant-scope ueber runs.userId
- *   - Wenn die Runde gerade laeuft → 409
+ * Body (optional): { scope?: "all" | "video" | "pdf" | "envelope" }
  */
 
 const bodySchema = z.object({
@@ -31,7 +27,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const auth = await requireUserApi();
+  const auth = await requireAdminApi();
   if (!auth.ok) return auth.response;
 
   let scope: LeadRegenScope = "all";
@@ -56,7 +52,7 @@ export async function POST(
     })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
-    .where(and(eq(leads.id, params.id), eq(runs.userId, auth.user.id)))
+    .where(eq(leads.id, params.id))
     .limit(1);
 
   if (!row) {

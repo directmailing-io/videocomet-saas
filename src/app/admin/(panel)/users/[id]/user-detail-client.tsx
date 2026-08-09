@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Mail, Save } from "lucide-react";
+import { ChevronDown, KeyRound, Mail, Save } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getInitials } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toaster";
 import { runStatusLabel, runStatusVariant } from "@/lib/run-status";
 import { DangerZone } from "./danger-zone";
+import { RunLeadsPanel } from "./run-leads-panel";
 
 export interface AdminUserDetail {
   id: string;
@@ -124,6 +125,7 @@ export function UserDetailClient({
   );
   const [creditReason, setCreditReason] = React.useState("");
   const [creditSaving, setCreditSaving] = React.useState(false);
+  const [expandedRunId, setExpandedRunId] = React.useState<string | null>(null);
 
   async function submitCreditAdjust(e: React.FormEvent) {
     e.preventDefault();
@@ -538,39 +540,67 @@ export function UserDetailClient({
                                 <th className="py-2 pr-3 font-semibold">Runde</th>
                                 <th className="py-2 pr-3 font-semibold">Status</th>
                                 <th className="py-2 pr-3 font-semibold">Leads</th>
-                                <th className="py-2 font-semibold">Erstellt</th>
+                                <th className="py-2 pr-3 font-semibold">Erstellt</th>
+                                <th className="py-2 font-semibold">Details</th>
                               </tr>
                             </thead>
                             <tbody>
                               {c.runs.map((r) => (
-                                <tr
-                                  key={r.id}
-                                  className="border-b border-line/60 last:border-0"
-                                >
-                                  <td className="py-2 pr-3 text-ink">
-                                    <span className="font-medium">{r.name}</span>
-                                    <span className="block text-[11px] text-ink-muted font-mono">
-                                      {r.id}
-                                    </span>
-                                  </td>
-                                  <td className="py-2 pr-3">
-                                    <Badge variant={runStatusVariant(r.status)} dot>
-                                      {runStatusLabel(r.status)}
-                                    </Badge>
-                                  </td>
-                                  <td className="py-2 pr-3 text-ink whitespace-nowrap">
-                                    {r.completedLeads}/{r.totalLeads}
-                                    {r.failedLeads > 0 ? (
-                                      <span className="text-danger">
-                                        {" "}
-                                        ({r.failedLeads} Fehler)
+                                <React.Fragment key={r.id}>
+                                  <tr className="border-b border-line/60 last:border-0">
+                                    <td className="py-2 pr-3 text-ink">
+                                      <span className="font-medium">{r.name}</span>
+                                      <span className="block text-[11px] text-ink-muted font-mono">
+                                        {r.id}
                                       </span>
-                                    ) : null}
-                                  </td>
-                                  <td className="py-2 text-ink-muted whitespace-nowrap">
-                                    {formatDateTime(r.createdAt)}
-                                  </td>
-                                </tr>
+                                    </td>
+                                    <td className="py-2 pr-3">
+                                      <Badge variant={runStatusVariant(r.status)} dot>
+                                        {runStatusLabel(r.status)}
+                                      </Badge>
+                                    </td>
+                                    <td className="py-2 pr-3 text-ink whitespace-nowrap">
+                                      {r.completedLeads}/{r.totalLeads}
+                                      {r.failedLeads > 0 ? (
+                                        <span className="text-danger">
+                                          {" "}
+                                          ({r.failedLeads} Fehler)
+                                        </span>
+                                      ) : null}
+                                    </td>
+                                    <td className="py-2 pr-3 text-ink-muted whitespace-nowrap">
+                                      {formatDateTime(r.createdAt)}
+                                    </td>
+                                    <td className="py-2">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setExpandedRunId((cur) =>
+                                            cur === r.id ? null : r.id,
+                                          )
+                                        }
+                                        aria-expanded={expandedRunId === r.id}
+                                        className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-3 py-1 text-xs font-semibold text-ink hover:bg-surface-muted transition-colors"
+                                      >
+                                        Leads
+                                        <ChevronDown
+                                          className={`size-3.5 text-brand-deep transition-transform ${
+                                            expandedRunId === r.id
+                                              ? "rotate-180"
+                                              : ""
+                                          }`}
+                                        />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                  {expandedRunId === r.id ? (
+                                    <tr className="border-b border-line/60 last:border-0">
+                                      <td colSpan={5} className="p-0">
+                                        <RunLeadsPanel runId={r.id} />
+                                      </td>
+                                    </tr>
+                                  ) : null}
+                                </React.Fragment>
                               ))}
                             </tbody>
                           </table>
