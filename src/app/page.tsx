@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CommunitySection } from "@/components/marketing/CommunitySection";
 import { DemoSection } from "@/components/marketing/DemoSection";
 import { FAQSection } from "@/components/marketing/FAQSection";
 import { FAQ } from "@/components/marketing/faq-data";
@@ -73,6 +74,7 @@ export default function HomePage() {
       <DemoSection />
       <HowItWorksSection />
       <TestimonialsSection />
+      <CommunitySection />
       <FeaturesBento />
       <PricingSection />
       <FAQSection />
