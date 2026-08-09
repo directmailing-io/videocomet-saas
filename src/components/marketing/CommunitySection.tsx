@@ -42,53 +42,58 @@ export function CommunitySection() {
       className="relative z-[2] w-full bg-white pb-16 md:pb-32"
     >
       <div className="max-w-6xl mx-auto px-6 md:px-10">
-        <div className="grid gap-8 md:grid-cols-2 md:gap-12 items-center">
-          <RevealOnScroll delay={0}>
-            <div className="grid grid-cols-2 gap-3">
-              {PHOTOS.map((p) => (
-                <Squircle
-                  key={p.src}
-                  radius={20}
-                  shadow="pretty"
-                  wrapperClassName="w-full aspect-square"
-                  className="relative size-full bg-ink"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={p.src}
-                    alt={p.alt}
-                    className="absolute inset-0 size-full object-cover"
-                    loading="lazy"
-                  />
-                </Squircle>
-              ))}
-            </div>
-          </RevealOnScroll>
+        <RevealOnScroll delay={0}>
+          <Squircle
+            radius={28}
+            shadow="pretty"
+            className="bg-[#f8f7fd] p-5 md:p-8"
+          >
+            <div className="grid gap-6 md:grid-cols-2 md:gap-10 items-center">
+              <div className="grid grid-cols-2 gap-3">
+                {PHOTOS.map((p) => (
+                  <Squircle
+                    key={p.src}
+                    radius={18}
+                    wrapperClassName="w-full aspect-square"
+                    className="relative size-full bg-ink"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={p.src}
+                      alt={p.alt}
+                      className="absolute inset-0 size-full object-cover"
+                      loading="lazy"
+                    />
+                  </Squircle>
+                ))}
+              </div>
 
-          <RevealOnScroll delay={100}>
-            <h3 className="font-semibold tracking-[-0.02em] text-ink leading-[1.15] text-[clamp(22px,2.4vw,30px)] mb-4 text-balance">
-              Enger Draht zu unseren Kunden.
-            </h3>
-            <p className="text-ink-muted text-[16.5px] leading-relaxed">
-              Wir treffen unsere Kunden auch persönlich, zuletzt beim
-              VIDEOCOMET-Day in Würzburg. Ein Tag zum Austauschen und für
-              Einblicke von Speakern wie{" "}
-              {SPEAKERS.map((s, i) => (
-                <React.Fragment key={s.name}>
-                  <span className="inline-flex items-baseline gap-1 rounded-full bg-brand-soft/70 px-2.5 py-0.5 text-[13.5px] text-ink whitespace-nowrap align-baseline">
-                    <span className="font-semibold">{s.name}</span>
-                    <span className="text-ink-muted">· {s.company}</span>
-                  </span>
-                  {i < SPEAKERS.length - 2
-                    ? ", "
-                    : i === SPEAKERS.length - 2
-                      ? " oder "
-                      : "."}
-                </React.Fragment>
-              ))}
-            </p>
-          </RevealOnScroll>
-        </div>
+              <div>
+                <h3 className="font-semibold tracking-[-0.02em] text-ink leading-[1.15] text-[clamp(22px,2.4vw,30px)] mb-4 text-balance">
+                  Enger Draht zu unseren Kunden.
+                </h3>
+                <p className="text-ink-muted text-[16.5px] leading-relaxed">
+                  Wir treffen unsere Kunden auch persönlich, zuletzt beim
+                  VIDEOCOMET-Day in Würzburg. Ein Tag zum Austauschen und für
+                  Einblicke von Speakern wie{" "}
+                  {SPEAKERS.map((s, i) => (
+                    <React.Fragment key={s.name}>
+                      <span className="inline-flex items-baseline gap-1 rounded-full bg-white px-2.5 py-0.5 text-[13.5px] text-ink whitespace-nowrap align-baseline shadow-sm">
+                        <span className="font-semibold">{s.name}</span>
+                        <span className="text-ink-muted">· {s.company}</span>
+                      </span>
+                      {i < SPEAKERS.length - 2
+                        ? ", "
+                        : i === SPEAKERS.length - 2
+                          ? " oder "
+                          : "."}
+                    </React.Fragment>
+                  ))}
+                </p>
+              </div>
+            </div>
+          </Squircle>
+        </RevealOnScroll>
       </div>
     </section>
   );
