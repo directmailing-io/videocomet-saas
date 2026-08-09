@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 import { getUserById } from "@/lib/db/queries/users";
 import { db } from "@/lib/db";
 import { campaigns, runs, mediaItems } from "@/lib/db/schema";
+import { listTransactions } from "@/lib/billing/credit-service";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { UserDetailClient } from "./user-detail-client";
@@ -42,6 +43,50 @@ async function getActivityStats(userId: string) {
   }
 }
 
+async function getCampaignsWithRuns(userId: string) {
+  const [campaignRows, runRows] = await Promise.all([
+    db
+      .select({
+        id: campaigns.id,
+        name: campaigns.name,
+        createdAt: campaigns.createdAt,
+      })
+      .from(campaigns)
+      .where(eq(campaigns.userId, userId))
+      .orderBy(desc(campaigns.createdAt)),
+    db
+      .select({
+        id: runs.id,
+        campaignId: runs.campaignId,
+        name: runs.name,
+        status: runs.status,
+        totalLeads: runs.totalLeads,
+        completedLeads: runs.completedLeads,
+        failedLeads: runs.failedLeads,
+        createdAt: runs.createdAt,
+      })
+      .from(runs)
+      .where(eq(runs.userId, userId))
+      .orderBy(desc(runs.createdAt)),
+  ]);
+  return campaignRows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    createdAt: c.createdAt.toISOString(),
+    runs: runRows
+      .filter((r) => r.campaignId === c.id)
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        status: r.status,
+        totalLeads: r.totalLeads,
+        completedLeads: r.completedLeads,
+        failedLeads: r.failedLeads,
+        createdAt: r.createdAt.toISOString(),
+      })),
+  }));
+}
+
 export default async function AdminUserDetailPage({
   params,
   searchParams,
@@ -53,7 +98,24 @@ export default async function AdminUserDetailPage({
     notFound();
   }
 
-  const stats = await getActivityStats(params.id);
+  const [stats, userCampaigns, creditTx] = await Promise.all([
+    getActivityStats(params.id),
+    getCampaignsWithRuns(params.id),
+    listTransactions({ userId: params.id, limit: 100 }),
+  ]);
+
+  const creditHistory = creditTx.map((t) => ({
+    id: String(t.id),
+    kind: t.kind,
+    delta: t.delta,
+    balanceAfter: t.balanceAfter,
+    reason: t.reason,
+    stripeRef: t.stripeRef,
+    createdAt:
+      typeof t.createdAt === "string"
+        ? t.createdAt
+        : t.createdAt.toISOString(),
+  }));
 
   const initialUser = {
     id: user.id,
@@ -97,6 +159,9 @@ export default async function AdminUserDetailPage({
       <UserDetailClient
         initialUser={initialUser}
         stats={stats}
+        campaigns={userCampaigns}
+        creditBalance={user.creditBalance}
+        creditHistory={creditHistory}
         initialTab={searchParams?.tab ?? "profile"}
       />
     </div>

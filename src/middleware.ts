@@ -42,6 +42,40 @@ const OWN_HOSTS = new Set<string>([
 const SANDBOX_LP_HOST = "lp.videocomet.de";
 
 /**
+ * API-Härtung: Das Session-Cookie ist auf `.videocomet.de` gescopet
+ * (Cross-Domain-Login Marketing↔App), d.h. der Browser sendet es auch an
+ * lp.videocomet.de — wo Kunden-HTML mit eigenem JS läuft. Ohne Gating
+ * könnte ein bösartiges Kunden-Script von dort same-origin `/api/...`
+ * mit Cookie aufrufen. Deshalb:
+ *   1. Auf Nicht-App-Hosts (Sandbox-LP + Custom-Domains) sind NUR die
+ *      öffentlichen API-Prefixe erreichbar (Tracking, LP-Formulare, Share).
+ *   2. Mutierende Requests auf geschützte APIs werden abgelehnt, wenn der
+ *      Origin-Header von einem fremden Host stammt. Fehlender Origin
+ *      bleibt erlaubt (Server-zu-Server: Stripe-Webhook, Cron).
+ */
+const TRUSTED_ORIGIN_HOSTS = new Set<string>([
+  "app.videocomet.de",
+  "videocomet.de",
+  "www.videocomet.de",
+  "localhost",
+  "127.0.0.1",
+]);
+const PUBLIC_API_PREFIXES = [
+  "/api/track/",
+  "/api/lp/",
+  "/api/r/",
+  "/api/share/",
+  "/api/email/",
+  "/api/health",
+  "/api/healthz",
+];
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+function isPublicApiPath(pathname: string): boolean {
+  return PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p));
+}
+
+/**
  * Host-Split: die Marketing-Homepage lebt auf videocomet.de (+ www),
  * der Memberbereich auf app.videocomet.de. Die Middleware sorgt dafuer,
  * dass ein Request auf dem falschen Host auf die richtige Domain
@@ -156,6 +190,35 @@ export function middleware(req: NextRequest) {
   const session = req.cookies.get(SESSION_COOKIE)?.value;
   const rawHost = (req.headers.get("host") ?? "").toLowerCase().split(":")[0];
   const hostKind = classifyHost(rawHost);
+
+  // ── API-Gating (siehe Kommentar bei TRUSTED_ORIGIN_HOSTS) ─────────────
+  if (pathname.startsWith("/api/")) {
+    const isProtectedApi = !isPublicApiPath(pathname);
+    if (
+      isProtectedApi &&
+      (hostKind === "custom" || rawHost === SANDBOX_LP_HOST)
+    ) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (isProtectedApi && MUTATING_METHODS.has(req.method)) {
+      const origin = req.headers.get("origin");
+      if (origin) {
+        let originHost = "";
+        try {
+          originHost = new URL(origin).hostname.toLowerCase();
+        } catch {
+          originHost = "";
+        }
+        if (!TRUSTED_ORIGIN_HOSTS.has(originHost)) {
+          return NextResponse.json(
+            { error: "Ungültiger Origin." },
+            { status: 403 },
+          );
+        }
+      }
+    }
+    return NextResponse.next();
+  }
 
   // ── Custom-LP-Sandbox-Routing (lp.videocomet.de) ──────────────────────
   // Requests on the dedicated sandbox host map `/[slug]` → `/cv/[slug]`,

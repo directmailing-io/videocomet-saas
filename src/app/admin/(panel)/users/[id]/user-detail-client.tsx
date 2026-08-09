@@ -20,6 +20,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toaster";
+import { runStatusLabel, runStatusVariant } from "@/lib/run-status";
 import { DangerZone } from "./danger-zone";
 
 export interface AdminUserDetail {
@@ -40,11 +41,50 @@ export interface AdminUserDetail {
   lastLoginAt: string | null;
 }
 
+export interface AdminRunSummary {
+  id: string;
+  name: string;
+  status: string;
+  totalLeads: number;
+  completedLeads: number;
+  failedLeads: number;
+  createdAt: string;
+}
+
+export interface AdminCampaignSummary {
+  id: string;
+  name: string;
+  createdAt: string;
+  runs: AdminRunSummary[];
+}
+
+export interface AdminCreditTx {
+  id: string;
+  kind: string;
+  delta: number;
+  balanceAfter: number;
+  reason: string | null;
+  stripeRef: string | null;
+  createdAt: string;
+}
+
 interface Props {
   initialUser: AdminUserDetail;
   stats: { campaigns: number; runs: number; media: number };
+  campaigns: AdminCampaignSummary[];
+  creditBalance: number;
+  creditHistory: AdminCreditTx[];
   initialTab: string;
 }
+
+const CREDIT_KIND_LABELS: Record<string, string> = {
+  topup: "Kauf (Stripe)",
+  video_charge: "Video-Produktion",
+  admin_adjust: "Manuelle Korrektur",
+  promo_grant: "Promo-Gutschrift",
+  email_charge: "E-Mail-Versand",
+  email_refund: "E-Mail-Erstattung",
+};
 
 function formatDateTime(d: string | null): string {
   if (!d) return "nie";
@@ -57,18 +97,86 @@ function formatDateTime(d: string | null): string {
   });
 }
 
-export function UserDetailClient({ initialUser, stats, initialTab }: Props) {
+export function UserDetailClient({
+  initialUser,
+  stats,
+  campaigns,
+  creditBalance,
+  creditHistory,
+  initialTab,
+}: Props) {
   const router = useRouter();
   const { toast } = useToast();
   const [user, setUser] = React.useState<AdminUserDetail>(initialUser);
   const [tab, setTab] = React.useState(
-    ["profile", "security", "activity", "danger"].includes(initialTab)
+    ["profile", "campaigns", "credits", "security", "activity", "danger"].includes(
+      initialTab,
+    )
       ? initialTab
       : "profile",
   );
   const [saving, setSaving] = React.useState(false);
   const [pwSetting, setPwSetting] = React.useState(false);
   const [newPassword, setNewPassword] = React.useState("");
+  const [creditAmount, setCreditAmount] = React.useState("");
+  const [creditDirection, setCreditDirection] = React.useState<"add" | "remove">(
+    "add",
+  );
+  const [creditReason, setCreditReason] = React.useState("");
+  const [creditSaving, setCreditSaving] = React.useState(false);
+
+  async function submitCreditAdjust(e: React.FormEvent) {
+    e.preventDefault();
+    const amount = Number(creditAmount);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      toast({
+        title: "Ungültige Menge",
+        description: "Bitte eine positive ganze Zahl eingeben.",
+        variant: "danger",
+      });
+      return;
+    }
+    if (creditReason.trim().length < 3) {
+      toast({
+        title: "Grund fehlt",
+        description: "Bitte einen Grund angeben (mind. 3 Zeichen).",
+        variant: "danger",
+      });
+      return;
+    }
+    setCreditSaving(true);
+    try {
+      const res = await fetch("/api/admin/billing/adjust", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          delta: creditDirection === "add" ? amount : -amount,
+          reason: creditReason.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({
+          title: data.error ?? "Anpassung fehlgeschlagen.",
+          variant: "danger",
+        });
+        return;
+      }
+      toast({
+        title: `Credits ${creditDirection === "add" ? "gutgeschrieben" : "abgezogen"}.`,
+        description: `Neuer Stand: ${data.balanceAfter} Credits`,
+        variant: "success",
+      });
+      setCreditAmount("");
+      setCreditReason("");
+      router.refresh();
+    } catch {
+      toast({ title: "Verbindung fehlgeschlagen.", variant: "danger" });
+    } finally {
+      setCreditSaving(false);
+    }
+  }
 
   const initials = getInitials(user.firstName, user.lastName, user.email);
   const displayName =
@@ -244,6 +352,8 @@ export function UserDetailClient({ initialUser, stats, initialTab }: Props) {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
             <TabsTrigger value="profile">Profil</TabsTrigger>
+            <TabsTrigger value="campaigns">Kampagnen</TabsTrigger>
+            <TabsTrigger value="credits">Credits</TabsTrigger>
             <TabsTrigger value="security">Sicherheit</TabsTrigger>
             <TabsTrigger value="activity">Aktivität</TabsTrigger>
             <TabsTrigger value="danger">Gefahrenzone</TabsTrigger>
@@ -392,6 +502,210 @@ export function UserDetailClient({ initialUser, stats, initialTab }: Props) {
                 </Button>
               </div>
             </form>
+          </TabsContent>
+
+          <TabsContent value="campaigns">
+            {campaigns.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <p className="text-sm text-ink-muted">
+                    Dieser User hat noch keine Kampagnen.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {campaigns.map((c) => (
+                  <Card key={c.id}>
+                    <CardHeader>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <CardTitle>{c.name}</CardTitle>
+                        <span className="text-xs text-ink-muted shrink-0">
+                          erstellt {formatDateTime(c.createdAt)}
+                        </span>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {c.runs.length === 0 ? (
+                        <p className="text-sm text-ink-muted">
+                          Noch keine Runden.
+                        </p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-left text-xs uppercase tracking-wider text-ink-muted border-b border-line">
+                                <th className="py-2 pr-3 font-semibold">Runde</th>
+                                <th className="py-2 pr-3 font-semibold">Status</th>
+                                <th className="py-2 pr-3 font-semibold">Leads</th>
+                                <th className="py-2 font-semibold">Erstellt</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {c.runs.map((r) => (
+                                <tr
+                                  key={r.id}
+                                  className="border-b border-line/60 last:border-0"
+                                >
+                                  <td className="py-2 pr-3 text-ink">
+                                    <span className="font-medium">{r.name}</span>
+                                    <span className="block text-[11px] text-ink-muted font-mono">
+                                      {r.id}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 pr-3">
+                                    <Badge variant={runStatusVariant(r.status)} dot>
+                                      {runStatusLabel(r.status)}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-2 pr-3 text-ink whitespace-nowrap">
+                                    {r.completedLeads}/{r.totalLeads}
+                                    {r.failedLeads > 0 ? (
+                                      <span className="text-danger">
+                                        {" "}
+                                        ({r.failedLeads} Fehler)
+                                      </span>
+                                    ) : null}
+                                  </td>
+                                  <td className="py-2 text-ink-muted whitespace-nowrap">
+                                    {formatDateTime(r.createdAt)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="credits">
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                      Aktueller Credit-Stand
+                    </p>
+                    <p className="text-3xl font-bold text-ink mt-2">
+                      {creditBalance}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">
+                      Credits manuell anpassen
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form
+                      onSubmit={submitCreditAdjust}
+                      className="flex flex-col gap-3"
+                    >
+                      <div className="flex gap-2">
+                        <Select
+                          value={creditDirection}
+                          onValueChange={(v: "add" | "remove") =>
+                            setCreditDirection(v)
+                          }
+                        >
+                          <SelectTrigger className="w-40">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="add">Gutschreiben</SelectItem>
+                            <SelectItem value="remove">Abziehen</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          min={1}
+                          step={1}
+                          placeholder="Anzahl"
+                          value={creditAmount}
+                          onChange={(e) => setCreditAmount(e.target.value)}
+                        />
+                      </div>
+                      <Input
+                        placeholder="Grund (Pflicht, landet im Verlauf)"
+                        value={creditReason}
+                        onChange={(e) => setCreditReason(e.target.value)}
+                        maxLength={500}
+                      />
+                      <div>
+                        <Button type="submit" loading={creditSaving}>
+                          Anpassen
+                        </Button>
+                      </div>
+                    </form>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Credit-Verlauf (letzte 100)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {creditHistory.length === 0 ? (
+                    <p className="text-sm text-ink-muted">
+                      Noch keine Credit-Bewegungen.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs uppercase tracking-wider text-ink-muted border-b border-line">
+                            <th className="py-2 pr-3 font-semibold">Datum</th>
+                            <th className="py-2 pr-3 font-semibold">Typ</th>
+                            <th className="py-2 pr-3 font-semibold text-right">
+                              Änderung
+                            </th>
+                            <th className="py-2 pr-3 font-semibold text-right">
+                              Stand danach
+                            </th>
+                            <th className="py-2 font-semibold">Grund / Referenz</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {creditHistory.map((t) => (
+                            <tr
+                              key={t.id}
+                              className="border-b border-line/60 last:border-0"
+                            >
+                              <td className="py-2 pr-3 text-ink-muted whitespace-nowrap">
+                                {formatDateTime(t.createdAt)}
+                              </td>
+                              <td className="py-2 pr-3 text-ink">
+                                {CREDIT_KIND_LABELS[t.kind] ?? t.kind}
+                              </td>
+                              <td
+                                className={`py-2 pr-3 text-right font-medium whitespace-nowrap ${
+                                  t.delta >= 0 ? "text-success" : "text-danger"
+                                }`}
+                              >
+                                {t.delta >= 0 ? `+${t.delta}` : t.delta}
+                              </td>
+                              <td className="py-2 pr-3 text-right text-ink whitespace-nowrap">
+                                {t.balanceAfter}
+                              </td>
+                              <td className="py-2 text-ink-muted max-w-[280px] truncate">
+                                {t.reason ?? t.stripeRef ?? "–"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="security">

@@ -1,0 +1,12 @@
+# Secrets duerfen NIE in ein Image gelangen (Dockerfile nutzt COPY . .)
+.env
+.env.*
+secrets/
+
+# Build-/Dev-Artefakte: unnoetig im Build-Context
+.git/
+.next/
+node_modules/
+.docker-data/
+coverage/
+*.log

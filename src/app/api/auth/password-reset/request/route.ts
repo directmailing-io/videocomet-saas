@@ -8,6 +8,8 @@ import { db } from "@/lib/db";
 import { passwordResets } from "@/lib/db/schema";
 import { getUserByEmail } from "@/lib/db/queries/users";
 import { sendPasswordResetMail } from "@/lib/mail";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/tracking";
 
 const bodySchema = z.object({
   email: z.string().email("Ungültige E-Mail-Adresse."),
@@ -21,6 +23,18 @@ export async function POST(req: NextRequest) {
     body = bodySchema.parse(await req.json());
   } catch {
     // Even for invalid input, never leak info; respond uniformly.
+    return NextResponse.json({ ok: true, message: GENERIC_MESSAGE });
+  }
+
+  // Anti-Mail-Bombing: still auslaufen lassen, Antwort bleibt generisch
+  // (kein 429), damit keine Konto-Existenz ableitbar ist.
+  const ip = getClientIp(req);
+  const emailKey = body.email.trim().toLowerCase();
+  const [ipLimit, emailLimit] = await Promise.all([
+    checkRateLimit(`pwreset:ip:${ip}`, 10, 60 * 60),
+    checkRateLimit(`pwreset:email:${emailKey}`, 3, 60 * 60),
+  ]);
+  if (!ipLimit.ok || !emailLimit.ok) {
     return NextResponse.json({ ok: true, message: GENERIC_MESSAGE });
   }
 

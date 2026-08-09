@@ -102,10 +102,12 @@ export async function PATCH(
     return NextResponse.json({ lead: null, noChange: true });
   }
 
+  // row.leadId stammt aus der Ownership-gescopten Query oben — nicht aus
+  // params, damit der User-Scope explizit im Datenfluss bleibt.
   const [updated] = await db
     .update(leads)
     .set(patch)
-    .where(eq(leads.id, params.id))
+    .where(eq(leads.id, row.leadId))
     .returning();
 
   return NextResponse.json({ lead: updated });

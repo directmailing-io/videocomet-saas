@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireUserApi } from "@/lib/auth-guard";
+import { requireAdminApi } from "@/lib/auth-guard";
 import { adminAdjust } from "@/lib/billing/credit-service";
 
 /**
@@ -20,11 +20,8 @@ const BODY = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const auth = await requireUserApi();
+  const auth = await requireAdminApi();
   if (!auth.ok) return auth.response;
-  if (auth.user.role !== "admin") {
-    return NextResponse.json({ error: "Admin only" }, { status: 403 });
-  }
 
   const raw = await req.json().catch(() => null);
   const parsed = BODY.safeParse(raw);

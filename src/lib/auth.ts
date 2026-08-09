@@ -24,8 +24,9 @@ export const lucia = new Lucia(adapter, {
       // SECURITY: sameSite="lax" statt "strict" — Cross-Site-Return-Flows
       // (Stripe-Checkout, Email-Reset-Links) muessen die Session
       // mitschicken, sonst landet der User auf Login-Screen. "strict"
-      // hat exakt diesen Bug verursacht. CSRF-Schutz kommt weiterhin
-      // aus httpOnly + secure + Origin-Check auf state-changing routes.
+      // hat exakt diesen Bug verursacht. CSRF-Schutz kommt aus httpOnly +
+      // secure + dem API-Gating in src/middleware.ts (Origin-Check auf
+      // mutierenden /api-Routen + Host-Gating fuer lp./Custom-Domains).
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       // Domain-Scope: In Prod muessen videocomet.de UND app.videocomet.de

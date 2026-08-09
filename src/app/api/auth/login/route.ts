@@ -9,6 +9,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { lucia } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/tracking";
 
 const bodySchema = z.object({
   email: z.string().email("Ungültige E-Mail-Adresse."),
@@ -25,7 +27,29 @@ export async function POST(req: NextRequest) {
   }
 
   const email = body.email.trim().toLowerCase();
-  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+
+  const ip = getClientIp(req);
+  const [ipLimit, emailLimit] = await Promise.all([
+    checkRateLimit(`login:ip:${ip}`, 20, 15 * 60),
+    checkRateLimit(`login:email:${email}`, 10, 15 * 60),
+  ]);
+  if (!ipLimit.ok || !emailLimit.ok) {
+    return NextResponse.json(
+      { error: "Zu viele Anmeldeversuche. Bitte warte ein paar Minuten." },
+      { status: 429 },
+    );
+  }
+
+  const [user] = await db
+    .select({
+      id: users.id,
+      passwordHash: users.passwordHash,
+      isActive: users.isActive,
+      role: users.role,
+    })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
 
   if (!user) {
     return NextResponse.json({ error: "E-Mail oder Passwort ist falsch." }, { status: 401 });

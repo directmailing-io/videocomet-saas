@@ -26,19 +26,16 @@ import { NextRequest, NextResponse } from "next/server";
 const SECRET = process.env.BUNNY_PURGE_TRIGGER_SECRET ?? "";
 
 export async function POST(req: NextRequest) {
-  // Auth: Shared-Secret. Wenn kein Secret in ENV gesetzt ist, lassen wir
-  // nur Localhost-Calls durch (Dev-Convenience). In Prod wird das Secret
-  // gesetzt sein und externe Calls werden 401'd.
-  if (SECRET) {
-    const got = req.headers.get("x-bunny-purge-secret");
-    if (got !== SECRET) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-  } else {
-    const host = req.headers.get("host") ?? "";
-    if (!host.startsWith("localhost") && !host.startsWith("127.0.0.1")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  // Auth: Shared-Secret, fail-closed. Ohne konfiguriertes Secret ist der
+  // Endpoint deaktiviert (der Host-Header waere client-kontrollierbar und
+  // taugt nicht als Localhost-Nachweis). Der 60s-Worker-Cron purgt auch
+  // ohne diesen Trigger.
+  if (!SECRET) {
+    return NextResponse.json({ error: "Not configured" }, { status: 503 });
+  }
+  const got = req.headers.get("x-bunny-purge-secret");
+  if (got !== SECRET) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   let reason = "unknown";

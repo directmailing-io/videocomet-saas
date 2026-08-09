@@ -5,7 +5,7 @@ import * as React from "react";
 import { Squircle } from "./Squircle";
 
 /**
- * COMING-SOON-Card für die persönliche KI-Begrüßung.
+ * Feature-Card für die persönliche KI-Begrüßung (live).
  *
  * Sitzt als breite Top-Card in der Features-Bento: links das Video-Mockup
  * (Thumbnail mit Play-Button) plus Sprechblase, in der der Vorname im Loop
@@ -185,7 +185,7 @@ export function ComingSoonFeatureCard() {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-60" />
             <span className="relative inline-flex size-2 rounded-full bg-brand" />
           </span>
-          Coming soon
+          Brandneu
         </div>
 
         <h3 className="font-light tracking-[-0.03em] text-ink leading-[1.08] text-[clamp(28px,3.2vw,40px)] text-balance">
@@ -209,11 +209,11 @@ export function ComingSoonFeatureCard() {
             für jeden Lead einzeln mit Vornamen
           </strong>
           , in deiner Stimme und mit passenden Lippenbewegungen. Klingt nach
-          Zauberei, ist aber bald einfach ein Klick.
+          Zauberei, ist aber einfach ein Klick.
         </p>
 
         <p className="mt-5 text-[12.5px] text-ink/55">
-          Startet in Kürze für alle VIDEOCOMET Kunden. Ganz ohne
+          Jetzt verfügbar für alle VIDEOCOMET Kunden. Ganz ohne
           Zusatz-Setup, du brauchst nur dein Video.
         </p>
       </div>

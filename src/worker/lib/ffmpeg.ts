@@ -524,8 +524,11 @@ export async function renderTextSegment(input: RenderTextSegmentInput): Promise<
   const h = input.height ?? 720;
   const durationSec = Math.max(0.2, input.durationMs / 1000);
   const fps = 30;
-  const bg = input.bgColor.replace("#", "0x");
-  const fg = input.textColor.replace("#", "0x");
+  // Farben strikt validieren — sie landen unescaped im lavfi-Filtergraph.
+  const toFilterColor = (raw: string, fallback: string) =>
+    /^#[0-9a-fA-F]{6}$/.test(raw) ? raw.replace("#", "0x") : fallback;
+  const bg = toFilterColor(input.bgColor, "0x000000");
+  const fg = toFilterColor(input.textColor, "0xffffff");
 
   // Resolve a font file that exists on the worker image (Debian Bookworm).
   const fontFile =
