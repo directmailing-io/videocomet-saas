@@ -51,11 +51,11 @@ const EXAMPLES: ReadonlyArray<{ count: number; label: string }> = [
   { count: 1000, label: "1.000 Leads" },
 ];
 
-const PAKET: ReadonlyArray<string> = [
-  "Persönliches Video mit seiner Webseite und personalisierter Präsentation",
-  "Landingpage, auf der das Video läuft",
-  "Brief mit Link und QR-Code zum Video",
-  "Handschriftlicher Umschlag zum Ausdrucken",
+/** Was Credits kosten — eine Zeile pro Leistung, Chip rechts. */
+const CREDIT_KOSTEN: ReadonlyArray<{ label: string; credits: string }> = [
+  { label: "1 Lead komplett: Video, Landingpage, Brief + Umschlag", credits: "1 Credit" },
+  { label: "Extra: KI-Begrüßung mit Vornamen, in deiner Stimme", credits: "+1 Credit" },
+  { label: "10 E-Mails versenden", credits: "1 Credit" },
 ];
 
 export function PricingSection() {
@@ -93,8 +93,12 @@ export function PricingSection() {
           </RevealOnScroll>
           <RevealOnScroll delay={300}>
             <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-xl mx-auto">
-              40 € Grundgebühr im Monat. 1 € pro Lead, komplett mit
-              Video, Landingpage, Brief und Umschlag. Mehr nicht.
+              40 € Grundgebühr im Monat. Alles andere zahlst du mit
+              Credits — und{" "}
+              <strong className="font-semibold text-ink">
+                1 Credit kostet genau 1 €
+              </strong>
+              . Fertig.
             </p>
           </RevealOnScroll>
         </div>
@@ -189,31 +193,38 @@ export function PricingSection() {
                         shadow="float"
                         className="bg-white/95 backdrop-blur-md px-7 py-4 text-center"
                       >
-                        <div className="flex items-baseline gap-1 justify-center">
-                          <span className="font-light tracking-[-0.04em] leading-none text-[44px] bg-clip-text text-transparent bg-[linear-gradient(96deg,#9573EE_0%,#7C5CE8_45%,#5E44C2_75%,#3F2D8A_100%)]">
+                        <div className="flex items-baseline gap-2 justify-center">
+                          <span className="font-light tracking-[-0.04em] leading-none text-[38px] bg-clip-text text-transparent bg-[linear-gradient(96deg,#9573EE_0%,#7C5CE8_45%,#5E44C2_75%,#3F2D8A_100%)]">
+                            1 Credit
+                          </span>
+                          <span className="font-light tracking-[-0.04em] leading-none text-[38px] text-ink/70">
+                            =
+                          </span>
+                          <span className="font-light tracking-[-0.04em] leading-none text-[38px] bg-clip-text text-transparent bg-[linear-gradient(96deg,#9573EE_0%,#7C5CE8_45%,#5E44C2_75%,#3F2D8A_100%)]">
                             1 €
                           </span>
                         </div>
                         <div className="text-[12px] text-ink-muted mt-1.5">
-                          pro Lead, alles inklusive
+                          dein Guthaben, ohne Kleingedrucktes
                         </div>
                       </Squircle>
                     </div>
                   </Squircle>
                   <h3 className="text-lg font-semibold text-ink leading-tight mt-5 mb-2">
-                    Und da ist alles drin
+                    Und so viel kosten die Dinge
                   </h3>
-                  <ul className="flex flex-col gap-1.5">
-                    {PAKET.map((p) => (
+                  <ul className="flex flex-col gap-2">
+                    {CREDIT_KOSTEN.map((k) => (
                       <li
-                        key={p}
-                        className="flex items-start gap-2 text-[14.5px] text-ink-soft leading-snug"
+                        key={k.label}
+                        className="flex items-center justify-between gap-3 rounded-xl bg-white border border-line/70 px-3.5 py-2.5"
                       >
-                        <Check
-                          className="size-3.5 text-emerald-600 mt-[3px] shrink-0"
-                          strokeWidth={3}
-                        />
-                        <span>{p}</span>
+                        <span className="text-[13.5px] text-ink-soft leading-snug">
+                          {k.label}
+                        </span>
+                        <span className="shrink-0 rounded-full bg-brand-soft text-brand-deep text-[12px] font-bold px-3 py-1 whitespace-nowrap tabular-nums">
+                          {k.credits}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -244,8 +255,8 @@ export function PricingSection() {
                 ))}
               </div>
               <p className="mt-4 text-center text-[13px] text-ink-muted">
-                Optional: persönliche KI-Begrüßung mit Vornamen, in deiner
-                Stimme. 2 € statt 1 € pro Video.
+                Gerechnet: 40 € Grundgebühr + 1 Credit pro Lead. Mit
+                KI-Begrüßung wären es 2 Credits pro Lead.
               </p>
             </div>
 
@@ -318,8 +329,7 @@ export function PricingSection() {
                 <ArrowRight className="size-4" />
               </Link>
               <div className="text-[12px] text-ink-muted mt-4">
-                3 Monate Mindestlaufzeit · nur für Unternehmen (B2B) ·
-                E-Mail-Versand: 10 E-Mails = 1 Credit
+                3 Monate Mindestlaufzeit · nur für Unternehmen (B2B)
               </div>
             </div>
             </Squircle>

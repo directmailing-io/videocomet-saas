@@ -3,9 +3,12 @@
 import * as React from "react";
 
 /**
- * Reveal-on-Scroll: kurzes Fade-up mit dezentem Scale + Blur.
- * Stagger via `delay`-Prop — wird intern gestaucht und gekappt, damit
- * auch bei schnellem Scrollen nichts nachhinkt.
+ * Reveal-on-Scroll: kurzes Fade-up, nur opacity + transform.
+ * Bewusst KEIN blur()-Filter: animierte Filter zwingen den Browser bei
+ * grossen Cards in teure Repaints und fuehlen sich beim Scrollen traege
+ * an (Daniel-Feedback 2026-08-09). Stagger via `delay`-Prop — wird
+ * intern gestaucht und gekappt, damit bei schnellem Scrollen nichts
+ * nachhinkt.
  */
 export function RevealOnScroll({
   children,
@@ -33,13 +36,13 @@ export function RevealOnScroll({
       },
       // Positive Bottom-Margin: Elemente starten kurz bevor sie im
       // Viewport sind — bei schnellem Scrollen wirkt nichts verspätet.
-      { threshold: 0, rootMargin: "0px 0px 10% 0px" },
+      { threshold: 0, rootMargin: "0px 0px 15% 0px" },
     );
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
 
-  const effectiveDelay = Math.min(delay * 0.35, 320);
+  const effectiveDelay = Math.min(delay * 0.3, 240);
 
   return (
     <Tag
@@ -47,12 +50,11 @@ export function RevealOnScroll({
       className={className}
       style={{
         opacity: visible ? 1 : 0,
-        transform: visible
-          ? "translateY(0) scale(1)"
-          : "translateY(24px) scale(0.98)",
-        filter: visible ? "blur(0px)" : "blur(5px)",
-        transition: `opacity 600ms cubic-bezier(0.2,0.8,0.2,1) ${effectiveDelay}ms, transform 600ms cubic-bezier(0.2,0.8,0.2,1) ${effectiveDelay}ms, filter 450ms cubic-bezier(0.2,0.8,0.2,1) ${effectiveDelay}ms`,
-        willChange: "opacity, transform, filter",
+        transform: visible ? "translateY(0)" : "translateY(16px)",
+        transition: `opacity 420ms cubic-bezier(0.2,0.8,0.2,1) ${effectiveDelay}ms, transform 420ms cubic-bezier(0.2,0.8,0.2,1) ${effectiveDelay}ms`,
+        // Layer nur waehrend der Animation vorhalten, danach freigeben —
+        // sonst haelt jede Card dauerhaft einen Compositor-Layer.
+        willChange: visible ? "auto" : "opacity, transform",
       }}
     >
       {children}

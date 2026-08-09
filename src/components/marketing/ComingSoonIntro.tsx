@@ -62,19 +62,21 @@ export function ComingSoonFeatureCard() {
       wrapperClassName="h-full"
       className="relative p-6 sm:p-8 md:p-12 flex flex-col lg:flex-row gap-8 md:gap-12 lg:gap-14 items-center overflow-hidden"
     >
-      {/* Lavendel-Canvas + Glow — hebt die Card als „Ankündigung" vom Rest ab */}
+      {/* Dunkler Ink-Violett-Canvas mit Glow — die eine Premium-Card der
+          Seite. Bewusst dunkel (Kontrast zu allen weissen/Lavendel-Cards),
+          passt zum Ink-CTA-Stil. */}
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "radial-gradient(70% 90% at 20% 0%, rgba(170,140,245,0.28) 0%, transparent 55%), radial-gradient(60% 80% at 100% 100%, rgba(149,115,238,0.20) 0%, transparent 55%), #f7f5fd",
+            "radial-gradient(70% 90% at 18% 0%, rgba(149,115,238,0.42) 0%, transparent 55%), radial-gradient(55% 75% at 100% 100%, rgba(124,92,232,0.32) 0%, transparent 55%), radial-gradient(40% 50% at 75% 10%, rgba(232,121,249,0.14) 0%, transparent 60%), linear-gradient(160deg, #1B1442 0%, #131030 100%)",
         }}
       />
 
       {/* Visual: Video-Mockup + Sprechblase */}
       <div className="relative flex-1 w-full max-w-[560px] mx-auto lg:mx-0 pt-6 pb-5">
-        <div className="relative rounded-[20px] md:rounded-[24px] overflow-hidden shadow-[0_30px_80px_-20px_rgba(63,45,138,0.35)] ring-1 ring-white/60">
+        <div className="relative rounded-[20px] md:rounded-[24px] overflow-hidden shadow-[0_30px_80px_-16px_rgba(10,6,30,0.75)] ring-1 ring-white/15">
           <div className="relative aspect-video">
             <Image
               src="/marketing/ki-intro-thumb.webp"
@@ -152,7 +154,7 @@ export function ComingSoonFeatureCard() {
 
         {/* Kleines Info-Pill unten links */}
         <div
-          className="absolute -bottom-0 left-3 md:-bottom-1 md:left-1 flex items-center gap-2 rounded-full bg-white/85 backdrop-blur-md px-4 py-2 shadow-[0_10px_30px_-8px_rgba(63,45,138,0.35)] ring-1 ring-white/70"
+          className="absolute -bottom-0 left-3 md:-bottom-1 md:left-1 flex items-center gap-2 rounded-full bg-white px-4 py-2 shadow-[0_12px_34px_-8px_rgba(10,6,30,0.6)]"
           aria-hidden
         >
           <span className="inline-flex size-5 items-center justify-center rounded-full bg-brand-soft text-brand-deep">
@@ -180,21 +182,35 @@ export function ComingSoonFeatureCard() {
 
       {/* Text rechts */}
       <div className="relative lg:w-[380px] lg:shrink-0 text-center lg:text-left">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-brand-200 text-brand-deep text-[11px] font-semibold tracking-[0.18em] uppercase mb-6 shadow-[0_2px_12px_-4px_rgba(124,92,232,0.25)]">
-          <span className="relative flex size-2" aria-hidden>
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-60" />
-            <span className="relative inline-flex size-2 rounded-full bg-brand" />
-          </span>
+        <div
+          className="vc-cs-badge relative inline-flex items-center gap-2 px-4 py-2 rounded-full text-white text-[11.5px] font-bold tracking-[0.18em] uppercase mb-6 overflow-hidden shadow-[0_10px_30px_-6px_rgba(232,121,249,0.55)]"
+          style={{
+            background:
+              "linear-gradient(120deg, #F472B6 0%, #C084FC 55%, #8B5CF6 100%)",
+          }}
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden
+          >
+            <path d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9L12 2z" />
+            <path d="M19 15l.9 2.6L22.5 18.5l-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9L19 15z" />
+          </svg>
           Brandneu
+          {/* Glanz-Sweep */}
+          <span className="vc-cs-badge-sheen absolute inset-y-0 w-1/3" aria-hidden />
         </div>
 
-        <h3 className="font-light tracking-[-0.03em] text-ink leading-[1.08] text-[clamp(28px,3.2vw,40px)] text-balance">
+        <h3 className="font-light tracking-[-0.03em] text-white leading-[1.08] text-[clamp(28px,3.2vw,40px)] text-balance">
           Ein Video.{" "}
           <span
             className="bg-clip-text text-transparent font-normal"
             style={{
               backgroundImage:
-                "linear-gradient(96deg, #9573EE 0%, #7C5CE8 45%, #5E44C2 75%, #3F2D8A 100%)",
+                "linear-gradient(96deg, #E9DFFF 0%, #C4B0FF 40%, #A385FF 75%, #8F6FF0 100%)",
             }}
           >
             Jeder Lead hört seinen Namen.
@@ -202,17 +218,17 @@ export function ComingSoonFeatureCard() {
           In deiner Stimme.
         </h3>
 
-        <p className="mt-5 text-[15px] md:text-base leading-relaxed text-ink-soft text-balance">
+        <p className="mt-5 text-[15px] md:text-base leading-relaxed text-white/75 text-balance">
           Du nimmst dein Video ganz normal auf. VIDEOCOMET spricht die
           Begrüßung dann{" "}
-          <strong className="font-semibold text-ink">
+          <strong className="font-semibold text-white">
             für jeden Lead einzeln mit Vornamen
           </strong>
           , in deiner Stimme und mit passenden Lippenbewegungen. Klingt nach
           Zauberei, ist aber einfach ein Klick.
         </p>
 
-        <p className="mt-5 text-[12.5px] text-ink/55">
+        <p className="mt-5 text-[12.5px] text-white/50">
           Jetzt verfügbar für alle VIDEOCOMET Kunden. Ganz ohne
           Zusatz-Setup, du brauchst nur dein Video.
         </p>
@@ -243,8 +259,17 @@ export function ComingSoonFeatureCard() {
         .vc-cs-play {
           animation: vc-cs-play-breathe 3.2s ease-in-out infinite;
         }
+        @keyframes vc-cs-badge-sheen-sweep {
+          0%, 60% { transform: translateX(-250%) skewX(-18deg); }
+          100%    { transform: translateX(400%) skewX(-18deg); }
+        }
+        .vc-cs-badge-sheen {
+          left: 0;
+          background: linear-gradient(100deg, transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%);
+          animation: vc-cs-badge-sheen-sweep 3.4s ease-in-out infinite;
+        }
         @media (prefers-reduced-motion: reduce) {
-          .vc-cs-bubble, .vc-cs-bars span, .vc-cs-play {
+          .vc-cs-bubble, .vc-cs-bars span, .vc-cs-play, .vc-cs-badge-sheen {
             animation: none;
           }
         }
