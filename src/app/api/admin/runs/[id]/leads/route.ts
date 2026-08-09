@@ -5,7 +5,8 @@ import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { requireAdminApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
-import { leads, runs } from "@/lib/db/schema";
+import { campaigns, leads, runs, userDomains } from "@/lib/db/schema";
+import { buildLeadPublicUrl } from "@/lib/lead-public-url";
 
 /**
  * GET /api/admin/runs/[id]/leads
@@ -53,12 +54,24 @@ export async function GET(
       name: runs.name,
       status: runs.status,
       userId: runs.userId,
+      campaignDomainId: campaigns.domainId,
     })
     .from(runs)
+    .innerJoin(campaigns, eq(campaigns.id, runs.campaignId))
     .where(eq(runs.id, params.id))
     .limit(1);
   if (!run) {
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
+  }
+
+  let customHostname: string | null = null;
+  if (run.campaignDomainId) {
+    const [d] = await db
+      .select({ hostname: userDomains.hostname, status: userDomains.status })
+      .from(userDomains)
+      .where(eq(userDomains.id, run.campaignDomainId))
+      .limit(1);
+    if (d && d.status === "active") customHostname = d.hostname;
   }
 
   const rows = await db
@@ -95,6 +108,11 @@ export async function GET(
       rowIndex: l.rowIndex,
       name: leadDisplayName(l.data ?? {}, l.rowIndex),
       slug: l.slug,
+      // Immer Preview-Modus: Admin-Aufrufe duerfen keine Views tracken.
+      lpUrl: buildLeadPublicUrl(
+        { slug: l.slug, customHostname },
+        { preview: true, absolute: true },
+      ),
       status: l.status,
       errorMessage: l.errorMessage,
       currentStage: l.currentStage,

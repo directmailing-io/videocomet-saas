@@ -15,7 +15,28 @@ import { leadJobPriority } from "@/lib/queue-priority";
  */
 
 export type LeadRegenScope = "all" | "video" | "pdf" | "envelope";
-export type RunRegenMode = "all" | "video" | "pdf" | "failed";
+export type RunRegenMode =
+  | "all"
+  | "video"
+  | "pdf"
+  | "envelope"
+  | "landingpage"
+  | "failed";
+
+const RUN_REGEN_MODES: ReadonlyArray<RunRegenMode> = [
+  "all",
+  "video",
+  "pdf",
+  "envelope",
+  "landingpage",
+  "failed",
+];
+
+export function parseRunRegenMode(input: unknown): RunRegenMode {
+  return RUN_REGEN_MODES.includes(input as RunRegenMode)
+    ? (input as RunRegenMode)
+    : "all";
+}
 
 export interface RegenOutcome {
   status: number;
@@ -140,6 +161,23 @@ export async function regenerateRunCore(
     };
   }
 
+  // "landingpage" ist ein Sonderfall: Landingpages werden zur Laufzeit aus
+  // der DB gerendert (Stage 5 schreibt nur den Slug). "Neu generieren"
+  // heißt hier: die auf dem Run gepinnte Custom-LP-Version auf den
+  // aktuellen aktiven Stand der Vorlage re-snapshotten. Kein Lead-Reset,
+  // keine Queue-Jobs, kein Status-Wechsel nötig — Block-Landingpages
+  // ziehen ihre Inhalte ohnehin immer live aus der Kampagne.
+  if (mode === "landingpage") {
+    const customLpVersionId = await resolveActiveCustomLpVersionId(
+      run.campaignId,
+    );
+    await updateRun(run.id, run.userId, { customLpVersionId });
+    return {
+      status: 200,
+      body: { ok: true, mode, totalLeads: 0, retried: 0 },
+    };
+  }
+
   // Lead-IDs in row-Reihenfolge holen — für stabile Re-enqueue-Order.
   const allLeadRows = await db
     .select({
@@ -207,8 +245,14 @@ export async function regenerateRunCore(
               ...baseReset,
               pdfUrl: null,
             }
-          : // mode === "failed": keine URLs anfassen, nur Status/Error/Timestamps
-            baseReset;
+          : mode === "envelope"
+            ? {
+                ...baseReset,
+                envelopePdfUrl: null,
+                envelopePdfExpiresAt: null,
+              }
+            : // mode === "failed": keine URLs anfassen, nur Status/Error/Timestamps
+              baseReset;
 
   // Asset-Deref VOR dem Reset: ohne das Lösen der bunny_asset_refs hielte
   // der alte Ref das Video für immer "referenziert" — der Purge-Worker
@@ -269,8 +313,11 @@ export async function regenerateRunCore(
       : {}),
   });
 
-  const skipVideo = mode === "pdf";
-  const skipPdf = mode === "video";
+  // "envelope" überspringt Video- UND PDF-Stages — nur die Envelope-Stage
+  // läuft (analog Lead-scope "envelope"): envelopePdfUrl wurde genullt,
+  // die Idempotenz-Guards der anderen Stages greifen.
+  const skipVideo = mode === "pdf" || mode === "envelope";
+  const skipPdf = mode === "video" || mode === "envelope";
   try {
     const queue = pipelineQueue();
     // Verwaiste Retries aufräumen: von früheren Fehlversuchen können noch

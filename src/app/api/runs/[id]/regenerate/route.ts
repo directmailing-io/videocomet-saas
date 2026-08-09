@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getRun } from "@/lib/db/queries/runs";
 import {
+  parseRunRegenMode,
   regenerateRunCore,
   type RunRegenMode,
 } from "@/lib/regenerate";
@@ -16,26 +17,17 @@ import {
  * komplett zurück und schickt Leads erneut durch die Pipeline.
  * Kern-Logik in @/lib/regenerate (geteilt mit der Admin-Route).
  *
- * Body (optional): { mode?: "all" | "video" | "pdf" | "failed" }
+ * Body (optional):
+ *   { mode?: "all" | "video" | "pdf" | "envelope" | "landingpage" | "failed" }
  *   - "all"    (Default): alle Outputs zurücksetzen, volle Pipeline.
- *   - "video": nur Video + Landingpage neu (skipPdf).
+ *   - "video": nur Video neu (skipPdf).
  *   - "pdf":   nur Brief-PDF neu (skipVideo).
+ *   - "envelope": nur Umschlag-PDF neu (skipVideo + skipPdf).
+ *   - "landingpage": Custom-LP-Version re-snapshotten (keine Queue-Jobs).
  *   - "failed": nur Leads mit status='failed', volle Pipeline.
  *
  * Ein laufender Run wird mit 409 abgelehnt.
  */
-
-function parseMode(input: unknown): RunRegenMode {
-  if (
-    input === "video" ||
-    input === "pdf" ||
-    input === "all" ||
-    input === "failed"
-  ) {
-    return input;
-  }
-  return "all";
-}
 
 export async function POST(
   req: NextRequest,
@@ -49,7 +41,7 @@ export async function POST(
     const ct = req.headers.get("content-type") ?? "";
     if (ct.includes("application/json")) {
       const body = (await req.json()) as { mode?: unknown };
-      mode = parseMode(body?.mode);
+      mode = parseRunRegenMode(body?.mode);
     }
   } catch {
     // Leerer / kaputter Body → Default behalten.

@@ -7,6 +7,7 @@ import { requireAdminApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { runs } from "@/lib/db/schema";
 import {
+  parseRunRegenMode,
   regenerateRunCore,
   type RunRegenMode,
 } from "@/lib/regenerate";
@@ -18,20 +19,9 @@ import {
  * (@/lib/regenerate), aber ohne Tenant-Scope — der Admin stößt die
  * Generierung im Namen des Run-Owners neu an (Support-Fall).
  *
- * Body (optional): { mode?: "all" | "video" | "pdf" | "failed" }
+ * Body (optional):
+ *   { mode?: "all" | "video" | "pdf" | "envelope" | "landingpage" | "failed" }
  */
-
-function parseMode(input: unknown): RunRegenMode {
-  if (
-    input === "video" ||
-    input === "pdf" ||
-    input === "all" ||
-    input === "failed"
-  ) {
-    return input;
-  }
-  return "all";
-}
 
 export async function POST(
   req: NextRequest,
@@ -45,7 +35,7 @@ export async function POST(
     const ct = req.headers.get("content-type") ?? "";
     if (ct.includes("application/json")) {
       const body = (await req.json()) as { mode?: unknown };
-      mode = parseMode(body?.mode);
+      mode = parseRunRegenMode(body?.mode);
     }
   } catch {
     // Leerer / kaputter Body → Default behalten.
