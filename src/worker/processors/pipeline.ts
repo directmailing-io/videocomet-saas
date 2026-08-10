@@ -1561,6 +1561,17 @@ export async function pipelineProcessor(
                   copyNameHint: data.leadId.substring(0, 8),
                   qrPngPath,
                   thumbnailFilePath: nativeThumbnailLocalPath,
+                  // Renderer 4.1: bei positioned QR-Platzhaltern wird der
+                  // echte QR nach dem Export gestempelt und weicht Text-
+                  // kollisionen aus (Anker = Link-Zeile via Lead-Slug;
+                  // Hostname als Fallback, falls die URL im PDF umbricht).
+                  qrOverlay:
+                    slug && pageUrlShort
+                      ? {
+                          anchorText: slug,
+                          anchorFallbacks: [pageUrlShort.split("/")[0]],
+                        }
+                      : null,
                 }),
               STAGE_TIMEOUTS_MS.docsNativeRender,
               "docsNativeRender",

@@ -28,8 +28,8 @@ import { uploadFile } from "../src/lib/bunny/storage";
 import { substitute } from "../src/lib/placeholders/substitute";
 import { renderViaDocsApi } from "../src/worker/lib/docs-native-pipeline";
 
-const RUN_ID = "508fe55e-f44d-46bc-8915-decf3d5204f1";
-const DOMAIN_HOSTNAME = "video.digispace.at";
+const RUN_ID = process.env.OVERLAY_RUN_ID ?? "508fe55e-f44d-46bc-8915-decf3d5204f1";
+const DOMAIN_HOSTNAME = process.env.OVERLAY_HOSTNAME ?? "video.digispace.at";
 const OUT_PREFIX = `overlay-test/${RUN_ID.slice(0, 8)}`;
 const CONCURRENCY = 3;
 
@@ -161,7 +161,7 @@ async function main(): Promise<void> {
           copyNameHint: `ovl-${slug.slice(0, 16)}`,
           qrPngPath,
           thumbnailFilePath: null,
-          qrOverlay: { anchorText: slug },
+          qrOverlay: { anchorText: slug, anchorFallbacks: [DOMAIN_HOSTNAME] },
         });
         if (!rendered.qrOverlayApplied) {
           throw new Error("qrOverlayApplied=false — Platzhalter nicht positioned?");

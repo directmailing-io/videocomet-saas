@@ -74,7 +74,7 @@ export interface DocsNativePipelineInput {
    * Text folgt statt von Googles Renderer an fester Position geclampt zu
    * werden. Ohne dieses Feld: unverändertes replaceImage-Verhalten.
    */
-  qrOverlay?: { anchorText: string } | null;
+  qrOverlay?: { anchorText: string; anchorFallbacks?: string[] } | null;
 }
 
 export interface DocsNativePipelineOutput {
@@ -375,16 +375,19 @@ export async function renderViaDocsApi(
     // referenzieren kann. Bunny-CDN-URL ist public HTTPS — passt fuer replaceImage.
     let qrBunnyUrl: string | null = null;
     if (input.qrPngPath && qrTarget) {
-      // Overlay-Modus: der Platzhalter bekommt ein TRANSPARENTES Bild —
+      // Overlay-Modus: der Platzhalter bekommt ein quasi unsichtbares Bild —
       // Layout bleibt exakt wie Google rendert, der echte QR wird nach dem
       // Export gestempelt. Sonst: der echte QR via replaceImage wie bisher.
+      // alpha 1/255 statt 0: voll transparente PNGs verwirft Googles
+      // PDF-Export komplett — dann fehlt die Marker-Box im PDF und das
+      // Stampen kennt die exakte Vorlagenposition nicht (nur Anker-Fallback).
       const buf = qrOverlayActive
         ? await sharp({
             create: {
               width: 64,
               height: 64,
               channels: 4,
-              background: { r: 255, g: 255, b: 255, alpha: 0 },
+              background: { r: 255, g: 255, b: 255, alpha: 1 / 255 },
             },
           })
             .png()
@@ -524,6 +527,7 @@ export async function renderViaDocsApi(
         qrWidthPt: qrTarget!.widthPt,
         qrHeightPt: qrTarget!.heightPt,
         anchorText: input.qrOverlay!.anchorText,
+        anchorFallbacks: input.qrOverlay!.anchorFallbacks,
         fallbackXPt: qrFallbackXPt,
       });
       pdfBuffer = overlayResult.pdfBuffer;

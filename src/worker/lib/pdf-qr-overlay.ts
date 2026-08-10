@@ -51,6 +51,11 @@ export interface QrOverlayInput {
   /** Eindeutiger Teil der Link-Zeile, z. B. der Lead-Slug. */
   anchorText: string;
   /**
+   * Weitere Suchbegriffe, falls `anchorText` im PDF nicht gefunden wird —
+   * z. B. der Hostname, wenn die URL im PDF mitten im Slug umbricht.
+   */
+  anchorFallbacks?: string[];
+  /**
    * Fallback-X (pt vom linken Seitenrand), falls die Marker-Box im PDF
    * nicht auffindbar ist. null → horizontal unter dem Anker zentrieren.
    */
@@ -72,7 +77,7 @@ export interface QrOverlayResult {
   shiftedDownPt: number;
 }
 
-interface Box {
+export interface Box {
   pageIndex: number;
   xMin: number;
   yMin: number;
@@ -80,7 +85,7 @@ interface Box {
   yMax: number;
 }
 
-interface PageWords {
+export interface PageWords {
   widthPt: number;
   heightPt: number;
   words: Array<{ xMin: number; yMin: number; xMax: number; yMax: number; text: string }>;
@@ -163,6 +168,23 @@ async function extractImages(
   return boxes;
 }
 
+/**
+ * Findet Anker-Boxen für den ersten Suchbegriff, der Treffer liefert.
+ * Reihenfolge: anchorText, dann anchorFallbacks (z. B. Hostname, falls die
+ * URL im PDF mitten im Slug umbricht und der Slug so unauffindbar wird).
+ */
+export function findAnchorBoxesWithFallbacks(
+  pages: PageWords[],
+  needles: string[],
+): Box[] {
+  for (const needle of needles) {
+    if (!needle) continue;
+    const hits = findAnchorBoxes(pages, needle);
+    if (hits.length > 0) return hits;
+  }
+  return [];
+}
+
 /** Findet Anker-Boxen: Wörter, die `anchorText` enthalten (case-insensitiv). */
 function findAnchorBoxes(pages: PageWords[], anchorText: string): Box[] {
   const needle = anchorText.toLowerCase();
@@ -203,6 +225,87 @@ function findAnchorBoxes(pages: PageWords[], anchorText: string): Box[] {
   return hits;
 }
 
+export interface PlacementInput {
+  page: PageWords;
+  marker: Box | null;
+  /** Anker auf derselben Seite wie der Marker (bzw. die Zielseite). */
+  anchor: Box | null;
+  qrWidthPt: number;
+  qrHeightPt: number;
+  fallbackXPt: number | null;
+  gapPt: number;
+}
+
+export interface Placement {
+  x: number;
+  yTop: number;
+  w: number;
+  h: number;
+  shiftedDownPt: number;
+}
+
+/** Mindest-Überschneidungstiefe (pt), ab der ein Wort als Kollision zählt —
+ *  puffert Koordinaten-Differenzen zwischen pdftotext und pdftohtml ab. */
+const COLLISION_MIN_OVERLAP_PT = 1.5;
+/** Max. Iterationen der Kollisionsauflösung (jede schiebt unter die
+ *  tiefste kollidierende Wortbox). */
+const COLLISION_MAX_PASSES = 8;
+
+/**
+ * Reine Platzierungslogik (testbar ohne poppler/pdf-lib).
+ *
+ * Ausgangsposition = Marker-Box (exakte Vorlagen-Position), sonst unter der
+ * Anker-Zeile. Danach Kollisionsauflösung gegen ALLE Wortboxen der Seite:
+ * echte Rechteck-Überschneidung (nicht nur eine Kante) — so bleibt eine
+ * Caption, die planmäßig unter dem QR steht, unangetastet, während eine
+ * hineingerutschte Link-Zeile (auch eine umgebrochene zweite URL-Zeile)
+ * den QR nach unten schiebt. Verschoben wird immer nach unten: Briefe
+ * füllen sich von oben, freier Raum liegt unten.
+ */
+export function computeQrPlacement(input: PlacementInput): Placement {
+  const { page, marker, anchor, gapPt: gap } = input;
+  let x =
+    marker?.xMin ??
+    input.fallbackXPt ??
+    (anchor ? (anchor.xMin + anchor.xMax) / 2 - input.qrWidthPt / 2 : 0);
+  let yTop = marker ? marker.yMin : anchor!.yMax + gap;
+
+  let shiftedDownPt = 0;
+  for (let pass = 0; pass < COLLISION_MAX_PASSES; pass++) {
+    const colliding = page.words.filter((wd) => {
+      const overlapX =
+        Math.min(wd.xMax, x + input.qrWidthPt) - Math.max(wd.xMin, x);
+      const overlapY =
+        Math.min(wd.yMax, yTop + input.qrHeightPt) - Math.max(wd.yMin, yTop);
+      return (
+        overlapX > COLLISION_MIN_OVERLAP_PT && overlapY > COLLISION_MIN_OVERLAP_PT
+      );
+    });
+    if (colliding.length === 0) break;
+    const target = Math.max(...colliding.map((wd) => wd.yMax)) + gap;
+    if (target <= yTop) break;
+    shiftedDownPt += target - yTop;
+    yTop = target;
+  }
+
+  // Clamping: unten aus der Seite darf nichts rauslaufen. Erst
+  // verkleinern (bis MIN_SCALE), dann notfalls Position anheben.
+  let w = input.qrWidthPt;
+  let h = input.qrHeightPt;
+  const available = page.heightPt - PAGE_BOTTOM_MARGIN_PT - yTop;
+  if (available < h) {
+    const scale = Math.max(available / h, MIN_SCALE);
+    w *= scale;
+    h *= scale;
+    if (yTop + h > page.heightPt - PAGE_BOTTOM_MARGIN_PT) {
+      yTop = page.heightPt - PAGE_BOTTOM_MARGIN_PT - h;
+    }
+  }
+  x = Math.min(Math.max(x, PAGE_BOTTOM_MARGIN_PT), page.widthPt - PAGE_BOTTOM_MARGIN_PT - w);
+
+  return { x, yTop, w, h, shiftedDownPt };
+}
+
 export async function stampQrOverlay(input: QrOverlayInput): Promise<QrOverlayResult> {
   const workDir = await mkdtemp(join(tmpdir(), "qr-overlay-"));
   try {
@@ -229,7 +332,10 @@ export async function stampQrOverlay(input: QrOverlayInput): Promise<QrOverlayRe
             input.qrHeightPt * MARKER_SIZE_TOLERANCE,
       ) ?? null;
 
-    const anchors = findAnchorBoxes(pages, input.anchorText);
+    const anchors = findAnchorBoxesWithFallbacks(pages, [
+      input.anchorText,
+      ...(input.anchorFallbacks ?? []),
+    ]);
     // Bei mehreren Anker-Treffern: der dem Marker nächstgelegene (gleiche
     // Seite), sonst der letzte im Dokument.
     let anchor: Box | null = null;
@@ -255,41 +361,15 @@ export async function stampQrOverlay(input: QrOverlayInput): Promise<QrOverlayRe
     const pageIndex = (marker ?? anchor!).pageIndex;
     const page = pages[pageIndex];
 
-    // Ausgangsposition: Marker-Box (= exakte Vorlagen-Position). Ohne
-    // Marker: fallbackXPt bzw. horizontal unter dem Anker zentriert.
-    let x =
-      marker?.xMin ??
-      input.fallbackXPt ??
-      (anchor ? (anchor.xMin + anchor.xMax) / 2 - input.qrWidthPt / 2 : 0);
-    let yTop = marker ? marker.yMin : anchor!.yMax + gap;
-
-    // Kollision: liegt die Link-Zeile in oder unter der QR-Oberkante,
-    // wandert der QR unter die Link-Zeile.
-    let shiftedDownPt = 0;
-    if (marker && anchor && anchor.pageIndex === pageIndex) {
-      const horizontalOverlap =
-        anchor.xMax > x - 2 && anchor.xMin < x + input.qrWidthPt + 2;
-      if (horizontalOverlap && anchor.yMax + gap > yTop) {
-        const target = anchor.yMax + gap;
-        shiftedDownPt = target - yTop;
-        yTop = target;
-      }
-    }
-
-    // Clamping: unten aus der Seite darf nichts rauslaufen. Erst
-    // verkleinern (bis MIN_SCALE), dann notfalls Position anheben.
-    let w = input.qrWidthPt;
-    let h = input.qrHeightPt;
-    const available = page.heightPt - PAGE_BOTTOM_MARGIN_PT - yTop;
-    if (available < h) {
-      const scale = Math.max(available / h, MIN_SCALE);
-      w *= scale;
-      h *= scale;
-      if (yTop + h > page.heightPt - PAGE_BOTTOM_MARGIN_PT) {
-        yTop = page.heightPt - PAGE_BOTTOM_MARGIN_PT - h;
-      }
-    }
-    x = Math.min(Math.max(x, PAGE_BOTTOM_MARGIN_PT), page.widthPt - PAGE_BOTTOM_MARGIN_PT - w);
+    const { x, yTop, w, h, shiftedDownPt } = computeQrPlacement({
+      page,
+      marker,
+      anchor: anchor && anchor.pageIndex === pageIndex ? anchor : null,
+      qrWidthPt: input.qrWidthPt,
+      qrHeightPt: input.qrHeightPt,
+      fallbackXPt: input.fallbackXPt,
+      gapPt: gap,
+    });
 
     // Stempeln (pdf-lib rechnet von der Seiten-UNTERKANTE).
     const pdf = await PDFDocument.load(input.pdfBuffer, { ignoreEncryption: true });
