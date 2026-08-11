@@ -139,6 +139,12 @@ export default async function AdminUserDetailPage({
       typeof user.lastLoginAt === "string"
         ? user.lastLoginAt
         : user.lastLoginAt?.toISOString() ?? null,
+    subscriptionStatus: user.subscriptionStatus ?? null,
+    subscriptionCurrentPeriodEnd:
+      user.subscriptionCurrentPeriodEnd instanceof Date
+        ? user.subscriptionCurrentPeriodEnd.toISOString()
+        : (user.subscriptionCurrentPeriodEnd ?? null),
+    stripeSubscriptionId: user.stripeSubscriptionId ?? null,
   };
 
   const displayName =

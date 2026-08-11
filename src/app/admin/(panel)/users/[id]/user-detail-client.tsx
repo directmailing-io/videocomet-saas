@@ -40,6 +40,9 @@ export interface AdminUserDetail {
   billingCountry: string | null;
   createdAt: string | null;
   lastLoginAt: string | null;
+  subscriptionStatus: string | null;
+  subscriptionCurrentPeriodEnd: string | null;
+  stripeSubscriptionId: string | null;
 }
 
 export interface AdminRunSummary {
@@ -129,6 +132,87 @@ export function UserDetailClient({
     id: string;
     name: string;
   } | null>(null);
+  const [compMonths, setCompMonths] = React.useState("3");
+  const [compReason, setCompReason] = React.useState("");
+  const [compBusy, setCompBusy] = React.useState(false);
+
+  async function grantCompAccess(e: React.FormEvent) {
+    e.preventDefault();
+    const months = Number(compMonths);
+    if (!Number.isFinite(months) || months < 0.5 || months > 60) {
+      toast({
+        title: "Ungültige Dauer",
+        description: "Bitte einen Wert zwischen 0.5 und 60 Monaten angeben.",
+        variant: "danger",
+      });
+      return;
+    }
+    if (compReason.trim().length < 3) {
+      toast({
+        title: "Grund fehlt",
+        description: "Bitte einen Grund angeben (mind. 3 Zeichen).",
+        variant: "danger",
+      });
+      return;
+    }
+    setCompBusy(true);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/comp-access`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ months, reason: compReason.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error ?? "Freischalten fehlgeschlagen.", variant: "danger" });
+        return;
+      }
+      setUser((u) => ({
+        ...u,
+        subscriptionStatus: data.subscriptionStatus,
+        subscriptionCurrentPeriodEnd: data.subscriptionCurrentPeriodEnd,
+      }));
+      setCompReason("");
+      toast({ title: "Gratis-Zugang gewährt.", variant: "success" });
+      router.refresh();
+    } catch {
+      toast({ title: "Verbindung fehlgeschlagen.", variant: "danger" });
+    } finally {
+      setCompBusy(false);
+    }
+  }
+
+  async function revokeCompAccess() {
+    if (
+      !window.confirm(
+        "Zugang wirklich sperren? Der User kann die Plattform danach nicht mehr nutzen, bis er selbst zahlt.",
+      )
+    ) {
+      return;
+    }
+    setCompBusy(true);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/comp-access`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error ?? "Sperren fehlgeschlagen.", variant: "danger" });
+        return;
+      }
+      setUser((u) => ({
+        ...u,
+        subscriptionStatus: null,
+        subscriptionCurrentPeriodEnd: null,
+      }));
+      toast({ title: "Zugang gesperrt.", variant: "success" });
+      router.refresh();
+    } catch {
+      toast({ title: "Verbindung fehlgeschlagen.", variant: "danger" });
+    } finally {
+      setCompBusy(false);
+    }
+  }
 
   async function submitCreditAdjust(e: React.FormEvent) {
     e.preventDefault();
@@ -606,6 +690,16 @@ export function UserDetailClient({
 
           <TabsContent value="credits">
             <div className="flex flex-col gap-4">
+              <CompAccessCard
+                user={user}
+                months={compMonths}
+                setMonths={setCompMonths}
+                reason={compReason}
+                setReason={setCompReason}
+                busy={compBusy}
+                onGrant={grantCompAccess}
+                onRevoke={revokeCompAccess}
+              />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Card>
                   <CardContent className="pt-6">
@@ -838,5 +932,117 @@ export function UserDetailClient({
         />
       ) : null}
     </div>
+  );
+}
+
+function CompAccessCard({
+  user,
+  months,
+  setMonths,
+  reason,
+  setReason,
+  busy,
+  onGrant,
+  onRevoke,
+}: {
+  user: AdminUserDetail;
+  months: string;
+  setMonths: (v: string) => void;
+  reason: string;
+  setReason: (v: string) => void;
+  busy: boolean;
+  onGrant: (e: React.FormEvent) => void;
+  onRevoke: () => void;
+}) {
+  const hasStripe = Boolean(user.stripeSubscriptionId);
+  const status = user.subscriptionStatus;
+  const periodEnd = user.subscriptionCurrentPeriodEnd
+    ? new Date(user.subscriptionCurrentPeriodEnd)
+    : null;
+  const active =
+    (status === "active" || status === "trialing") &&
+    (!periodEnd || periodEnd.getTime() > Date.now());
+  const isCompAccess = active && !hasStripe;
+  const daysLeft = periodEnd
+    ? Math.max(0, Math.round((periodEnd.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+    : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Plattform-Zugang</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-ink-muted">Status:</span>
+          {active ? (
+            <Badge variant="success">
+              {hasStripe ? "Bezahlend (Stripe)" : "Gratis freigeschaltet"}
+            </Badge>
+          ) : (
+            <Badge variant="neutral">Gesperrt (Paywall)</Badge>
+          )}
+          {periodEnd ? (
+            <span className="text-ink-muted">
+              bis {formatDateTime(periodEnd.toISOString())}
+              {daysLeft !== null ? ` · noch ${daysLeft} Tage` : ""}
+            </span>
+          ) : null}
+        </div>
+
+        {hasStripe ? (
+          <p className="text-sm text-ink-muted">
+            Dieser User hat eine aktive Stripe-Subscription. Änderungen bitte in Stripe
+            vornehmen (Kündigen, Pausieren, Rückerstattung). Der Gratis-Weg ist gesperrt,
+            damit ein zahlender Kunde nicht versehentlich ausgesperrt wird.
+          </p>
+        ) : (
+          <>
+            <form
+              onSubmit={onGrant}
+              className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-2"
+            >
+              <div className="sm:w-32">
+                <Label htmlFor="comp-months">Monate</Label>
+                <Input
+                  id="comp-months"
+                  type="number"
+                  min={0.5}
+                  max={60}
+                  step={0.5}
+                  value={months}
+                  onChange={(e) => setMonths(e.target.value)}
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <Label htmlFor="comp-reason">Grund (Pflicht, landet im Log)</Label>
+                <Input
+                  id="comp-reason"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="z. B. Freikunde, Beta-Tester, Support-Fall #1234"
+                  maxLength={500}
+                />
+              </div>
+              <Button type="submit" loading={busy}>
+                {isCompAccess ? "Zeitraum überschreiben" : "Gratis freischalten"}
+              </Button>
+            </form>
+            {isCompAccess ? (
+              <div>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={onRevoke}
+                  loading={busy}
+                >
+                  Zugang wieder sperren
+                </Button>
+              </div>
+            ) : null}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
