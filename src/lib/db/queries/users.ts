@@ -22,6 +22,12 @@ export interface CreateUserInput {
   billingZip?: string | null;
   billingCity?: string | null;
   billingCountry?: string | null;
+  /**
+   * Bei Self-Signup weglassen (bleibt null → E-Mail-Verify-Flow via /api/auth/…).
+   * Bei Admin-Anlage `new Date()` setzen — der Admin hat die E-Mail bewusst
+   * eingetragen, ohne dass der User sonst am Bezahl-Flow blockiert.
+   */
+  emailVerifiedAt?: Date | null;
 }
 
 export type UpdateUserPatch = Partial<
@@ -76,6 +82,7 @@ export async function createUser(input: CreateUserInput): Promise<User> {
       billingZip: input.billingZip ?? null,
       billingCity: input.billingCity ?? null,
       billingCountry: input.billingCountry ?? "DE",
+      emailVerifiedAt: input.emailVerifiedAt ?? null,
     })
     .returning();
   if (!row) throw new Error("Failed to create user");

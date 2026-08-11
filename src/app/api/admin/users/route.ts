@@ -98,6 +98,10 @@ export async function POST(req: NextRequest) {
       billingZip: body.billingZip ?? null,
       billingCity: body.billingCity ?? null,
       billingCountry: body.billingCountry ?? "DE",
+      // Admin-Anlage: E-Mail-Adresse ist vertrauenswürdig, sonst würde der
+      // User beim ersten Bezahl-Flow von /api/billing/*/create-checkout mit
+      // „bestätige zuerst deine E-Mail-Adresse" blockiert.
+      emailVerifiedAt: new Date(),
     });
   } catch (err) {
     console.error("[admin:users:create] error", err);
