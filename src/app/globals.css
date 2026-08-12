@@ -30,7 +30,6 @@
 @layer base {
   html, body {
     @apply bg-canvas text-ink antialiased;
-    font-feature-settings: "ss01", "cv11";
   }
   body {
     font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
