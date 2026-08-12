@@ -167,7 +167,17 @@ export default async function CampaignDetailPage({
         }
       : null,
     eta: etaMap.get(r.id) ?? null,
+    letterCount: r.letterCount,
+    envelopeCount: r.envelopeCount,
+    emailSentCount: r.emailSentCount,
   }));
+
+  // Ist der jeweilige Ausgabekanal in der Kampagne grundsätzlich aktiv?
+  // Steuert, welche Icons in der Runden-Tabelle überhaupt gezeigt werden —
+  // ohne Kanal-Aktivierung erscheint kein „grauer" Icon-Ballast.
+  const campaignHasLetters = Boolean(campaign.pdfEnabled);
+  const campaignHasEnvelopes = Boolean(campaign.envelopeTemplateId);
+  const campaignHasEmail = emailBlastList.length > 0 || mailboxList.length > 0;
 
   // Aggregates aus getCampaignDeepDive ODER aus allLeads als Fallback
   const summary = deepDive?.summary ?? {
@@ -336,6 +346,9 @@ export default async function CampaignDetailPage({
               campaignId={campaign.id}
               campaignName={campaign.name}
               initialRuns={initialRuns}
+              campaignHasLetters={campaignHasLetters}
+              campaignHasEnvelopes={campaignHasEnvelopes}
+              campaignHasEmail={campaignHasEmail}
             />
           )}
         </TabsContent>

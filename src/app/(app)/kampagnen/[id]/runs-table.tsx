@@ -5,9 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Archive,
+  FileText,
+  Mail as MailIcon,
   MoreVertical,
   ExternalLink,
   RotateCcw,
+  Send,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -46,7 +49,7 @@ import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { runStatusLabel, runStatusVariant } from "@/lib/run-status";
 import { formatRunEta, type RunEtaEntry } from "@/lib/run-eta-format";
-import { BulkExportDialog } from "./bulk-export-dialog";
+import { BulkExportDialog, type BulkExportType } from "./bulk-export-dialog";
 import { ResetTrackingDialog } from "./reset-tracking-dialog";
 
 export interface RunRow {
@@ -80,6 +83,10 @@ export interface RunRow {
   } | null;
   /** Server-ETA (W3) — nur bei status=generating gefüllt. */
   eta?: RunEtaEntry | null;
+  /** Ausgabe-Kennzahlen für die Icon-Spalte. */
+  letterCount: number;
+  envelopeCount: number;
+  emailSentCount: number;
 }
 
 function abModeLabel(mode: "random" | "sequential"): string {
@@ -134,6 +141,10 @@ interface RunsTableProps {
   campaignId: string;
   campaignName: string;
   initialRuns: RunRow[];
+  /** Aus der Kampagne abgeleitet: sind die Ausgabekanäle grundsätzlich konfiguriert? */
+  campaignHasLetters: boolean;
+  campaignHasEnvelopes: boolean;
+  campaignHasEmail: boolean;
 }
 
 /**
@@ -210,6 +221,9 @@ export function RunsTable({
   campaignId,
   campaignName,
   initialRuns,
+  campaignHasLetters,
+  campaignHasEnvelopes,
+  campaignHasEmail,
 }: RunsTableProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -223,6 +237,11 @@ export function RunsTable({
   const [bulkExportOpen, setBulkExportOpen] = React.useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = React.useState(false);
   const [bulkDeleting, setBulkDeleting] = React.useState(false);
+  // Single-Run-Export via Icon-Klick: übersteuert `selectedIds` für den Dialog.
+  const [singleRunExport, setSingleRunExport] = React.useState<{
+    run: RunRow;
+    type: BulkExportType;
+  } | null>(null);
 
   // Reseed local state when the server-rendered initial data changes
   // (e.g. after a router.refresh() following a delete or a navigation back).
@@ -504,6 +523,7 @@ export function RunsTable({
             <TableHead>Status</TableHead>
             <TableHead>Fortschritt</TableHead>
             {anyAb && <TableHead>A/B-Test</TableHead>}
+            <TableHead className="w-40">Ausgabe</TableHead>
             <TableHead>Erstellt</TableHead>
             <TableHead className="w-12 text-right">Aktionen</TableHead>
           </TableRow>
@@ -611,6 +631,18 @@ export function RunsTable({
                     )}
                   </TableCell>
                 )}
+                <TableCell data-row-action onClick={(e) => e.stopPropagation()}>
+                  <OutputIcons
+                    run={r}
+                    campaignId={campaignId}
+                    campaignHasLetters={campaignHasLetters}
+                    campaignHasEnvelopes={campaignHasEnvelopes}
+                    campaignHasEmail={campaignHasEmail}
+                    onDownload={(type) =>
+                      setSingleRunExport({ run: r, type })
+                    }
+                  />
+                </TableCell>
                 <TableCell className="text-ink-muted">
                   {formatDate(r.createdAt)}
                 </TableCell>
@@ -733,6 +765,32 @@ export function RunsTable({
         onSuccess={clearSelection}
       />
 
+      {/* Single-Run-Export via Icon-Klick — dedizierter Dialog, damit die
+          Selektion des Users nicht überschrieben wird. */}
+      <BulkExportDialog
+        open={singleRunExport !== null}
+        onOpenChange={(o) => {
+          if (!o) setSingleRunExport(null);
+        }}
+        runIds={singleRunExport ? [singleRunExport.run.id] : []}
+        runs={
+          singleRunExport
+            ? [
+                {
+                  id: singleRunExport.run.id,
+                  name: singleRunExport.run.name,
+                  completedLeads:
+                    singleRunExport.type === "envelopes"
+                      ? singleRunExport.run.envelopeCount
+                      : singleRunExport.run.letterCount,
+                },
+              ]
+            : []
+        }
+        campaignName={campaignName}
+        exportType={singleRunExport?.type ?? "letters"}
+      />
+
       {/* Bulk-Delete confirm ------------------------------------------ */}
       <Dialog
         open={bulkDeleteOpen}
@@ -851,5 +909,146 @@ export function RunsTable({
         </DialogContent>
       </Dialog>
     </TooltipProvider>
+  );
+}
+
+/**
+ * Kompakte Icon-Row in der „Ausgabe"-Spalte: Brief, Umschlag, Mail.
+ * Farbig = generiert/versendet, dezent grau = für diese Kampagne konfiguriert
+ * aber noch nichts da, komplett ausgeblendet = Kanal in der Kampagne
+ * grundsätzlich nicht aktiv.
+ *
+ * Brief- und Umschlag-Icon sind Buttons — Klick öffnet den BulkExportDialog
+ * mit dem passenden `exportType`. Mail springt in den E-Mail-Tab.
+ */
+function OutputIcons({
+  run,
+  campaignId,
+  campaignHasLetters,
+  campaignHasEnvelopes,
+  campaignHasEmail,
+  onDownload,
+}: {
+  run: RunRow;
+  campaignId: string;
+  campaignHasLetters: boolean;
+  campaignHasEnvelopes: boolean;
+  campaignHasEmail: boolean;
+  onDownload: (type: BulkExportType) => void;
+}) {
+  const anyConfigured =
+    campaignHasLetters || campaignHasEnvelopes || campaignHasEmail;
+  if (!anyConfigured) {
+    return <span className="text-xs text-ink-muted">—</span>;
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      {campaignHasLetters ? (
+        <OutputIconButton
+          icon={<FileText className="size-4" />}
+          count={run.letterCount}
+          activeLabel={`${run.letterCount} Briefe – als ZIP herunterladen`}
+          inactiveLabel="Noch keine Briefe generiert"
+          onClick={
+            run.letterCount > 0 ? () => onDownload("letters") : undefined
+          }
+        />
+      ) : null}
+      {campaignHasEnvelopes ? (
+        <OutputIconButton
+          icon={<MailIcon className="size-4" />}
+          count={run.envelopeCount}
+          activeLabel={`${run.envelopeCount} Umschläge – als ZIP herunterladen`}
+          inactiveLabel="Noch keine Umschläge generiert"
+          onClick={
+            run.envelopeCount > 0 ? () => onDownload("envelopes") : undefined
+          }
+        />
+      ) : null}
+      {campaignHasEmail ? (
+        <OutputIconLink
+          icon={<Send className="size-4" />}
+          count={run.emailSentCount}
+          activeLabel={`${run.emailSentCount} Mails versendet – zum E-Mail-Tab`}
+          inactiveLabel="Noch keine Mails versendet"
+          href={`/kampagnen/${campaignId}?tab=email`}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function OutputIconButton({
+  icon,
+  count,
+  activeLabel,
+  inactiveLabel,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  count: number;
+  activeLabel: string;
+  inactiveLabel: string;
+  onClick?: () => void;
+}) {
+  const active = count > 0;
+  const disabled = !onClick;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onClick}
+          aria-label={active ? activeLabel : inactiveLabel}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold tabular-nums transition-colors",
+            active
+              ? "bg-brand-soft text-brand-deep hover:bg-brand-soft/70"
+              : "bg-ink/[0.04] text-ink-muted cursor-default",
+          )}
+        >
+          {icon}
+          {active ? count.toLocaleString("de-DE") : ""}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{active ? activeLabel : inactiveLabel}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function OutputIconLink({
+  icon,
+  count,
+  activeLabel,
+  inactiveLabel,
+  href,
+}: {
+  icon: React.ReactNode;
+  count: number;
+  activeLabel: string;
+  inactiveLabel: string;
+  href: string;
+}) {
+  const active = count > 0;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          href={href}
+          aria-label={active ? activeLabel : inactiveLabel}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold tabular-nums transition-colors",
+            active
+              ? "bg-brand-soft text-brand-deep hover:bg-brand-soft/70"
+              : "bg-ink/[0.04] text-ink-muted hover:text-ink",
+          )}
+        >
+          {icon}
+          {active ? count.toLocaleString("de-DE") : ""}
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent>{active ? activeLabel : inactiveLabel}</TooltipContent>
+    </Tooltip>
   );
 }

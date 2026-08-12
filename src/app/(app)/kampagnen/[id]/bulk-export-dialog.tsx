@@ -26,12 +26,16 @@ export interface BulkExportDialogRun {
   completedLeads?: number;
 }
 
+export type BulkExportType = "letters" | "envelopes";
+
 export interface BulkExportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   runIds: string[];
   runs: BulkExportDialogRun[];
   campaignName: string;
+  /** Was landet im ZIP: Briefe (Default) oder Umschläge. */
+  exportType?: BulkExportType;
   /** Called once the download finishes successfully — used to clear the
    *  selection on the parent table. Optional. */
   onSuccess?: () => void;
@@ -95,8 +99,12 @@ export function BulkExportDialog({
   runIds,
   runs,
   campaignName: _campaignName,
+  exportType = "letters",
   onSuccess,
 }: BulkExportDialogProps) {
+  const isEnvelope = exportType === "envelopes";
+  const kindLabel = isEnvelope ? "Umschläge" : "Briefe";
+  const kindSingular = isEnvelope ? "Umschlag" : "Brief";
   const { toast } = useToast();
 
   const [stage, setStage] = React.useState<Stage>("configure");
@@ -181,6 +189,7 @@ export function BulkExportDialog({
         body: JSON.stringify({
           runIds,
           pdfsPerFile,
+          exportType,
           // Only send baseName when the user typed something — let the
           // backend pick its own default otherwise.
           ...(trimmedBase ? { baseName: trimmedBase } : {}),
@@ -273,11 +282,13 @@ export function BulkExportDialog({
             error={error}
             onCancel={() => onOpenChange(false)}
             onSubmit={() => void handleSubmit()}
+            kindLabel={kindLabel}
+            kindSingular={kindSingular}
           />
         )}
 
         {stage === "downloading" && (
-          <DownloadingView totalLeads={totalLeads} />
+          <DownloadingView totalLeads={totalLeads} kindLabel={kindLabel} />
         )}
 
         {stage === "success" && (
@@ -308,6 +319,8 @@ interface ConfigureViewProps {
   error: string | null;
   onCancel: () => void;
   onSubmit: () => void;
+  kindLabel: string;
+  kindSingular: string;
 }
 
 function ConfigureView({
@@ -326,6 +339,8 @@ function ConfigureView({
   error,
   onCancel,
   onSubmit,
+  kindLabel,
+  kindSingular,
 }: ConfigureViewProps) {
   const canSubmit =
     runIds.length > 0 &&
@@ -336,12 +351,12 @@ function ConfigureView({
     <>
       <DialogHeader>
         <DialogTitle>
-          Bulk-Export · {runIds.length}{" "}
+          {kindLabel} exportieren · {runIds.length}{" "}
           {runIds.length === 1 ? "Runde" : "Runden"}
         </DialogTitle>
         <DialogDescription>
           Insgesamt {totalLeads.toLocaleString("de-DE")} fertige Leads — werden
-          als ZIP mit PDFs und Adressliste heruntergeladen.
+          als ZIP mit {kindLabel}-PDFs und Adressliste heruntergeladen.
         </DialogDescription>
       </DialogHeader>
 
@@ -417,7 +432,7 @@ function ConfigureView({
             <span className="font-semibold text-ink">
               {estimatedBundles.toLocaleString("de-DE")}
             </span>{" "}
-            PDFs ({pdfsPerFile} Leads pro Bündel).
+            {kindSingular}-PDFs ({pdfsPerFile} Leads pro Bündel).
           </p>
         </section>
 
@@ -486,23 +501,29 @@ function ConfigureView({
   );
 }
 
-function DownloadingView({ totalLeads }: { totalLeads: number }) {
+function DownloadingView({
+  totalLeads,
+  kindLabel,
+}: {
+  totalLeads: number;
+  kindLabel: string;
+}) {
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Export wird erstellt …</DialogTitle>
+        <DialogTitle>{kindLabel} werden erstellt …</DialogTitle>
         <DialogDescription>
-          {totalLeads.toLocaleString("de-DE")} Leads werden zu PDFs gebündelt
-          und mit der Adressliste in einer ZIP-Datei zusammengepackt. Das kann
-          einige Minuten dauern (mehrere GB möglich). Bitte den Tab geöffnet
-          lassen.
+          {totalLeads.toLocaleString("de-DE")} Leads werden zu {kindLabel}-PDFs
+          gebündelt und mit der Adressliste in einer ZIP-Datei
+          zusammengepackt. Das kann einige Minuten dauern (mehrere GB
+          möglich). Bitte den Tab geöffnet lassen.
         </DialogDescription>
       </DialogHeader>
 
       <div className="flex flex-col items-center justify-center gap-3 py-8">
         <Loader2 className="size-10 text-brand animate-spin" />
         <p className="text-sm font-medium text-ink">
-          Server erzeugt PDFs und Adressliste …
+          Server erzeugt {kindLabel}-PDFs und Adressliste …
         </p>
         <p className="text-xs text-ink-muted">
           Sobald der Download startet, kannst du diesen Dialog schließen.

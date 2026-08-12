@@ -215,6 +215,10 @@ export interface RunWithCounts {
   abLeadsB: number;
   abViewedA: number;
   abViewedB: number;
+  /** Ausgabe-Zähler für die Icon-Spalte in der Runden-Tabelle. */
+  letterCount: number;
+  envelopeCount: number;
+  emailSentCount: number;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -478,6 +482,22 @@ export async function listCampaignRunsWithCounts(
         SELECT COUNT(*)::int FROM ${leads}
         WHERE ${leads.runId} = ${runs.id} AND ${leads.abVariant} = 'B' AND ${leads.removedAt} IS NULL AND ${leads.viewCount} > 0
       )`,
+      // Icons-Spalte in der Runden-Tabelle: pro-Run-Kennzahlen für
+      // Brief-/Umschlag-/Mail-Icons (siehe runs-table.tsx). Kein Cache-
+      // Feld auf `runs` — wir zählen jedes Mal live, weil Regenerate/
+      // Purge die Werte jederzeit ändern kann.
+      letterCount: sql<number>`(
+        SELECT COUNT(*)::int FROM ${leads}
+        WHERE ${leads.runId} = ${runs.id} AND ${leads.pdfUrl} IS NOT NULL AND ${leads.removedAt} IS NULL
+      )`,
+      envelopeCount: sql<number>`(
+        SELECT COUNT(*)::int FROM ${leads}
+        WHERE ${leads.runId} = ${runs.id} AND ${leads.envelopePdfUrl} IS NOT NULL AND ${leads.removedAt} IS NULL
+      )`,
+      emailSentCount: sql<number>`(
+        SELECT COALESCE(SUM(sent_count), 0)::int FROM email_blasts
+        WHERE run_id = ${runs.id}
+      )`,
     })
     .from(runs)
     .where(
@@ -507,6 +527,9 @@ export async function listCampaignRunsWithCounts(
     abLeadsB: r.abLeadsB ?? 0,
     abViewedA: r.abViewedA ?? 0,
     abViewedB: r.abViewedB ?? 0,
+    letterCount: r.letterCount ?? 0,
+    envelopeCount: r.envelopeCount ?? 0,
+    emailSentCount: r.emailSentCount ?? 0,
   }));
 }
 

@@ -182,6 +182,7 @@ interface LoadedLeadPdf {
 export async function mergePdfsInBundle(
   bundleLeads: readonly Lead[],
   concurrency = 8,
+  source: "letter" | "envelope" = "letter",
 ): Promise<{
   pdfBytes: Uint8Array;
   includedLeads: Lead[];
@@ -191,19 +192,24 @@ export async function mergePdfsInBundle(
   // Next-Webpack mangled sonst die CJS-Default-Resolution.
   const { PDFDocument } = await import("pdf-lib");
 
+  const pickUrl = (lead: Lead): string | null =>
+    source === "envelope" ? lead.envelopePdfUrl : lead.pdfUrl;
+  const missingLabel = source === "envelope" ? "kein envelope_pdf_url" : "kein pdf_url";
+
   const loaded = await mapWithConcurrency<Lead, LoadedLeadPdf>(
     bundleLeads,
     concurrency,
     async (lead) => {
-      if (!lead.pdfUrl) {
-        return { lead, bytes: null, errorMessage: "kein pdf_url" };
+      const url = pickUrl(lead);
+      if (!url) {
+        return { lead, bytes: null, errorMessage: missingLabel };
       }
       try {
         // Wir uebergeben die URL 1:1 (inkl. eventuelles `?v=…`-Cache-Suffix).
         // Bunny routet ueber den Pfad-Teil und ignoriert den Query-String;
         // das Cache-Suffix dient nur dem Browser/CDN-Invalidation und stoert
         // den Server-zu-Server-Fetch nicht.
-        const res = await fetch(lead.pdfUrl);
+        const res = await fetch(url);
         if (!res.ok) {
           return {
             lead,

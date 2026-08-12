@@ -452,7 +452,7 @@ function CampaignCard({
       >
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/10" />
         <div className="relative max-w-[90%] rounded-squircle bg-white/95 px-[18px] py-[10px] text-center shadow-[0_6px_20px_-6px_rgba(0,0,0,0.18)] backdrop-blur-md">
-          <div className="line-clamp-2 text-[15px] font-bold leading-tight tracking-[-0.015em] text-ink">
+          <div className="line-clamp-2 text-base font-semibold leading-snug text-ink">
             {item.name}
           </div>
         </div>

@@ -57,6 +57,8 @@ const bodySchema = z.object({
     .string()
     .max(80)
     .optional(),
+  /** Was landet im ZIP: nur Briefe (Default) oder nur Umschläge. */
+  exportType: z.enum(["letters", "envelopes"]).default("letters"),
 });
 
 // Adressliste-Spalten (in dieser Reihenfolge!). `#` wird pro Sheet als
@@ -151,6 +153,7 @@ export async function POST(req: NextRequest) {
       runIds: Array.isArray(json?.runIds) ? json.runIds : [],
       pdfsPerFile: Number(json?.pdfsPerFile),
       baseName: typeof json?.baseName === "string" ? json.baseName : undefined,
+      exportType: typeof json?.exportType === "string" ? json.exportType : undefined,
     });
   } catch (err) {
     return NextResponse.json(
@@ -221,24 +224,37 @@ export async function POST(req: NextRequest) {
   const bundleMetas: BundleMeta[] = [];
   const skipped: SkippedRun[] = [];
 
+  const isEnvelope = body.exportType === "envelopes";
+  const bundleKind = isEnvelope ? "Umschlag" : "Brief";
+  const emptyReason = isEnvelope
+    ? "Keine fertigen Leads mit Umschlag."
+    : "Keine fertigen Leads mit Brief.";
+  const bundleTag = isEnvelope ? "Umschlaege" : "Bundle";
+
   try {
     for (const rt of runtimes) {
-      const leads = await getCompletedLeadsForBundle(rt.run.id, auth.user.id);
+      const allLeads = await getCompletedLeadsForBundle(rt.run.id, auth.user.id);
+      // Nur die Leads, die den gewählten Ausgabe-Typ tatsächlich haben —
+      // sonst wird das Bundle mit „PDF nicht verfügbar"-Zeilen aufgeblasen.
+      const leads = isEnvelope
+        ? allLeads.filter((l) => Boolean(l.envelopePdfUrl))
+        : allLeads.filter((l) => Boolean(l.pdfUrl));
       if (leads.length === 0) {
-        skipped.push({
-          runName: rt.run.name,
-          reason: "Keine fertigen Leads mit PDF.",
-        });
+        skipped.push({ runName: rt.run.name, reason: emptyReason });
         continue;
       }
       const chunks = chunkBy(leads, body.pdfsPerFile);
       for (let i = 0; i < chunks.length; i += 1) {
         const chunk = chunks[i] as Lead[];
         const bundleNumber = i + 1;
-        const bundleFilename = `${rt.slug}-Bundle-${String(bundleNumber).padStart(3, "0")}.pdf`;
+        const bundleFilename = `${rt.slug}-${bundleTag}-${String(bundleNumber).padStart(3, "0")}.pdf`;
         const sheetName = buildBundleSheetName(rt.slug, bundleNumber);
 
-        const { pdfBytes, perLeadResults } = await mergePdfsInBundle(chunk, 8);
+        const { pdfBytes, perLeadResults } = await mergePdfsInBundle(
+          chunk,
+          8,
+          isEnvelope ? "envelope" : "letter",
+        );
 
         zip.file(
           `${baseName}/${rt.slug}/${bundleFilename}`,
@@ -253,7 +269,7 @@ export async function POST(req: NextRequest) {
             appUrl,
             r.included
               ? "OK"
-              : `PDF nicht verfuegbar${r.reason ? ` (${r.reason})` : ""}`,
+              : `${bundleKind}-PDF nicht verfuegbar${r.reason ? ` (${r.reason})` : ""}`,
           ),
         );
 
