@@ -34,12 +34,24 @@ export async function POST(req: NextRequest) {
   }
 
   // Tenant-Guard: verify the campaign belongs to the user.
+  let campaign;
   try {
-    await getCampaign(body.campaignId, auth.user.id);
+    campaign = await getCampaign(body.campaignId, auth.user.id);
   } catch {
     return NextResponse.json(
       { error: "Kampagne nicht gefunden." },
       { status: 404 },
+    );
+  }
+
+  // Entwürfe können keine Runden starten — erst fertigstellen.
+  if (campaign.status === "draft") {
+    return NextResponse.json(
+      {
+        error:
+          "Diese Kampagne ist noch ein Entwurf. Bitte stelle sie zuerst im Wizard fertig.",
+      },
+      { status: 422 },
     );
   }
 

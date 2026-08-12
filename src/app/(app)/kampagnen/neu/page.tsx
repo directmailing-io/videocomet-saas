@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth-guard";
 import { listUserMedia } from "@/lib/db/queries/media";
 import { listUserTpls } from "@/lib/db/queries/landingPageTemplates";
 import { listUserDomains } from "@/lib/db/queries/user-domains";
+import { getCampaign } from "@/lib/db/queries/campaigns";
 import { NewCampaignWizard } from "./wizard-container";
 
 interface CustomLpApiRow {
@@ -41,8 +42,28 @@ async function fetchCustomTemplates(): Promise<CustomLpApiRow[]> {
   }
 }
 
-export default async function NeuePage() {
+export default async function NeuePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ draft?: string }>;
+}) {
   const { user } = await requireUser();
+  const { draft: draftParam } = await searchParams;
+
+  // Server-Draft-Resume (Migration 0052): `?draft=<id>` lädt einen
+  // Entwurf. Ungültige/fremde IDs oder bereits aktivierte Kampagnen
+  // werden ignoriert → frischer Wizard.
+  let initialDraft: { id: string; envelope: unknown } | null = null;
+  if (draftParam) {
+    try {
+      const campaign = await getCampaign(draftParam, user.id);
+      if (campaign.status === "draft") {
+        initialDraft = { id: campaign.id, envelope: campaign.wizardState };
+      }
+    } catch {
+      // Nicht gefunden → frisch starten.
+    }
+  }
 
   const [webcams, templates, allMedia, domains, customTemplates] =
     await Promise.all([
@@ -59,7 +80,9 @@ export default async function NeuePage() {
 
   return (
     <NewCampaignWizard
+      key={initialDraft?.id ?? "new"}
       userId={user.id}
+      initialDraft={initialDraft}
       initialData={{
         webcams: webcams.map((w) => ({
           id: w.id,

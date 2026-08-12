@@ -4,29 +4,30 @@ import * as React from "react";
 import type { WizardState } from "./wizard-container";
 
 /**
- * Hook: useWizardDraft
+ * Hook: useWizardDraft — Server-Drafts (Migration 0052)
  *
- * Persistiert den Kampagnen-Wizard-State debounced (600 ms) in `localStorage`,
- * scoped pro User-Account. Damit überlebt der Fortschritt sowohl reine
- * Navigationen (`/landingpages/neu` → Browser-Back) als auch das vollständige
- * Schließen des Tabs.
+ * Persistiert den Kampagnen-Wizard-State debounced als echte
+ * Kampagnen-Row mit `status='draft'`:
  *
- * Strategie:
- *   - Key: `vc:wizard:draft:<userId>` — User-Scope verhindert, dass auf
- *     geteilten Geräten Drafts zwischen Accounts „durchsickern".
- *   - Speicherform: JSON-Payload mit `version`, `state`, `step`, `savedAt`.
- *     Beim Restore wird via `safeParse` validiert; bei Schema-Drift wird der
- *     Entwurf verworfen und ein Toast-Hint zurückgegeben.
- *   - Quota-Fallback: bei `QuotaExceededError` versuchen wir es in
- *     `sessionStorage` erneut. Schlägt auch das fehl → Status „error".
- *   - Multi-Tab: bei jedem Mount wird der zuletzt geschriebene Wert gelesen
- *     (kein Merge). Ist `savedAt` eines anderen Tabs neuer als unser Mount,
- *     übernehmen wir das im `storage`-Event.
+ *   - Beim ERSTEN echten Fortschritt (State weicht von den Defaults ab)
+ *     legt der Hook per POST /api/campaigns { draft: true } die Row an.
+ *     Dadurch entsteht sofort eine „Entwurf"-Card in der Übersicht —
+ *     aber keine leere Karteileiche, wenn jemand den Wizard nur öffnet.
+ *   - Danach schreibt jeder Auto-Save per PATCH den kompletten
+ *     Wizard-Snapshot ({ version, step, state }) in `wizard_state` +
+ *     den Namen (für die Card). So sind auch Felder ohne eigene
+ *     campaigns-Spalte (KI-Begrüßungs-Prefix, Thumbnail-Folie, …)
+ *     verlustfrei wiederherstellbar.
+ *   - Nach dem Anlegen wird die URL still auf `?draft=<id>` gesetzt,
+ *     damit ein Reload denselben Entwurf weiterführt.
+ *   - Mehrere Entwürfe parallel: jeder Wizard-Besuch ohne `?draft=`
+ *     erzeugt beim ersten Fortschritt einen neuen.
  *
- * Wir verzichten bewusst auf serverside Drafts: der Wizard wird selten
- * stundenlang offen gelassen, und ein DB-Schema-Eintrag würde Listen-Filter
- * (`is_draft = false`) an mehreren Stellen erfordern. localStorage ist
- * deutlich risikoärmer und deckt 100 % des hier diskutierten Use-Cases ab.
+ * Legacy: Vor Migration 0052 lagen Drafts nur in localStorage
+ * (`vc:wizard:draft:<userId>`). Existiert dort noch ein Entwurf, zeigen
+ * wir weiterhin das Restore-Banner; „Fortsetzen" spielt ihn in den
+ * Wizard zurück (der Auto-Save migriert ihn dann automatisch zum
+ * Server-Draft) und räumt den localStorage-Key auf.
  */
 
 // v2: Intro-Schritt eingefügt — Step-Indizes alter Drafts passen nicht mehr.
@@ -35,7 +36,7 @@ import type { WizardState } from "./wizard-container";
 // v4: Wizard-State bekommt introGreetingPrefix + introNamePattern; ohne
 //     die Felder crasht die Wizard-Karte „KI-Begrüßung".
 const STORAGE_VERSION = 4;
-const DEBOUNCE_MS = 600;
+const DEBOUNCE_MS = 900;
 
 export type DraftSaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -50,8 +51,10 @@ export interface DraftEnvelope {
 }
 
 export interface UseWizardDraftOptions {
-  /** User-ID — gibt den Scope für den localStorage-Key vor. */
+  /** User-ID — Scope für den Legacy-localStorage-Key. */
   userId: string;
+  /** Server-Draft-ID aus `?draft=` — null bei frischem Wizard. */
+  initialDraftId: string | null;
   /** Aktueller Wizard-State (wird debounced gespeichert). */
   state: WizardState;
   /** Aktueller Step. */
@@ -63,20 +66,15 @@ export interface UseWizardDraftResult {
   status: DraftSaveStatus;
   /** Wann zuletzt erfolgreich gespeichert wurde (ISO). */
   lastSavedAt: string | null;
-  /**
-   * Existiert ein Draft, der NICHT zum aktuellen Mount gehört (d. h. der
-   * Nutzer hatte einen vorherigen Wizard angefangen)? Wenn ja, liefern wir
-   * den Envelope für das Banner zurück; sonst `null`.
-   */
+  /** ID der Server-Draft-Row (null solange noch nichts angelegt wurde). */
+  draftId: string | null;
+  /** Legacy-localStorage-Entwurf für das Restore-Banner; sonst null. */
   existingDraft: DraftEnvelope | null;
   /** „Fortsetzen": State + Step zurückspielen, Banner schließen. */
   restoreDraft: () => void;
-  /** „Verwerfen": Draft löschen, Banner schließen. */
+  /** „Verwerfen": Legacy-Draft löschen, Banner schließen. */
   discardDraft: () => void;
-  /**
-   * Auf erfolgreichen Final-Save aufzurufen — räumt den Draft auf, damit der
-   * Nutzer beim nächsten Wizard-Besuch keinen veralteten Entwurf vorfindet.
-   */
+  /** Nach erfolgreicher Aktivierung aufzurufen — räumt Legacy-Keys auf. */
   clearDraft: () => void;
 }
 
@@ -123,8 +121,8 @@ function isWizardState(value: unknown): value is WizardState {
       typeof v.pdfThumbnailFrameMs === "number");
   if (!baseOk) return false;
   // Paket-C-Felder: optional für Forward/Backward-Compat. Alte Drafts
-  // ohne diese Keys werden akzeptiert; beim Restore fallen wir in der
-  // Container-Komponente auf die Default-Initialwerte zurück.
+  // ohne diese Keys werden akzeptiert; beim Restore fallen wir auf die
+  // Default-Initialwerte zurück.
   const thumbEnabledOk =
     v.thumbnailImageEnabled === undefined ||
     typeof v.thumbnailImageEnabled === "boolean";
@@ -133,8 +131,8 @@ function isWizardState(value: unknown): value is WizardState {
     v.thumbnailImage === null ||
     (typeof v.thumbnailImage === "object" && v.thumbnailImage !== null);
   // Migration-0019-Felder: ebenfalls optional, damit Drafts aus der
-  // Vor-Paket-A-Zeit weiterhin restoren — der Migrate-Pfad in
-  // `restoreDraft` füllt die Defaults nach.
+  // Vor-Paket-A-Zeit weiterhin restoren — der Migrate-Pfad füllt die
+  // Defaults nach.
   const modeOk =
     v.thumbnailMode === undefined ||
     v.thumbnailMode === "frame" ||
@@ -158,7 +156,61 @@ function isEnvelope(value: unknown): value is DraftEnvelope {
   );
 }
 
-function readDraft(userId: string): DraftEnvelope | null {
+/**
+ * Fehlende optionale Felder mit Defaults nachfüllen (Forward-Compat für
+ * Drafts aus älteren Wizard-Versionen) — gemeinsam genutzt vom Legacy-
+ * Restore und vom Server-Draft-Resume.
+ */
+function migrateWizardState(state: WizardState): WizardState {
+  const prev = state as WizardState & {
+    thumbnailMode?: WizardState["thumbnailMode"];
+    thumbnailPlayIcon?: boolean;
+    abTestingEnabled?: boolean;
+    pdfGoogleDocsUrlB?: string;
+    abSplitMode?: WizardState["abSplitMode"];
+    abSplitWeightA?: number;
+    introEnabled?: boolean;
+    introGreetingPrefix?: WizardState["introGreetingPrefix"];
+    introNamePattern?: WizardState["introNamePattern"];
+  };
+  const fallbackMode: WizardState["thumbnailMode"] = prev.thumbnailImageEnabled
+    ? "custom_image"
+    : "frame";
+  return {
+    ...state,
+    thumbnailImageEnabled: prev.thumbnailImageEnabled ?? false,
+    thumbnailImage: prev.thumbnailImage ?? null,
+    thumbnailMode: prev.thumbnailMode ?? fallbackMode,
+    thumbnailPlayIcon: prev.thumbnailPlayIcon ?? false,
+    abTestingEnabled: prev.abTestingEnabled ?? false,
+    pdfGoogleDocsUrlB: prev.pdfGoogleDocsUrlB ?? "",
+    abSplitMode: prev.abSplitMode ?? "random",
+    abSplitWeightA: prev.abSplitWeightA ?? 50,
+    introEnabled: prev.introEnabled ?? false,
+    introGreetingPrefix: prev.introGreetingPrefix ?? "Hi",
+    introNamePattern: prev.introNamePattern ?? "firstName",
+  };
+}
+
+/**
+ * Server-seitig gespeicherten `wizard_state`-Snapshot validieren und
+ * migrieren. Liefert null bei Schema-Drift — der Wizard startet dann
+ * frisch, behält aber die Draft-ID (der nächste Auto-Save überschreibt
+ * den kaputten Snapshot).
+ */
+export function parseDraftEnvelope(
+  raw: unknown,
+): { state: WizardState; step: number } | null {
+  if (!isEnvelope(raw)) return null;
+  return { state: migrateWizardState(raw.state), step: raw.step };
+}
+
+/** Anzeigename für die Entwurfs-Card, solange noch kein Name vergeben ist. */
+export function draftDisplayName(state: WizardState): string {
+  return state.name.trim() || "Unbenannter Entwurf";
+}
+
+function readLegacyDraft(userId: string): DraftEnvelope | null {
   if (typeof window === "undefined") return null;
   try {
     const raw =
@@ -178,11 +230,19 @@ function readDraft(userId: string): DraftEnvelope | null {
   }
 }
 
+function removeLegacyDraft(userId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(storageKey(userId));
+    window.sessionStorage.removeItem(storageKey(userId));
+  } catch {
+    // graceful no-op
+  }
+}
+
 function isDefaultState(state: WizardState): boolean {
-  // „Frischer" Wizard-Mount — kein erwähnenswerter Fortschritt. Wir
-  // verzichten dann auf das Schreiben, damit ein Discard-Banner-Klick
-  // den localStorage nicht sofort wieder mit dem leeren Initial-State
-  // beschreibt.
+  // „Frischer" Wizard-Mount — kein erwähnenswerter Fortschritt. Solange
+  // der State den Defaults entspricht, legen wir KEINE Draft-Row an.
   return (
     state.name === "" &&
     state.webcamMediaId === null &&
@@ -205,180 +265,157 @@ function isDefaultState(state: WizardState): boolean {
 }
 
 export function useWizardDraft(
-  { userId, state, step }: UseWizardDraftOptions,
+  { userId, initialDraftId, state, step }: UseWizardDraftOptions,
   io: UseWizardDraftIO,
 ): UseWizardDraftResult {
-  const [status, setStatus] = React.useState<DraftSaveStatus>("idle");
+  const [status, setStatus] = React.useState<DraftSaveStatus>(
+    initialDraftId ? "saved" : "idle",
+  );
   const [lastSavedAt, setLastSavedAt] = React.useState<string | null>(null);
+  const [draftId, setDraftId] = React.useState<string | null>(initialDraftId);
   const [existingDraft, setExistingDraft] = React.useState<DraftEnvelope | null>(
     null,
   );
 
-  // Auf Mount: existiert ein älterer Entwurf? Banner zeigen.
+  // Immer der frischeste Stand — der Save liest hieraus, damit auch bei
+  // in-flight Requests nie ein veralteter Snapshot geschrieben wird.
+  const latestRef = React.useRef({ state, step });
+  latestRef.current = { state, step };
+
+  const draftIdRef = React.useRef<string | null>(initialDraftId);
+  const savingRef = React.useRef(false);
+  const dirtyAgainRef = React.useRef(false);
+
+  // Auf Mount: Legacy-localStorage-Entwurf? Banner zeigen — aber nur,
+  // wenn wir nicht ohnehin einen Server-Draft fortsetzen.
   React.useEffect(() => {
-    const draft = readDraft(userId);
-    if (draft) {
-      setExistingDraft(draft);
-      setLastSavedAt(draft.savedAt);
-    }
-    // ESLint: nur einmal beim Mount lesen — userId ändert sich im
-    // Wizard nicht.
+    if (initialDraftId) return;
+    const draft = readLegacyDraft(userId);
+    if (draft) setExistingDraft(draft);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Discard-Marker ────────────────────────────────────────────────────────
-  //
-  // Nach „Verwerfen" soll der Auto-Save NICHT sofort wieder den (jetzt
-  // leeren, aber existierenden) State zurückschreiben. Wir setzen ein Flag
-  // bis sich der State tatsächlich vom Default-State entfernt.
-  const suppressUntilDirtyRef = React.useRef(false);
+  const flush = React.useCallback(async () => {
+    if (savingRef.current) {
+      dirtyAgainRef.current = true;
+      return;
+    }
+    savingRef.current = true;
+    setStatus("saving");
+    try {
+      const { state: s, step: st } = latestRef.current;
+      const envelope: DraftEnvelope = {
+        version: STORAGE_VERSION,
+        savedAt: new Date().toISOString(),
+        state: s,
+        step: st,
+      };
+      const name = draftDisplayName(s);
+      let res: Response;
+      if (!draftIdRef.current) {
+        res = await fetch("/api/campaigns", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            draft: true,
+            name,
+            mode: s.mode,
+            introEnabled: s.introEnabled,
+            pdfEnabled: s.pdfEnabled,
+            wizardState: envelope,
+          }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { campaign?: { id: string } };
+          if (data.campaign?.id) {
+            draftIdRef.current = data.campaign.id;
+            setDraftId(data.campaign.id);
+            // Reload/Back soll denselben Entwurf weiterführen.
+            window.history.replaceState(
+              null,
+              "",
+              `/kampagnen/neu?draft=${data.campaign.id}`,
+            );
+          }
+        }
+      } else {
+        res = await fetch(`/api/campaigns/${draftIdRef.current}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            // Diese Spalten spiegeln wir mit, damit die Entwurfs-Card
+            // in der Übersicht die richtigen Feature-Chips zeigt.
+            mode: s.mode,
+            introEnabled: s.introEnabled,
+            pdfEnabled: s.pdfEnabled,
+            wizardState: envelope,
+          }),
+        });
+      }
+      if (res.ok) {
+        setLastSavedAt(envelope.savedAt);
+        setStatus("saved");
+        // Ab jetzt ist der Server die Wahrheit — Legacy-Key entsorgen,
+        // damit beim nächsten Wizard-Besuch kein veraltetes Banner kommt.
+        removeLegacyDraft(userId);
+      } else {
+        setStatus("error");
+      }
+    } catch {
+      setStatus("error");
+    } finally {
+      savingRef.current = false;
+      if (dirtyAgainRef.current) {
+        dirtyAgainRef.current = false;
+        void flush();
+      }
+    }
+  }, [userId]);
 
-  // Banner: Fortsetzen
+  // Banner: Fortsetzen (Legacy-localStorage → Wizard; der Auto-Save
+  // migriert den Stand danach automatisch zum Server-Draft).
   const restoreDraft = React.useCallback(() => {
     if (!existingDraft) return;
-    // Forward-Compat: alte Drafts (vor Paket C) hatten keine thumbnail-
-    // Felder. Wir füllen sie defensiv mit Defaults, sonst greift `undefined`
-    // bis in den Editor durch. Migration-0019-Felder ebenfalls defaults:
-    // Drafts vor Paket A kennen `thumbnailMode`/`thumbnailPlayIcon` nicht,
-    // wir mappen Bestands-`thumbnailImageEnabled=true` auf 'custom_image',
-    // sonst 'frame' — analog zum SQL-Backfill der Migration.
-    const prev = existingDraft.state as WizardState & {
-      thumbnailMode?: WizardState["thumbnailMode"];
-      thumbnailPlayIcon?: boolean;
-      abTestingEnabled?: boolean;
-      pdfGoogleDocsUrlB?: string;
-      abSplitMode?: WizardState["abSplitMode"];
-      abSplitWeightA?: number;
-      introEnabled?: boolean;
-    };
-    const fallbackMode: WizardState["thumbnailMode"] = prev.thumbnailImageEnabled
-      ? "custom_image"
-      : "frame";
-    const migrated: WizardState = {
-      ...existingDraft.state,
-      thumbnailImageEnabled: prev.thumbnailImageEnabled ?? false,
-      thumbnailImage: prev.thumbnailImage ?? null,
-      thumbnailMode: prev.thumbnailMode ?? fallbackMode,
-      thumbnailPlayIcon: prev.thumbnailPlayIcon ?? false,
-      abTestingEnabled: prev.abTestingEnabled ?? false,
-      pdfGoogleDocsUrlB: prev.pdfGoogleDocsUrlB ?? "",
-      abSplitMode: prev.abSplitMode ?? "random",
-      abSplitWeightA: prev.abSplitWeightA ?? 50,
-      introEnabled: prev.introEnabled ?? false,
-    };
-    io.setState(migrated);
+    io.setState(migrateWizardState(existingDraft.state));
     io.setStep(existingDraft.step);
     setExistingDraft(null);
-    setStatus("saved");
-  }, [existingDraft, io]);
+    removeLegacyDraft(userId);
+  }, [existingDraft, io, userId]);
 
   // Banner: Verwerfen
   const discardDraft = React.useCallback(() => {
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.removeItem(storageKey(userId));
-        window.sessionStorage.removeItem(storageKey(userId));
-      } catch {
-        // graceful no-op
-      }
-    }
+    removeLegacyDraft(userId);
     setExistingDraft(null);
-    setLastSavedAt(null);
-    setStatus("idle");
-    suppressUntilDirtyRef.current = true;
   }, [userId]);
 
-  // Nach Final-Save aufrufen
+  // Nach erfolgreicher Aktivierung aufrufen.
   const clearDraft = React.useCallback(() => {
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.removeItem(storageKey(userId));
-        window.sessionStorage.removeItem(storageKey(userId));
-      } catch {
-        // graceful no-op
-      }
-    }
-    setExistingDraft(null);
+    removeLegacyDraft(userId);
+    draftIdRef.current = null;
+    setDraftId(null);
     setStatus("idle");
     setLastSavedAt(null);
   }, [userId]);
 
   // ── Debounced Auto-Save ───────────────────────────────────────────────────
-  //
-  // Wir speichern nur den „nutzbaren" State (keine defaults), und nur, wenn
-  // a) Banner nicht offen ist (Banner = es liegt noch ein anderer Entwurf
-  //    rum, den der Nutzer entscheiden muss) und
-  // b) der State von den Defaults abweicht.
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    if (existingDraft) return; // Erst entscheiden lassen
-    const isFresh = isDefaultState(state);
-    if (suppressUntilDirtyRef.current) {
-      if (isFresh) return;
-      suppressUntilDirtyRef.current = false;
-    }
-    if (isFresh && lastSavedAt === null) return;
+    if (existingDraft) return; // Erst über den Legacy-Draft entscheiden lassen
+    // Ohne Draft-Row legen wir erst bei echtem Fortschritt an; MIT
+    // Draft-Row speichern wir jede Änderung (auch zurück auf Defaults).
+    if (!draftIdRef.current && isDefaultState(state)) return;
 
-    // WICHTIG: status NICHT hier (synchron beim Re-Render) auf "saving"
-    // setzen — wir setzen es erst INNERHALB des Timeouts. Sonst flackert
-    // die Pille bei jedem Tastenanschlag auf "Speichere…" und bleibt
-    // dauerhaft hängen, solange der User aktiv tippt (cleanup cancelt
-    // den Timeout vor dem tatsächlichen Save).
     const handle = window.setTimeout(() => {
-      setStatus("saving");
-      const envelope: DraftEnvelope = {
-        version: STORAGE_VERSION,
-        savedAt: new Date().toISOString(),
-        state,
-        step,
-      };
-      const payload = JSON.stringify(envelope);
-      try {
-        window.localStorage.setItem(storageKey(userId), payload);
-        setLastSavedAt(envelope.savedAt);
-        setStatus("saved");
-      } catch {
-        // Quota voll → sessionStorage versuchen.
-        try {
-          window.sessionStorage.setItem(storageKey(userId), payload);
-          setLastSavedAt(envelope.savedAt);
-          setStatus("saved");
-        } catch {
-          setStatus("error");
-        }
-      }
+      void flush();
     }, DEBOUNCE_MS);
-
     return () => window.clearTimeout(handle);
-  }, [state, step, userId, existingDraft, lastSavedAt]);
-
-  // Multi-Tab: anderer Tab schreibt → unseren `lastSavedAt` syncen, damit
-  // die Pille die Wahrheit widerspiegelt. Wir spielen den State NICHT in
-  // unseren Wizard zurück (würde User-Input überschreiben).
-  React.useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onStorage = (e: StorageEvent) => {
-      if (e.key !== storageKey(userId)) return;
-      if (!e.newValue) {
-        setLastSavedAt(null);
-        return;
-      }
-      try {
-        const parsed: unknown = JSON.parse(e.newValue);
-        if (isEnvelope(parsed)) {
-          setLastSavedAt(parsed.savedAt);
-        }
-      } catch {
-        // ignore
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, [userId]);
+  }, [state, step, existingDraft, flush]);
 
   return {
     status,
     lastSavedAt,
+    draftId,
     existingDraft,
     restoreDraft,
     discardDraft,

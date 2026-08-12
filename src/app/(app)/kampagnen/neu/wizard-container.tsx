@@ -14,7 +14,7 @@ import { WizardStep4Landingpage } from "./wizard-step4-landingpage";
 import { WizardStep5Pdf } from "./wizard-step5-pdf";
 import { WizardStepIntro } from "./wizard-step-intro";
 import { WizardStep6Summary } from "./wizard-step6-summary";
-import { useWizardDraft } from "./use-wizard-draft";
+import { parseDraftEnvelope, useWizardDraft } from "./use-wizard-draft";
 import { DraftRestoreBanner, DraftStatusPill } from "./wizard-draft-ui";
 import { WizardReloadButton } from "./wizard-reload-button";
 
@@ -146,6 +146,14 @@ export interface NewCampaignWizardProps {
    * auf geteilten Browsern Drafts nicht zwischen Accounts durchsickern.
    */
   userId: string;
+  /**
+   * Server-Draft (Migration 0052), wenn der Wizard über `?draft=<id>`
+   * geöffnet wurde: `envelope` ist der rohe `wizard_state`-Snapshot aus
+   * der DB. Validierung/Migration übernimmt `parseDraftEnvelope` —
+   * bei Schema-Drift startet der Wizard frisch, behält aber die ID
+   * (der nächste Auto-Save überschreibt den kaputten Snapshot).
+   */
+  initialDraft?: { id: string; envelope: unknown } | null;
   initialData: {
     webcams: WizardWebcam[];
     templates: WizardTemplate[];
@@ -210,16 +218,8 @@ const STEP_META: StepMeta[] = [
  */
 const EDITOR_STEP_INDEX = 3;
 
-export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProps) {
-  const router = useRouter();
-  const [step, setStep] = React.useState(0);
-  const [submitting, setSubmitting] = React.useState(false);
-  // Webcam list lives in wizard state so newly recorded webcams that step 1
-  // adds are still visible in the step 6 summary.
-  const [webcams, setWebcams] = React.useState<WizardWebcam[]>(
-    initialData.webcams,
-  );
-  const [state, setState] = React.useState<WizardState>({
+function createInitialWizardState(): WizardState {
+  return {
     name: "",
     webcamMediaId: null,
     mode: "webcam-only",
@@ -246,7 +246,62 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
     introEnabled: false,
     introGreetingPrefix: "Hi",
     introNamePattern: "firstName",
+  };
+}
+
+export function NewCampaignWizard({
+  userId,
+  initialDraft,
+  initialData,
+}: NewCampaignWizardProps) {
+  const router = useRouter();
+  // Server-Draft-Resume: Snapshot einmalig beim Mount parsen (Lazy-Init,
+  // damit der teure JSON-Walk nicht bei jedem Render läuft). Referenzen
+  // auf inzwischen gelöschte Ressourcen (Webcam, Vorlagen, Domain) werden
+  // genullt — sonst scheitert die Aktivierung später an FK-Constraints.
+  const [resumed] = React.useState(() => {
+    const parsed = initialDraft
+      ? parseDraftEnvelope(initialDraft.envelope)
+      : null;
+    if (!parsed) return null;
+    const s = parsed.state;
+    const webcamOk =
+      s.webcamMediaId === null ||
+      initialData.webcams.some((w) => w.id === s.webcamMediaId);
+    const tplOk =
+      s.landingPageTemplateId === null ||
+      initialData.templates.some((t) => t.id === s.landingPageTemplateId);
+    const customOk =
+      s.customLpTemplateId === null ||
+      (initialData.customTemplates ?? []).some(
+        (t) => t.id === s.customLpTemplateId,
+      );
+    const domainOk =
+      s.domainId === null ||
+      (initialData.domains ?? []).some((d) => d.id === s.domainId);
+    if (webcamOk && tplOk && customOk && domainOk) return parsed;
+    return {
+      // Fehlt die Webcam, zurück zu Schritt 1 — sie ist die Grundlage.
+      step: webcamOk ? parsed.step : 0,
+      state: {
+        ...s,
+        webcamMediaId: webcamOk ? s.webcamMediaId : null,
+        landingPageTemplateId: tplOk ? s.landingPageTemplateId : null,
+        customLpTemplateId: customOk ? s.customLpTemplateId : null,
+        domainId: domainOk ? s.domainId : null,
+      },
+    };
   });
+  const [step, setStep] = React.useState(resumed?.step ?? 0);
+  const [submitting, setSubmitting] = React.useState(false);
+  // Webcam list lives in wizard state so newly recorded webcams that step 1
+  // adds are still visible in the step 6 summary.
+  const [webcams, setWebcams] = React.useState<WizardWebcam[]>(
+    initialData.webcams,
+  );
+  const [state, setState] = React.useState<WizardState>(
+    () => resumed?.state ?? createInitialWizardState(),
+  );
 
   const update = React.useCallback((patch: Partial<WizardState>) => {
     setState((s) => ({ ...s, ...patch }));
@@ -264,18 +319,17 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
     startReload(() => router.refresh());
   }, [router]);
 
-  // ── Draft-Persistenz (Auto-Save) ────────────────────────────────────────
+  // ── Draft-Persistenz (Auto-Save als Server-Draft) ───────────────────────
   //
-  // Hält den Wizard-Fortschritt in localStorage am Leben, damit ein Wechsel
-  // nach `/landingpages/neu` oder ein versehentlicher Tab-Close den User
-  // nicht ALLES verlieren lässt. Siehe `./use-wizard-draft.ts` für Details
-  // (Debounce, Schema-Drift-Handling, Quota-Fallback in sessionStorage).
+  // Legt beim ersten echten Fortschritt eine Kampagnen-Row mit
+  // status='draft' an (→ „Entwurf"-Card in der Übersicht) und hält sie
+  // danach debounced aktuell. Siehe `./use-wizard-draft.ts` für Details.
   const draftIO = React.useMemo(
     () => ({ setState, setStep }),
     [],
   );
   const draft = useWizardDraft(
-    { userId, state, step },
+    { userId, initialDraftId: initialDraft?.id ?? null, state, step },
     draftIO,
   );
 
@@ -298,10 +352,16 @@ export function NewCampaignWizard({ userId, initialData }: NewCampaignWizardProp
   async function handleSave() {
     setSubmitting(true);
     try {
-      const res = await fetch("/api/campaigns", {
-        method: "POST",
+      // Existiert bereits eine Draft-Row (Auto-Save), aktivieren wir sie
+      // per PATCH — sonst klassischer POST. So gibt es nie Duplikate.
+      const activateId = draft.draftId;
+      const res = await fetch(
+        activateId ? `/api/campaigns/${activateId}` : "/api/campaigns",
+        {
+        method: activateId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...(activateId ? { status: "active" } : {}),
           name: state.name || "Neue Kampagne",
           webcamMediaId: state.webcamMediaId,
           mode: state.mode,

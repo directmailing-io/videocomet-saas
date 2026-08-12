@@ -33,6 +33,7 @@ export default async function KampagnenPage() {
     id: c.id,
     name: c.name,
     mode: c.mode,
+    status: c.status,
     createdAt: c.createdAt,
     runCount: runsByCampaign.get(c.id) ?? 0,
     introEnabled: c.introEnabled,

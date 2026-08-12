@@ -1,7 +1,15 @@
 import Link from "next/link";
-import { Megaphone, Film, Library, Loader2, Plus } from "lucide-react";
+import {
+  Megaphone,
+  Film,
+  Eye,
+  Loader2,
+  Plus,
+  PencilLine,
+  ChevronRight,
+} from "lucide-react";
 import { db } from "@/lib/db";
-import { runs, leads, mediaItems, campaigns } from "@/lib/db/schema";
+import { runs, leads } from "@/lib/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { requireUser } from "@/lib/auth-guard";
 import { StatCard } from "@/components/ui/stat-card";
@@ -10,9 +18,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { listUserCampaigns } from "@/lib/db/queries/campaigns";
+import { getActivityFeed } from "@/lib/db/queries/activity";
 import { runStatusLabel, runStatusVariant } from "@/lib/run-status";
 import { getRunEtas } from "@/lib/run-eta-read";
 import { formatRunEta } from "@/lib/run-eta-format";
+import {
+  DashboardActivityList,
+  type DashboardActivityItem,
+} from "./activity-card";
 
 function formatDate(d: Date | null): string {
   if (!d) return "";
@@ -32,47 +45,67 @@ export default async function DashboardPage() {
   const userId = user.id;
 
   const userCampaigns = await listUserCampaigns(userId);
+  const activeCampaignCount = userCampaigns.filter(
+    (c) => c.status === "active",
+  ).length;
+  const drafts = userCampaigns.filter((c) => c.status === "draft");
 
-  const [activeCampaigns] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(campaigns)
-    .where(eq(campaigns.userId, userId));
-
-  const [generatedVideos] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(leads)
-    .innerJoin(runs, eq(runs.id, leads.runId))
-    .where(and(eq(runs.userId, userId), eq(leads.status, "completed")));
-
-  const [mediaCount] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(mediaItems)
-    .where(eq(mediaItems.userId, userId));
-
-  const [openRuns] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(runs)
-    .where(and(eq(runs.userId, userId), eq(runs.status, "generating")));
-
-  const recentRuns = await db
-    .select({
-      id: runs.id,
-      name: runs.name,
-      status: runs.status,
-      campaignId: runs.campaignId,
-      totalLeads: runs.totalLeads,
-      completedLeads: runs.completedLeads,
-      createdAt: runs.createdAt,
-    })
-    .from(runs)
-    .where(eq(runs.userId, userId))
-    .orderBy(desc(runs.createdAt))
-    .limit(5);
+  const [
+    [generatedVideos],
+    [videoViews],
+    [openRuns],
+    recentRuns,
+    activityFeed,
+  ] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leads)
+      .innerJoin(runs, eq(runs.id, leads.runId))
+      .where(and(eq(runs.userId, userId), eq(leads.status, "completed"))),
+    db
+      .select({
+        total: sql<number>`coalesce(sum(${leads.viewCount}), 0)::int`,
+      })
+      .from(leads)
+      .innerJoin(runs, eq(runs.id, leads.runId))
+      .where(eq(runs.userId, userId)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(runs)
+      .where(and(eq(runs.userId, userId), eq(runs.status, "generating"))),
+    db
+      .select({
+        id: runs.id,
+        name: runs.name,
+        status: runs.status,
+        campaignId: runs.campaignId,
+        totalLeads: runs.totalLeads,
+        completedLeads: runs.completedLeads,
+        createdAt: runs.createdAt,
+      })
+      .from(runs)
+      .where(eq(runs.userId, userId))
+      .orderBy(desc(runs.createdAt))
+      .limit(5),
+    getActivityFeed(userId, { scope: { kind: "global" }, limit: 6 }),
+  ]);
 
   // Server-ETA (W3) für laufende Runden — reiner Redis-Read, Momentaufnahme
   // beim Seitenaufbau (kein Live-Countdown nötig auf dem Dashboard).
   const etaMap = await getRunEtas(
     recentRuns.filter((r) => r.status === "generating").map((r) => r.id),
+  );
+
+  const activityItems: DashboardActivityItem[] = activityFeed.rows.map(
+    (r) => ({
+      eventId: r.eventId,
+      ts: r.ts,
+      kind: r.kind,
+      payload: r.payload,
+      leadName: r.lead.name,
+      campaignName: r.campaign.name,
+      temperature: r.lead.temperature,
+    }),
   );
 
   const firstName = user.firstName?.trim() || user.email;
@@ -98,10 +131,10 @@ export default async function DashboardPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
           label="Aktive Kampagnen"
-          value={activeCampaigns?.count ?? 0}
+          value={activeCampaignCount}
           icon={<Megaphone />}
         />
         <StatCard
@@ -110,16 +143,50 @@ export default async function DashboardPage() {
           icon={<Film />}
         />
         <StatCard
-          label="Mediathek-Items"
-          value={mediaCount?.count ?? 0}
-          icon={<Library />}
+          label="Video-Aufrufe"
+          value={videoViews?.total ?? 0}
+          icon={<Eye />}
         />
         <StatCard
-          label="Offene Runs"
-          value={openRuns?.count ?? 0}
+          label="Laufende Runden"
+          value={runningCount}
           icon={<Loader2 />}
         />
       </div>
+
+      {drafts.length > 0 && (
+        <Link
+          href={
+            drafts.length === 1
+              ? `/kampagnen/neu?draft=${drafts[0].id}`
+              : "/kampagnen"
+          }
+          className="group mb-6 flex items-center gap-3 rounded-squircle-md bg-surface px-5 py-3.5 shadow-card transition-all duration-200 hover:shadow-card-hover"
+        >
+          <span className="size-2 shrink-0 rounded-full bg-amber-400 ring-4 ring-amber-400/20" />
+          <p className="min-w-0 flex-1 truncate text-sm text-ink">
+            {drafts.length === 1 ? (
+              <>
+                Dein Entwurf{" "}
+                <span className="font-semibold">
+                  {drafts[0].name?.trim() || "Unbenannter Entwurf"}
+                </span>{" "}
+                wartet auf Fertigstellung
+              </>
+            ) : (
+              <>
+                <span className="font-semibold">{drafts.length} Entwürfe</span>{" "}
+                warten auf Fertigstellung
+              </>
+            )}
+          </p>
+          <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-deep">
+            <PencilLine className="size-4" />
+            Weiter bearbeiten
+            <ChevronRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+          </span>
+        </Link>
+      )}
 
       {userCampaigns.length === 0 ? (
         <EmptyState
@@ -133,49 +200,79 @@ export default async function DashboardPage() {
           }
         />
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Aktuelle Runden</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {recentRuns.length === 0 ? (
-              <p className="text-sm text-ink-muted">
-                Noch keine Runden gestartet. Starte eine Runde in einer deiner Kampagnen.
-              </p>
-            ) : (
-              <ul className="divide-y divide-line-soft">
-                {recentRuns.map((r) => {
-                  const etaEntry =
-                    r.status === "generating" ? etaMap.get(r.id) : undefined;
-                  const etaLabel = etaEntry ? formatRunEta(etaEntry) : null;
-                  return (
-                  <li
-                    key={r.id}
-                    className="flex items-center justify-between gap-4 py-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        href={`/kampagnen/${r.campaignId}`}
-                        className="block text-sm font-semibold text-ink hover:text-brand-deep truncate"
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Aktuelle Runden</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {recentRuns.length === 0 ? (
+                <p className="text-sm text-ink-muted">
+                  Noch keine Runden gestartet. Starte eine Runde in einer
+                  deiner Kampagnen.
+                </p>
+              ) : (
+                <ul className="divide-y divide-line-soft">
+                  {recentRuns.map((r) => {
+                    const etaEntry =
+                      r.status === "generating" ? etaMap.get(r.id) : undefined;
+                    const etaLabel = etaEntry ? formatRunEta(etaEntry) : null;
+                    return (
+                      <li
+                        key={r.id}
+                        className="flex items-center justify-between gap-4 py-3"
                       >
-                        {r.name}
-                      </Link>
-                      <p className="text-xs text-ink-muted mt-0.5">
-                        {r.completedLeads} / {r.totalLeads} Leads &middot;{" "}
-                        {formatDate(r.createdAt)}
-                        {etaLabel ? <> &middot; {etaLabel}</> : null}
-                      </p>
-                    </div>
-                    <Badge variant={runStatusVariant(r.status)} dot>
-                      {runStatusLabel(r.status)}
-                    </Badge>
-                  </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+                        <div className="min-w-0 flex-1">
+                          <Link
+                            href={`/kampagnen/${r.campaignId}`}
+                            className="block text-sm font-semibold text-ink hover:text-brand-deep truncate"
+                          >
+                            {r.name}
+                          </Link>
+                          <p className="text-xs text-ink-muted mt-0.5">
+                            {r.completedLeads} / {r.totalLeads} Leads &middot;{" "}
+                            {formatDate(r.createdAt)}
+                            {etaLabel ? <> &middot; {etaLabel}</> : null}
+                          </p>
+                        </div>
+                        <Badge variant={runStatusVariant(r.status)} dot>
+                          {runStatusLabel(r.status)}
+                        </Badge>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle>Letzte Aktivität</CardTitle>
+              {activityItems.length > 0 && (
+                <Link
+                  href="/aktivitaet"
+                  className="text-sm font-semibold text-brand-deep hover:underline"
+                >
+                  Alle ansehen
+                </Link>
+              )}
+            </CardHeader>
+            <CardContent>
+              {activityItems.length === 0 ? (
+                <p className="text-sm text-ink-muted">
+                  Noch keine Aktivität. Sobald Empfänger deine Videos öffnen,
+                  siehst du es hier zuerst.
+                </p>
+              ) : (
+                <DashboardActivityList
+                  items={activityItems}
+                  now={Date.now()}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
     </>
   );

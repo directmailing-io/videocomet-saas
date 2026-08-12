@@ -9,11 +9,7 @@ import {
   listUserCampaigns,
 } from "@/lib/db/queries/campaigns";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
-import { eq, sql } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { introCalibrations } from "@/lib/db/schema";
-import { introCalibrationQueue } from "@/worker/intro-queue";
-import { DEFAULT_TTS_TEMPLATE } from "@/lib/intro";
+import { ensureIntroCalibration } from "@/lib/intro-calibration-enqueue";
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -75,13 +71,27 @@ const createSchema = z.object({
       message: "Vorlage muss {vorname} oder {nachname} enthalten.",
     })
     .optional(),
+  /**
+   * Kampagnen-Entwurf (Migration 0052): `draft: true` legt die Row mit
+   * status='draft' an — der Wizard ruft das beim ersten echten Fortschritt
+   * auf und speichert danach per PATCH weiter. `wizardState` ist der
+   * komplette Wizard-Snapshot ({ version, step, state }) für verlustfreies
+   * Fortsetzen; Form wird clientseitig beim Restore validiert.
+   */
+  draft: z.boolean().optional(),
+  wizardState: z.unknown().nullable().optional(),
 });
 
 export async function GET() {
   const auth = await requireUserApi();
   if (!auth.ok) return auth.response;
   const campaigns = await listUserCampaigns(auth.user.id);
-  return NextResponse.json({ campaigns });
+  // Entwürfe nicht mit ausliefern — der Endpoint speist Auswahl-Listen
+  // (z. B. Webhook-Konfiguration), in denen unfertige Kampagnen nichts
+  // verloren haben.
+  return NextResponse.json({
+    campaigns: campaigns.filter((c) => c.status !== "draft"),
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -102,72 +112,25 @@ export async function POST(req: NextRequest) {
   // ein invaliderer Renderer-Pfad fängt Schema-Drift später ab.
   // introTtsTemplate wandert NICHT in die campaigns-Tabelle — es wird
   // unten beim Kalibrierungs-Insert verwendet.
-  const { thumbnailImage, introTtsTemplate, ...rest } = body;
+  const { thumbnailImage, introTtsTemplate, draft, wizardState, ...rest } = body;
   const campaign = await createCampaign(auth.user.id, {
     ...rest,
+    status: draft ? "draft" : "active",
+    wizardState: draft ? wizardState ?? null : null,
     thumbnailImage:
       thumbnailImage === undefined
         ? undefined
         : (thumbnailImage as CampaignThumbnailImage | null),
   });
 
-  // Best-effort: Bei aktivierter KI-Begrüßung die Video-Kalibrierung des
-  // Webcam-Videos direkt anstoßen, damit sie beim ersten Run schon fertig
-  // ist. Fehler brechen die Kampagnen-Erstellung nicht ab — der Start-
-  // Endpoint fällt ohne fertige Kalibrierung auf den Direktpfad zurück.
-  if (body.introEnabled && body.webcamMediaId) {
-    try {
-      const [existing] = await db
-        .select({
-          id: introCalibrations.id,
-          status: introCalibrations.status,
-          voiceStatus: introCalibrations.voiceStatus,
-        })
-        .from(introCalibrations)
-        .where(eq(introCalibrations.mediaItemId, body.webcamMediaId))
-        .limit(1);
-      if (existing && existing.status === "ready" && existing.voiceStatus !== "ready") {
-        // Kalibrierung fertig, aber noch keine Kampagnen-Stimme (Video aus
-        // der Zeit vor per-Video-Training oder Trainings-Fehler) → Job neu
-        // anstoßen; der Processor misst neu und trainiert die Stimme mit.
-        await introCalibrationQueue().add(
-          "intro-calibration",
-          { calibrationId: existing.id },
-          { jobId: `intro-calibration-${existing.id}-${Date.now()}` },
-        );
-      }
-      // Fertige oder laufende Kalibrierung nicht zurücksetzen.
-      if (!existing || existing.status === "failed") {
-        const initialTemplate = introTtsTemplate ?? DEFAULT_TTS_TEMPLATE;
-        const [calibration] = await db
-          .insert(introCalibrations)
-          .values({
-            mediaItemId: body.webcamMediaId,
-            userId: auth.user.id,
-            status: "pending",
-            ttsTemplate: initialTemplate,
-          })
-          .onConflictDoUpdate({
-            target: introCalibrations.mediaItemId,
-            set: {
-              status: "pending",
-              error: null,
-              // Beim Retry-Weg (failed → pending) auch das Template
-              // aktualisieren, wenn der Client eines mitgesendet hat.
-              ...(introTtsTemplate ? { ttsTemplate: introTtsTemplate } : {}),
-              updatedAt: sql`now()`,
-            },
-          })
-          .returning();
-        await introCalibrationQueue().add(
-          "intro-calibration",
-          { calibrationId: calibration.id },
-          { jobId: `intro-calibration-${calibration.id}-${Date.now()}` },
-        );
-      }
-    } catch (err) {
-      console.error("[api/campaigns] intro calibration enqueue failed:", err);
-    }
+  // Kalibrierung erst anstoßen, wenn die Kampagne wirklich fertig ist —
+  // bei Entwürfen passiert das später im Aktivierungs-PATCH.
+  if (!draft && body.introEnabled && body.webcamMediaId) {
+    await ensureIntroCalibration(
+      auth.user.id,
+      body.webcamMediaId,
+      introTtsTemplate,
+    );
   }
 
   return NextResponse.json({ campaign }, { status: 201 });

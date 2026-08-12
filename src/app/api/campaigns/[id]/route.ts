@@ -15,6 +15,7 @@ import {
 import { removeBunnyAssetRefsForOwner } from "@/lib/db/queries/bunny-assets";
 import { triggerBunnyPurgeTick } from "@/lib/bunny/purge-trigger";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
+import { ensureIntroCalibration } from "@/lib/intro-calibration-enqueue";
 
 const patchSchema = z.object({
   name: z.string().min(1).max(120).optional(),
@@ -68,6 +69,24 @@ const patchSchema = z.object({
   // Aktivierung setzt UI-seitig ein ready-Voice-Profil + Kalibrierung
   // voraus; die Pipeline fällt sonst automatisch aufs Original zurück.
   introEnabled: z.boolean().optional(),
+  // ── Kampagnen-Entwürfe (Migration 0052) ─────────────────────────────────
+  // Nur die Aktivierung ist erlaubt (draft → active); der umgekehrte Weg
+  // existiert bewusst nicht — eine live geschaltete Kampagne kann Runden
+  // haben und darf nicht zurück in den Wizard-Limbus. `wizardState` ist
+  // der Auto-Save-Snapshot des Wizards; bei Aktivierung wird er genullt.
+  status: z.literal("active").optional(),
+  wizardState: z.unknown().nullable().optional(),
+  // TTS-Vorlage für den Kalibrierungs-Anstoß bei der Aktivierung —
+  // gleiche Regeln wie im POST-Endpoint.
+  introTtsTemplate: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .refine((v) => v.includes("{vorname}") || v.includes("{nachname}"), {
+      message: "Vorlage muss {vorname} oder {nachname} enthalten.",
+    })
+    .optional(),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -97,16 +116,28 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // Types wollen `CampaignThumbnailImage | null | undefined`. Wir cast'en
   // nur, wenn der Key tatsächlich gesetzt war, damit Drizzle's „nur
   // gesetzte Spalten anfassen"-Semantik erhalten bleibt.
-  const { thumbnailImage, ...rest } = body;
-  const patch =
-    thumbnailImage === undefined
-      ? rest
-      : {
-          ...rest,
-          thumbnailImage: thumbnailImage as CampaignThumbnailImage | null,
-        };
+  const { thumbnailImage, introTtsTemplate, ...rest } = body;
+  const activating = rest.status === "active";
+  const patch = {
+    ...rest,
+    // Bei Aktivierung den Wizard-Snapshot immer entsorgen — die echten
+    // Spalten sind ab jetzt die Wahrheit.
+    ...(activating ? { wizardState: null } : {}),
+    ...(thumbnailImage === undefined
+      ? {}
+      : { thumbnailImage: thumbnailImage as CampaignThumbnailImage | null }),
+  };
   try {
     const campaign = await updateCampaign(params.id, auth.user.id, patch);
+    // Kalibrierung für die KI-Begrüßung anstoßen, sobald der Entwurf
+    // fertiggestellt wird (Spiegel zur POST-Logik bei Direkt-Erstellung).
+    if (activating && campaign.introEnabled && campaign.webcamMediaId) {
+      await ensureIntroCalibration(
+        auth.user.id,
+        campaign.webcamMediaId,
+        introTtsTemplate,
+      );
+    }
     return NextResponse.json({ campaign });
   } catch {
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });

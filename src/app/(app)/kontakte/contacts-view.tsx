@@ -18,7 +18,14 @@ import {
   Play,
   MousePointerClick,
   Clock,
+  Copy,
+  MapPin,
+  Megaphone,
+  CalendarClock,
 } from "lucide-react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { classifyLeadFromAggregates } from "@/lib/activity/classify";
+import { TemperatureBadge } from "../aktivitaet/_components/temperature-badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -598,97 +605,219 @@ function ContactDetailDrawer({
     }
   }
 
+  // Aggregiertes Engagement über alle Vorkommen — CRM-Kopfzahlen.
+  const totals = detail.occurrences.reduce(
+    (acc, o) => {
+      acc.views += o.viewCount ?? 0;
+      acc.plays += o.playCount ?? 0;
+      acc.watch += o.watchTimeSec ?? 0;
+      acc.cta += o.ctaClickCount ?? 0;
+      return acc;
+    },
+    { views: 0, plays: 0, watch: 0, cta: 0 },
+  );
+  const temperature = classifyLeadFromAggregates({
+    pageViewCount: totals.views,
+    playCount: totals.plays,
+    watchTimeSec: totals.watch,
+    ctaClickCount: totals.cta,
+  });
+
+  function formatWatch(sec: number): string {
+    if (sec <= 0) return "0s";
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  }
+
+  async function copyEmail() {
+    if (!detail.email) return;
+    try {
+      await navigator.clipboard.writeText(detail.email);
+      toast({ variant: "success", title: "E-Mail kopiert", description: detail.email });
+    } catch {
+      toast({ variant: "danger", title: "Kopieren fehlgeschlagen" });
+    }
+  }
+
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center"
-      onClick={onClose}
-    >
-      <div
-        className="bg-surface w-full sm:max-w-2xl rounded-t-squircle-xl sm:rounded-squircle-xl shadow-card max-h-[90vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start gap-3 p-5 border-b border-line">
-          <div className="size-12 rounded-full bg-brand-soft flex items-center justify-center text-brand-deep font-bold shrink-0">
-            {detail.displayName.substring(0, 2).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-lg font-bold text-ink truncate">
-              {detail.displayName}
-            </div>
-            <div className="text-xs text-ink-muted mt-0.5 flex flex-wrap gap-3">
-              {detail.email && (
-                <span className="inline-flex items-center gap-1">
-                  <Mail className="size-3" /> {detail.email}
-                </span>
-              )}
-              {detail.company && (
-                <span className="inline-flex items-center gap-1">
-                  <Building2 className="size-3" /> {detail.company}
-                </span>
-              )}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-ink-muted hover:text-ink"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
+    <DialogPrimitive.Root open onOpenChange={(o) => !o && onClose()}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay
+          className={cn(
+            "fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+          )}
+        />
+        <DialogPrimitive.Content
+          className={cn(
+            "fixed right-0 top-0 z-50 h-full w-full max-w-[560px] bg-surface border-l border-line shadow-lift",
+            "flex flex-col",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+            "duration-200",
+          )}
+          aria-describedby={undefined}
+        >
+          <DialogPrimitive.Title className="sr-only">
+            Kontakt-Details
+          </DialogPrimitive.Title>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {loading ? (
-            <div className="py-8 text-center text-sm text-ink-muted">
-              <Loader2 className="size-4 animate-spin inline mr-2" /> Lade Details …
+          {/* Header */}
+          <header className="flex items-start gap-4 p-5 border-b border-line">
+            <div className="size-14 rounded-full bg-brand-soft flex items-center justify-center text-brand-deep font-bold text-lg shrink-0">
+              {detail.displayName.substring(0, 2).toUpperCase()}
             </div>
-          ) : (
-            <>
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
-                  Vorkommen ({detail.occurrences.length})
-                </h3>
-                <div className="space-y-2">
-                  {detail.occurrences.map((occ) => (
-                    <OccurrenceCard key={occ.leadId} occ={occ} />
-                  ))}
-                </div>
+            <div className="flex-1 min-w-0">
+              <div className="mb-1">
+                <TemperatureBadge temperature={temperature} compact />
               </div>
+              <h2 className="text-lg font-bold text-ink truncate">
+                {detail.displayName}
+              </h2>
+              {detail.company && (
+                <p className="text-sm text-ink-muted truncate">
+                  {detail.company}
+                </p>
+              )}
+            </div>
+            <DialogPrimitive.Close
+              className="p-1.5 rounded-full text-ink-muted hover:text-ink hover:bg-surface-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+              aria-label="Schließen"
+            >
+              <X className="size-4" />
+            </DialogPrimitive.Close>
+          </header>
 
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
-                  Importierte Daten
-                </h3>
-                <div className="rounded-squircle-sm bg-surface-soft p-4">
-                  <dl className="text-xs grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
-                    {Object.entries(detail.occurrences[0]?.rawData ?? {}).map(
-                      ([k, v]) => (
+          {/* Engagement-Kacheln */}
+          <div className="grid grid-cols-4 gap-2 px-5 py-4 border-b border-line-soft">
+            <EngagementTile
+              icon={<Eye className="size-3.5" />}
+              label="Aufrufe"
+              value={totals.views}
+            />
+            <EngagementTile
+              icon={<Play className="size-3.5" />}
+              label="Video-Starts"
+              value={totals.plays}
+            />
+            <EngagementTile
+              icon={<Clock className="size-3.5" />}
+              label="Watch-Time"
+              value={formatWatch(totals.watch)}
+            />
+            <EngagementTile
+              icon={<MousePointerClick className="size-3.5" />}
+              label="CTA-Klicks"
+              value={totals.cta}
+            />
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-6">
+            {loading ? (
+              <div className="py-8 text-center text-sm text-ink-muted">
+                <Loader2 className="size-4 animate-spin inline mr-2" /> Lade
+                Details …
+              </div>
+            ) : (
+              <>
+                {/* Kontaktdaten */}
+                <section>
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+                    Kontaktdaten
+                  </h3>
+                  <div className="rounded-squircle-sm bg-surface-soft divide-y divide-line-soft">
+                    <ContactField
+                      icon={<Mail className="size-3.5" />}
+                      label="E-Mail"
+                      value={detail.email}
+                      action={
+                        detail.email ? (
+                          <button
+                            type="button"
+                            onClick={() => void copyEmail()}
+                            className="p-1 rounded-full text-ink-muted hover:text-ink hover:bg-surface-muted"
+                            title="E-Mail kopieren"
+                          >
+                            <Copy className="size-3.5" />
+                          </button>
+                        ) : null
+                      }
+                    />
+                    <ContactField
+                      icon={<Building2 className="size-3.5" />}
+                      label="Firma"
+                      value={detail.company}
+                    />
+                    <ContactField
+                      icon={<MapPin className="size-3.5" />}
+                      label="Stadt"
+                      value={detail.city}
+                    />
+                    <ContactField
+                      icon={<Megaphone className="size-3.5" />}
+                      label="Kampagnen"
+                      value={`${detail.campaignCount} ${detail.campaignCount === 1 ? "Kampagne" : "Kampagnen"} · ${detail.runCount} ${detail.runCount === 1 ? "Runde" : "Runden"}`}
+                    />
+                    <ContactField
+                      icon={<CalendarClock className="size-3.5" />}
+                      label="Zuletzt kontaktiert"
+                      value={new Date(detail.lastSeenAt).toLocaleDateString(
+                        "de-DE",
+                        { day: "2-digit", month: "2-digit", year: "numeric" },
+                      )}
+                    />
+                  </div>
+                </section>
+
+                {/* Kampagnen-Historie */}
+                <section>
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+                    Kampagnen-Historie ({detail.occurrences.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {detail.occurrences.map((occ) => (
+                      <OccurrenceCard key={occ.leadId} occ={occ} />
+                    ))}
+                  </div>
+                </section>
+
+                {/* Importierte Daten */}
+                <section>
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+                    Importierte Daten
+                  </h3>
+                  <div className="rounded-squircle-sm bg-surface-soft p-4">
+                    <dl className="text-xs grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+                      {Object.entries(
+                        detail.occurrences[0]?.rawData ?? {},
+                      ).map(([k, v]) => (
                         <React.Fragment key={k}>
                           <dt className="text-ink-muted truncate">{k}</dt>
                           <dd className="text-ink font-mono truncate">
                             {String(v ?? "—")}
                           </dd>
                         </React.Fragment>
-                      ),
-                    )}
-                  </dl>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+                      ))}
+                    </dl>
+                  </div>
+                </section>
+              </>
+            )}
+          </div>
 
-        <div className="border-t border-line-soft p-4 bg-danger-soft/40">
-          {!showDeleteBox ? (
-            <Button
-              variant="ghost"
-              onClick={() => setShowDeleteBox(true)}
-              iconLeft={<Trash2 className="size-4" />}
-              className="text-danger hover:bg-danger-soft"
-            >
-              Kontakt endgültig löschen (DSGVO)
-            </Button>
-          ) : (
+          <div className="border-t border-line-soft p-4 bg-danger-soft/40">
+            {!showDeleteBox ? (
+              <Button
+                variant="ghost"
+                onClick={() => setShowDeleteBox(true)}
+                iconLeft={<Trash2 className="size-4" />}
+                className="text-danger hover:bg-danger-soft"
+              >
+                Kontakt endgültig löschen (DSGVO)
+              </Button>
+            ) : (
             <div className="space-y-3">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="size-4 text-red-600 shrink-0 mt-0.5" />
@@ -740,8 +869,59 @@ function ContactDetailDrawer({
               </div>
             </div>
           )}
-        </div>
-      </div>
+          </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}
+
+function EngagementTile({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5 rounded-squircle-sm bg-surface-soft px-2.5 py-2">
+      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-ink-muted">
+        {icon}
+        <span className="truncate">{label}</span>
+      </span>
+      <span className="text-sm font-bold text-ink tabular-nums truncate">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function ContactField({
+  icon,
+  label,
+  value,
+  action,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | null | undefined;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2.5">
+      <span className="text-ink-muted shrink-0">{icon}</span>
+      <span className="w-36 shrink-0 text-xs text-ink-muted">{label}</span>
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate text-sm",
+          value ? "text-ink" : "text-ink-muted italic",
+        )}
+      >
+        {value || "—"}
+      </span>
+      {action}
     </div>
   );
 }

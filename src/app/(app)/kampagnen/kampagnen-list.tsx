@@ -28,6 +28,7 @@ export interface KampagnenListItem {
   id: string;
   name: string;
   mode: string;
+  status: "draft" | "active";
   createdAt: Date | string | null;
   runCount: number;
   introEnabled: boolean;
@@ -139,7 +140,9 @@ export function KampagnenList({ items }: { items: KampagnenListItem[] }) {
 
   async function confirmDelete() {
     if (!target) return;
-    if (confirmText !== target.name) return;
+    // Entwürfe haben noch keine Runden/Videos — die Tipp-Bestätigung
+    // wäre reine Schikane.
+    if (target.status !== "draft" && confirmText !== target.name) return;
     setPending(target.id);
     try {
       const res = await fetch(`/api/campaigns/${target.id}`, {
@@ -264,32 +267,71 @@ export function KampagnenList({ items }: { items: KampagnenListItem[] }) {
                 <AlertTriangle className="size-5" />
               </div>
               <div className="flex-1">
-                <DialogTitle>Kampagne löschen?</DialogTitle>
+                <DialogTitle>
+                  {target?.status === "draft"
+                    ? "Entwurf löschen?"
+                    : "Kampagne löschen?"}
+                </DialogTitle>
                 <DialogDescription className="mt-1">
-                  Beim Löschen von{" "}
-                  <span className="font-semibold text-ink">{target?.name}</span>{" "}
-                  werden alle zugehörigen Daten unwiderruflich entfernt.
+                  {target?.status === "draft" ? (
+                    <>
+                      Der Entwurf{" "}
+                      <span className="font-semibold text-ink">
+                        {target?.name}
+                      </span>{" "}
+                      wird entfernt. Er hat noch keine Runden oder Videos.
+                    </>
+                  ) : (
+                    <>
+                      Beim Löschen von{" "}
+                      <span className="font-semibold text-ink">
+                        {target?.name}
+                      </span>{" "}
+                      werden alle zugehörigen Daten unwiderruflich entfernt.
+                    </>
+                  )}
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
-          <ul className="list-disc pl-5 text-sm text-ink space-y-1.5">
-            <li>Alle Runden dieser Kampagne</li>
-            <li>Alle Leads dieser Runden</li>
-            <li>Alle generierten Videos auf Bunny Stream</li>
-            <li>Alle generierten PDFs auf Bunny Storage</li>
-          </ul>
+          {target?.status !== "draft" && (
+            <ul className="list-disc pl-5 text-sm text-ink space-y-1.5">
+              <li>Alle Runden dieser Kampagne</li>
+              <li>Alle Leads dieser Runden</li>
+              <li>Alle generierten Videos auf Bunny Stream</li>
+              <li>Alle generierten PDFs auf Bunny Storage</li>
+            </ul>
+          )}
           <DialogFooter>
-            <Button variant="ghost" type="button" onClick={closeDelete}>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={closeDelete}
+              disabled={Boolean(pending)}
+            >
               Abbrechen
             </Button>
-            <Button
-              variant="danger"
-              type="button"
-              onClick={() => setStage("stage2")}
-            >
-              Weiter
-            </Button>
+            {target?.status === "draft" ? (
+              <Button
+                variant="danger"
+                type="button"
+                loading={Boolean(pending)}
+                onClick={() => {
+                  void confirmDelete();
+                }}
+                iconLeft={<Trash2 className="size-4" />}
+              >
+                Entwurf löschen
+              </Button>
+            ) : (
+              <Button
+                variant="danger"
+                type="button"
+                onClick={() => setStage("stage2")}
+              >
+                Weiter
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -383,6 +425,11 @@ function CampaignCard({
   const hasPresentation = item.mode === "with-presentation";
   const hasIntro = item.introEnabled;
   const hasBrief = item.pdfEnabled;
+  const isDraft = item.status === "draft";
+  // Entwürfe führen zurück in den Wizard, aktive Kampagnen in die Detailseite.
+  const href = isDraft
+    ? `/kampagnen/neu?draft=${item.id}`
+    : `/kampagnen/${item.id}`;
 
   return (
     <div
@@ -393,9 +440,11 @@ function CampaignCard({
     >
       {/* Klickfläche über die ganze Card (unter dem Dropdown). */}
       <Link
-        href={`/kampagnen/${item.id}`}
+        href={href}
         className="absolute inset-0 z-10 rounded-squircle-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2"
-        aria-label={`${item.name} öffnen`}
+        aria-label={
+          isDraft ? `${item.name} weiter bearbeiten` : `${item.name} öffnen`
+        }
       />
 
       {/* Dropdown-Menü — über der Klickfläche. */}
@@ -420,16 +469,27 @@ function CampaignCard({
               <Pencil className="size-4 text-ink-muted" />
               Umbenennen
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href={`/kampagnen/${item.id}/bearbeiten`}>
-                <Pencil className="size-4 text-ink-muted" />
-                Bearbeiten
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled>
-              <Copy className="size-4 text-ink-muted" />
-              Duplizieren
-            </DropdownMenuItem>
+            {isDraft ? (
+              <DropdownMenuItem asChild>
+                <Link href={href}>
+                  <Pencil className="size-4 text-ink-muted" />
+                  Weiter bearbeiten
+                </Link>
+              </DropdownMenuItem>
+            ) : (
+              <>
+                <DropdownMenuItem asChild>
+                  <Link href={`/kampagnen/${item.id}/bearbeiten`}>
+                    <Pencil className="size-4 text-ink-muted" />
+                    Bearbeiten
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                  <Copy className="size-4 text-ink-muted" />
+                  Duplizieren
+                </DropdownMenuItem>
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               danger
@@ -463,15 +523,26 @@ function CampaignCard({
         <div className="mb-3 flex items-center justify-center gap-2.5">
           <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
             <span
-              className="size-2 rounded-full bg-emerald-500 ring-[3px] ring-emerald-500/20"
+              className={
+                isDraft
+                  ? "size-2 rounded-full bg-amber-400 ring-[3px] ring-amber-400/25"
+                  : "size-2 rounded-full bg-emerald-500 ring-[3px] ring-emerald-500/20"
+              }
               aria-hidden
             />
-            Aktiv
+            {isDraft ? "Entwurf" : "Aktiv"}
           </span>
-          <span className="text-[12px] font-medium text-ink-muted">
-            <span className="mr-2 text-ink-muted">·</span>
-            {item.runCount} {item.runCount === 1 ? "Runde" : "Runden"}
-          </span>
+          {isDraft ? (
+            <span className="text-[12px] font-medium text-ink-muted">
+              <span className="mr-2 text-ink-muted">·</span>
+              Weiter bearbeiten
+            </span>
+          ) : (
+            <span className="text-[12px] font-medium text-ink-muted">
+              <span className="mr-2 text-ink-muted">·</span>
+              {item.runCount} {item.runCount === 1 ? "Runde" : "Runden"}
+            </span>
+          )}
         </div>
         <div className="flex flex-nowrap items-center justify-center gap-[5px] overflow-hidden">
           <span className="inline-flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-brand-soft px-2.5 py-[3px] text-[10.5px] font-semibold leading-[1.3] text-brand-deep">

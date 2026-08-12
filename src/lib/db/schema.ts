@@ -314,6 +314,19 @@ export const campaigns = pgTable("campaigns", {
    */
   introEnabled: boolean("intro_enabled").notNull().default(false),
 
+  /**
+   * Kampagnen-Entwürfe (Migration 0052): 'draft' = im Wizard angelegt,
+   * noch nicht fertiggestellt — kann keine Runden starten und taucht in
+   * Auswahl-Listen (Mail-Versand, Webhooks) nicht auf. 'active' = normal.
+   */
+  status: text("status").$type<"draft" | "active">().notNull().default("active"),
+  /**
+   * Wizard-Snapshot für Entwürfe (Migration 0052): { version, step, state }.
+   * Hält auch Felder ohne eigene campaigns-Spalte (z. B. KI-Begrüßungs-
+   * Prefix). Wird bei Aktivierung auf NULL gesetzt.
+   */
+  wizardState: jsonb("wizard_state").$type<unknown>(),
+
   /** Soft-Delete-Marker (Migration 0015). NULL = aktiv. Queries werden
    * in Paket G angepasst — bis dahin keine Verhaltensänderung. */
   deletedAt: timestamp("deleted_at", { withTimezone: true }),

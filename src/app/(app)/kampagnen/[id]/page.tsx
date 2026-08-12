@@ -1,6 +1,6 @@
 import type * as React from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { BarChart3, Mail, Plus, Send } from "lucide-react";
 import { eq } from "drizzle-orm";
 import { requireUser } from "@/lib/auth-guard";
@@ -108,6 +108,11 @@ export default async function CampaignDetailPage({
     campaign = await getCampaign(id, user.id);
   } catch {
     notFound();
+  }
+
+  // Entwürfe haben keine Detailseite — zurück in den Wizard.
+  if (campaign.status === "draft") {
+    redirect(`/kampagnen/neu?draft=${campaign.id}`);
   }
 
   // Parallel: Runden-Liste, Aggregate, Lead-Flat-Liste, Blasts, Postfächer, Webcam-Media
