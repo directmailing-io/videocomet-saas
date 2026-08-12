@@ -387,24 +387,24 @@ function CampaignCard({
   return (
     <div
       className={
-        "relative rounded-[28px] bg-[#f8f7fd] p-[18px_18px_20px] shadow-[0_6px_24px_-12px_rgba(60,40,130,0.12)] transition-[transform,box-shadow] duration-200 hover:-translate-y-[3px] hover:shadow-[0_12px_32px_-12px_rgba(60,40,130,0.18)]" +
+        "group relative rounded-squircle-xl bg-[#f8f7fd] p-[18px_18px_20px] shadow-[0_6px_24px_-12px_rgba(60,40,130,0.12)] transition-[transform,box-shadow] duration-200 hover:-translate-y-[3px] hover:shadow-[0_12px_32px_-12px_rgba(60,40,130,0.18)]" +
         (pending ? " opacity-60 pointer-events-none" : "")
       }
     >
-      {/* Klickfläche für's Öffnen */}
+      {/* Klickfläche über die ganze Card (unter dem Dropdown). */}
       <Link
         href={`/kampagnen/${item.id}`}
-        className="absolute inset-0 z-0 rounded-[28px]"
+        className="absolute inset-0 z-10 rounded-squircle-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2"
         aria-label={`${item.name} öffnen`}
       />
 
-      {/* Dropdown-Menü */}
-      <div className="absolute right-2.5 top-2.5 z-20">
+      {/* Dropdown-Menü — über der Klickfläche. */}
+      <div className="absolute right-2.5 top-2.5 z-30">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="inline-flex size-[30px] items-center justify-center rounded-[10px] bg-white/85 text-ink backdrop-blur-md hover:bg-white"
+              className="inline-flex size-[30px] items-center justify-center rounded-squircle-sm bg-white/85 text-ink backdrop-blur-md hover:bg-white"
               aria-label="Kampagnen-Aktionen"
             >
               <MoreHorizontal className="size-4" />
@@ -445,21 +445,21 @@ function CampaignCard({
         </DropdownMenu>
       </div>
 
-      {/* Farbiger Cover mit Namens-Tile */}
+      {/* Farbiger Cover mit Namens-Tile — nicht-interaktiv, damit der Card-Link greift. */}
       <div
-        className="relative flex aspect-[16/10] items-center justify-center overflow-hidden rounded-[18px] bg-cover bg-center p-4"
+        className="pointer-events-none relative flex aspect-[16/10] items-center justify-center overflow-hidden rounded-squircle-lg bg-cover bg-center p-4"
         style={{ backgroundImage: `url('${bg}')` }}
       >
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/10" />
-        <div className="relative z-10 max-w-[90%] rounded-[14px] bg-white/95 px-[18px] py-[10px] text-center shadow-[0_6px_20px_-6px_rgba(0,0,0,0.18)] backdrop-blur-md">
+        <div className="relative max-w-[90%] rounded-squircle bg-white/95 px-[18px] py-[10px] text-center shadow-[0_6px_20px_-6px_rgba(0,0,0,0.18)] backdrop-blur-md">
           <div className="line-clamp-2 text-[15px] font-bold leading-tight tracking-[-0.015em] text-ink">
             {item.name}
           </div>
         </div>
       </div>
 
-      {/* Metadaten */}
-      <div className="pointer-events-none relative z-10 mt-[14px] px-1 text-center">
+      {/* Metadaten — nicht-interaktiv. */}
+      <div className="pointer-events-none relative mt-[14px] px-1 text-center">
         <div className="mb-3 flex items-center justify-center gap-2.5">
           <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
             <span
