@@ -35,6 +35,8 @@ export default async function KampagnenPage() {
     mode: c.mode,
     createdAt: c.createdAt,
     runCount: runsByCampaign.get(c.id) ?? 0,
+    introEnabled: c.introEnabled,
+    pdfEnabled: c.pdfEnabled,
   }));
 
   return (
