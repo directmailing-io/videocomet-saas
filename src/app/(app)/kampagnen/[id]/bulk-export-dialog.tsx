@@ -14,6 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toaster";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
@@ -50,7 +57,22 @@ const PDFS_PER_FILE_MIN = 1;
 const PDFS_PER_FILE_MAX = 1000;
 const PDFS_PER_FILE_DEFAULT = 100;
 const LOCAL_STORAGE_KEY = "vc:bulkExport:pdfsPerFile";
+const SORT_STORAGE_KEY = "vc:bulkExport:sortBy";
 const LARGE_EXPORT_THRESHOLD = 2000;
+
+type BundleSort = "original" | "firstName" | "lastName" | "zip" | "city";
+
+const SORT_OPTIONS: { value: BundleSort; label: string }[] = [
+  { value: "original", label: "Original-Reihenfolge (wie importiert)" },
+  { value: "firstName", label: "Vorname (A–Z)" },
+  { value: "lastName", label: "Nachname (A–Z)" },
+  { value: "zip", label: "PLZ (aufsteigend)" },
+  { value: "city", label: "Ort (A–Z)" },
+];
+
+function isBundleSort(v: string | null): v is BundleSort {
+  return SORT_OPTIONS.some((o) => o.value === v);
+}
 
 type Stage = "configure" | "downloading" | "success";
 
@@ -115,6 +137,7 @@ export function BulkExportDialog({
     String(PDFS_PER_FILE_DEFAULT),
   );
   const [baseName, setBaseName] = React.useState<string>("");
+  const [sortBy, setSortBy] = React.useState<BundleSort>("original");
   const [error, setError] = React.useState<string | null>(null);
   const placeholder = React.useMemo(() => `bulk-export-${todayIso()}`, []);
 
@@ -130,6 +153,10 @@ export function BulkExportDialog({
       setPdfsPerFile(PDFS_PER_FILE_DEFAULT);
       setPdfsPerFileInput(String(PDFS_PER_FILE_DEFAULT));
     }
+    // Sortierung wird persistiert, damit Brief- und Umschlag-Export
+    // automatisch mit derselben Sortierung laufen (1:1-Kuvertierung).
+    const storedSort = safeRead(SORT_STORAGE_KEY);
+    setSortBy(isBundleSort(storedSort) ? storedSort : "original");
     setStage("configure");
     setBaseName("");
     setError(null);
@@ -140,6 +167,11 @@ export function BulkExportDialog({
     if (!open) return;
     safeWrite(LOCAL_STORAGE_KEY, String(pdfsPerFile));
   }, [open, pdfsPerFile]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    safeWrite(SORT_STORAGE_KEY, sortBy);
+  }, [open, sortBy]);
 
   // Derived figures used in the configure-screen summary.
   const selectedRuns = React.useMemo(
@@ -190,6 +222,7 @@ export function BulkExportDialog({
           runIds,
           pdfsPerFile,
           exportType,
+          sortBy,
           // Only send baseName when the user typed something — let the
           // backend pick its own default otherwise.
           ...(trimmedBase ? { baseName: trimmedBase } : {}),
@@ -276,6 +309,8 @@ export function BulkExportDialog({
             pdfsPerFileInput={pdfsPerFileInput}
             onApplyPreset={applyPreset}
             onCustomInput={handleCustomInput}
+            sortBy={sortBy}
+            onSortBy={setSortBy}
             baseName={baseName}
             onBaseName={setBaseName}
             placeholder={placeholder}
@@ -313,6 +348,8 @@ interface ConfigureViewProps {
   pdfsPerFileInput: string;
   onApplyPreset: (n: number) => void;
   onCustomInput: (raw: string) => void;
+  sortBy: BundleSort;
+  onSortBy: (v: BundleSort) => void;
   baseName: string;
   onBaseName: (v: string) => void;
   placeholder: string;
@@ -333,6 +370,8 @@ function ConfigureView({
   pdfsPerFileInput,
   onApplyPreset,
   onCustomInput,
+  sortBy,
+  onSortBy,
   baseName,
   onBaseName,
   placeholder,
@@ -433,6 +472,31 @@ function ConfigureView({
               {estimatedBundles.toLocaleString("de-DE")}
             </span>{" "}
             {kindSingular}-PDFs ({pdfsPerFile} Leads pro Bündel).
+          </p>
+        </section>
+
+        {/* Sort order ---------------------------------------------- */}
+        <section>
+          <Label htmlFor="bulk-export-sort">Sortierung</Label>
+          <Select
+            value={sortBy}
+            onValueChange={(v) => onSortBy(v as BundleSort)}
+          >
+            <SelectTrigger id="bulk-export-sort">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SORT_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="mt-1 text-xs text-ink-muted">
+            Die Auswahl wird gemerkt: Exportierst du Briefe und Umschläge
+            nacheinander, sind beide gleich sortiert — Brief und Umschlag
+            passen 1:1 zueinander.
           </p>
         </section>
 

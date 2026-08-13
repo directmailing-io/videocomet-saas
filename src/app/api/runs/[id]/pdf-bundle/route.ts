@@ -6,6 +6,11 @@ import { z } from "zod";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getRun } from "@/lib/db/queries/runs";
 import { getCompletedLeadsForBundle } from "@/lib/db/queries/leads";
+import {
+  BUNDLE_SORT_VALUES,
+  sortLeadsForBundle,
+  type BundleSort,
+} from "@/lib/bundle-helpers";
 import type { leads } from "@/lib/db/schema";
 import type { PDFDocument as PDFDocumentType } from "pdf-lib";
 
@@ -47,10 +52,13 @@ const sizeSchema = z
 const variantSchema = z.enum(["mixed", "split", "A", "B"]);
 type BundleVariant = z.infer<typeof variantSchema>;
 
+const sortSchema = z.enum(BUNDLE_SORT_VALUES);
+
 const bodySchema = z.object({
   pdfsPerFile: sizeSchema,
   baseName: z.string().max(80).optional(),
   variant: variantSchema.optional(),
+  sortBy: sortSchema.optional(),
 });
 
 export async function POST(
@@ -64,6 +72,7 @@ export async function POST(
     pdfsPerFile: number;
     baseName?: string;
     variant?: BundleVariant;
+    sortBy?: BundleSort;
   };
   try {
     const json = await req.json();
@@ -71,6 +80,7 @@ export async function POST(
       pdfsPerFile: Number(json.pdfsPerFile),
       baseName: typeof json.baseName === "string" ? json.baseName : undefined,
       variant: typeof json.variant === "string" ? json.variant : undefined,
+      sortBy: typeof json.sortBy === "string" ? json.sortBy : undefined,
     });
   } catch (err) {
     return NextResponse.json(
@@ -88,6 +98,7 @@ export async function POST(
     body.pdfsPerFile,
     body.baseName,
     body.variant ?? "mixed",
+    body.sortBy ?? "original",
   );
 }
 
@@ -106,6 +117,9 @@ export async function GET(
   const variantParsed = variantSchema.safeParse(
     req.nextUrl.searchParams.get("variant") ?? "mixed",
   );
+  const sortParsed = sortSchema.safeParse(
+    req.nextUrl.searchParams.get("sortBy") ?? "original",
+  );
 
   return buildBundle(
     params.id,
@@ -113,6 +127,7 @@ export async function GET(
     pdfsPerFile,
     baseNameRaw ?? undefined,
     variantParsed.success ? variantParsed.data : "mixed",
+    sortParsed.success ? sortParsed.data : "original",
   );
 }
 
@@ -166,7 +181,7 @@ function buildGroups(
   if (variant === "mixed") {
     return [
       {
-        label: "Alle Briefe (Original-Reihenfolge)",
+        label: "Alle Briefe",
         suffix: "",
         letterDir: "",
         envelopeDir: "umschlaege",
@@ -230,6 +245,7 @@ async function buildBundle(
   pdfsPerFile: number,
   baseNameInput: string | undefined,
   variant: BundleVariant,
+  sortBy: BundleSort,
 ): Promise<Response> {
   let run;
   try {
@@ -239,8 +255,12 @@ async function buildBundle(
   }
 
   // Geteilter Ordering-Helper — identisch zur Reihenfolge des Bulk-Export-
-  // Endpoints, damit die Excel-Spalten 1:1 zur PDF-Seite passen.
-  const completed = await getCompletedLeadsForBundle(runId, userId);
+  // Endpoints, damit die Excel-Spalten 1:1 zur PDF-Seite passen. Sortierung
+  // VOR buildGroups, damit A/B-Gruppen und Batches sortiert entstehen.
+  const completed = sortLeadsForBundle(
+    await getCompletedLeadsForBundle(runId, userId),
+    sortBy,
+  );
 
   if (completed.length === 0) {
     return NextResponse.json(
@@ -359,16 +379,24 @@ async function buildBundle(
 
     // README: Manifest + Warnungen. Immer bei Varianten-Auswahl oder wenn
     // etwas schiefging — der Lettershop soll Abweichungen sehen, nicht raten.
-    if (variant !== "mixed" || warnings.length > 0) {
+    if (variant !== "mixed" || sortBy !== "original" || warnings.length > 0) {
+      const sortLabel: Record<BundleSort, string> = {
+        original: "Original-Reihenfolge (wie importiert)",
+        firstName: "Alphabetisch nach Vorname",
+        lastName: "Alphabetisch nach Nachname",
+        zip: "Nach PLZ (aufsteigend)",
+        city: "Alphabetisch nach Ort",
+      };
       const lines: string[] = [
         `PDF-Bundle "${baseName}" — Runde: ${run.name}`,
         `Zusammenstellung: ${
           variant === "mixed"
-            ? "Original-Reihenfolge (gemischt)"
+            ? "Alle Briefe (gemischt)"
             : variant === "split"
               ? "Nach Brief-Variante getrennt"
               : `Nur Brief ${variant}`
         }`,
+        `Sortierung: ${sortLabel[sortBy]}`,
         "",
         ...groups.map((g) => `${g.label}: ${g.leads.length} Leads`),
         "",

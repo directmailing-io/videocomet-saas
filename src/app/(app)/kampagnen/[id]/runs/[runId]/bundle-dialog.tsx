@@ -34,6 +34,16 @@ const PDFS_PER_FILE = [10, 25, 50, 100, 200, 500];
 
 type BundleVariant = "mixed" | "split" | "A" | "B";
 
+type BundleSort = "original" | "firstName" | "lastName" | "zip" | "city";
+
+const SORT_OPTIONS: { value: BundleSort; label: string }[] = [
+  { value: "original", label: "Original-Reihenfolge (wie importiert)" },
+  { value: "firstName", label: "Vorname (A–Z)" },
+  { value: "lastName", label: "Nachname (A–Z)" },
+  { value: "zip", label: "PLZ (aufsteigend)" },
+  { value: "city", label: "Ort (A–Z)" },
+];
+
 const VARIANT_OPTIONS: {
   value: BundleVariant;
   label: string;
@@ -65,6 +75,7 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
   const [open, setOpen] = React.useState(false);
   const [pdfsPerFile, setPdfsPerFile] = React.useState("100");
   const [variant, setVariant] = React.useState<BundleVariant>("mixed");
+  const [sortBy, setSortBy] = React.useState<BundleSort>("original");
   const [downloading, setDownloading] = React.useState(false);
   const { toast } = useToast();
   // Default base name: runName slugified light. User can overwrite.
@@ -102,6 +113,7 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
         baseName: baseName.trim() || defaultBase,
       });
       if (abActive && variant !== "mixed") params.set("variant", variant);
+      if (sortBy !== "original") params.set("sortBy", sortBy);
       // Bewusst kein window.location — der Fetch erlaubt uns den
       // Loading-State ehrlich zu tracken (bis die Server-Response Headers
       // kommen) und dann den Blob-Download programmatisch auszuloesen.
@@ -200,6 +212,29 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
               </div>
             </div>
           )}
+
+          <div>
+            <Label htmlFor="bundle-sort">Sortierung</Label>
+            <Select
+              value={sortBy}
+              onValueChange={(v) => setSortBy(v as BundleSort)}
+            >
+              <SelectTrigger id="bundle-sort">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-ink-muted">
+              Umschläge werden automatisch in derselben Reihenfolge sortiert —
+              Brief und Umschlag passen immer 1:1 zueinander.
+            </p>
+          </div>
 
           <div>
             <Label htmlFor="bundle-name">Dateiname</Label>

@@ -118,6 +118,137 @@ export function uniqueSlug(taken: Set<string>, candidate: string): string {
   return fallback;
 }
 
+// ── Bundle-Sortierung ──────────────────────────────────────────────────────
+
+/**
+ * Sortierung der Leads VOR dem Bündeln/Chunken. "original" = Import-
+ * Reihenfolge (rowIndex). Alle anderen sortieren nach Lead-Datenfeldern.
+ *
+ * WICHTIG (Kuvertier-Garantie): Die Sortierung muss deterministisch sein —
+ * Brief- und Umschlag-Export laufen als getrennte Requests über dieselbe
+ * Lead-Liste und müssen exakt dieselbe Reihenfolge produzieren, damit
+ * Brief N immer in Umschlag N passt. Deshalb enden alle Vergleichsketten
+ * in `rowIndex` + `id` als eindeutigem Tiebreaker.
+ */
+export type BundleSort = "original" | "firstName" | "lastName" | "zip" | "city";
+
+export const BUNDLE_SORT_VALUES = [
+  "original",
+  "firstName",
+  "lastName",
+  "zip",
+  "city",
+] as const satisfies readonly BundleSort[];
+
+/**
+ * Case-insensitives Feld-Lookup auf heterogenen CSV-Spaltennamen (deutsch/
+ * englisch/snake_case/Umlaut-encodiert). Alphanumerisch normalisiert,
+ * erster nicht-leerer Treffer gewinnt. Gleiche Logik wie die Adressliste
+ * des Bulk-Exports — Sortierung und Excel-Anzeige sehen dieselben Werte.
+ */
+function lookupLeadField(
+  data: Record<string, unknown> | null | undefined,
+  candidates: readonly string[],
+): string {
+  if (!data) return "";
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/ä/g, "a")
+      .replace(/ö/g, "o")
+      .replace(/ü/g, "u")
+      .replace(/ß/g, "s")
+      .replace(/[^a-z0-9]/g, "");
+  const map = new Map<string, string>();
+  for (const [k, v] of Object.entries(data)) {
+    if (typeof v === "string" && v.trim() !== "") {
+      const nk = norm(k);
+      if (!map.has(nk)) map.set(nk, v.trim());
+    }
+  }
+  for (const cand of candidates) {
+    const hit = map.get(norm(cand));
+    if (hit) return hit;
+  }
+  return "";
+}
+
+const FIELD_CANDIDATES: Record<
+  Exclude<BundleSort, "original">,
+  readonly string[]
+> = {
+  firstName: ["Vorname", "firstName", "first_name"],
+  lastName: ["Nachname", "lastName", "last_name", "Name"],
+  zip: ["PLZ", "Postleitzahl", "zip", "zipCode", "zip_code", "postcode", "postal_code"],
+  city: ["Stadt", "city", "Ort", "town"],
+};
+
+/** Sekundär-Schlüssel pro Sortierung — hält gleiche Werte sinnvoll gruppiert. */
+const SORT_KEY_CHAIN: Record<
+  Exclude<BundleSort, "original">,
+  readonly Exclude<BundleSort, "original">[]
+> = {
+  firstName: ["firstName", "lastName"],
+  lastName: ["lastName", "firstName"],
+  zip: ["zip", "city", "lastName", "firstName"],
+  city: ["city", "zip", "lastName", "firstName"],
+};
+
+/**
+ * Sortiert eine Lead-Liste für den Bundle-Export. Gibt eine NEUE Liste
+ * zurück (Input bleibt unangetastet).
+ *
+ * - de-Collation, case-insensitiv, `numeric: true` (PLZ "01067" < "10115",
+ *   aber auch "Haus 2" < "Haus 10")
+ * - Leads OHNE Wert im Sortierfeld landen ans Ende (nicht zwischen die
+ *   sortierten — sonst zerreißt es die Stapel im Lettershop)
+ * - Deterministisch bei Gleichstand: rowIndex, dann Lead-ID
+ */
+export function sortLeadsForBundle(
+  leads: readonly Lead[],
+  sort: BundleSort,
+): Lead[] {
+  const out = [...leads];
+  if (sort === "original") return out;
+
+  const collator = new Intl.Collator("de", {
+    sensitivity: "base",
+    numeric: true,
+  });
+  const chain = SORT_KEY_CHAIN[sort];
+
+  // Sortierwerte einmal pro Lead vorberechnen (nicht in jedem Vergleich).
+  const keys = new Map<Lead, string[]>();
+  for (const lead of out) {
+    keys.set(
+      lead,
+      chain.map((field) =>
+        lookupLeadField(
+          lead.data as Record<string, unknown> | null,
+          FIELD_CANDIDATES[field],
+        ),
+      ),
+    );
+  }
+
+  out.sort((a, b) => {
+    const ka = keys.get(a) ?? [];
+    const kb = keys.get(b) ?? [];
+    // Leads ohne Wert im PRIMÄR-Feld immer ans Ende.
+    const aEmpty = (ka[0] ?? "") === "";
+    const bEmpty = (kb[0] ?? "") === "";
+    if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
+    for (let i = 0; i < chain.length; i += 1) {
+      const cmp = collator.compare(ka[i] ?? "", kb[i] ?? "");
+      if (cmp !== 0) return cmp;
+    }
+    if (a.rowIndex !== b.rowIndex) return a.rowIndex - b.rowIndex;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+
+  return out;
+}
+
 /**
  * Klein-Semaphore: `n` parallel laufende Tasks, alle anderen warten. Wird
  * im Bundle-Download benutzt, damit wir bei 500 Lead-PDFs nicht 500

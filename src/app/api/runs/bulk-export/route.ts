@@ -16,10 +16,12 @@ import {
 } from "@/lib/db/queries/leads";
 import { buildLeadPublicUrl } from "@/lib/lead-public-url";
 import {
+  BUNDLE_SORT_VALUES,
   buildBundleSheetName,
   chunkBy,
   mergePdfsInBundle,
   slugifyRunName,
+  sortLeadsForBundle,
   uniqueSlug,
 } from "@/lib/bundle-helpers";
 import type ArchiverNs from "archiver";
@@ -59,6 +61,12 @@ const bodySchema = z.object({
     .optional(),
   /** Was landet im ZIP: nur Briefe (Default) oder nur Umschläge. */
   exportType: z.enum(["letters", "envelopes"]).default("letters"),
+  /**
+   * Sortierung der Leads VOR dem Bündeln. Deterministisch (Tiebreaker
+   * rowIndex → id), damit getrennte Brief-/Umschlag-Exporte mit derselben
+   * Sortierung exakt dieselbe Reihenfolge produzieren (Kuvertier-Garantie).
+   */
+  sortBy: z.enum(BUNDLE_SORT_VALUES).default("original"),
 });
 
 // Adressliste-Spalten (in dieser Reihenfolge!). `#` wird pro Sheet als
@@ -154,6 +162,7 @@ export async function POST(req: NextRequest) {
       pdfsPerFile: Number(json?.pdfsPerFile),
       baseName: typeof json?.baseName === "string" ? json.baseName : undefined,
       exportType: typeof json?.exportType === "string" ? json.exportType : undefined,
+      sortBy: typeof json?.sortBy === "string" ? json.sortBy : undefined,
     });
   } catch (err) {
     return NextResponse.json(
@@ -233,7 +242,12 @@ export async function POST(req: NextRequest) {
 
   try {
     for (const rt of runtimes) {
-      const allLeads = await getCompletedLeadsForBundle(rt.run.id, auth.user.id);
+      // Sortierung VOR dem Typ-Filter — Brief- und Umschlag-Export mit
+      // derselben Sortierung liefern so garantiert dieselbe Reihenfolge.
+      const allLeads = sortLeadsForBundle(
+        await getCompletedLeadsForBundle(rt.run.id, auth.user.id),
+        body.sortBy,
+      );
       // Nur die Leads, die den gewählten Ausgabe-Typ tatsächlich haben —
       // sonst wird das Bundle mit „PDF nicht verfügbar"-Zeilen aufgeblasen.
       const leads = isEnvelope
