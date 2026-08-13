@@ -172,13 +172,17 @@ function lookupLeadField(
  * Brief N immer in Umschlag N passt. Deshalb endet der Vergleich immer in
  * `rowIndex` + `id` als eindeutigem Tiebreaker.
  */
+export type BundleSortDir = "asc" | "desc";
+
 export function sortLeadsForBundle(
   leads: readonly Lead[],
   column: string | null | undefined,
+  direction: BundleSortDir = "asc",
 ): Lead[] {
   const out = [...leads];
   const col = (column ?? "").trim();
   if (col === "") return out;
+  const dir = direction === "desc" ? -1 : 1;
 
   const collator = new Intl.Collator("de", {
     sensitivity: "base",
@@ -197,12 +201,13 @@ export function sortLeadsForBundle(
   out.sort((a, b) => {
     const ka = keys.get(a) ?? "";
     const kb = keys.get(b) ?? "";
-    // Leads ohne Wert in der Sortier-Spalte immer ans Ende.
+    // Leads ohne Wert in der Sortier-Spalte immer ans Ende — unabhängig
+    // von der Richtung (auch absteigend gehören Lücken nach hinten).
     const aEmpty = ka === "";
     const bEmpty = kb === "";
     if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
     const cmp = collator.compare(ka, kb);
-    if (cmp !== 0) return cmp;
+    if (cmp !== 0) return cmp * dir;
     if (a.rowIndex !== b.rowIndex) return a.rowIndex - b.rowIndex;
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });

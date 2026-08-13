@@ -1,7 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Archive, AlertTriangle, FileDown, Loader2 } from "lucide-react";
+import {
+  Archive,
+  AlertTriangle,
+  ArrowDownAZ,
+  ArrowUpZA,
+  FileDown,
+  Loader2,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -58,6 +65,9 @@ const PDFS_PER_FILE_MAX = 1000;
 const PDFS_PER_FILE_DEFAULT = 100;
 const LOCAL_STORAGE_KEY = "vc:bulkExport:pdfsPerFile";
 const SORT_STORAGE_KEY = "vc:bulkExport:sortBy";
+const SORT_DIR_STORAGE_KEY = "vc:bulkExport:sortDir";
+
+type SortDir = "asc" | "desc";
 const LARGE_EXPORT_THRESHOLD = 2000;
 
 /** Sentinel für „keine Sortierung" — kann nicht mit echten Spaltennamen kollidieren. */
@@ -127,6 +137,7 @@ export function BulkExportDialog({
   );
   const [baseName, setBaseName] = React.useState<string>("");
   const [sortBy, setSortBy] = React.useState<string>(SORT_ORIGINAL);
+  const [sortDir, setSortDir] = React.useState<SortDir>("asc");
   // Tatsächliche Spalten der Leadlisten der gewählten Runs — jede Liste hat
   // andere Spalten, deshalb kommen die Optionen vom Server.
   const [sortColumns, setSortColumns] = React.useState<string[] | null>(null);
@@ -146,6 +157,7 @@ export function BulkExportDialog({
       setPdfsPerFileInput(String(PDFS_PER_FILE_DEFAULT));
     }
     setSortBy(SORT_ORIGINAL);
+    setSortDir("asc");
     setSortColumns(null);
     setStage("configure");
     setBaseName("");
@@ -166,7 +178,11 @@ export function BulkExportDialog({
         const cols = data.columns ?? [];
         setSortColumns(cols);
         const stored = safeRead(SORT_STORAGE_KEY);
-        if (stored && cols.includes(stored)) setSortBy(stored);
+        if (stored && cols.includes(stored)) {
+          setSortBy(stored);
+          const storedDir = safeRead(SORT_DIR_STORAGE_KEY);
+          if (storedDir === "asc" || storedDir === "desc") setSortDir(storedDir);
+        }
       })
       .catch(() => {
         if (!cancelled) setSortColumns([]);
@@ -187,6 +203,11 @@ export function BulkExportDialog({
     // Nur echte User-Auswahl persistieren — so übernimmt der nächste
     // Export (z.B. Umschläge nach Briefen) automatisch dieselbe Sortierung.
     safeWrite(SORT_STORAGE_KEY, v);
+  }
+
+  function handleSortDir(v: SortDir) {
+    setSortDir(v);
+    safeWrite(SORT_DIR_STORAGE_KEY, v);
   }
 
   // Derived figures used in the configure-screen summary.
@@ -238,7 +259,7 @@ export function BulkExportDialog({
           runIds,
           pdfsPerFile,
           exportType,
-          ...(sortBy !== SORT_ORIGINAL ? { sortBy } : {}),
+          ...(sortBy !== SORT_ORIGINAL ? { sortBy, sortDir } : {}),
           // Only send baseName when the user typed something — let the
           // backend pick its own default otherwise.
           ...(trimmedBase ? { baseName: trimmedBase } : {}),
@@ -326,8 +347,10 @@ export function BulkExportDialog({
             onApplyPreset={applyPreset}
             onCustomInput={handleCustomInput}
             sortBy={sortBy}
+            sortDir={sortDir}
             sortColumns={sortColumns}
             onSortBy={handleSortBy}
+            onSortDir={handleSortDir}
             baseName={baseName}
             onBaseName={setBaseName}
             placeholder={placeholder}
@@ -366,8 +389,10 @@ interface ConfigureViewProps {
   onApplyPreset: (n: number) => void;
   onCustomInput: (raw: string) => void;
   sortBy: string;
+  sortDir: SortDir;
   sortColumns: string[] | null;
   onSortBy: (v: string) => void;
+  onSortDir: (v: SortDir) => void;
   baseName: string;
   onBaseName: (v: string) => void;
   placeholder: string;
@@ -389,8 +414,10 @@ function ConfigureView({
   onApplyPreset,
   onCustomInput,
   sortBy,
+  sortDir,
   sortColumns,
   onSortBy,
+  onSortDir,
   baseName,
   onBaseName,
   placeholder,
@@ -511,13 +538,45 @@ function ConfigureView({
               </SelectItem>
               {(sortColumns ?? []).map((col) => (
                 <SelectItem key={col} value={col}>
-                  Nach „{col}&ldquo; (aufsteigend)
+                  {col}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {sortBy !== SORT_ORIGINAL && (
+            <div
+              role="radiogroup"
+              aria-label="Sortierrichtung"
+              className="mt-2 grid grid-cols-2 gap-1.5"
+            >
+              {(
+                [
+                  { value: "asc", label: "Aufsteigend", Icon: ArrowDownAZ },
+                  { value: "desc", label: "Absteigend", Icon: ArrowUpZA },
+                ] as const
+              ).map(({ value, label, Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={sortDir === value}
+                  onClick={() => onSortDir(value)}
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded-squircle-sm px-3 py-2 text-sm font-medium transition-colors",
+                    sortDir === value
+                      ? "bg-brand-soft/60 ring-2 ring-brand/30"
+                      : "bg-surface-soft hover:bg-brand-soft/30",
+                  )}
+                >
+                  <Icon className="size-4" aria-hidden />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           <p className="mt-1 text-xs text-ink-muted">
-            Sortiert nach den Spalten deiner Leadliste. Die Auswahl wird
+            Die gesamte Liste wird zuerst sortiert und erst danach in die
+            PDF-Bündel aufgeteilt (z.B. 1–100, 101–200). Die Auswahl wird
             gemerkt: Exportierst du Briefe und Umschläge nacheinander, sind
             beide gleich sortiert — Brief und Umschlag passen 1:1 zueinander.
           </p>

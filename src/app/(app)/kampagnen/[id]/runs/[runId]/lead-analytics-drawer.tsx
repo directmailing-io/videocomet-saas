@@ -17,9 +17,19 @@
 
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { ExternalLink, Eye, MousePointerClick, Play, X } from "lucide-react";
+import {
+  ExternalLink,
+  Eye,
+  FileDown,
+  Mail,
+  MousePointerClick,
+  Play,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildLeadPublicUrl } from "@/lib/lead-public-url";
+import { Badge } from "@/components/ui/badge";
+import { formatCompanyName, formatPersonName } from "@/lib/format-name";
 
 export interface LeadAnalyticsDrawerLead {
   id: string;
@@ -27,6 +37,13 @@ export interface LeadAnalyticsDrawerLead {
   /** Custom-Domain-Hostname falls die Kampagne eine aktive hat. */
   customHostname?: string | null;
   data: Record<string, string>;
+  /** Optional: Pipeline-Status für die Status-Pille im Header. */
+  status?: string;
+  /** Optional: direkte Download-Links für Brief/Umschlag. */
+  pdfUrl?: string | null;
+  envelopePdfUrl?: string | null;
+  /** Brief-Variante bei A/B-Runden. */
+  abVariant?: "A" | "B" | null;
 }
 
 export interface LeadAnalyticsDrawerProps {
@@ -115,8 +132,19 @@ export function LeadAnalyticsDrawer({
     };
   }, [open, lead]);
 
-  const headerName = lead ? prettyLeadDisplayName(lead.data) : "";
-  const headerCompany = lead ? prettyLeadCompany(lead.data) : "";
+  const headerName = lead
+    ? formatPersonName(prettyLeadDisplayName(lead.data))
+    : "";
+  const headerCompany = lead
+    ? formatCompanyName(prettyLeadCompany(lead.data))
+    : "";
+  const initials =
+    headerName
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w.charAt(0).toLocaleUpperCase("de-DE"))
+      .join("") || "?";
 
   const hasAnyActivity =
     !!data &&
@@ -145,19 +173,33 @@ export function LeadAnalyticsDrawer({
           )}
         >
           <div className="flex items-start justify-between gap-3 border-b border-line-soft px-6 py-5">
-            <div className="min-w-0">
-              <DialogPrimitive.Title className="text-base font-semibold leading-tight text-ink">
-                {headerName || "Lead-Analytics"}
-                {headerCompany ? (
-                  <span className="text-ink-muted font-normal">
-                    {" "}
-                    — {headerCompany}
-                  </span>
-                ) : null}
-              </DialogPrimitive.Title>
-              <DialogPrimitive.Description className="mt-0.5 text-xs text-ink-muted">
-                Tracking-Übersicht für diesen Lead
-              </DialogPrimitive.Description>
+            <div className="flex min-w-0 items-center gap-3">
+              <span
+                aria-hidden
+                className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-bold text-brand-deep"
+              >
+                {initials}
+              </span>
+              <div className="min-w-0">
+                <DialogPrimitive.Title className="truncate text-base font-semibold leading-tight text-ink">
+                  {headerName || "Lead-Details"}
+                </DialogPrimitive.Title>
+                <DialogPrimitive.Description className="mt-0.5 truncate text-xs text-ink-muted">
+                  {headerCompany || "Kontaktdaten & Tracking für diesen Lead"}
+                </DialogPrimitive.Description>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {lead?.status && (
+                    <Badge variant={leadStatusVariant(lead.status)} dot>
+                      {leadStatusLabel(lead.status)}
+                    </Badge>
+                  )}
+                  {lead?.abVariant && (
+                    <Badge variant={lead.abVariant === "A" ? "brand" : "warn"}>
+                      Brief {lead.abVariant}
+                    </Badge>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               {lead?.slug && (
@@ -194,6 +236,7 @@ export function LeadAnalyticsDrawer({
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+            {lead && <ContactSection lead={lead} />}
             {loading && <DrawerSkeleton />}
             {!loading && error && (
               <div className="rounded-squircle-md bg-danger-soft px-4 py-3 text-sm text-danger">
@@ -220,6 +263,213 @@ export function LeadAnalyticsDrawer({
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+  );
+}
+
+function leadStatusVariant(
+  s: string,
+): "brand" | "success" | "warn" | "danger" | "neutral" {
+  switch (s) {
+    case "completed":
+      return "success";
+    case "failed":
+      return "danger";
+    case "rendering":
+    case "uploading":
+      return "brand";
+    default:
+      return "neutral";
+  }
+}
+
+function leadStatusLabel(s: string): string {
+  switch (s) {
+    case "pending":
+      return "Wartet";
+    case "rendering":
+      return "Rendert";
+    case "uploading":
+      return "Hochladen";
+    case "completed":
+      return "Fertig";
+    case "failed":
+      return "Fehler";
+    default:
+      return s;
+  }
+}
+
+/** Normalisierter Feldname für Prioritäts-Sortierung und Wert-Formatierung. */
+function normalizeFieldKey(key: string): string {
+  return key
+    .toLocaleLowerCase("de-DE")
+    .replace(/ä/g, "a")
+    .replace(/ö/g, "o")
+    .replace(/ü/g, "u")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+const NAME_FIELD_KEYS = new Set([
+  "vorname",
+  "firstname",
+  "nachname",
+  "lastname",
+  "name",
+  "fullname",
+  "ansprechpartner",
+]);
+
+const COMPANY_FIELD_KEYS = new Set([
+  "firma",
+  "company",
+  "companyname",
+  "unternehmen",
+  "firmenname",
+]);
+
+/** Bekannte Felder zuerst — der Rest folgt in Import-Reihenfolge. */
+const CONTACT_FIELD_PRIORITY = [
+  "vorname",
+  "firstname",
+  "nachname",
+  "lastname",
+  "name",
+  "fullname",
+  "email",
+  "mail",
+  "telefon",
+  "phone",
+  "tel",
+  "mobil",
+  "firma",
+  "company",
+  "companyname",
+  "unternehmen",
+  "position",
+  "strasse",
+  "street",
+  "adresse",
+  "address",
+  "hausnummer",
+  "plz",
+  "zip",
+  "postleitzahl",
+  "ort",
+  "stadt",
+  "city",
+  "land",
+  "country",
+  "website",
+  "url",
+  "webseite",
+];
+
+function ContactValue({
+  fieldKey,
+  value,
+}: {
+  fieldKey: string;
+  value: string;
+}) {
+  const norm = normalizeFieldKey(fieldKey);
+  if (NAME_FIELD_KEYS.has(norm)) return <>{formatPersonName(value)}</>;
+  if (COMPANY_FIELD_KEYS.has(norm)) return <>{formatCompanyName(value)}</>;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    return (
+      <a href={`mailto:${value}`} className="text-brand-deep hover:underline">
+        {value}
+      </a>
+    );
+  }
+  if (/^https?:\/\//i.test(value)) {
+    return (
+      <a
+        href={value}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="break-all text-brand-deep hover:underline"
+      >
+        {value}
+      </a>
+    );
+  }
+  return <>{value}</>;
+}
+
+/**
+ * CRM-Sektion: alle importierten Lead-Felder, bekannte Kontaktfelder zuerst,
+ * plus direkte Dokument-Links (Brief/Umschlag).
+ */
+function ContactSection({ lead }: { lead: LeadAnalyticsDrawerLead }) {
+  const entries = React.useMemo(() => {
+    const all = Object.entries(lead.data ?? {}).filter(
+      ([, v]) => typeof v === "string" && v.trim() !== "",
+    );
+    const rank = (key: string) => {
+      const i = CONTACT_FIELD_PRIORITY.indexOf(normalizeFieldKey(key));
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    return all
+      .map(([k, v], idx) => ({ k, v: v.trim(), idx }))
+      .sort((a, b) => rank(a.k) - rank(b.k) || a.idx - b.idx);
+  }, [lead.data]);
+
+  const hasDocs = !!lead.pdfUrl || !!lead.envelopePdfUrl;
+
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-muted">
+        Kontaktdaten
+      </h3>
+      {entries.length === 0 ? (
+        <div className="rounded-squircle-md bg-surface-soft px-4 py-4 text-sm text-ink-muted">
+          Keine Daten importiert.
+        </div>
+      ) : (
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-3 rounded-squircle-md bg-surface-soft px-4 py-4 sm:grid-cols-2">
+          {entries.map(({ k, v }) => (
+            <div
+              key={k}
+              className={cn("min-w-0", v.length > 60 && "sm:col-span-2")}
+            >
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                {k}
+              </dt>
+              <dd className="mt-0.5 break-words text-sm text-ink">
+                <ContactValue fieldKey={k} value={v} />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {hasDocs && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {lead.pdfUrl && (
+            <a
+              href={`/api/leads/${lead.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full bg-surface-soft px-3 py-1.5 text-xs font-semibold text-ink hover:bg-canvas-deep transition-colors"
+            >
+              <FileDown className="size-3.5" />
+              Brief-PDF
+            </a>
+          )}
+          {lead.envelopePdfUrl && (
+            <a
+              href={`/api/leads/${lead.id}/envelope-pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full bg-surface-soft px-3 py-1.5 text-xs font-semibold text-ink hover:bg-canvas-deep transition-colors"
+            >
+              <Mail className="size-3.5" />
+              Umschlag-PDF
+            </a>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

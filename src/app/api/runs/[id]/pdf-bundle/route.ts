@@ -6,7 +6,10 @@ import { z } from "zod";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getRun } from "@/lib/db/queries/runs";
 import { getCompletedLeadsForBundle } from "@/lib/db/queries/leads";
-import { sortLeadsForBundle } from "@/lib/bundle-helpers";
+import {
+  sortLeadsForBundle,
+  type BundleSortDir,
+} from "@/lib/bundle-helpers";
 import type { leads } from "@/lib/db/schema";
 import type { PDFDocument as PDFDocumentType } from "pdf-lib";
 
@@ -50,12 +53,14 @@ type BundleVariant = z.infer<typeof variantSchema>;
 
 /** Spaltenname aus den Lead-Daten (User-Auswahl); fehlt → Original-Reihenfolge. */
 const sortSchema = z.string().trim().min(1).max(200);
+const sortDirSchema = z.enum(["asc", "desc"]);
 
 const bodySchema = z.object({
   pdfsPerFile: sizeSchema,
   baseName: z.string().max(80).optional(),
   variant: variantSchema.optional(),
   sortBy: sortSchema.optional(),
+  sortDir: sortDirSchema.optional(),
 });
 
 export async function POST(
@@ -70,6 +75,7 @@ export async function POST(
     baseName?: string;
     variant?: BundleVariant;
     sortBy?: string;
+    sortDir?: BundleSortDir;
   };
   try {
     const json = await req.json();
@@ -78,6 +84,7 @@ export async function POST(
       baseName: typeof json.baseName === "string" ? json.baseName : undefined,
       variant: typeof json.variant === "string" ? json.variant : undefined,
       sortBy: typeof json.sortBy === "string" ? json.sortBy : undefined,
+      sortDir: typeof json.sortDir === "string" ? json.sortDir : undefined,
     });
   } catch (err) {
     return NextResponse.json(
@@ -96,6 +103,7 @@ export async function POST(
     body.baseName,
     body.variant ?? "mixed",
     body.sortBy,
+    body.sortDir ?? "asc",
   );
 }
 
@@ -117,6 +125,9 @@ export async function GET(
   const sortParsed = sortSchema.safeParse(
     req.nextUrl.searchParams.get("sortBy"),
   );
+  const sortDirParsed = sortDirSchema.safeParse(
+    req.nextUrl.searchParams.get("sortDir"),
+  );
 
   return buildBundle(
     params.id,
@@ -125,6 +136,7 @@ export async function GET(
     baseNameRaw ?? undefined,
     variantParsed.success ? variantParsed.data : "mixed",
     sortParsed.success ? sortParsed.data : undefined,
+    sortDirParsed.success ? sortDirParsed.data : "asc",
   );
 }
 
@@ -243,6 +255,7 @@ async function buildBundle(
   baseNameInput: string | undefined,
   variant: BundleVariant,
   sortBy: string | undefined,
+  sortDir: BundleSortDir,
 ): Promise<Response> {
   let run;
   try {
@@ -257,6 +270,7 @@ async function buildBundle(
   const completed = sortLeadsForBundle(
     await getCompletedLeadsForBundle(runId, userId),
     sortBy,
+    sortDir,
   );
 
   if (completed.length === 0) {
@@ -388,7 +402,7 @@ async function buildBundle(
         }`,
         `Sortierung: ${
           sortBy
-            ? `Nach Spalte "${sortBy}" (aufsteigend)`
+            ? `Nach Spalte "${sortBy}" (${sortDir === "desc" ? "absteigend" : "aufsteigend"})`
             : "Original-Reihenfolge (wie importiert)"
         }`,
         "",

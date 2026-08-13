@@ -105,6 +105,37 @@ describe("sortLeadsForBundle", () => {
     ]);
   });
 
+  it("sortiert absteigend, wenn direction 'desc' ist", () => {
+    const input = [
+      lead({ Vorname: "Anna" }),
+      lead({ Vorname: "zora" }),
+      lead({ Vorname: "Bernd" }),
+    ];
+    const out = sortLeadsForBundle(input, "Vorname", "desc");
+    expect(values(out, "Vorname")).toEqual(["zora", "Bernd", "Anna"]);
+  });
+
+  it("stellt Leads ohne Wert auch bei 'desc' ans Ende", () => {
+    const input = [
+      lead({ Vorname: "" }, 0),
+      lead({ Vorname: "Anna" }, 1),
+      lead({}, 2),
+      lead({ Vorname: "Bernd" }, 3),
+    ];
+    const out = sortLeadsForBundle(input, "Vorname", "desc");
+    expect(out.map((l) => l.rowIndex)).toEqual([3, 1, 0, 2]);
+  });
+
+  it("nutzt bei 'desc' und gleichem Wert weiterhin rowIndex aufsteigend als Tiebreaker", () => {
+    const input = [
+      lead({ Vorname: "Anna" }, 9),
+      lead({ Vorname: "Anna" }, 2),
+      lead({ Vorname: "Anna" }, 5),
+    ];
+    const out = sortLeadsForBundle(input, "Vorname", "desc");
+    expect(out.map((l) => l.rowIndex)).toEqual([2, 5, 9]);
+  });
+
   it("mutiert den Input nicht", () => {
     const input = [lead({ Vorname: "Zora" }, 0), lead({ Vorname: "Anna" }, 1)];
     const before = input.map((l) => l.id);

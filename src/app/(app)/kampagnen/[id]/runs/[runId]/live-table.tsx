@@ -3,7 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import {
+  ArrowDown,
+  ArrowUp,
   CheckCircle2,
+  ChevronsUpDown,
   Send,
   ChevronDown,
   ChevronRight,
@@ -52,6 +55,7 @@ import {
 import { BundleDialog } from "./bundle-dialog";
 import { LeadEditDialog } from "./lead-edit-dialog";
 import { formatRunEta, type RunEtaEntry } from "@/lib/run-eta-format";
+import { formatPersonName } from "@/lib/format-name";
 
 interface LeadRow {
   id: string;
@@ -232,6 +236,29 @@ function prettyEmail(d: Record<string, string>): string {
   return d.email || d["E-Mail"] || d.mail || "";
 }
 
+/** Formatierter Anzeigename ("daniel fischer" → "Daniel Fischer") oder "—". */
+function displayLeadName(d: Record<string, string>): string {
+  const composed = [prettyName(d), prettyLastName(d)]
+    .filter((part) => part && part !== "—")
+    .join(" ");
+  return composed ? formatPersonName(composed) : "—";
+}
+
+function leadInitials(d: Record<string, string>): string {
+  const name = displayLeadName(d);
+  if (name === "—") return "?";
+  return (
+    name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w.charAt(0).toLocaleUpperCase("de-DE"))
+      .join("") || "?"
+  );
+}
+
+type LeadSortKey = "row" | "name" | "status";
+
 export function LiveTable({
   runId,
   campaignId,
@@ -303,9 +330,23 @@ export function LiveTable({
   // Namens-/E-Mail-Suche + Client-Pagination (50/Seite).
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(0);
+  // Client-seitige Tabellen-Sortierung (nur Anzeige — Exporte sortieren
+  // serverseitig über den Bundle-Dialog).
+  const [sortKey, setSortKey] = React.useState<LeadSortKey>("row");
+  const [sortAsc, setSortAsc] = React.useState(true);
+  const toggleSort = React.useCallback((key: LeadSortKey) => {
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortAsc((a) => !a);
+        return prev;
+      }
+      setSortAsc(true);
+      return key;
+    });
+  }, []);
   React.useEffect(() => {
     setPage(0);
-  }, [filter, search]);
+  }, [filter, search, sortKey, sortAsc]);
 
   // Drawer state for per-lead analytics.
   const [drawerLead, setDrawerLead] = React.useState<LeadRow | null>(null);
@@ -707,13 +748,47 @@ export function LiveTable({
     });
   }, [leads, filter, search]);
 
+  const sortedLeads = React.useMemo(() => {
+    if (sortKey === "row" && sortAsc) return filteredLeads;
+    const collator = new Intl.Collator("de", {
+      sensitivity: "base",
+      numeric: true,
+    });
+    const dir = sortAsc ? 1 : -1;
+    const keyOf = (l: LeadRow): string => {
+      switch (sortKey) {
+        case "name": {
+          const n = displayLeadName(l.data);
+          return n === "—" ? "" : n;
+        }
+        case "status":
+          return statusLabel(l.status);
+        default:
+          return "";
+      }
+    };
+    const out = [...filteredLeads];
+    out.sort((a, b) => {
+      if (sortKey === "row") return (a.rowIndex - b.rowIndex) * dir;
+      const ka = keyOf(a);
+      const kb = keyOf(b);
+      // Leere Werte unabhängig von der Richtung ans Ende.
+      const aEmpty = ka === "";
+      const bEmpty = kb === "";
+      if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
+      const cmp = collator.compare(ka, kb);
+      if (cmp !== 0) return cmp * dir;
+      return a.rowIndex - b.rowIndex;
+    });
+    return out;
+  }, [filteredLeads, sortKey, sortAsc]);
+
   // Client-Pagination — hält die Tabelle auch bei tausenden Leads flüssig.
-  const pageCount = Math.max(1, Math.ceil(filteredLeads.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(sortedLeads.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const pagedLeads = React.useMemo(
-    () =>
-      filteredLeads.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
-    [filteredLeads, safePage],
+    () => sortedLeads.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
+    [sortedLeads, safePage],
   );
 
   const workerStatsLabel = (() => {
@@ -733,10 +808,8 @@ export function LiveTable({
   const leadNameById = React.useMemo(() => {
     const m = new Map<string, string>();
     for (const l of leads) {
-      const n = [prettyName(l.data), prettyLastName(l.data)]
-        .filter((part) => part && part !== "—")
-        .join(" ");
-      if (n) m.set(l.id, n);
+      const n = displayLeadName(l.data);
+      if (n !== "—") m.set(l.id, n);
     }
     return m;
   }, [leads]);
@@ -1181,15 +1254,28 @@ export function LiveTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12">#</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>E-Mail</TableHead>
-              <TableHead>Status</TableHead>
+              <SortableHead
+                className="w-14"
+                label="#"
+                active={sortKey === "row"}
+                asc={sortAsc}
+                onClick={() => toggleSort("row")}
+              />
+              <SortableHead
+                label="Lead"
+                active={sortKey === "name"}
+                asc={sortAsc}
+                onClick={() => toggleSort("name")}
+              />
+              <SortableHead
+                label="Status"
+                active={sortKey === "status"}
+                asc={sortAsc}
+                onClick={() => toggleSort("status")}
+              />
               {abActive && <TableHead>Brief</TableHead>}
               {emailColumnActive && <TableHead>E-Mail-Status</TableHead>}
-              <TableHead>Landingpage</TableHead>
-              <TableHead>PDF</TableHead>
-              <TableHead>Umschlag</TableHead>
+              <TableHead>Unterlagen</TableHead>
               <TableHead className="w-14 text-right">Aktion</TableHead>
             </TableRow>
           </TableHeader>
@@ -1197,7 +1283,7 @@ export function LiveTable({
             {filteredLeads.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={8 + (abActive ? 1 : 0) + (emailColumnActive ? 1 : 0)}
+                  colSpan={5 + (abActive ? 1 : 0) + (emailColumnActive ? 1 : 0)}
                   className="text-center text-ink-muted py-8"
                 >
                   {leads.length === 0
@@ -1214,16 +1300,28 @@ export function LiveTable({
                   onClick={() => openLeadDrawer(l)}
                   className="cursor-pointer hover:bg-surface-muted/60 transition-colors"
                 >
-                  <TableCell className="text-xs text-ink-muted">
+                  <TableCell className="text-xs text-ink-muted tabular-nums">
                     {l.rowIndex + 1}
                   </TableCell>
-                  <TableCell className="font-medium text-ink">
-                    {[prettyName(l.data), prettyLastName(l.data)]
-                      .filter(Boolean)
-                      .join(" ") || "—"}
-                  </TableCell>
-                  <TableCell className="text-ink-muted text-xs">
-                    {prettyEmail(l.data)}
+                  <TableCell>
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        aria-hidden
+                        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[11px] font-bold text-brand-deep"
+                      >
+                        {leadInitials(l.data)}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block max-w-[220px] truncate font-medium text-ink">
+                          {displayLeadName(l.data)}
+                        </span>
+                        {prettyEmail(l.data) && (
+                          <span className="block max-w-[220px] truncate text-xs text-ink-muted">
+                            {prettyEmail(l.data)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant={statusVariant(l.status)} dot>
@@ -1247,64 +1345,65 @@ export function LiveTable({
                     </TableCell>
                   )}
                   <TableCell onClick={stopRowClick}>
-                    {l.slug ? (
-                      <a
-                        href={
-                          buildLeadPublicUrl(
-                            {
-                              slug: l.slug,
-                              customHostname: l.customHostname ?? null,
-                            },
-                            { preview: true },
-                          ) ?? `/v/${l.slug}?preview=1`
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-brand-deep hover:underline text-xs"
-                        title={
-                          l.customHostname
-                            ? `Auf ${l.customHostname} im Vorschau-Modus öffnen`
-                            : "Im Vorschau-Modus öffnen (kein Tracking)"
-                        }
-                      >
-                        <ExternalLink className="size-3.5" />
-                        Vorschau
-                      </a>
-                    ) : (
-                      <span className="text-ink-muted text-xs">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell onClick={stopRowClick}>
-                    {l.pdfUrl ? (
-                      <a
-                        href={`/api/leads/${l.id}/pdf`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-brand-deep hover:underline text-xs"
-                      >
-                        <FileDown className="size-3.5" />
-                        Download
-                      </a>
-                    ) : pdfEnabled ? (
-                      <span className="text-ink-muted text-xs">—</span>
-                    ) : (
-                      <span className="text-ink-muted text-xs">aus</span>
-                    )}
-                  </TableCell>
-                  <TableCell onClick={stopRowClick}>
-                    {l.envelopePdfUrl ? (
-                      <a
-                        href={`/api/leads/${l.id}/envelope-pdf`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-brand-deep hover:underline text-xs"
-                      >
-                        <MailIcon className="size-3.5" />
-                        Download
-                      </a>
-                    ) : (
-                      <span className="text-ink-muted text-xs">—</span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {l.slug ? (
+                        <a
+                          href={
+                            buildLeadPublicUrl(
+                              {
+                                slug: l.slug,
+                                customHostname: l.customHostname ?? null,
+                              },
+                              { preview: true },
+                            ) ?? `/v/${l.slug}?preview=1`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex size-7 items-center justify-center rounded-full text-brand-deep hover:bg-brand-soft/60 transition-colors"
+                          title={
+                            l.customHostname
+                              ? `Landingpage auf ${l.customHostname} im Vorschau-Modus öffnen`
+                              : "Landingpage im Vorschau-Modus öffnen (kein Tracking)"
+                          }
+                          aria-label="Landingpage-Vorschau"
+                        >
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      ) : (
+                        <DocPlaceholder icon={<ExternalLink className="size-3.5" />} />
+                      )}
+                      {l.pdfUrl ? (
+                        <a
+                          href={`/api/leads/${l.id}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex size-7 items-center justify-center rounded-full text-brand-deep hover:bg-brand-soft/60 transition-colors"
+                          title="Brief-PDF herunterladen"
+                          aria-label="Brief-PDF herunterladen"
+                        >
+                          <FileDown className="size-3.5" />
+                        </a>
+                      ) : (
+                        <DocPlaceholder
+                          icon={<FileDown className="size-3.5" />}
+                          title={pdfEnabled ? undefined : "Brief-PDF ist deaktiviert"}
+                        />
+                      )}
+                      {l.envelopePdfUrl ? (
+                        <a
+                          href={`/api/leads/${l.id}/envelope-pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex size-7 items-center justify-center rounded-full text-brand-deep hover:bg-brand-soft/60 transition-colors"
+                          title="Umschlag-PDF herunterladen"
+                          aria-label="Umschlag-PDF herunterladen"
+                        >
+                          <MailIcon className="size-3.5" />
+                        </a>
+                      ) : (
+                        <DocPlaceholder icon={<MailIcon className="size-3.5" />} />
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell onClick={stopRowClick} className="text-right">
                     <LeadRowActions
@@ -1546,6 +1645,63 @@ function FilterPillCount({ children }: { children: React.ReactNode }): React.JSX
  * up to the row click. Without this, the analytics drawer would open every
  * time a user clicks the landingpage / video / PDF link.
  */
+function SortableHead({
+  label,
+  active,
+  asc,
+  onClick,
+  className,
+}: {
+  label: string;
+  active: boolean;
+  asc: boolean;
+  onClick: () => void;
+  className?: string;
+}): React.JSX.Element {
+  return (
+    <TableHead className={className} aria-sort={active ? (asc ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "inline-flex items-center gap-1 transition-colors hover:text-ink",
+          active && "text-ink",
+        )}
+        title={`Nach ${label === "#" ? "Import-Reihenfolge" : label} sortieren`}
+      >
+        {label}
+        {active ? (
+          asc ? (
+            <ArrowUp className="size-3" aria-hidden />
+          ) : (
+            <ArrowDown className="size-3" aria-hidden />
+          )
+        ) : (
+          <ChevronsUpDown className="size-3 opacity-40" aria-hidden />
+        )}
+      </button>
+    </TableHead>
+  );
+}
+
+function DocPlaceholder({
+  icon,
+  title,
+}: {
+  icon: React.ReactNode;
+  title?: string;
+}): React.JSX.Element {
+  return (
+    <span
+      aria-hidden={title ? undefined : true}
+      title={title}
+      className="inline-flex size-7 items-center justify-center rounded-full text-ink-muted/30"
+    >
+      {icon}
+    </span>
+  );
+}
+
 function stopRowClick(e: React.MouseEvent): void {
   e.stopPropagation();
 }

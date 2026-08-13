@@ -40,6 +40,19 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
+import { formatCompanyName, formatPersonName } from "@/lib/format-name";
+
+function contactInitials(name: string): string {
+  const formatted = formatPersonName(name);
+  return (
+    formatted
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w.charAt(0).toLocaleUpperCase("de-DE"))
+      .join("") || "?"
+  );
+}
 
 interface OccurrenceSummary {
   campaignId: string;
@@ -300,7 +313,7 @@ function ContactRow({
           onClick={() => onOpen(contact.masterLeadId)}
           className="size-9 rounded-full bg-brand-soft flex items-center justify-center text-brand-deep font-semibold text-sm shrink-0"
         >
-          {contact.displayName.substring(0, 2).toUpperCase()}
+          {contactInitials(contact.displayName)}
         </button>
         <button
           type="button"
@@ -308,7 +321,7 @@ function ContactRow({
           className="flex-1 min-w-0 text-left"
         >
           <div className="text-sm font-semibold text-ink truncate">
-            {contact.displayName}
+            {formatPersonName(contact.displayName)}
           </div>
           <div className="text-xs text-ink-muted truncate flex items-center gap-3 mt-0.5">
             {contact.email && (
@@ -320,7 +333,7 @@ function ContactRow({
             {contact.company && (
               <span className="inline-flex items-center gap-1">
                 <Building2 className="size-3" />
-                {contact.company}
+                {formatCompanyName(contact.company)}
               </span>
             )}
           </div>
@@ -427,7 +440,13 @@ function OccurrenceCard({ occ }: { occ: Occurrence }) {
           variant={occ.status === "completed" ? "success" : "neutral"}
           className="text-[10px] shrink-0"
         >
-          {occ.status}
+          {occ.status === "completed"
+            ? "Fertig"
+            : occ.status === "failed"
+              ? "Fehler"
+              : occ.status === "pending"
+                ? "Wartet"
+                : occ.status}
         </Badge>
       </div>
 
@@ -667,18 +686,18 @@ function ContactDetailDrawer({
           {/* Header */}
           <header className="flex items-start gap-4 p-5 border-b border-line">
             <div className="size-14 rounded-full bg-brand-soft flex items-center justify-center text-brand-deep font-bold text-lg shrink-0">
-              {detail.displayName.substring(0, 2).toUpperCase()}
+              {contactInitials(detail.displayName)}
             </div>
             <div className="flex-1 min-w-0">
               <div className="mb-1">
                 <TemperatureBadge temperature={temperature} compact />
               </div>
               <h2 className="text-lg font-bold text-ink truncate">
-                {detail.displayName}
+                {formatPersonName(detail.displayName)}
               </h2>
               {detail.company && (
                 <p className="text-sm text-ink-muted truncate">
-                  {detail.company}
+                  {formatCompanyName(detail.company)}
                 </p>
               )}
             </div>
@@ -748,12 +767,12 @@ function ContactDetailDrawer({
                     <ContactField
                       icon={<Building2 className="size-3.5" />}
                       label="Firma"
-                      value={detail.company}
+                      value={detail.company ? formatCompanyName(detail.company) : null}
                     />
                     <ContactField
                       icon={<MapPin className="size-3.5" />}
                       label="Stadt"
-                      value={detail.city}
+                      value={detail.city ? formatPersonName(detail.city) : null}
                     />
                     <ContactField
                       icon={<Megaphone className="size-3.5" />}
@@ -789,17 +808,26 @@ function ContactDetailDrawer({
                     Importierte Daten
                   </h3>
                   <div className="rounded-squircle-sm bg-surface-soft p-4">
-                    <dl className="text-xs grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
-                      {Object.entries(
-                        detail.occurrences[0]?.rawData ?? {},
-                      ).map(([k, v]) => (
-                        <React.Fragment key={k}>
-                          <dt className="text-ink-muted truncate">{k}</dt>
-                          <dd className="text-ink font-mono truncate">
-                            {String(v ?? "—")}
-                          </dd>
-                        </React.Fragment>
-                      ))}
+                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+                      {Object.entries(detail.occurrences[0]?.rawData ?? {})
+                        .map(([k, v]) => [k, String(v ?? "").trim()] as const)
+                        .filter(([, v]) => v !== "")
+                        .map(([k, v]) => (
+                          <div
+                            key={k}
+                            className={cn(
+                              "min-w-0",
+                              v.length > 60 && "sm:col-span-2",
+                            )}
+                          >
+                            <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                              {k}
+                            </dt>
+                            <dd className="mt-0.5 break-words text-sm text-ink">
+                              {v}
+                            </dd>
+                          </div>
+                        ))}
                     </dl>
                   </div>
                 </section>

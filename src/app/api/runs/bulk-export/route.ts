@@ -68,6 +68,8 @@ const bodySchema = z.object({
    * dieselbe Reihenfolge produzieren (Kuvertier-Garantie).
    */
   sortBy: z.string().trim().min(1).max(200).optional(),
+  /** Sortier-Richtung; wirkt nur zusammen mit `sortBy`. */
+  sortDir: z.enum(["asc", "desc"]).default("asc"),
 });
 
 // Adressliste-Spalten (in dieser Reihenfolge!). `#` wird pro Sheet als
@@ -164,6 +166,7 @@ export async function POST(req: NextRequest) {
       baseName: typeof json?.baseName === "string" ? json.baseName : undefined,
       exportType: typeof json?.exportType === "string" ? json.exportType : undefined,
       sortBy: typeof json?.sortBy === "string" ? json.sortBy : undefined,
+      sortDir: typeof json?.sortDir === "string" ? json.sortDir : undefined,
     });
   } catch (err) {
     return NextResponse.json(
@@ -245,9 +248,12 @@ export async function POST(req: NextRequest) {
     for (const rt of runtimes) {
       // Sortierung VOR dem Typ-Filter — Brief- und Umschlag-Export mit
       // derselben Sortierung liefern so garantiert dieselbe Reihenfolge.
+      // Sortiert wird die GESAMTE Lead-Liste des Runs, danach erst wird in
+      // pdfsPerFile-Bündel aufgeteilt.
       const allLeads = sortLeadsForBundle(
         await getCompletedLeadsForBundle(rt.run.id, auth.user.id),
         body.sortBy,
+        body.sortDir,
       );
       // Nur die Leads, die den gewählten Ausgabe-Typ tatsächlich haben —
       // sonst wird das Bundle mit „PDF nicht verfügbar"-Zeilen aufgeblasen.

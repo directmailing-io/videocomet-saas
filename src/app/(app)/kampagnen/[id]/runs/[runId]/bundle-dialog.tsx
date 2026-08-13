@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Archive, FileDown } from "lucide-react";
+import { Archive, ArrowDownAZ, ArrowUpZA, FileDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -69,6 +69,7 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
   const [pdfsPerFile, setPdfsPerFile] = React.useState("100");
   const [variant, setVariant] = React.useState<BundleVariant>("mixed");
   const [sortBy, setSortBy] = React.useState<string>(SORT_ORIGINAL);
+  const [sortDir, setSortDir] = React.useState<"asc" | "desc">("asc");
   // Tatsächliche Spalten der Leadliste dieser Runde — jede Liste hat andere
   // Spalten, deshalb kommen die Optionen vom Server statt aus einer festen Liste.
   const [sortColumns, setSortColumns] = React.useState<string[] | null>(null);
@@ -125,7 +126,10 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
         baseName: baseName.trim() || defaultBase,
       });
       if (abActive && variant !== "mixed") params.set("variant", variant);
-      if (sortBy !== SORT_ORIGINAL) params.set("sortBy", sortBy);
+      if (sortBy !== SORT_ORIGINAL) {
+        params.set("sortBy", sortBy);
+        params.set("sortDir", sortDir);
+      }
       // Bewusst kein window.location — der Fetch erlaubt uns den
       // Loading-State ehrlich zu tracken (bis die Server-Response Headers
       // kommen) und dann den Blob-Download programmatisch auszuloesen.
@@ -241,15 +245,52 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
                 </SelectItem>
                 {(sortColumns ?? []).map((col) => (
                   <SelectItem key={col} value={col}>
-                    Nach „{col}&ldquo; (aufsteigend)
+                    {col}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {sortBy !== SORT_ORIGINAL && (
+              <div
+                role="radiogroup"
+                aria-label="Sortierrichtung"
+                className="mt-2 grid grid-cols-2 gap-1.5"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={sortDir === "asc"}
+                  onClick={() => setSortDir("asc")}
+                  className={`flex items-center justify-center gap-1.5 rounded-squircle-sm px-3 py-2 text-sm font-medium transition-colors ${
+                    sortDir === "asc"
+                      ? "bg-brand-soft/60 ring-2 ring-brand/30"
+                      : "bg-surface-soft hover:bg-brand-soft/30"
+                  }`}
+                >
+                  <ArrowDownAZ className="size-4" aria-hidden />
+                  Aufsteigend
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={sortDir === "desc"}
+                  onClick={() => setSortDir("desc")}
+                  className={`flex items-center justify-center gap-1.5 rounded-squircle-sm px-3 py-2 text-sm font-medium transition-colors ${
+                    sortDir === "desc"
+                      ? "bg-brand-soft/60 ring-2 ring-brand/30"
+                      : "bg-surface-soft hover:bg-brand-soft/30"
+                  }`}
+                >
+                  <ArrowUpZA className="size-4" aria-hidden />
+                  Absteigend
+                </button>
+              </div>
+            )}
             <p className="mt-1 text-xs text-ink-muted">
-              Sortiert nach den Spalten deiner Leadliste. Umschläge werden
-              automatisch in derselben Reihenfolge sortiert — Brief und
-              Umschlag passen immer 1:1 zueinander.
+              Die gesamte Liste wird zuerst sortiert und erst danach in die
+              PDF-Dateien aufgeteilt (z.B. 1–100, 101–200). Umschläge folgen
+              automatisch derselben Reihenfolge — Brief und Umschlag passen
+              immer 1:1 zueinander.
             </p>
           </div>
 
