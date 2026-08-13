@@ -34,15 +34,8 @@ const PDFS_PER_FILE = [10, 25, 50, 100, 200, 500];
 
 type BundleVariant = "mixed" | "split" | "A" | "B";
 
-type BundleSort = "original" | "firstName" | "lastName" | "zip" | "city";
-
-const SORT_OPTIONS: { value: BundleSort; label: string }[] = [
-  { value: "original", label: "Original-Reihenfolge (wie importiert)" },
-  { value: "firstName", label: "Vorname (A–Z)" },
-  { value: "lastName", label: "Nachname (A–Z)" },
-  { value: "zip", label: "PLZ (aufsteigend)" },
-  { value: "city", label: "Ort (A–Z)" },
-];
+/** Sentinel für „keine Sortierung" — kann nicht mit echten Spaltennamen kollidieren. */
+const SORT_ORIGINAL = "__original__";
 
 const VARIANT_OPTIONS: {
   value: BundleVariant;
@@ -75,7 +68,26 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
   const [open, setOpen] = React.useState(false);
   const [pdfsPerFile, setPdfsPerFile] = React.useState("100");
   const [variant, setVariant] = React.useState<BundleVariant>("mixed");
-  const [sortBy, setSortBy] = React.useState<BundleSort>("original");
+  const [sortBy, setSortBy] = React.useState<string>(SORT_ORIGINAL);
+  // Tatsächliche Spalten der Leadliste dieser Runde — jede Liste hat andere
+  // Spalten, deshalb kommen die Optionen vom Server statt aus einer festen Liste.
+  const [sortColumns, setSortColumns] = React.useState<string[] | null>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch(`/api/runs/bundle-columns?runIds=${runId}`)
+      .then((res) => (res.ok ? res.json() : { columns: [] }))
+      .then((data: { columns?: string[] }) => {
+        if (!cancelled) setSortColumns(data.columns ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setSortColumns([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, runId]);
   const [downloading, setDownloading] = React.useState(false);
   const { toast } = useToast();
   // Default base name: runName slugified light. User can overwrite.
@@ -113,7 +125,7 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
         baseName: baseName.trim() || defaultBase,
       });
       if (abActive && variant !== "mixed") params.set("variant", variant);
-      if (sortBy !== "original") params.set("sortBy", sortBy);
+      if (sortBy !== SORT_ORIGINAL) params.set("sortBy", sortBy);
       // Bewusst kein window.location — der Fetch erlaubt uns den
       // Loading-State ehrlich zu tracken (bis die Server-Response Headers
       // kommen) und dann den Blob-Download programmatisch auszuloesen.
@@ -215,24 +227,29 @@ export function BundleDialog({ runId, runName, abActive = false }: BundleDialogP
 
           <div>
             <Label htmlFor="bundle-sort">Sortierung</Label>
-            <Select
-              value={sortBy}
-              onValueChange={(v) => setSortBy(v as BundleSort)}
-            >
-              <SelectTrigger id="bundle-sort">
-                <SelectValue />
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger id="bundle-sort" disabled={sortColumns === null}>
+                {sortColumns === null ? (
+                  <span className="text-ink-muted">Spalten werden geladen …</span>
+                ) : (
+                  <SelectValue />
+                )}
               </SelectTrigger>
               <SelectContent>
-                {SORT_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
+                <SelectItem value={SORT_ORIGINAL}>
+                  Original-Reihenfolge (wie importiert)
+                </SelectItem>
+                {(sortColumns ?? []).map((col) => (
+                  <SelectItem key={col} value={col}>
+                    Nach „{col}&ldquo; (aufsteigend)
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <p className="mt-1 text-xs text-ink-muted">
-              Umschläge werden automatisch in derselben Reihenfolge sortiert —
-              Brief und Umschlag passen immer 1:1 zueinander.
+              Sortiert nach den Spalten deiner Leadliste. Umschläge werden
+              automatisch in derselben Reihenfolge sortiert — Brief und
+              Umschlag passen immer 1:1 zueinander.
             </p>
           </div>
 

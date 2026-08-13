@@ -6,11 +6,7 @@ import { z } from "zod";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getRun } from "@/lib/db/queries/runs";
 import { getCompletedLeadsForBundle } from "@/lib/db/queries/leads";
-import {
-  BUNDLE_SORT_VALUES,
-  sortLeadsForBundle,
-  type BundleSort,
-} from "@/lib/bundle-helpers";
+import { sortLeadsForBundle } from "@/lib/bundle-helpers";
 import type { leads } from "@/lib/db/schema";
 import type { PDFDocument as PDFDocumentType } from "pdf-lib";
 
@@ -52,7 +48,8 @@ const sizeSchema = z
 const variantSchema = z.enum(["mixed", "split", "A", "B"]);
 type BundleVariant = z.infer<typeof variantSchema>;
 
-const sortSchema = z.enum(BUNDLE_SORT_VALUES);
+/** Spaltenname aus den Lead-Daten (User-Auswahl); fehlt → Original-Reihenfolge. */
+const sortSchema = z.string().trim().min(1).max(200);
 
 const bodySchema = z.object({
   pdfsPerFile: sizeSchema,
@@ -72,7 +69,7 @@ export async function POST(
     pdfsPerFile: number;
     baseName?: string;
     variant?: BundleVariant;
-    sortBy?: BundleSort;
+    sortBy?: string;
   };
   try {
     const json = await req.json();
@@ -98,7 +95,7 @@ export async function POST(
     body.pdfsPerFile,
     body.baseName,
     body.variant ?? "mixed",
-    body.sortBy ?? "original",
+    body.sortBy,
   );
 }
 
@@ -118,7 +115,7 @@ export async function GET(
     req.nextUrl.searchParams.get("variant") ?? "mixed",
   );
   const sortParsed = sortSchema.safeParse(
-    req.nextUrl.searchParams.get("sortBy") ?? "original",
+    req.nextUrl.searchParams.get("sortBy"),
   );
 
   return buildBundle(
@@ -127,7 +124,7 @@ export async function GET(
     pdfsPerFile,
     baseNameRaw ?? undefined,
     variantParsed.success ? variantParsed.data : "mixed",
-    sortParsed.success ? sortParsed.data : "original",
+    sortParsed.success ? sortParsed.data : undefined,
   );
 }
 
@@ -245,7 +242,7 @@ async function buildBundle(
   pdfsPerFile: number,
   baseNameInput: string | undefined,
   variant: BundleVariant,
-  sortBy: BundleSort,
+  sortBy: string | undefined,
 ): Promise<Response> {
   let run;
   try {
@@ -379,14 +376,7 @@ async function buildBundle(
 
     // README: Manifest + Warnungen. Immer bei Varianten-Auswahl oder wenn
     // etwas schiefging — der Lettershop soll Abweichungen sehen, nicht raten.
-    if (variant !== "mixed" || sortBy !== "original" || warnings.length > 0) {
-      const sortLabel: Record<BundleSort, string> = {
-        original: "Original-Reihenfolge (wie importiert)",
-        firstName: "Alphabetisch nach Vorname",
-        lastName: "Alphabetisch nach Nachname",
-        zip: "Nach PLZ (aufsteigend)",
-        city: "Alphabetisch nach Ort",
-      };
+    if (variant !== "mixed" || sortBy || warnings.length > 0) {
       const lines: string[] = [
         `PDF-Bundle "${baseName}" — Runde: ${run.name}`,
         `Zusammenstellung: ${
@@ -396,7 +386,11 @@ async function buildBundle(
               ? "Nach Brief-Variante getrennt"
               : `Nur Brief ${variant}`
         }`,
-        `Sortierung: ${sortLabel[sortBy]}`,
+        `Sortierung: ${
+          sortBy
+            ? `Nach Spalte "${sortBy}" (aufsteigend)`
+            : "Original-Reihenfolge (wie importiert)"
+        }`,
         "",
         ...groups.map((g) => `${g.label}: ${g.leads.length} Leads`),
         "",

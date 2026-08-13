@@ -16,7 +16,6 @@ import {
 } from "@/lib/db/queries/leads";
 import { buildLeadPublicUrl } from "@/lib/lead-public-url";
 import {
-  BUNDLE_SORT_VALUES,
   buildBundleSheetName,
   chunkBy,
   mergePdfsInBundle,
@@ -62,11 +61,13 @@ const bodySchema = z.object({
   /** Was landet im ZIP: nur Briefe (Default) oder nur Umschläge. */
   exportType: z.enum(["letters", "envelopes"]).default("letters"),
   /**
-   * Sortierung der Leads VOR dem Bündeln. Deterministisch (Tiebreaker
-   * rowIndex → id), damit getrennte Brief-/Umschlag-Exporte mit derselben
-   * Sortierung exakt dieselbe Reihenfolge produzieren (Kuvertier-Garantie).
+   * Spaltenname aus den Lead-Daten, nach dem VOR dem Bündeln sortiert wird
+   * (User wählt aus den tatsächlichen Spalten seiner Liste). Fehlt der
+   * Wert → Original-Reihenfolge. Deterministisch (Tiebreaker rowIndex → id),
+   * damit getrennte Brief-/Umschlag-Exporte mit derselben Sortierung exakt
+   * dieselbe Reihenfolge produzieren (Kuvertier-Garantie).
    */
-  sortBy: z.enum(BUNDLE_SORT_VALUES).default("original"),
+  sortBy: z.string().trim().min(1).max(200).optional(),
 });
 
 // Adressliste-Spalten (in dieser Reihenfolge!). `#` wird pro Sheet als

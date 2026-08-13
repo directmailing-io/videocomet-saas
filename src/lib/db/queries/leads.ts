@@ -364,6 +364,41 @@ export async function getCompletedLeadsForBundle(
   return rows.map((r) => r.lead);
 }
 
+/**
+ * Distinct-Spaltennamen (jsonb-Keys von `leads.data`) über die angegebenen
+ * Runs — Grundlage für die Sortier-Auswahl im PDF-Bundle-Export. Jede
+ * Leadliste hat eigene Spalten, also bieten wir dem User genau die an, die
+ * in seinen Daten tatsächlich existieren.
+ *
+ * Tenant-Guard via JOIN auf `runs.user_id`. Reihenfolge: alphabetisch
+ * (deutsch, case-insensitiv) — jsonb erhält die CSV-Spaltenreihenfolge
+ * nicht, alphabetisch ist die verlässlichste Ordnung.
+ */
+export async function getLeadDataColumns(
+  runIds: string[],
+  userId: string,
+): Promise<string[]> {
+  if (runIds.length === 0) return [];
+  const rows = await db
+    .selectDistinct({
+      col: sql<string>`jsonb_object_keys(${leads.data})`,
+    })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .where(
+      and(
+        inArray(leads.runId, runIds),
+        eq(runs.userId, userId),
+        isNull(leads.removedAt),
+      ),
+    );
+  const collator = new Intl.Collator("de", { sensitivity: "base" });
+  return rows
+    .map((r) => r.col)
+    .filter((c) => c.trim() !== "")
+    .sort((a, b) => collator.compare(a, b));
+}
+
 export async function countByStatus(
   runId: string,
   userId: string,

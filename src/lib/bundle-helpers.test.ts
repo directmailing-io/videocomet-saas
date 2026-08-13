@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sortLeadsForBundle, type BundleSort } from "./bundle-helpers";
+import { sortLeadsForBundle } from "./bundle-helpers";
 import type { Lead } from "@/lib/db/queries/leads";
 
 let seq = 0;
@@ -12,113 +12,103 @@ function lead(data: Record<string, string>, rowIndex?: number): Lead {
   } as unknown as Lead;
 }
 
-function names(leads: Lead[], field: string): string[] {
+function values(leads: Lead[], field: string): string[] {
   return leads.map(
     (l) => ((l.data ?? {}) as Record<string, string>)[field] ?? "",
   );
 }
 
 describe("sortLeadsForBundle", () => {
-  it("gibt bei 'original' eine Kopie in unveränderter Reihenfolge zurück", () => {
+  it("gibt ohne Spalte eine Kopie in unveränderter Reihenfolge zurück", () => {
     const input = [
       lead({ Vorname: "Zora" }, 0),
       lead({ Vorname: "Anna" }, 1),
       lead({ Vorname: "Mia" }, 2),
     ];
-    const out = sortLeadsForBundle(input, "original");
-    expect(out).not.toBe(input);
-    expect(names(out, "Vorname")).toEqual(["Zora", "Anna", "Mia"]);
+    for (const col of [undefined, null, "", "  "]) {
+      const out = sortLeadsForBundle(input, col);
+      expect(out).not.toBe(input);
+      expect(values(out, "Vorname")).toEqual(["Zora", "Anna", "Mia"]);
+    }
   });
 
-  it("sortiert alphabetisch nach Vorname (case-insensitiv, Umlaute deutsch)", () => {
+  it("sortiert alphabetisch nach gewählter Spalte (case-insensitiv, Umlaute deutsch)", () => {
     const input = [
       lead({ Vorname: "zora" }),
       lead({ Vorname: "Änne" }),
       lead({ Vorname: "Anna" }),
       lead({ Vorname: "Bernd" }),
     ];
-    const out = sortLeadsForBundle(input, "firstName");
-    expect(names(out, "Vorname")).toEqual(["Anna", "Änne", "Bernd", "zora"]);
+    const out = sortLeadsForBundle(input, "Vorname");
+    expect(values(out, "Vorname")).toEqual(["Anna", "Änne", "Bernd", "zora"]);
   });
 
-  it("sortiert nach Nachname mit Vorname als Sekundär-Schlüssel", () => {
-    const input = [
-      lead({ Vorname: "Klaus", Nachname: "Müller" }),
-      lead({ Vorname: "Anna", Nachname: "Müller" }),
-      lead({ Vorname: "Zora", Nachname: "Abel" }),
-    ];
-    const out = sortLeadsForBundle(input, "lastName");
-    expect(names(out, "Vorname")).toEqual(["Zora", "Anna", "Klaus"]);
-  });
-
-  it("sortiert PLZ numerisch aufsteigend (führende Nullen korrekt)", () => {
+  it("sortiert PLZ-Spalte numerisch aufsteigend (führende Nullen korrekt)", () => {
     const input = [
       lead({ PLZ: "10115" }),
       lead({ PLZ: "01067" }),
       lead({ PLZ: "99084" }),
       lead({ PLZ: "80331" }),
     ];
-    const out = sortLeadsForBundle(input, "zip");
-    expect(names(out, "PLZ")).toEqual(["01067", "10115", "80331", "99084"]);
+    const out = sortLeadsForBundle(input, "PLZ");
+    expect(values(out, "PLZ")).toEqual(["01067", "10115", "80331", "99084"]);
   });
 
-  it("findet Felder über heterogene CSV-Spaltennamen", () => {
+  it("matcht Spaltennamen tolerant über Schreibvarianten (Groß/klein, snake_case, Umlaute)", () => {
     const input = [
       lead({ first_name: "Zora" }),
-      lead({ firstName: "Anna" }),
-      lead({ Vorname: "Mia" }),
+      lead({ firstname: "Anna" }),
+      lead({ "First-Name": "Mia" }),
     ];
-    const out = sortLeadsForBundle(input, "firstName");
-    const values = out.map((l) => {
+    const out = sortLeadsForBundle(input, "First_Name");
+    const names = out.map((l) => {
       const d = (l.data ?? {}) as Record<string, string>;
-      return d.Vorname ?? d.firstName ?? d.first_name;
+      return d.first_name ?? d.firstname ?? d["First-Name"];
     });
-    expect(values).toEqual(["Anna", "Mia", "Zora"]);
+    expect(names).toEqual(["Anna", "Mia", "Zora"]);
   });
 
-  it("stellt Leads ohne Wert im Sortierfeld ans Ende (Original-Reihenfolge)", () => {
+  it("stellt Leads ohne Wert in der Spalte ans Ende (Original-Reihenfolge)", () => {
     const input = [
       lead({ Vorname: "" }, 0),
       lead({ Vorname: "Bernd" }, 1),
       lead({}, 2),
       lead({ Vorname: "Anna" }, 3),
     ];
-    const out = sortLeadsForBundle(input, "firstName");
+    const out = sortLeadsForBundle(input, "Vorname");
     expect(out.map((l) => l.rowIndex)).toEqual([3, 1, 0, 2]);
+  });
+
+  it("sortiert bei unbekannter Spalte stabil in Original-Reihenfolge", () => {
+    const input = [
+      lead({ Vorname: "Zora" }, 0),
+      lead({ Vorname: "Anna" }, 1),
+      lead({ Vorname: "Mia" }, 2),
+    ];
+    const out = sortLeadsForBundle(input, "GibtEsNicht");
+    expect(out.map((l) => l.rowIndex)).toEqual([0, 1, 2]);
   });
 
   it("ist deterministisch: getrennte Aufrufe (Brief/Umschlag) liefern identische Reihenfolge", () => {
     const input = [
-      lead({ Vorname: "Anna", Nachname: "Meier" }, 5),
-      lead({ Vorname: "Anna", Nachname: "Meier" }, 2),
-      lead({ Vorname: "Anna", Nachname: "Meier" }, 9),
+      lead({ Vorname: "Anna" }, 5),
+      lead({ Vorname: "Anna" }, 2),
+      lead({ Vorname: "Anna" }, 9),
     ];
     const shuffled = [input[2], input[0], input[1]] as Lead[];
-    for (const sort of ["firstName", "lastName", "zip", "city"] as BundleSort[]) {
-      const a = sortLeadsForBundle(input, sort).map((l) => l.id);
-      const b = sortLeadsForBundle(shuffled, sort).map((l) => l.id);
-      expect(b).toEqual(a);
-    }
-    // Gleicher Name → Tiebreaker rowIndex
-    expect(sortLeadsForBundle(input, "firstName").map((l) => l.rowIndex)).toEqual([
+    const a = sortLeadsForBundle(input, "Vorname").map((l) => l.id);
+    const b = sortLeadsForBundle(shuffled, "Vorname").map((l) => l.id);
+    expect(b).toEqual(a);
+    // Gleicher Wert → Tiebreaker rowIndex
+    expect(sortLeadsForBundle(input, "Vorname").map((l) => l.rowIndex)).toEqual([
       2, 5, 9,
     ]);
-  });
-
-  it("sortiert nach Ort mit PLZ als Sekundär-Schlüssel", () => {
-    const input = [
-      lead({ Stadt: "Berlin", PLZ: "10999" }),
-      lead({ Ort: "Aachen", PLZ: "52062" }),
-      lead({ city: "Berlin", PLZ: "10115" }),
-    ];
-    const out = sortLeadsForBundle(input, "city");
-    expect(names(out, "PLZ")).toEqual(["52062", "10115", "10999"]);
   });
 
   it("mutiert den Input nicht", () => {
     const input = [lead({ Vorname: "Zora" }, 0), lead({ Vorname: "Anna" }, 1)];
     const before = input.map((l) => l.id);
-    sortLeadsForBundle(input, "firstName");
+    sortLeadsForBundle(input, "Vorname");
     expect(input.map((l) => l.id)).toEqual(before);
   });
 });
