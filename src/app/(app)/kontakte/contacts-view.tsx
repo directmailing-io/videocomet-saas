@@ -10,7 +10,6 @@ import {
   Trash2,
   Loader2,
   ExternalLink,
-  X,
   AlertTriangle,
   ArrowUpDown,
   Filter,
@@ -23,7 +22,6 @@ import {
   Megaphone,
   CalendarClock,
 } from "lucide-react";
-import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { classifyLeadFromAggregates } from "@/lib/activity/classify";
 import { TemperatureBadge } from "../aktivitaet/_components/temperature-badge";
 import { PageHeader } from "@/components/ui/page-header";
@@ -41,17 +39,14 @@ import {
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { formatCompanyName, formatPersonName } from "@/lib/format-name";
+import {
+  CrmDetailModal,
+  LeadFieldGrid,
+  crmInitials,
+} from "@/components/crm/detail-modal";
 
 function contactInitials(name: string): string {
-  const formatted = formatPersonName(name);
-  return (
-    formatted
-      .split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w.charAt(0).toLocaleUpperCase("de-DE"))
-      .join("") || "?"
-  );
+  return crmInitials(formatPersonName(name));
 }
 
 interface OccurrenceSummary {
@@ -274,7 +269,7 @@ export function ContactsView({ userId: _userId }: { userId: string }) {
       )}
 
       {selectedDetail && (
-        <ContactDetailDrawer
+        <ContactDetailModal
           detail={selectedDetail}
           loading={detailLoading}
           onClose={() => setSelectedDetail(null)}
@@ -577,7 +572,7 @@ function ActivityStat({
   );
 }
 
-function ContactDetailDrawer({
+function ContactDetailModal({
   detail,
   loading,
   onClose,
@@ -589,6 +584,7 @@ function ContactDetailDrawer({
   onDeleted: () => void;
 }) {
   const { toast } = useToast();
+  const [tab, setTab] = React.useState<"kontakt" | "kampagnen">("kontakt");
   const [deleteConfirm, setDeleteConfirm] = React.useState("");
   const [showDeleteBox, setShowDeleteBox] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
@@ -660,57 +656,149 @@ function ContactDetailDrawer({
   }
 
   return (
-    <DialogPrimitive.Root open onOpenChange={(o) => !o && onClose()}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay
-          className={cn(
-            "fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm",
-            "data-[state=open]:animate-in data-[state=closed]:animate-out",
-            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-          )}
-        />
-        <DialogPrimitive.Content
-          className={cn(
-            "fixed right-0 top-0 z-50 h-full w-full max-w-[560px] bg-surface border-l border-line shadow-lift",
-            "flex flex-col",
-            "data-[state=open]:animate-in data-[state=closed]:animate-out",
-            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
-            "duration-200",
-          )}
-          aria-describedby={undefined}
-        >
-          <DialogPrimitive.Title className="sr-only">
-            Kontakt-Details
-          </DialogPrimitive.Title>
-
-          {/* Header */}
-          <header className="flex items-start gap-4 p-5 border-b border-line">
-            <div className="size-14 rounded-full bg-brand-soft flex items-center justify-center text-brand-deep font-bold text-lg shrink-0">
-              {contactInitials(detail.displayName)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="mb-1">
-                <TemperatureBadge temperature={temperature} compact />
+    <CrmDetailModal
+      open
+      onOpenChange={(o) => !o && onClose()}
+      initials={contactInitials(detail.displayName)}
+      title={formatPersonName(detail.displayName)}
+      subtitle={
+        detail.company ? formatCompanyName(detail.company) : "Kontakt-Details"
+      }
+      badges={<TemperatureBadge temperature={temperature} compact />}
+      tabs={[
+        { id: "kontakt", label: "Kontaktdaten" },
+        {
+          id: "kampagnen",
+          label: "Kampagnen",
+          badge: detail.occurrences.length,
+        },
+      ]}
+      activeTab={tab}
+      onTabChange={(id) => setTab(id as "kontakt" | "kampagnen")}
+      footer={
+        !showDeleteBox ? (
+          <Button
+            variant="ghost"
+            onClick={() => setShowDeleteBox(true)}
+            iconLeft={<Trash2 className="size-4" />}
+            className="text-danger hover:bg-danger-soft"
+          >
+            Kontakt endgültig löschen (DSGVO)
+          </Button>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="size-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="text-xs text-red-900">
+                <strong>Achtung:</strong> Diese Aktion entfernt alle Spuren
+                dieses Kontakts aus{" "}
+                <strong>{detail.campaignCount} Kampagnen</strong>,{" "}
+                <strong>{detail.runCount} Runden</strong>, inkl. aller
+                personalisierten Videos, PDFs, QR-Codes und URLs. Nicht
+                rückgängig zu machen. Tippe unten „DAUERHAFT LÖSCHEN".
               </div>
-              <h2 className="text-lg font-bold text-ink truncate">
-                {formatPersonName(detail.displayName)}
-              </h2>
-              {detail.company && (
-                <p className="text-sm text-ink-muted truncate">
-                  {formatCompanyName(detail.company)}
-                </p>
-              )}
             </div>
-            <DialogPrimitive.Close
-              className="p-1.5 rounded-full text-ink-muted hover:text-ink hover:bg-surface-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-              aria-label="Schließen"
-            >
-              <X className="size-4" />
-            </DialogPrimitive.Close>
-          </header>
+            <Input
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder="DAUERHAFT LÖSCHEN eintippen"
+              className={cn(
+                "text-sm",
+                canDelete && "border-red-500 focus:ring-red-500/20",
+              )}
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowDeleteBox(false);
+                  setDeleteConfirm("");
+                }}
+                disabled={deleting}
+              >
+                Abbrechen
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleDelete}
+                disabled={!canDelete || deleting}
+                iconLeft={
+                  deleting ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-4" />
+                  )
+                }
+              >
+                Endgültig löschen
+              </Button>
+            </div>
+          </div>
+        )
+      }
+    >
+      {loading ? (
+        <div className="py-8 text-center text-sm text-ink-muted">
+          <Loader2 className="size-4 animate-spin inline mr-2" /> Lade Details …
+        </div>
+      ) : tab === "kontakt" ? (
+        <div className="space-y-5">
+          <div className="rounded-squircle-md bg-surface-soft divide-y divide-line-soft">
+            <ContactField
+              icon={<Mail className="size-3.5" />}
+              label="E-Mail"
+              value={detail.email}
+              action={
+                detail.email ? (
+                  <button
+                    type="button"
+                    onClick={() => void copyEmail()}
+                    className="p-1 rounded-full text-ink-muted hover:text-ink hover:bg-surface-muted"
+                    title="E-Mail kopieren"
+                  >
+                    <Copy className="size-3.5" />
+                  </button>
+                ) : null
+              }
+            />
+            <ContactField
+              icon={<Building2 className="size-3.5" />}
+              label="Firma"
+              value={detail.company ? formatCompanyName(detail.company) : null}
+            />
+            <ContactField
+              icon={<MapPin className="size-3.5" />}
+              label="Stadt"
+              value={detail.city ? formatPersonName(detail.city) : null}
+            />
+            <ContactField
+              icon={<Megaphone className="size-3.5" />}
+              label="Kampagnen"
+              value={`${detail.campaignCount} ${detail.campaignCount === 1 ? "Kampagne" : "Kampagnen"} · ${detail.runCount} ${detail.runCount === 1 ? "Runde" : "Runden"}`}
+            />
+            <ContactField
+              icon={<CalendarClock className="size-3.5" />}
+              label="Zuletzt kontaktiert"
+              value={new Date(detail.lastSeenAt).toLocaleDateString("de-DE", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+              })}
+            />
+          </div>
 
-          {/* Engagement-Kacheln */}
-          <div className="grid grid-cols-4 gap-2 px-5 py-4 border-b border-line-soft">
+          <section>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+              Importierte Daten
+            </h3>
+            <LeadFieldGrid data={detail.occurrences[0]?.rawData} />
+          </section>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <EngagementTile
               icon={<Eye className="size-3.5" />}
               label="Aufrufe"
@@ -733,174 +821,14 @@ function ContactDetailDrawer({
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5 space-y-6">
-            {loading ? (
-              <div className="py-8 text-center text-sm text-ink-muted">
-                <Loader2 className="size-4 animate-spin inline mr-2" /> Lade
-                Details …
-              </div>
-            ) : (
-              <>
-                {/* Kontaktdaten */}
-                <section>
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
-                    Kontaktdaten
-                  </h3>
-                  <div className="rounded-squircle-sm bg-surface-soft divide-y divide-line-soft">
-                    <ContactField
-                      icon={<Mail className="size-3.5" />}
-                      label="E-Mail"
-                      value={detail.email}
-                      action={
-                        detail.email ? (
-                          <button
-                            type="button"
-                            onClick={() => void copyEmail()}
-                            className="p-1 rounded-full text-ink-muted hover:text-ink hover:bg-surface-muted"
-                            title="E-Mail kopieren"
-                          >
-                            <Copy className="size-3.5" />
-                          </button>
-                        ) : null
-                      }
-                    />
-                    <ContactField
-                      icon={<Building2 className="size-3.5" />}
-                      label="Firma"
-                      value={detail.company ? formatCompanyName(detail.company) : null}
-                    />
-                    <ContactField
-                      icon={<MapPin className="size-3.5" />}
-                      label="Stadt"
-                      value={detail.city ? formatPersonName(detail.city) : null}
-                    />
-                    <ContactField
-                      icon={<Megaphone className="size-3.5" />}
-                      label="Kampagnen"
-                      value={`${detail.campaignCount} ${detail.campaignCount === 1 ? "Kampagne" : "Kampagnen"} · ${detail.runCount} ${detail.runCount === 1 ? "Runde" : "Runden"}`}
-                    />
-                    <ContactField
-                      icon={<CalendarClock className="size-3.5" />}
-                      label="Zuletzt kontaktiert"
-                      value={new Date(detail.lastSeenAt).toLocaleDateString(
-                        "de-DE",
-                        { day: "2-digit", month: "2-digit", year: "numeric" },
-                      )}
-                    />
-                  </div>
-                </section>
-
-                {/* Kampagnen-Historie */}
-                <section>
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
-                    Kampagnen-Historie ({detail.occurrences.length})
-                  </h3>
-                  <div className="space-y-2">
-                    {detail.occurrences.map((occ) => (
-                      <OccurrenceCard key={occ.leadId} occ={occ} />
-                    ))}
-                  </div>
-                </section>
-
-                {/* Importierte Daten */}
-                <section>
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
-                    Importierte Daten
-                  </h3>
-                  <div className="rounded-squircle-sm bg-surface-soft p-4">
-                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-                      {Object.entries(detail.occurrences[0]?.rawData ?? {})
-                        .map(([k, v]) => [k, String(v ?? "").trim()] as const)
-                        .filter(([, v]) => v !== "")
-                        .map(([k, v]) => (
-                          <div
-                            key={k}
-                            className={cn(
-                              "min-w-0",
-                              v.length > 60 && "sm:col-span-2",
-                            )}
-                          >
-                            <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-                              {k}
-                            </dt>
-                            <dd className="mt-0.5 break-words text-sm text-ink">
-                              {v}
-                            </dd>
-                          </div>
-                        ))}
-                    </dl>
-                  </div>
-                </section>
-              </>
-            )}
+          <div className="space-y-2">
+            {detail.occurrences.map((occ) => (
+              <OccurrenceCard key={occ.leadId} occ={occ} />
+            ))}
           </div>
-
-          <div className="border-t border-line-soft p-4 bg-danger-soft/40">
-            {!showDeleteBox ? (
-              <Button
-                variant="ghost"
-                onClick={() => setShowDeleteBox(true)}
-                iconLeft={<Trash2 className="size-4" />}
-                className="text-danger hover:bg-danger-soft"
-              >
-                Kontakt endgültig löschen (DSGVO)
-              </Button>
-            ) : (
-            <div className="space-y-3">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="size-4 text-red-600 shrink-0 mt-0.5" />
-                <div className="text-xs text-red-900">
-                  <strong>Achtung:</strong> Diese Aktion entfernt alle Spuren
-                  dieses Kontakts aus{" "}
-                  <strong>{detail.campaignCount} Kampagnen</strong>,{" "}
-                  <strong>{detail.runCount} Runden</strong>, inkl. aller
-                  personalisierten Videos, PDFs, QR-Codes und URLs. Nicht
-                  rückgängig zu machen. Tippe unten „DAUERHAFT LÖSCHEN".
-                </div>
-              </div>
-              <Input
-                value={deleteConfirm}
-                onChange={(e) => setDeleteConfirm(e.target.value)}
-                placeholder="DAUERHAFT LÖSCHEN eintippen"
-                className={cn(
-                  "text-sm",
-                  canDelete && "border-red-500 focus:ring-red-500/20",
-                )}
-              />
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setShowDeleteBox(false);
-                    setDeleteConfirm("");
-                  }}
-                  disabled={deleting}
-                >
-                  Abbrechen
-                </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={handleDelete}
-                  disabled={!canDelete || deleting}
-                  iconLeft={
-                    deleting ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="size-4" />
-                    )
-                  }
-                >
-                  Endgültig löschen
-                </Button>
-              </div>
-            </div>
-          )}
-          </div>
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+        </div>
+      )}
+    </CrmDetailModal>
   );
 }
 

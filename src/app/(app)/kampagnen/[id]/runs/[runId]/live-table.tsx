@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useToast } from "@/components/ui/toaster";
-import { LeadAnalyticsDrawer } from "./lead-analytics-drawer";
+import { LeadDetailModal } from "./lead-detail-modal";
 import { buildLeadPublicUrl } from "@/lib/lead-public-url";
 import { cn } from "@/lib/utils";
 import { runStatusLabel, runStatusVariant } from "@/lib/run-status";
@@ -1451,7 +1451,7 @@ export function LiveTable({
         )}
       </div>
 
-      <LeadAnalyticsDrawer
+      <LeadDetailModal
         lead={drawerLead}
         open={drawerOpen}
         onOpenChange={setDrawerOpen}

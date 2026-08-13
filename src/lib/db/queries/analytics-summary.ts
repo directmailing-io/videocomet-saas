@@ -118,7 +118,7 @@ export interface EventListResult {
 /**
  * Read the company name from a lead's `data` jsonb column. Leads come from
  * arbitrary CSV/Google-Sheets imports, so the column name varies. Mirrors the
- * fallback chain used in `lead-analytics-drawer.tsx`.
+ * fallback chain used in `lead-detail-modal.tsx`.
  */
 function pickCompanyName(data: Record<string, string> | null | undefined): string {
   if (!data) return "";
