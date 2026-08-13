@@ -189,6 +189,47 @@ const COMPANY_FIELD_KEYS = new Set([
   "firmenname",
 ]);
 
+/**
+ * Felder mit gleicher Bedeutung (Original-CSV-Spalte + gemappter Platzhalter,
+ * z.B. „Vorname" und „firstName") landen beim Import beide im Daten-Blob.
+ * Für die Anzeige fassen wir sie zu Gruppen zusammen und zeigen identische
+ * Werte nur einmal.
+ */
+const FIELD_ALIAS_GROUPS: Record<string, string> = {
+  vorname: "vorname",
+  firstname: "vorname",
+  nachname: "nachname",
+  lastname: "nachname",
+  name: "name",
+  fullname: "name",
+  email: "email",
+  mail: "email",
+  emailadresse: "email",
+  telefon: "telefon",
+  phone: "telefon",
+  tel: "telefon",
+  firma: "firma",
+  company: "firma",
+  companyname: "firma",
+  unternehmen: "firma",
+  firmenname: "firma",
+  strasse: "strasse",
+  street: "strasse",
+  adresse: "adresse",
+  address: "adresse",
+  plz: "plz",
+  zip: "plz",
+  postleitzahl: "plz",
+  ort: "ort",
+  stadt: "ort",
+  city: "ort",
+  land: "land",
+  country: "land",
+  website: "website",
+  url: "website",
+  webseite: "website",
+};
+
 /** Bekannte Felder zuerst — der Rest folgt in Import-Reihenfolge. */
 const FIELD_PRIORITY = [
   "vorname",
@@ -259,9 +300,10 @@ function FieldValue({
 }
 
 /**
- * Alle importierten Lead-Felder als aufgeräumtes Raster: bekannte
- * Kontaktfelder zuerst, Namen/Firmen formatiert, E-Mails/URLs verlinkt,
- * lange Werte über die volle Breite.
+ * Alle importierten Lead-Felder als aufgeräumte Liste mit Trennlinien:
+ * bekannte Kontaktfelder zuerst, Namen/Firmen formatiert, E-Mails/URLs
+ * verlinkt. Bedeutungsgleiche Duplikate (Original-Spalte + gemappter
+ * Platzhalter mit identischem Wert) werden nur einmal angezeigt.
  */
 export function LeadFieldGrid({
   data,
@@ -276,9 +318,26 @@ export function LeadFieldGrid({
       const i = FIELD_PRIORITY.indexOf(normalizeFieldKey(key));
       return i === -1 ? Number.MAX_SAFE_INTEGER : i;
     };
-    return all
+    const sorted = all
       .map(([k, v], idx) => ({ k, v, idx }))
       .sort((a, b) => rank(a.k) - rank(b.k) || a.idx - b.idx);
+
+    const seen = new Map<string, Set<string>>();
+    const deduped: typeof sorted = [];
+    for (const e of sorted) {
+      const norm = normalizeFieldKey(e.k);
+      const group = FIELD_ALIAS_GROUPS[norm] ?? norm;
+      const valNorm = e.v.toLocaleLowerCase("de-DE");
+      let vals = seen.get(group);
+      if (!vals) {
+        vals = new Set();
+        seen.set(group, vals);
+      }
+      if (vals.has(valNorm)) continue;
+      vals.add(valNorm);
+      deduped.push(e);
+    }
+    return deduped;
   }, [data]);
 
   if (entries.length === 0) {
@@ -290,13 +349,13 @@ export function LeadFieldGrid({
   }
 
   return (
-    <dl className="grid grid-cols-1 gap-x-5 gap-y-3.5 rounded-squircle-md bg-surface-soft px-5 py-4 sm:grid-cols-2">
+    <dl className="divide-y divide-line-soft rounded-squircle-md bg-surface-soft">
       {entries.map(({ k, v }) => (
-        <div key={k} className={cn("min-w-0", v.length > 60 && "sm:col-span-2")}>
-          <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+        <div key={k} className="flex items-baseline gap-3 px-4 py-2.5">
+          <dt className="w-36 shrink-0 truncate text-[11px] font-medium uppercase tracking-wide text-ink-muted">
             {k}
           </dt>
-          <dd className="mt-0.5 break-words text-sm text-ink">
+          <dd className="min-w-0 flex-1 break-words text-sm text-ink">
             <FieldValue fieldKey={k} value={v} />
           </dd>
         </div>

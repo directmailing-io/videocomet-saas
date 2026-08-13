@@ -375,62 +375,59 @@ function ContactRow({
   );
 }
 
+function formatOccWatchTime(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, "0")} min`;
+}
+
+function formatOccRelative(iso: string): string {
+  const d = new Date(iso);
+  const diffMs = Date.now() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "gerade eben";
+  if (diffMin < 60) return `vor ${diffMin} Min.`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `vor ${diffH} Std.`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 30) return `vor ${diffD} Tag${diffD === 1 ? "" : "en"}`;
+  return d.toLocaleDateString("de-DE");
+}
+
+/** Kopfzeile eines Vorkommens: Kampagne + Runde als Links + Datum. */
+function OccurrenceHead({ occ }: { occ: Occurrence }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <Link
+        href={`/kampagnen/${occ.campaignId}`}
+        className="font-semibold text-ink truncate hover:text-brand-deep"
+      >
+        {occ.campaignName}
+      </Link>
+      <div className="text-xs text-ink-muted">
+        <Link
+          href={`/kampagnen/${occ.campaignId}/runs/${occ.runId}`}
+          className="hover:text-brand-deep"
+        >
+          Runde: {occ.runName}
+        </Link>
+        {" · "}
+        {new Date(occ.createdAt).toLocaleDateString("de-DE")}
+      </div>
+    </div>
+  );
+}
+
 /**
- * Zeigt ein einzelnes Vorkommen: Kampagne + Runde als Links, Status,
- * URLs (Landingpage/Video/PDF) UND das Tracking der Aktivität.
- *
- * Tracking-Anzeige richtet sich nach dem was passiert ist:
- *   - Keine Aktivität → "Noch nicht geöffnet"
- *   - Views > 0       → Anzahl + letzter Öffnung
- *   - Video-Plays     → Anzahl + gesamte Watch-Time
- *   - CTA-Clicks      → Anzahl + letzter Klick
+ * Tab „Kampagnen": ein Vorkommen mit Kampagne, Runde, Status und den
+ * direkten Links (Landingpage/Video/PDF) — ohne Tracking.
  */
-function OccurrenceCard({ occ }: { occ: Occurrence }) {
-  const hasActivity =
-    occ.viewCount > 0 || occ.playCount > 0 || occ.ctaClickCount > 0;
-
-  const formatWatchTime = (sec: number): string => {
-    if (sec < 60) return `${sec}s`;
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${String(s).padStart(2, "0")} min`;
-  };
-
-  const formatRelative = (iso: string): string => {
-    const d = new Date(iso);
-    const diffMs = Date.now() - d.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return "gerade eben";
-    if (diffMin < 60) return `vor ${diffMin} Min.`;
-    const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return `vor ${diffH} Std.`;
-    const diffD = Math.floor(diffH / 24);
-    if (diffD < 30) return `vor ${diffD} Tag${diffD === 1 ? "" : "en"}`;
-    return d.toLocaleDateString("de-DE");
-  };
-
+function OccurrenceInfoCard({ occ }: { occ: Occurrence }) {
   return (
     <div className="rounded-squircle-sm bg-surface-soft p-4 text-sm">
-      {/* Kopf: Kampagne + Runde + Status */}
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <Link
-            href={`/kampagnen/${occ.campaignId}`}
-            className="font-semibold text-ink truncate hover:text-brand-deep"
-          >
-            {occ.campaignName}
-          </Link>
-          <div className="text-xs text-ink-muted">
-            <Link
-              href={`/kampagnen/${occ.campaignId}/runs/${occ.runId}`}
-              className="hover:text-brand-deep"
-            >
-              Runde: {occ.runName}
-            </Link>
-            {" · "}
-            {new Date(occ.createdAt).toLocaleDateString("de-DE")}
-          </div>
-        </div>
+        <OccurrenceHead occ={occ} />
         <Badge
           variant={occ.status === "completed" ? "success" : "neutral"}
           className="text-[10px] shrink-0"
@@ -445,7 +442,6 @@ function OccurrenceCard({ occ }: { occ: Occurrence }) {
         </Badge>
       </div>
 
-      {/* URLs */}
       <div className="mt-2 flex flex-wrap gap-2 text-xs">
         {occ.pageUrl && (
           <a
@@ -481,62 +477,71 @@ function OccurrenceCard({ occ }: { occ: Occurrence }) {
           </a>
         )}
       </div>
+    </div>
+  );
+}
 
-      {/* Tracking / Aktivität */}
-      <div className="mt-3 pt-3 border-t border-line-soft">
-        <div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold mb-2">
-          Aktivität
-        </div>
-        {!hasActivity ? (
-          <div className="text-xs text-ink-muted italic">
-            Noch keine Aktivität — der Kontakt hat die Landingpage noch nicht
-            geöffnet.
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <ActivityStat
-              icon={<Eye className="size-3.5" />}
-              label="Aufrufe"
-              value={occ.viewCount.toString()}
-              detail={
-                occ.lastViewedAt
-                  ? `Zuletzt ${formatRelative(occ.lastViewedAt)}`
-                  : undefined
-              }
-              active={occ.viewCount > 0}
-            />
-            <ActivityStat
-              icon={<Play className="size-3.5" />}
-              label="Video gestartet"
-              value={occ.playCount.toString()}
-              detail={
-                occ.watchTimeSec > 0
-                  ? `${formatWatchTime(occ.watchTimeSec)} gesehen`
-                  : undefined
-              }
-              active={occ.playCount > 0}
-            />
-            <ActivityStat
-              icon={<MousePointerClick className="size-3.5" />}
-              label="CTA geklickt"
-              value={occ.ctaClickCount.toString()}
-              detail={
-                occ.lastCtaAt
-                  ? `Zuletzt ${formatRelative(occ.lastCtaAt)}`
-                  : undefined
-              }
-              active={occ.ctaClickCount > 0}
-            />
-            <ActivityStat
-              icon={<Clock className="size-3.5" />}
-              label="Erst-Öffnung"
-              value={occ.firstViewedAt ? formatRelative(occ.firstViewedAt) : "—"}
-              detail={undefined}
-              active={Boolean(occ.firstViewedAt)}
-            />
-          </div>
-        )}
+/** Tab „Aktivität": Tracking eines Vorkommens (Aufrufe, Plays, CTA, …). */
+function OccurrenceActivityCard({ occ }: { occ: Occurrence }) {
+  const hasActivity =
+    occ.viewCount > 0 || occ.playCount > 0 || occ.ctaClickCount > 0;
+
+  return (
+    <div className="rounded-squircle-sm bg-surface-soft p-4 text-sm">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <OccurrenceHead occ={occ} />
       </div>
+      {!hasActivity ? (
+        <div className="text-xs text-ink-muted italic">
+          Noch keine Aktivität — der Kontakt hat die Landingpage noch nicht
+          geöffnet.
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <ActivityStat
+            icon={<Eye className="size-3.5" />}
+            label="Aufrufe"
+            value={occ.viewCount.toString()}
+            detail={
+              occ.lastViewedAt
+                ? `Zuletzt ${formatOccRelative(occ.lastViewedAt)}`
+                : undefined
+            }
+            active={occ.viewCount > 0}
+          />
+          <ActivityStat
+            icon={<Play className="size-3.5" />}
+            label="Video gestartet"
+            value={occ.playCount.toString()}
+            detail={
+              occ.watchTimeSec > 0
+                ? `${formatOccWatchTime(occ.watchTimeSec)} gesehen`
+                : undefined
+            }
+            active={occ.playCount > 0}
+          />
+          <ActivityStat
+            icon={<MousePointerClick className="size-3.5" />}
+            label="CTA geklickt"
+            value={occ.ctaClickCount.toString()}
+            detail={
+              occ.lastCtaAt
+                ? `Zuletzt ${formatOccRelative(occ.lastCtaAt)}`
+                : undefined
+            }
+            active={occ.ctaClickCount > 0}
+          />
+          <ActivityStat
+            icon={<Clock className="size-3.5" />}
+            label="Erst-Öffnung"
+            value={
+              occ.firstViewedAt ? formatOccRelative(occ.firstViewedAt) : "—"
+            }
+            detail={undefined}
+            active={Boolean(occ.firstViewedAt)}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -584,7 +589,9 @@ function ContactDetailModal({
   onDeleted: () => void;
 }) {
   const { toast } = useToast();
-  const [tab, setTab] = React.useState<"kontakt" | "kampagnen">("kontakt");
+  const [tab, setTab] = React.useState<"kontakt" | "kampagnen" | "aktivitaet">(
+    "kontakt",
+  );
   const [deleteConfirm, setDeleteConfirm] = React.useState("");
   const [showDeleteBox, setShowDeleteBox] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
@@ -672,9 +679,12 @@ function ContactDetailModal({
           label: "Kampagnen",
           badge: detail.occurrences.length,
         },
+        { id: "aktivitaet", label: "Aktivität" },
       ]}
       activeTab={tab}
-      onTabChange={(id) => setTab(id as "kontakt" | "kampagnen")}
+      onTabChange={(id) =>
+        setTab(id as "kontakt" | "kampagnen" | "aktivitaet")
+      }
       footer={
         !showDeleteBox ? (
           <Button
@@ -796,6 +806,12 @@ function ContactDetailModal({
             <LeadFieldGrid data={detail.occurrences[0]?.rawData} />
           </section>
         </div>
+      ) : tab === "kampagnen" ? (
+        <div className="space-y-2">
+          {detail.occurrences.map((occ) => (
+            <OccurrenceInfoCard key={occ.leadId} occ={occ} />
+          ))}
+        </div>
       ) : (
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -823,7 +839,7 @@ function ContactDetailModal({
 
           <div className="space-y-2">
             {detail.occurrences.map((occ) => (
-              <OccurrenceCard key={occ.leadId} occ={occ} />
+              <OccurrenceActivityCard key={occ.leadId} occ={occ} />
             ))}
           </div>
         </div>
