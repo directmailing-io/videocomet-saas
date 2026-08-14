@@ -547,6 +547,10 @@ export function PhaseRegie({
   const selectedIndex = selected
     ? tabs.findIndex((t) => t.id === selected.id)
     : -1;
+  /** Kachel des offenen URL-Formulars — für die fokussierte Formular-Ansicht. */
+  const activeTile = addForm
+    ? [...PERSONALIZED_TILES, ...STATIC_TILES].find((t) => t.kind === addForm)
+    : null;
 
   /** Einheitliche Szenen-Kachel; personalisierte Kacheln mit Violett-Akzent. */
   const renderAddTile = (tile: AddTile, personalized: boolean) => {
@@ -760,15 +764,65 @@ export function PhaseRegie({
               {showNewTabPage ? (
                 <div className="absolute inset-0 overflow-y-auto bg-surface">
                   <div className="mx-auto flex min-h-full max-w-xl flex-col items-center justify-center gap-4 px-6 py-8">
-                    <div className="text-center">
-                      <h2 className="text-base font-bold text-ink">
-                        Neue Szene
-                      </h2>
-                      <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-                        Beim Aufnehmen springst du live zwischen deinen
-                        Szenen, wie zwischen Browser-Tabs.
-                      </p>
-                    </div>
+                    {!addForm && (
+                      <>
+                    {tabs.length === 0 ? (
+                      <>
+                        <div className="text-center">
+                          <h2 className="text-base font-bold text-ink">
+                            Willkommen im Studio
+                          </h2>
+                          <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+                            Hier entsteht dein Video in drei Schritten, ganz
+                            ohne Schnitt:
+                          </p>
+                        </div>
+                        <ol className="grid w-full grid-cols-3 gap-2">
+                          {[
+                            {
+                              title: "Szenen vorbereiten",
+                              text: "Wähle unten, was dein Video zeigen soll, zum Beispiel die Website deines Leads.",
+                            },
+                            {
+                              title: "Einmal aufnehmen",
+                              text: "Du sprichst in die Kamera und wechselst live zwischen deinen Szenen.",
+                            },
+                            {
+                              title: "Fertig",
+                              text: "Kein Schnitt nötig. Jeder Lead bekommt automatisch sein persönliches Video.",
+                            },
+                          ].map((step, i) => (
+                            <li
+                              key={step.title}
+                              className="rounded-squircle-md bg-surface-soft p-3"
+                            >
+                              <span className="flex size-5 items-center justify-center rounded-full bg-brand/15 text-[10px] font-bold text-brand-deep">
+                                {i + 1}
+                              </span>
+                              <p className="mt-1.5 text-[11px] font-bold text-ink">
+                                {step.title}
+                              </p>
+                              <p className="mt-0.5 text-[10px] leading-snug text-ink-muted">
+                                {step.text}
+                              </p>
+                            </li>
+                          ))}
+                        </ol>
+                        <p className="text-xs font-semibold text-ink">
+                          Los geht&apos;s: Womit soll dein Video starten?
+                        </p>
+                      </>
+                    ) : (
+                      <div className="text-center">
+                        <h2 className="text-base font-bold text-ink">
+                          Neue Szene
+                        </h2>
+                        <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+                          Beim Aufnehmen springst du live zwischen deinen
+                          Szenen, wie zwischen Browser-Tabs.
+                        </p>
+                      </div>
+                    )}
 
                     <section className="w-full">
                       <div className="mb-1.5 flex items-center gap-1.5 px-1">
@@ -823,11 +877,39 @@ export function PhaseRegie({
                         {canvaError}
                       </p>
                     )}
+                      </>
+                    )}
 
-                    {/* URL-Formular für Website / Google Docs */}
-                    {addForm && (
+                    {/* Fokussierte Formular-Ansicht: Kacheln ausgeblendet,
+                        damit die Eingabe nicht übersehen wird. */}
+                    {addForm && activeTile && (
+                      <>
+                      <div className="w-full">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddForm(null);
+                            setAddFormError(null);
+                          }}
+                          className="flex items-center gap-1 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
+                        >
+                          <ChevronLeft className="size-3.5" />
+                          Zurück zur Auswahl
+                        </button>
+                      </div>
+                      <div className="flex flex-col items-center text-center">
+                        <span className="flex size-10 items-center justify-center rounded-squircle-md bg-brand/15 text-brand-deep">
+                          {activeTile.icon}
+                        </span>
+                        <h2 className="mt-2 text-base font-bold text-ink">
+                          {activeTile.label}
+                        </h2>
+                        <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+                          {activeTile.hint}
+                        </p>
+                      </div>
                       <form
-                        className="flex w-full flex-col gap-2 rounded-squircle-md border border-line-soft bg-surface-soft p-3"
+                        className="flex w-full flex-col gap-2 rounded-squircle-md border border-brand/40 bg-surface p-4 shadow-card"
                         onSubmit={(e) => {
                           e.preventDefault();
                           submitAddForm();
@@ -949,6 +1031,7 @@ export function PhaseRegie({
                           </p>
                         )}
                       </form>
+                      </>
                     )}
                   </div>
                 </div>

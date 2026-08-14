@@ -515,9 +515,9 @@ function RecordingEntryCards({
         <span className="sr-only">VIDEOCOMET Studio</span>
         <StudioWordmark height={28} className="mt-4" />
         <span className="mt-3 max-w-sm text-sm text-ink-muted leading-relaxed">
-          Noch kein Video? Hier nimmst du es direkt auf. Du sprichst in die
-          Kamera, VIDEOCOMET zeigt dabei zum Beispiel die Website deines
-          Empfängers. Ohne Schnitt, ohne Vorkenntnisse.
+          Alles in einem Rutsch: Du sprichst in die Kamera, und dein Video
+          zeigt gleichzeitig den Bildschirm dazu, zum Beispiel die Website
+          deines Leads. Einmal aufnehmen, fertig. Kein Schnitt nötig.
         </span>
         {isDesktop ? (
           <span className="mt-auto pt-6">
@@ -550,8 +550,9 @@ function RecordingEntryCards({
           Klassischer Editor
         </span>
         <span className="mt-2 text-sm text-ink-muted leading-relaxed">
-          Video schon fertig? Wähle es aus und gestalte danach alles
-          drumherum.
+          Hier nimmst du nur dich mit der Webcam auf oder wählst ein
+          fertiges Video. Die Bildschirm-Szenen baust du danach Schritt für
+          Schritt selbst zusammen.
         </span>
         <span className="mt-auto pt-5 self-start">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink-muted transition-colors group-hover:border-ink/30 group-hover:text-ink">
