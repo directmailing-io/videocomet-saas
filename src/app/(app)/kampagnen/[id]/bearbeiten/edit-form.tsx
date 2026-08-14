@@ -7,8 +7,8 @@ import {
   ArrowLeft,
   Camera,
   Check,
+  FileText,
   Image as ImageIcon,
-  Info,
   Globe,
   LayoutTemplate,
   MonitorPlay,
@@ -19,7 +19,13 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -31,6 +37,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toaster";
 import { ThumbnailFramePicker } from "@/components/editor/thumbnail-frame-picker";
 import {
@@ -201,9 +213,9 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
     thumbnailPlayIcon: data.campaign.thumbnailPlayIcon ?? false,
   });
 
-  const [saving, setSaving] = React.useState(false);
   const [savingField, setSavingField] = React.useState<string | null>(null);
   const [showWebcamPicker, setShowWebcamPicker] = React.useState(false);
+  const [tab, setTab] = React.useState("video");
 
   const id = data.campaign.id;
 
@@ -247,67 +259,6 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
     [id, toast, router],
   );
 
-  async function saveAll() {
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/campaigns/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: state.name,
-          mode: state.mode,
-          webcamMediaId: state.webcamMediaId,
-          pipPosition: state.pipPosition,
-          pipShape: state.pipShape,
-          landingPageTemplateId: state.customLpTemplateId
-            ? null
-            : state.landingPageTemplateId,
-          customLpTemplateId: state.customLpTemplateId,
-          domainId: state.domainId,
-          slugTemplate: state.slugTemplate,
-          slugSuffix: state.slugSuffix,
-          pdfEnabled: state.pdfEnabled,
-          pdfGoogleDocsUrl: state.pdfGoogleDocsUrl
-            ? state.pdfGoogleDocsUrl
-            : null,
-          pdfQrEnabled: state.pdfQrEnabled,
-          pdfThumbnailEnabled: state.pdfThumbnailEnabled,
-          pdfThumbnailFrameMs: state.pdfThumbnailFrameMs,
-          // Paket C — Backend ignoriert, solange API-Schema noch ungepatcht.
-          thumbnailImageEnabled: state.thumbnailImageEnabled,
-          thumbnailImage: state.thumbnailImage,
-          // Migration 0019 — Single-Source-of-Truth + Play-Icon.
-          thumbnailMode: state.thumbnailMode,
-          thumbnailPlayIcon: state.thumbnailPlayIcon,
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        toast({
-          title: "Speichern fehlgeschlagen",
-          description:
-            (body as { error?: string }).error ?? "Bitte erneut versuchen.",
-          variant: "danger",
-        });
-        return;
-      }
-      toast({
-        title: "Kampagne gespeichert",
-        description: "Alle Änderungen wurden übernommen.",
-        variant: "success",
-      });
-      router.refresh();
-    } catch {
-      toast({
-        title: "Speichern fehlgeschlagen",
-        description: "Verbindung zum Server fehlgeschlagen.",
-        variant: "danger",
-      });
-    } finally {
-      setSaving(false);
-    }
-  }
-
   const currentWebcam = data.webcams.find(
     (w) => w.id === state.webcamMediaId,
   );
@@ -316,76 +267,152 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
     <>
       <PageHeader
         title="Kampagne bearbeiten"
-        subtitle={`Änderungen werden direkt gespeichert. (${state.name})`}
+        subtitle="Alle Änderungen werden automatisch gespeichert."
         actions={
-          <>
-            <Button variant="ghost" asChild iconLeft={<ArrowLeft className="size-4" />}>
-              <Link href={`/kampagnen/${id}`}>Zurück</Link>
-            </Button>
-            {state.mode === "with-presentation" && (
-              <Button
-                variant="ghost"
-                asChild
-                iconLeft={<MonitorPlay className="size-4" />}
-              >
+          <Button
+            variant="ghost"
+            asChild
+            iconLeft={<ArrowLeft className="size-4" />}
+          >
+            <Link href={`/kampagnen/${id}`}>Zurück</Link>
+          </Button>
+        }
+      />
+
+      <div className="max-w-3xl space-y-5">
+        {/* Name kompakt, ohne eigene Karte-Überschrift */}
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <Label
+              htmlFor="edit-name"
+              className="shrink-0 text-sm font-semibold text-ink"
+            >
+              Name
+            </Label>
+            <Input
+              id="edit-name"
+              value={state.name}
+              onChange={(e) =>
+                setState((s) => ({ ...s, name: e.target.value }))
+              }
+              onBlur={() => {
+                if (state.name.trim() && state.name !== data.campaign.name) {
+                  void patchAndSync({ name: state.name }, "Name");
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+              placeholder="Kampagnen-Name"
+            />
+          </CardContent>
+        </Card>
+
+        {/* Drei Themenbereiche statt zwölf loser Karten */}
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="video">
+              <Video className="size-4" />
+              Video
+            </TabsTrigger>
+            <TabsTrigger value="landingpage">
+              <Globe className="size-4" />
+              Landingpage
+            </TabsTrigger>
+            <TabsTrigger value="brief">
+              <FileText className="size-4" />
+              PDF-Brief
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="video" className="space-y-5">
+        {/* Video-Editor prominent statt versteckt im Header */}
+        {state.mode === "with-presentation" && (
+          <Card>
+            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+              <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-squircle-md bg-brand-soft text-brand-deep">
+                <MonitorPlay className="size-6" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-ink">Video-Editor</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
+                  Szenen, Reihenfolge und Vorschau deines Videos bearbeitest
+                  du im Editor.
+                </p>
+              </div>
+              <Button asChild iconLeft={<MonitorPlay className="size-4" />}>
                 <Link href={`/kampagnen/${id}/editor`}>
                   Video-Editor öffnen
                 </Link>
               </Button>
-            )}
-            <Button
-              onClick={() => {
-                void saveAll();
-              }}
-              loading={saving}
-              iconLeft={<Save className="size-4" />}
-            >
-              Speichern
-            </Button>
-          </>
-        }
-      />
+            </CardContent>
+          </Card>
+        )}
 
-      <div className="grid grid-cols-1 gap-5 max-w-3xl">
-        {/* Name */}
+        {/* Modus */}
         <Card>
           <CardHeader>
-            <CardTitle>Name</CardTitle>
+            <CardTitle>Video-Aufbau</CardTitle>
+            <CardDescription>
+              Bestimmt, ob dein Video pur verschickt wird oder mit Szenen
+              kombiniert ist.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-2 items-end">
-              <div className="flex-1">
-                <Label htmlFor="edit-name">Kampagnen-Name</Label>
-                <Input
-                  id="edit-name"
-                  value={state.name}
-                  onChange={(e) =>
-                    setState((s) => ({ ...s, name: e.target.value }))
-                  }
-                  onBlur={() => {
-                    if (
-                      state.name.trim() &&
-                      state.name !== data.campaign.name
-                    ) {
-                      void patchAndSync({ name: state.name }, "Name");
-                    }
-                  }}
-                  placeholder="Kampagnen-Name"
-                />
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  if (state.name.trim()) {
-                    void patchAndSync({ name: state.name }, "Name");
-                  }
-                }}
-                loading={savingField === "Name"}
-                iconLeft={<Save className="size-4" />}
-              >
-                Speichern
-              </Button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {(
+                [
+                  {
+                    value: "webcam-only" as const,
+                    title: "Nur Webcam",
+                    description:
+                      "Dein aufgenommenes Video wird unverändert versendet.",
+                    icon: Video,
+                  },
+                  {
+                    value: "with-presentation" as const,
+                    title: "Mit Präsentation",
+                    description:
+                      "Dein Video wird mit Szenen kombiniert: Webseiten, Folien oder Bilder. Den Ablauf gestaltest du im Video-Editor.",
+                    icon: LayoutTemplate,
+                  },
+                ]
+              ).map((opt) => {
+                const Icon = opt.icon;
+                const active = opt.value === state.mode;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      if (opt.value === state.mode) return;
+                      setState((s) => ({ ...s, mode: opt.value }));
+                      void patchAndSync({ mode: opt.value }, "Modus");
+                    }}
+                    className={cn(
+                      "text-left rounded-squircle-md border bg-surface p-4 transition-all relative",
+                      active
+                        ? "border-brand ring-2 ring-brand/30"
+                        : "border-line hover:border-brand/50",
+                    )}
+                  >
+                    {active && (
+                      <span className="absolute top-2 right-2 inline-flex size-5 items-center justify-center rounded-full bg-brand text-white">
+                        <Check className="size-3" />
+                      </span>
+                    )}
+                    <span className="inline-flex size-10 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep mb-2">
+                      <Icon className="size-5" />
+                    </span>
+                    <p className="text-sm font-semibold text-ink">
+                      {opt.title}
+                    </p>
+                    <p className="text-xs text-ink-muted mt-1 leading-relaxed">
+                      {opt.description}
+                    </p>
+                  </button>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -393,7 +420,11 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
         {/* Webcam */}
         <Card>
           <CardHeader>
-            <CardTitle>Webcam</CardTitle>
+            <CardTitle>Dein Video</CardTitle>
+            <CardDescription>
+              Die Aufnahme von dir, die als Grundlage für jedes Lead-Video
+              dient.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {currentWebcam ? (
@@ -501,101 +532,15 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
           initialEnabled={data.campaign.introEnabled ?? false}
         />
 
-        {/* Modus */}
+        {/* PiP nur relevant, wenn Szenen im Spiel sind */}
+        {state.mode === "with-presentation" && (
         <Card>
           <CardHeader>
-            <CardTitle>Modus</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {(
-                [
-                  {
-                    value: "webcam-only" as const,
-                    title: "Nur Webcam",
-                    description:
-                      "Das Webcam-Video wird unverändert versendet.",
-                    icon: Video,
-                  },
-                  {
-                    value: "with-presentation" as const,
-                    title: "Mit Präsentation",
-                    description:
-                      "Webcam wird mit Folien, Websites oder Bildern kombiniert.",
-                    icon: LayoutTemplate,
-                  },
-                ]
-              ).map((opt) => {
-                const Icon = opt.icon;
-                const active = opt.value === state.mode;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => {
-                      if (opt.value === state.mode) return;
-                      setState((s) => ({ ...s, mode: opt.value }));
-                      void patchAndSync({ mode: opt.value }, "Modus");
-                    }}
-                    className={cn(
-                      "text-left rounded-squircle-md border bg-surface p-4 transition-all relative",
-                      active
-                        ? "border-brand ring-2 ring-brand/30"
-                        : "border-line hover:border-brand/50",
-                    )}
-                  >
-                    {active && (
-                      <span className="absolute top-2 right-2 inline-flex size-5 items-center justify-center rounded-full bg-brand text-white">
-                        <Check className="size-3" />
-                      </span>
-                    )}
-                    <span className="inline-flex size-10 items-center justify-center rounded-squircle-sm bg-brand-soft text-brand-deep mb-2">
-                      <Icon className="size-5" />
-                    </span>
-                    <p className="text-sm font-semibold text-ink">
-                      {opt.title}
-                    </p>
-                    <p className="text-xs text-ink-muted mt-1 leading-relaxed">
-                      {opt.description}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Segmente */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Segmente</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-start gap-3 rounded-squircle-sm bg-brand-soft p-4">
-              <Info className="size-5 text-brand-deep shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm text-ink">
-                  Der Segment-Editor ist aktuell nur im Neu-Wizard verfügbar.
-                  Eine Bearbeitung bestehender Segmente folgt in v2.
-                </p>
-                <p className="text-xs text-ink-muted mt-1">
-                  Tipp: Du kannst eine neue Kampagne mit angepassten
-                  Segmenten anlegen und die alte löschen.
-                </p>
-                <div className="mt-3">
-                  <Button asChild variant="ghost" size="sm">
-                    <Link href="/kampagnen/neu">Neue Kampagne anlegen</Link>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* PiP */}
-        <Card>
-          <CardHeader>
-            <CardTitle>PiP (Picture-in-Picture)</CardTitle>
+            <CardTitle>Dein Bild im Video (PiP)</CardTitle>
+            <CardDescription>
+              So erscheint dein Webcam-Bild als kleines Fenster über den
+              Szenen.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -641,11 +586,18 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
             </div>
           </CardContent>
         </Card>
+        )}
+          </TabsContent>
 
+          <TabsContent value="landingpage" className="space-y-5">
         {/* Landingpage-Vorlage */}
         <Card>
           <CardHeader>
-            <CardTitle>Landingpage-Vorlage</CardTitle>
+            <CardTitle>Vorlage</CardTitle>
+            <CardDescription>
+              Das Design der Seite, auf der dein Video pro Lead abgespielt
+              wird.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {data.templates.length === 0 &&
@@ -696,7 +648,10 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
         {/* Custom-Domain */}
         <Card>
           <CardHeader>
-            <CardTitle>Custom-Domain</CardTitle>
+            <CardTitle>Domain</CardTitle>
+            <CardDescription>
+              Unter welcher Web-Adresse die Landingpage erreichbar ist.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <DomainSelect
@@ -710,10 +665,13 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
           </CardContent>
         </Card>
 
-        {/* Slug-Vorlage */}
+        {/* Lead-Link: Slug-Vorlage + optionaler Suffix in EINER Karte */}
         <Card>
           <CardHeader>
-            <CardTitle>Slug-Vorlage</CardTitle>
+            <CardTitle>Persönlicher Link pro Lead</CardTitle>
+            <CardDescription>
+              So wird die Web-Adresse aufgebaut, die jeder Lead bekommt.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <SlugTemplateField
@@ -728,15 +686,7 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
                 setState((s) => ({ ...s, slugTemplate: next }))
               }
             />
-          </CardContent>
-        </Card>
-
-        {/* Slug-Suffix (optional) */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Slug-Suffix (optional)</CardTitle>
-          </CardHeader>
-          <CardContent>
+            <div className="mt-5 border-t border-line-soft pt-5">
             <SlugSuffixField
               value={state.slugSuffix}
               onCommit={(next) => {
@@ -747,13 +697,20 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
                 setState((s) => ({ ...s, slugSuffix: next }))
               }
             />
+            </div>
           </CardContent>
         </Card>
+          </TabsContent>
 
+          <TabsContent value="brief" className="space-y-5">
         {/* PDF */}
         <Card>
           <CardHeader>
             <CardTitle>PDF-Brief</CardTitle>
+            <CardDescription>
+              Pro Lead ein persönliches Anschreiben als PDF, zum Beispiel für
+              den Postversand.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
@@ -837,10 +794,17 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
             <CardTitle>Vorschaubild im Brief</CardTitle>
           </CardHeader>
           <CardContent>
+            {!state.pdfEnabled ? (
+              <p className="text-sm text-ink-muted">
+                Aktiviere zuerst oben den PDF-Brief, dann kannst du hier das
+                Vorschaubild einstellen.
+              </p>
+            ) : (
+              <>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-ink">
-                  Thumbnail einbetten
+                  Vorschaubild einbetten
                 </p>
                 <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
                   Vorschaubild auf der ersten Brief-Seite. Wähle Standbild
@@ -1048,8 +1012,12 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
                 )}
               </div>
             )}
+              </>
+            )}
           </CardContent>
         </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </>
   );

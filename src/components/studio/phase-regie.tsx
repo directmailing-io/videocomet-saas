@@ -25,6 +25,7 @@ import {
   Globe2,
   Image as ImageIcon,
   Loader2,
+  MonitorUp,
   PlaySquare,
   Plus,
   Presentation,
@@ -44,6 +45,7 @@ import {
   websiteSegmentMappingKey,
 } from "@/lib/placeholders/website-url";
 import {
+  createCanvaSegment,
   createGDocsSegment,
   createGSlideSegment,
   createPdfSegment,
@@ -119,6 +121,12 @@ const PERSONALIZED_TILES: AddTile[] = [
     icon: <Presentation className="size-4" />,
   },
   {
+    kind: "canva",
+    label: "PowerPoint-Datei (Canva)",
+    hint: "Als .pptx hochladen, Platzhalter pro Lead ausgefüllt",
+    icon: <MonitorUp className="size-4" />,
+  },
+  {
     kind: "gdocs",
     label: "Google Docs",
     hint: "Dein Dokument mit Platzhaltern, pro Lead ausgefüllt",
@@ -136,8 +144,8 @@ const STATIC_TILES: AddTile[] = [
   },
   {
     kind: "pdf",
-    label: "PDF-Folien (Canva, PowerPoint)",
-    hint: "Folien als PDF exportieren und hier hochladen",
+    label: "PDF-Folien",
+    hint: "Folien als PDF hochladen, ohne Platzhalter",
     icon: <FileType2 className="size-4" />,
   },
   {
@@ -240,6 +248,84 @@ export function PhaseRegie({
 
   /** Laufender Google-Slides-Import (dauert je nach Deck 10-60 s). */
   const [gslideImporting, setGslideImporting] = React.useState(false);
+
+  /** Laufender PPTX-Upload + Folien-Scan (LibreOffice, 10-60 s). */
+  const [canvaImporting, setCanvaImporting] = React.useState(false);
+  const [canvaError, setCanvaError] = React.useState<string | null>(null);
+  const canvaInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const onCanvaFile = async (file: File) => {
+    setCanvaImporting(true);
+    setCanvaError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const uploadRes = await fetch("/api/canva/upload", {
+        method: "POST",
+        body: form,
+        credentials: "include",
+      });
+      const uploadData = (await uploadRes.json().catch(() => null)) as {
+        error?: string;
+        mediaId?: string;
+        publicUrl?: string;
+        fileName?: string;
+      } | null;
+      if (!uploadRes.ok || !uploadData?.mediaId || !uploadData.publicUrl) {
+        throw new Error(
+          uploadData?.error ||
+            "Die Datei konnte nicht hochgeladen werden. Bitte versuche es erneut.",
+        );
+      }
+      const procRes = await fetch("/api/canva/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ pptxMediaId: uploadData.mediaId }),
+      });
+      const procData = (await procRes.json().catch(() => null)) as {
+        error?: string;
+        fileName?: string | null;
+        slides?: {
+          slideIndex: number;
+          thumbnailUrl: string | null;
+          detectedPlaceholders: string[];
+        }[];
+      } | null;
+      if (!procRes.ok) {
+        throw new Error(
+          procData?.error ||
+            "Die Präsentation konnte nicht verarbeitet werden. Bitte versuche es erneut.",
+        );
+      }
+      const slides = (procData?.slides ?? []).filter((s) => !!s.thumbnailUrl);
+      if (slides.length === 0) {
+        throw new Error(
+          "In der Datei wurden keine Folien gefunden. Prüfe die PPTX-Datei und versuche es erneut.",
+        );
+      }
+      const fileName = procData?.fileName ?? uploadData.fileName ?? null;
+      for (const s of slides) {
+        const seg = createCanvaSegment({ label: `Folie ${s.slideIndex + 1}` });
+        seg.pptxMediaId = uploadData.mediaId;
+        seg.pptxPublicUrl = uploadData.publicUrl;
+        seg.fileName = fileName;
+        seg.slideIndex = s.slideIndex;
+        seg.thumbnailUrl = s.thumbnailUrl;
+        seg.detectedPlaceholders = s.detectedPlaceholders;
+        seg.lastFetchedAt = new Date().toISOString();
+        onAddTab(seg);
+      }
+    } catch (err) {
+      setCanvaError(
+        err instanceof Error
+          ? err.message
+          : "Die Präsentation konnte nicht verarbeitet werden.",
+      );
+    } finally {
+      setCanvaImporting(false);
+    }
+  };
 
   const submitGSlideForm = async () => {
     const urlErr = urlInputError(addUrl);
@@ -359,9 +445,14 @@ export function PhaseRegie({
   const onTileClick = (kind: StudioSceneKind) => {
     setPdfError(null);
     setMediaError(null);
+    setCanvaError(null);
     setAddFormError(null);
     if (kind === "pdf") {
       fileInputRef.current?.click();
+      return;
+    }
+    if (kind === "canva") {
+      canvaInputRef.current?.click();
       return;
     }
     if (kind === "image" || kind === "video") {
@@ -462,6 +553,7 @@ export function PhaseRegie({
     const busy =
       (tile.kind === "pdf" && pdfUploading) ||
       (tile.kind === "gslide" && gslideImporting) ||
+      (tile.kind === "canva" && canvaImporting) ||
       tile.kind === mediaUploading;
     const activeForm = addForm === tile.kind;
     return (
@@ -498,7 +590,7 @@ export function PhaseRegie({
         </span>
         <span className="text-[10px] leading-snug text-ink-muted">
           {busy
-            ? tile.kind === "gslide"
+            ? tile.kind === "gslide" || tile.kind === "canva"
               ? "Folien werden geladen…"
               : tile.kind === mediaUploading && mediaProgress > 0
                 ? `Wird hochgeladen… ${mediaProgress} %`
@@ -725,6 +817,13 @@ export function PhaseRegie({
                       </p>
                     )}
 
+                    {canvaError && (
+                      <p className="flex w-full items-start gap-1.5 rounded-squircle-sm bg-danger-soft px-3 py-2 text-[11px] text-danger">
+                        <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                        {canvaError}
+                      </p>
+                    )}
+
                     {/* URL-Formular für Website / Google Docs */}
                     {addForm && (
                       <form
@@ -883,6 +982,19 @@ export function PhaseRegie({
               const f = e.target.files?.[0];
               e.target.value = "";
               if (f) void onPdfFile(f);
+            }}
+          />
+
+          {/* Verstecktes PPTX-Input (Canva/PowerPoint) */}
+          <input
+            ref={canvaInputRef}
+            type="file"
+            accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void onCanvaFile(f);
             }}
           />
 
@@ -1121,6 +1233,39 @@ function SceneSettings({
       <div className="rounded-squircle-lg bg-surface p-3 shadow-card">
         <p className="text-[11px] leading-relaxed text-ink-muted">
           Folie {seg.slideIndex + 1} deiner Präsentation.{" "}
+          {seg.detectedPlaceholders.length > 0 ? (
+            <>
+              Platzhalter auf dieser Folie (werden pro Lead ersetzt):{" "}
+              {seg.detectedPlaceholders.map((p, i) => (
+                <React.Fragment key={p}>
+                  {i > 0 && ", "}
+                  <code className="rounded bg-surface-muted px-1">
+                    {`{{${p}}}`}
+                  </code>
+                </React.Fragment>
+              ))}
+            </>
+          ) : (
+            <>
+              Platzhalter wie{" "}
+              <code className="rounded bg-surface-muted px-1">
+                {"{{firma}}"}
+              </code>{" "}
+              würden pro Lead ersetzt, auf dieser Folie wurden keine
+              gefunden.
+            </>
+          )}
+        </p>
+      </div>
+    );
+  }
+
+  if (seg.kind === "canva") {
+    return (
+      <div className="rounded-squircle-lg bg-surface p-3 shadow-card">
+        <p className="text-[11px] leading-relaxed text-ink-muted">
+          Folie {seg.slideIndex + 1}
+          {seg.fileName ? ` von ${seg.fileName}` : ""}.{" "}
           {seg.detectedPlaceholders.length > 0 ? (
             <>
               Platzhalter auf dieser Folie (werden pro Lead ersetzt):{" "}

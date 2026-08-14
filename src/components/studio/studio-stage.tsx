@@ -221,8 +221,12 @@ export function StudioStage({
         showToolbar={doc.showToolbar}
       />
     );
-  } else if (segment.kind === "gslide" && segment.thumbnailUrl) {
-    // Folie aus der Google-Slides-Präsentation: Standbild, contain auf Weiß.
+  } else if (
+    (segment.kind === "gslide" || segment.kind === "canva") &&
+    segment.thumbnailUrl
+  ) {
+    // Folie aus Google Slides bzw. hochgeladener PPTX: Standbild,
+    // contain auf Weiß.
     content = (
       <div className="absolute inset-0 bg-white">
         {/* eslint-disable-next-line @next/next/no-img-element */}

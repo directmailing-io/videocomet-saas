@@ -12,6 +12,7 @@ import {
   Globe,
   Globe2,
   Image as ImageIcon,
+  MonitorUp,
   PlaySquare,
   Presentation,
   Type,
@@ -36,6 +37,8 @@ export function SceneKindIcon({
       return <FileText className={cls} />;
     case "gslide":
       return <Presentation className={cls} />;
+    case "canva":
+      return <MonitorUp className={cls} />;
     case "pdf":
       return <FileType2 className={cls} />;
     case "image":
