@@ -16,6 +16,12 @@ import {
 import { getDomainByHostname } from "@/lib/db/queries/user-domains";
 import { LandingThemeProvider } from "@/components/landing-blocks/theme-provider";
 import { extractThemeAndBrand } from "@/lib/landing-theme/extract";
+import {
+  appBaseUrl,
+  leadFirstName,
+  ogShareDescription,
+  ogShareTitle,
+} from "@/lib/landing-og";
 import { VideoPlayer } from "./video-player";
 import { LandingRender } from "./landing-render";
 import { TrackerInit } from "./tracker-init";
@@ -91,15 +97,59 @@ async function loadCampaignAndTemplate(runId: string): Promise<{
   }
 }
 
+/**
+ * Personalisierte Share-Vorschau (Daniel, 2026-08-15): Titel/Beschreibung
+ * mit Vornamen + OG-Bild im Markenlook (/api/og/v/<slug>). Der Vorname ist
+ * bewusst die einzige personenbezogene Angabe; scheitert die Lead-Auflösung,
+ * fallen wir auf neutrale Texte zurück und blocken NIE den Seiten-Render.
+ */
 export async function generateMetadata({
   params,
+  searchParams,
 }: PublicLandingProps): Promise<Metadata> {
   const { slug } = await params;
-  // We deliberately keep metadata minimal — no PII in the title.
+  let firstName: string | null = null;
+  let hostParam: string | null = null;
+  try {
+    hostParam = resolveCustomDomainHostFromPage(
+      await searchParams,
+      await headers(),
+    );
+    let lead: Awaited<ReturnType<typeof getLeadBySlugForDefaultDomain>> = null;
+    if (hostParam) {
+      const domain = await getDomainByHostname(hostParam);
+      if (domain && domain.status === "active") {
+        lead = await getLeadBySlugAndDomain(slug, domain.id);
+      }
+    } else {
+      lead = await getLeadBySlugForDefaultDomain(slug);
+    }
+    firstName = lead ? leadFirstName(lead.data) : null;
+  } catch {
+    // neutrale Metadaten sind besser als eine 500 im Head
+  }
+
+  const title = ogShareTitle(firstName);
+  const description = ogShareDescription(firstName);
+  const ogImageUrl = `${appBaseUrl()}/api/og/v/${encodeURIComponent(slug)}${
+    hostParam ? `?host=${encodeURIComponent(hostParam)}` : ""
+  }`;
   return {
-    title: "VIDEOCOMET",
-    description: "Personalisierte Videobotschaft.",
+    title,
+    description,
     robots: { index: false, follow: false },
+    openGraph: {
+      title,
+      description,
+      type: "video.other",
+      images: [{ url: ogImageUrl, width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImageUrl],
+    },
     other: { "x-slug": slug },
   };
 }
