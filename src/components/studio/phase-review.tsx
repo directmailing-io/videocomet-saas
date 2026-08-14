@@ -34,6 +34,7 @@ import type {
   StudioPipShape,
 } from "./studio-flow";
 import { SceneKindIcon } from "./scene-icon";
+import { StudioWordmark } from "./studio-wordmark";
 import {
   formatSegmentDuration,
   tabLabel,
@@ -165,37 +166,34 @@ export function PhaseReview({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="border-b border-white/10 px-6 py-3">
-        <h1 className="text-sm font-bold text-white">
-          Studio-Aufnahme · Überprüfen
-        </h1>
-        <p className="text-xs text-white/50">
-          Schau dir deine Aufnahme an. Verdächtig kurze Szenen kannst du
-          entfernen — dein Video bleibt dabei ungeschnitten.
-        </p>
+      <header className="flex items-baseline gap-3 px-6 py-4">
+        <StudioWordmark />
+        <span className="text-sm font-medium text-ink-muted">Überprüfen</span>
       </header>
 
       <div className="flex min-h-0 flex-1 gap-4 overflow-y-auto p-4">
         {upload.phase === "uploading" && (
           <div className="flex flex-1 flex-col items-center justify-center gap-4">
-            <Loader2 className="size-8 animate-spin text-brand" />
-            <p className="text-sm font-semibold text-white">
+            <Loader2 className="size-8 animate-spin text-brand-deep" />
+            <p className="text-sm font-semibold text-ink">
               Aufnahme wird gespeichert…
             </p>
-            <div className="h-2 w-64 overflow-hidden rounded-full bg-white/10">
+            <div className="h-2 w-64 overflow-hidden rounded-full bg-canvas-deep">
               <div
                 className="h-full rounded-full bg-brand transition-[width]"
                 style={{ width: `${upload.pct}%` }}
               />
             </div>
-            <p className="text-xs tabular-nums text-white/50">{upload.pct} %</p>
+            <p className="text-xs tabular-nums text-ink-muted">
+              {upload.pct} %
+            </p>
           </div>
         )}
 
         {upload.phase === "error" && (
           <div className="flex flex-1 flex-col items-center justify-center gap-4">
             <AlertCircle className="size-8 text-danger" />
-            <p className="max-w-md text-center text-sm leading-relaxed text-white/80">
+            <p className="max-w-md text-center text-sm leading-relaxed text-ink">
               {upload.message}
             </p>
             <Button variant="ghost" onClick={startUpload}>
@@ -208,26 +206,32 @@ export function PhaseReview({
           <>
             {/* Vorschau-Player */}
             <div className="flex min-w-0 flex-1 flex-col gap-3">
-              <div className="overflow-hidden rounded-squircle-lg shadow-card">
-                <PreviewPlayer
+              <div className="overflow-hidden rounded-squircle-xl bg-surface p-2 shadow-lift">
+                <div className="overflow-hidden rounded-squircle-lg">
+                  <PreviewPlayer
                   segments={segments}
                   webcamUrl={upload.media.publicUrl}
                   webcamDurationSec={
                     upload.media.durationSec ?? recording.recordedMs / 1000
                   }
-                  pipPosition={pipPosition}
-                  pipShape={pipShape}
-                />
+                    pipPosition={pipPosition}
+                    pipShape={pipShape}
+                  />
+                </div>
               </div>
+              <p className="px-2 text-xs text-ink-muted">
+                Schau dir deine Aufnahme an. Verdächtig kurze Szenen kannst du
+                rechts entfernen — dein Video bleibt dabei ungeschnitten.
+              </p>
             </div>
 
-            {/* Segment-Liste */}
-            <div className="flex w-[340px] shrink-0 flex-col gap-2 overflow-y-auto">
-              <h2 className="px-1 text-xs font-bold uppercase tracking-wide text-white/50">
+            {/* Szenen-Liste */}
+            <div className="flex w-[340px] shrink-0 flex-col gap-2 overflow-y-auto rounded-squircle-lg bg-surface p-3 shadow-card">
+              <h2 className="px-1 text-xs font-bold uppercase tracking-wide text-ink-muted">
                 Szenen in deinem Video ({derived.length})
               </h2>
               {derived.length === 0 && (
-                <p className="rounded-squircle-md bg-white/5 px-3 py-3 text-xs leading-relaxed text-white/60">
+                <p className="rounded-squircle-md bg-surface-soft px-3 py-3 text-xs leading-relaxed text-ink-muted">
                   Aus dieser Aufnahme konnten keine Szenen abgeleitet werden —
                   vermutlich war sie zu kurz. Klicke unten links auf „Neu
                   aufnehmen" und versuche es noch einmal.
@@ -243,7 +247,7 @@ export function PhaseReview({
                   <div
                     key={d.segment.id}
                     className={cn(
-                      "flex items-center gap-2.5 rounded-squircle-md bg-surface px-3 py-2.5 shadow-card",
+                      "flex items-center gap-2.5 rounded-squircle-md bg-surface-soft px-3 py-2.5",
                       d.flagged && "ring-1 ring-warn/60",
                     )}
                   >
@@ -279,7 +283,7 @@ export function PhaseReview({
                   </div>
                 );
               })}
-              <p className="px-1 text-[10px] leading-snug text-white/40">
+              <p className="px-1 text-[10px] leading-snug text-ink-muted">
                 Entfernst du eine Szene, übernimmt die vorherige Szene deren
                 Zeit — Bild und Ton bleiben synchron.
               </p>
@@ -288,13 +292,13 @@ export function PhaseReview({
         )}
       </div>
 
-      <footer className="flex items-center justify-between border-t border-white/10 px-6 py-3">
+      <footer className="flex items-center justify-between border-t border-line-soft bg-surface/60 px-6 py-3 backdrop-blur">
         <Button
           variant="ghost"
           size="sm"
           onClick={handleRetake}
           iconLeft={<RotateCcw className="size-3.5" />}
-          className="border-transparent bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
+          className="border-transparent bg-transparent text-ink-muted hover:bg-canvas-deep hover:text-ink"
         >
           Neu aufnehmen
         </Button>

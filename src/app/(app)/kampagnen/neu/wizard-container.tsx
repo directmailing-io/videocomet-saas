@@ -416,9 +416,12 @@ export function NewCampaignWizard({
 
   // Skip editor step if mode is webcam-only
   const totalSteps = STEP_META.length;
-  const skipEditor = state.mode === "webcam-only";
   // Studio-Aufnahme: Modus steht implizit fest → Schritt 2 überspringen.
-  const skipModeStep = (state.recordingKind ?? "classic") === "studio";
+  // Segmente + PiP kommen fertig aus dem StudioFlow → auch der Editor
+  // (Schritt 3) entfällt.
+  const isStudioRecording = (state.recordingKind ?? "classic") === "studio";
+  const skipEditor = state.mode === "webcam-only" || isStudioRecording;
+  const skipModeStep = isStudioRecording;
 
   const isSkippedStep = React.useCallback(
     (idx: number) => {
@@ -712,11 +715,14 @@ export function NewCampaignWizard({
             const isActive = idx === step;
             const isDone = idx < step;
             const isSkipped = isSkippedStep(idx);
-            // Studio-Aufnahme: Der Modus-Schritt ist nicht ausgelassen,
-            // sondern bereits erledigt — im Studio ist der Modus implizit
-            // „Webcam + Videopräsentation". Der Stepper zeigt ihn deshalb
+            // Studio-Aufnahme: Modus- und Editor-Schritt sind nicht
+            // ausgelassen, sondern bereits erledigt — Modus ist implizit
+            // „Webcam + Videopräsentation", die Segmente kommen fertig
+            // geschnitten aus dem Studio. Der Stepper zeigt beide deshalb
             // als abgehakt statt als übersprungen.
-            const isStudioDone = idx === MODE_STEP_INDEX && skipModeStep;
+            const isStudioDone =
+              (idx === MODE_STEP_INDEX || idx === EDITOR_STEP_INDEX) &&
+              isStudioRecording;
             return (
               <li key={s.label}>
                 <button
@@ -753,7 +759,9 @@ export function NewCampaignWizard({
                     <span className="truncate">{s.label}</span>
                     {isStudioDone ? (
                       <span className="text-[11px] font-normal text-ink-muted">
-                        Durch Studio-Aufnahme festgelegt
+                        {idx === EDITOR_STEP_INDEX
+                          ? "Im Studio fertig geschnitten"
+                          : "Durch Studio-Aufnahme festgelegt"}
                       </span>
                     ) : isSkipped ? (
                       <span className="text-[11px] font-normal text-ink-muted">

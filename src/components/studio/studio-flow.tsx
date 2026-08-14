@@ -190,10 +190,7 @@ export function StudioFlow({ onComplete, onCancel }: StudioFlowProps) {
   if (!portalTarget) return null;
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex flex-col overflow-hidden"
-      style={{ backgroundColor: "#17151f" }}
-    >
+    <div className="fixed inset-0 z-[120] flex flex-col overflow-hidden bg-canvas">
       {phase === "regie" && (
         <PhaseRegie
           tabs={tabs}

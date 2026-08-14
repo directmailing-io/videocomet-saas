@@ -15,6 +15,7 @@ import {
   Monitor,
 } from "lucide-react";
 import { RecordingHint } from "@/components/intro/recording-hint";
+import { StudioWordmark } from "@/components/studio/studio-wordmark";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -57,10 +58,11 @@ export interface WizardStep1Props {
    *  einblenden (kollabierbar). Nur wenn der User das Feature aktivieren will. */
   showKiHint?: boolean;
   /**
-   * Wenn gesetzt, zeigt Schritt 0 zwei gleichwertige Einstiegskarten
-   * („Klassisch" vs. „Studio-Aufnahme"). Klick auf die Studio-Karte ruft
-   * diesen Callback auf — der Container öffnet dann den StudioFlow als
-   * Vollbild-Overlay. Optional für Back-Compat mit älteren Callsites.
+   * Wenn gesetzt, zeigt Schritt 0 die Einstiegskarten („VIDEOCOMET Studio"
+   * als Hauptweg, „Video manuell zusammenstellen" als sekundäre Option).
+   * Klick auf die Studio-Karte ruft diesen Callback auf — der Container
+   * öffnet dann den StudioFlow als Vollbild-Overlay. Optional für
+   * Back-Compat mit älteren Callsites.
    */
   onStartStudio?: () => void;
 }
@@ -451,17 +453,15 @@ function useIsDesktop(): boolean {
 }
 
 /**
- * RecordingEntryCards — zwei gleichwertige Einstiegskarten in Schritt 0:
+ * RecordingEntryCards — Einstieg in Schritt 0 mit klarer Hierarchie:
  *
- *   • „Klassisch — Schritt für Schritt": heutiger Flow (Webcam wählen oder
- *     aufnehmen, danach die weiteren Schritte). Klick öffnet direkt den
- *     Webcam-Recorder; die Auswahl-Liste darunter bleibt wie gehabt nutzbar.
- *   • „Studio-Aufnahme" (Badge „Neu"): Szenen vorbereiten, einmal aufnehmen,
- *     live zwischen Szenen springen — Klick öffnet den StudioFlow als
- *     Vollbild-Overlay (Callback in den Container).
- *
- * Bewusst keine Bevormundung: beide Karten sind gleich groß und gleich
- * prominent, nur die Studio-Karte trägt das Neu-Badge.
+ *   • „VIDEOCOMET Studio" (primär, groß): Szenen vorbereiten, einmal
+ *     aufnehmen, live zwischen Szenen springen — Klick öffnet den StudioFlow
+ *     als Vollbild-Overlay (Callback in den Container). Unter 1024px
+ *     ausgegraut (Desktop-Guard).
+ *   • „Video manuell zusammenstellen" (sekundär, dezent): für alle, die ihr
+ *     Video schon haben — Mediathek-Auswahl darunter bleibt wie gehabt,
+ *     der Klick öffnet den klassischen Webcam-Recorder.
  */
 function RecordingEntryCards({
   onStartClassic,
@@ -472,30 +472,8 @@ function RecordingEntryCards({
 }) {
   const isDesktop = useIsDesktop();
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {/* Klassisch */}
-      <button
-        type="button"
-        onClick={onStartClassic}
-        className="group relative flex flex-col text-left rounded-squircle-lg bg-surface shadow-card p-5 transition-all duration-200 ease-spring hover:shadow-card-hover hover:-translate-y-0.5"
-      >
-        <span className="inline-flex size-9 items-center justify-center rounded-full bg-canvas-deep text-ink">
-          <ListChecks className="size-4" />
-        </span>
-        <span className="mt-3 text-base font-semibold text-ink">
-          Klassisch — Schritt für Schritt
-        </span>
-        <span className="mt-1 text-sm text-ink-muted leading-relaxed">
-          Webcam-Video wählen oder aufnehmen, danach führt dich der Assistent
-          durch die weiteren Schritte.
-        </span>
-        <span className="mt-4 inline-flex items-center gap-1.5 self-start rounded-full bg-ink px-3.5 py-1.5 text-xs font-semibold text-white transition-colors group-hover:bg-ink/90">
-          <Video className="size-3.5" />
-          Aufnahme starten
-        </span>
-      </button>
-
-      {/* Studio */}
+    <div className="flex flex-col gap-3">
+      {/* Studio — Hauptweg */}
       <button
         type="button"
         onClick={() => {
@@ -504,36 +482,57 @@ function RecordingEntryCards({
         disabled={!isDesktop}
         aria-disabled={!isDesktop}
         className={cn(
-          "group relative flex flex-col text-left rounded-squircle-lg bg-surface shadow-card p-5 transition-all duration-200 ease-spring",
+          "group relative flex flex-col text-left rounded-squircle-xl bg-surface shadow-card p-6 sm:p-8 transition-all duration-200 ease-spring",
           isDesktop
             ? "hover:shadow-card-hover hover:-translate-y-0.5"
             : "opacity-60 cursor-not-allowed",
         )}
       >
-        <span className="absolute right-4 top-4 inline-flex items-center rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-semibold leading-none text-brand-deep">
+        <span className="absolute right-5 top-5 inline-flex items-center rounded-full bg-brand-soft px-2.5 py-1 text-[10px] font-semibold leading-none text-brand-deep">
           Neu
         </span>
-        <span className="inline-flex size-9 items-center justify-center rounded-full bg-brand-soft text-brand-deep">
-          <Clapperboard className="size-4" />
-        </span>
-        <span className="mt-3 text-base font-semibold text-ink">
-          Studio-Aufnahme
-        </span>
-        <span className="mt-1 text-sm text-ink-muted leading-relaxed">
-          Szenen vorbereiten, einmal aufnehmen — live zwischen Szenen springen
-          und scrollen. Fertig geschnitten.
+        <span className="sr-only">Studio-Aufnahme</span>
+        <StudioWordmark height={24} />
+        <span className="mt-3 max-w-xl text-sm text-ink-muted leading-relaxed">
+          Bereite deine Szenen vor, nimm einmal auf und springe live zwischen
+          Szenen — scrollen inklusive. Am Ende ist dein Video fertig
+          geschnitten, ganz ohne Nachbearbeitung.
         </span>
         {isDesktop ? (
-          <span className="mt-4 inline-flex items-center gap-1.5 self-start rounded-full bg-ink px-3.5 py-1.5 text-xs font-semibold text-white transition-colors group-hover:bg-ink/90">
-            <Clapperboard className="size-3.5" />
+          <span className="mt-5 inline-flex items-center gap-1.5 self-start rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white transition-colors group-hover:bg-ink/90">
+            <Clapperboard className="size-4" />
             Studio öffnen
           </span>
         ) : (
-          <span className="mt-4 inline-flex items-center gap-1.5 self-start rounded-full border border-line-soft px-3.5 py-1.5 text-xs font-medium text-ink-muted">
+          <span className="mt-5 inline-flex items-center gap-1.5 self-start rounded-full border border-line-soft px-4 py-2 text-xs font-medium text-ink-muted">
             <Monitor className="size-3.5" />
             Am besten am Laptop oder Desktop
           </span>
         )}
+      </button>
+
+      {/* Manuell — sekundärer Weg */}
+      <button
+        type="button"
+        onClick={onStartClassic}
+        className="group flex items-start gap-3.5 text-left rounded-squircle-lg bg-surface shadow-card p-4 transition-all duration-200 ease-spring hover:shadow-card-hover hover:-translate-y-0.5"
+      >
+        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-canvas-deep text-ink">
+          <ListChecks className="size-4" />
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <span className="text-sm font-semibold text-ink">
+            Video manuell zusammenstellen
+          </span>
+          <span className="mt-0.5 text-xs text-ink-muted leading-relaxed">
+            Du hast dein Video schon aufgenommen? Wähle es unten aus und baue
+            alles drumherum — oder nimm hier klassisch neu auf.
+          </span>
+          <span className="mt-2.5 inline-flex items-center gap-1.5 self-start rounded-full border border-line-soft px-3 py-1 text-xs font-semibold text-ink transition-colors group-hover:bg-canvas-deep/60">
+            <Video className="size-3.5" />
+            Video aufnehmen
+          </span>
+        </span>
       </button>
     </div>
   );

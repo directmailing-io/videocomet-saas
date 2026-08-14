@@ -4,9 +4,10 @@
  * phase-regie — Phase 1 des Studio-Flows: Szenen anlegen, sortieren und
  * vorbereiten lassen.
  *
- * Links: Szenen-Liste (Status-Badges aus use-scene-assets) + 4 Typ-Kacheln
- * zum Hinzufügen + Teleprompter-Text. Rechts: große 16:9-Vorschau der
- * ausgewählten Szene (StudioStage, scrollbar) + Szenen-Einstellungen.
+ * Die Bühne ist ein Browser-Fenster: Szenen liegen als Tabs in der
+ * Chrome-Leiste, ein „+"-Tab öffnet die Neuer-Tab-Seite zum Hinzufügen
+ * (Website / Google Docs / PDF / Text-Folie). Darunter: Einstellungen der
+ * gewählten Szene + Teleprompter.
  *
  * „Weiter" ist erst aktiv, wenn ≥1 Szene existiert und ALLE bereit sind —
  * die Live-Aufnahme braucht keine Netzwerk-Ladevorgänge mehr.
@@ -16,9 +17,8 @@ import * as React from "react";
 import {
   AlertCircle,
   ArrowRight,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   FileType2,
   Globe,
@@ -40,9 +40,12 @@ import {
 } from "@/lib/segments/defaults";
 import { StudioStage } from "./studio-stage";
 import { SceneKindIcon } from "./scene-icon";
+import { StudioWordmark } from "./studio-wordmark";
 import {
   clamp01,
   sceneKindOf,
+  tabLabel,
+  tabThumbUrl,
   type StudioSceneKind,
   type UpdateSegmentFn,
 } from "./internal";
@@ -134,7 +137,9 @@ export function PhaseRegie({
   const [selectedId, setSelectedId] = React.useState<string | null>(
     tabs[0]?.id ?? null,
   );
-  /** Offenes URL-Eingabe-Formular (website/gdocs) unter den Kacheln. */
+  /** „+"-Tab aktiv: Neuer-Tab-Seite statt Szenen-Vorschau. */
+  const [adding, setAdding] = React.useState(tabs.length === 0);
+  /** Offenes URL-Eingabe-Formular (website/gdocs) auf der Neuer-Tab-Seite. */
   const [addForm, setAddForm] = React.useState<"website" | "gdocs" | null>(
     null,
   );
@@ -160,11 +165,12 @@ export function PhaseRegie({
     // Effekt, sobald tabs aktualisiert sind (letzte Szene selektieren).
   };
 
-  // Neu hinzugefügte Szene automatisch auswählen.
+  // Neu hinzugefügte Szene automatisch auswählen + Neuer-Tab-Seite schließen.
   const prevCountRef = React.useRef(tabs.length);
   React.useEffect(() => {
     if (tabs.length > prevCountRef.current) {
       setSelectedId(tabs[tabs.length - 1].id);
+      setAdding(false);
     }
     prevCountRef.current = tabs.length;
   }, [tabs]);
@@ -245,308 +251,367 @@ export function PhaseRegie({
       ? "Füge zuerst mindestens eine Szene hinzu."
       : "Bitte warte, bis alle Szenen vorbereitet sind.";
 
+  const showNewTabPage = adding || !selected;
+  const selectedIndex = selected
+    ? tabs.findIndex((t) => t.id === selected.id)
+    : -1;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Kopfzeile */}
-      <header className="flex items-center justify-between border-b border-white/10 px-6 py-3">
-        <div>
-          <h1 className="text-sm font-bold text-white">
-            Studio-Aufnahme · Regie
-          </h1>
-          <p className="text-xs text-white/50">
-            Lege deine Szenen fest — während der Aufnahme wechselst du live
-            zwischen ihnen.
-          </p>
+      <header className="flex items-center justify-between px-6 py-4">
+        <div className="flex items-baseline gap-3">
+          <StudioWordmark />
+          <span className="text-sm font-medium text-ink-muted">Regie</span>
         </div>
         <button
           type="button"
           onClick={onCancel}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink"
         >
           <X className="size-3.5" />
           Abbrechen
         </button>
       </header>
 
-      <div className="flex min-h-0 flex-1 gap-4 p-4">
-        {/* Linke Spalte: Szenen + Hinzufügen + Teleprompter */}
-        <div className="flex w-[340px] shrink-0 flex-col gap-3 overflow-y-auto pr-1">
-          {/* Szenen-Liste */}
-          <section className="rounded-squircle-lg bg-surface p-3 shadow-card">
-            <h2 className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-ink-muted">
-              Szenen ({tabs.length})
-            </h2>
-            {tabs.length === 0 ? (
-              <p className="px-1 py-3 text-xs text-ink-muted">
-                Noch keine Szenen. Füge unten deine erste Szene hinzu.
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-1.5">
+      {/* Browser-Fenster + Detailkarten */}
+      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pb-4">
+        <div
+          className="flex w-full flex-col gap-3"
+          style={{ maxWidth: "max(720px, calc((100vh - 380px) * 16 / 9))" }}
+        >
+          <div className="flex flex-col overflow-hidden rounded-squircle-xl bg-surface shadow-lift">
+            {/* Chrome-Leiste: Ampel + Szenen-Tabs + „+"-Tab */}
+            <div className="flex h-11 shrink-0 items-stretch gap-3 border-b border-line-soft bg-surface-soft pl-4 pr-3">
+              <span className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-full bg-[#f0b9b4]" />
+                <span className="size-2.5 rounded-full bg-[#f0dcae]" />
+                <span className="size-2.5 rounded-full bg-[#bcdcc0]" />
+              </span>
+
+              <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto pt-1.5">
                 {tabs.map((tab, i) => {
                   const status = assets.statusById[tab.id] ?? "loading";
-                  const active = tab.id === selectedId;
+                  const active = !showNewTabPage && tab.id === selectedId;
+                  const thumb = tabThumbUrl(tab);
                   return (
-                    <li key={tab.id}>
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelectedId(tab.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") setSelectedId(tab.id);
-                        }}
+                    <div
+                      key={tab.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        setAdding(false);
+                        setSelectedId(tab.id);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          setAdding(false);
+                          setSelectedId(tab.id);
+                        }
+                      }}
+                      className={cn(
+                        "group flex h-full shrink-0 cursor-pointer items-center gap-2 rounded-t-[10px] px-3 transition-colors",
+                        active
+                          ? "-mb-px border border-b-0 border-line-soft bg-surface"
+                          : "text-ink-muted hover:bg-canvas-deep/70",
+                      )}
+                    >
+                      <span
                         className={cn(
-                          "group flex w-full cursor-pointer items-center gap-2 rounded-squircle-md border px-2.5 py-2 text-left transition-colors",
-                          active
-                            ? "border-brand bg-brand-soft"
-                            : "border-transparent bg-surface-soft hover:bg-surface-muted",
+                          "text-[10px] font-bold tabular-nums",
+                          active ? "text-brand-deep" : "text-ink-muted/70",
                         )}
                       >
-                        <span className="w-4 shrink-0 text-center text-xs font-bold text-ink-muted">
-                          {i + 1}
-                        </span>
+                        {i + 1}
+                      </span>
+                      {thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={thumb}
+                          alt=""
+                          className="h-[18px] w-7 shrink-0 rounded-[4px] object-cover object-top"
+                        />
+                      ) : tab.segment.kind === "text" ? (
+                        <span
+                          className="h-[18px] w-7 shrink-0 rounded-[4px] border border-line-soft"
+                          style={{ backgroundColor: tab.segment.bgColor }}
+                        />
+                      ) : (
                         <SceneKindIcon
                           kind={sceneKindOf(tab)}
-                          className="shrink-0 text-brand-deep"
+                          className="size-3.5 shrink-0 text-ink-muted"
                         />
-                        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
-                          {tab.segment.label}
-                        </span>
-
-                        {/* Status-Badge */}
-                        {status === "loading" && (
-                          <span className="flex shrink-0 items-center gap-1 text-[10px] font-medium text-ink-muted">
-                            <Loader2 className="size-3 animate-spin" />
-                            Wird vorbereitet…
-                          </span>
+                      )}
+                      <span
+                        className={cn(
+                          "max-w-[130px] truncate text-xs",
+                          active
+                            ? "font-semibold text-ink"
+                            : "font-medium text-ink-muted",
                         )}
-                        {status === "ready" && (
-                          <span className="flex shrink-0 items-center gap-1 text-[10px] font-medium text-ok">
-                            <CheckCircle2 className="size-3" />
-                            Bereit
-                          </span>
-                        )}
-                        {status === "error" && (
-                          <span className="flex shrink-0 items-center gap-1 text-[10px] font-medium text-danger">
-                            <AlertCircle className="size-3" />
-                            Fehler
-                          </span>
-                        )}
-
-                        {/* Sortieren + Löschen */}
-                        <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                          <button
-                            type="button"
-                            aria-label="Nach oben"
-                            disabled={i === 0}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onMoveTab(tab.id, -1);
-                            }}
-                            className="rounded p-0.5 text-ink-muted hover:bg-surface-muted hover:text-ink disabled:opacity-30"
-                          >
-                            <ChevronUp className="size-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Nach unten"
-                            disabled={i === tabs.length - 1}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onMoveTab(tab.id, 1);
-                            }}
-                            className="rounded p-0.5 text-ink-muted hover:bg-surface-muted hover:text-ink disabled:opacity-30"
-                          >
-                            <ChevronDown className="size-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Szene löschen"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onRemoveTab(tab.id);
-                            }}
-                            className="rounded p-0.5 text-ink-muted hover:bg-danger/10 hover:text-danger"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
-                        </span>
-                      </div>
-                    </li>
+                      >
+                        {tabLabel(tab)}
+                      </span>
+                      {status === "loading" && (
+                        <Loader2 className="size-3 shrink-0 animate-spin text-ink-muted" />
+                      )}
+                      {status === "error" && (
+                        <AlertCircle className="size-3 shrink-0 text-danger" />
+                      )}
+                      <button
+                        type="button"
+                        aria-label="Szene löschen"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveTab(tab.id);
+                        }}
+                        className="shrink-0 rounded-full p-0.5 text-ink-muted/0 transition-colors hover:bg-canvas-deep hover:text-ink group-hover:text-ink-muted"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
                   );
                 })}
-              </ul>
-            )}
-          </section>
 
-          {/* Szene hinzufügen */}
-          <section className="rounded-squircle-lg bg-surface p-3 shadow-card">
-            <h2 className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-ink-muted">
-              Szene hinzufügen
-            </h2>
-            <div className="grid grid-cols-2 gap-2">
-              {ADD_TILES.map((tile) => (
+                {/* „+"-Tab: neue Szene (Browser-Metapher) */}
                 <button
-                  key={tile.kind}
                   type="button"
-                  onClick={() => onTileClick(tile.kind)}
-                  disabled={tile.kind === "pdf" && pdfUploading}
+                  aria-label="Szene hinzufügen"
+                  onClick={() => {
+                    setAdding(true);
+                    setAddForm(null);
+                    setPdfError(null);
+                  }}
                   className={cn(
-                    "flex flex-col items-start gap-1 rounded-squircle-md border p-2.5 text-left transition-colors",
-                    addForm === tile.kind
-                      ? "border-brand bg-brand-soft"
-                      : "border-line-soft bg-surface-soft hover:bg-surface-muted",
-                    tile.kind === "pdf" && pdfUploading && "opacity-60",
+                    "flex h-full shrink-0 items-center gap-1.5 rounded-t-[10px] px-3 text-xs font-semibold transition-colors",
+                    showNewTabPage
+                      ? "-mb-px border border-b-0 border-line-soft bg-surface text-brand-deep"
+                      : "text-ink-muted hover:bg-canvas-deep/70 hover:text-ink",
                   )}
                 >
-                  <span className="flex items-center gap-1.5 text-xs font-bold text-ink">
-                    {tile.kind === "pdf" && pdfUploading ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      tile.icon
-                    )}
-                    {tile.label}
-                    <Plus className="ml-auto size-3 text-ink-muted" />
-                  </span>
-                  <span className="text-[10px] leading-snug text-ink-muted">
-                    {tile.kind === "pdf" && pdfUploading
-                      ? "Wird hochgeladen…"
-                      : tile.hint}
-                  </span>
+                  <Plus className="size-3.5" />
+                  {tabs.length === 0 && "Neue Szene"}
                 </button>
-              ))}
+              </div>
             </div>
 
-            {/* Verstecktes PDF-Input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/pdf,.pdf"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                e.target.value = "";
-                if (f) void onPdfFile(f);
-              }}
-            />
-            {pdfError && (
-              <p className="mt-2 flex items-start gap-1.5 rounded-squircle-sm bg-danger/10 px-2.5 py-2 text-[11px] text-danger">
-                <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-                {pdfError}
-              </p>
-            )}
-
-            {/* URL-Formular für Website / Google Docs */}
-            {addForm && (
-              <form
-                className="mt-2 flex flex-col gap-2 rounded-squircle-md bg-surface-soft p-2.5"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  submitAddForm();
-                }}
-              >
-                <label className="text-[11px] font-semibold text-ink">
-                  {addForm === "website"
-                    ? "Website-Adresse"
-                    : "Link zum Google-Dokument"}
-                </label>
-                <input
-                  autoFocus
-                  type="text"
-                  value={addUrl}
-                  onChange={(e) => setAddUrl(e.target.value)}
-                  placeholder={
-                    addForm === "website"
-                      ? "z. B. beispiel-firma.de"
-                      : "https://docs.google.com/document/d/…"
-                  }
-                  className="h-8 rounded-squircle-sm border border-line-soft bg-surface px-2.5 text-xs text-ink outline-none focus:border-brand"
-                />
-                {addForm === "gdocs" && (
-                  <p className="text-[10px] leading-snug text-ink-muted">
-                    Die Vorschau zeigt deine Vorlage mit sichtbaren{" "}
-                    <code className="rounded bg-surface-muted px-1">
-                      {"{{platzhaltern}}"}
-                    </code>{" "}
-                    — im fertigen Video werden sie pro Empfänger ersetzt.
-                  </p>
-                )}
-                <div className="flex justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAddForm(null)}
-                  >
-                    Abbrechen
-                  </Button>
-                  <Button type="submit" size="sm" disabled={!addUrl.trim()}>
-                    Hinzufügen
-                  </Button>
-                </div>
-              </form>
-            )}
-          </section>
-
-          {/* Teleprompter */}
-          <section className="rounded-squircle-lg bg-surface p-3 shadow-card">
-            <h2 className="mb-1 px-1 text-xs font-bold uppercase tracking-wide text-ink-muted">
-              Teleprompter (optional)
-            </h2>
-            <p className="mb-2 px-1 text-[10px] leading-snug text-ink-muted">
-              Dein Skript läuft während der Aufnahme halbtransparent oben mit.
-            </p>
-            <textarea
-              value={script}
-              onChange={(e) => onScriptChange(e.target.value)}
-              rows={4}
-              placeholder="Hallo, ich habe mir eure Website angeschaut und…"
-              className="w-full resize-y rounded-squircle-sm border border-line-soft bg-surface-soft p-2.5 text-xs leading-relaxed text-ink outline-none focus:border-brand"
-            />
-          </section>
-        </div>
-
-        {/* Rechte Spalte: Vorschau + Einstellungen */}
-        <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <div className="relative w-full overflow-hidden rounded-squircle-lg bg-black/40 shadow-card">
+            {/* Fensterinhalt: Neuer-Tab-Seite oder Szenen-Vorschau */}
             <div className="relative aspect-video w-full">
-              {selected ? (
-                <StudioStage
-                  key={selected.id}
-                  segment={selected.segment}
-                  scrollRatio={previewRatioRef.current.get(selected.id) ?? 0}
-                  onScrollRatio={(y) => {
-                    previewRatioRef.current.set(selected.id, clamp01(y));
-                    forceRender();
-                  }}
-                />
+              {showNewTabPage ? (
+                <div className="absolute inset-0 overflow-y-auto bg-surface">
+                  <div className="mx-auto flex min-h-full max-w-lg flex-col items-center justify-center gap-5 px-6 py-8">
+                    <div className="text-center">
+                      <h2 className="text-base font-bold text-ink">
+                        Neue Szene
+                      </h2>
+                      <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+                        Während der Aufnahme wechselst du live zwischen deinen
+                        Szenen — wie zwischen Browser-Tabs.
+                      </p>
+                    </div>
+                    <div className="grid w-full grid-cols-2 gap-2.5">
+                      {ADD_TILES.map((tile) => (
+                        <button
+                          key={tile.kind}
+                          type="button"
+                          onClick={() => onTileClick(tile.kind)}
+                          disabled={tile.kind === "pdf" && pdfUploading}
+                          className={cn(
+                            "flex flex-col items-start gap-1 rounded-squircle-md border p-3 text-left transition-colors",
+                            addForm === tile.kind
+                              ? "border-brand bg-brand-soft"
+                              : "border-line-soft bg-surface-soft hover:border-line hover:bg-surface-muted",
+                            tile.kind === "pdf" && pdfUploading && "opacity-60",
+                          )}
+                        >
+                          <span className="flex w-full items-center gap-1.5 text-xs font-bold text-ink">
+                            {tile.kind === "pdf" && pdfUploading ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              tile.icon
+                            )}
+                            {tile.label}
+                            <Plus className="ml-auto size-3 text-ink-muted" />
+                          </span>
+                          <span className="text-[10px] leading-snug text-ink-muted">
+                            {tile.kind === "pdf" && pdfUploading
+                              ? "Wird hochgeladen…"
+                              : tile.hint}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {pdfError && (
+                      <p className="flex w-full items-start gap-1.5 rounded-squircle-sm bg-danger-soft px-3 py-2 text-[11px] text-danger">
+                        <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                        {pdfError}
+                      </p>
+                    )}
+
+                    {/* URL-Formular für Website / Google Docs */}
+                    {addForm && (
+                      <form
+                        className="flex w-full flex-col gap-2 rounded-squircle-md border border-line-soft bg-surface-soft p-3"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          submitAddForm();
+                        }}
+                      >
+                        <label className="text-[11px] font-semibold text-ink">
+                          {addForm === "website"
+                            ? "Website-Adresse"
+                            : "Link zum Google-Dokument"}
+                        </label>
+                        <input
+                          autoFocus
+                          type="text"
+                          value={addUrl}
+                          onChange={(e) => setAddUrl(e.target.value)}
+                          placeholder={
+                            addForm === "website"
+                              ? "z. B. beispiel-firma.de"
+                              : "https://docs.google.com/document/d/…"
+                          }
+                          className="h-9 rounded-squircle-sm border border-line-soft bg-surface px-3 text-xs text-ink outline-none focus:border-brand"
+                        />
+                        {addForm === "gdocs" && (
+                          <p className="text-[10px] leading-snug text-ink-muted">
+                            Die Vorschau zeigt deine Vorlage mit sichtbaren{" "}
+                            <code className="rounded bg-surface-muted px-1">
+                              {"{{platzhaltern}}"}
+                            </code>{" "}
+                            — im fertigen Video werden sie pro Empfänger
+                            ersetzt.
+                          </p>
+                        )}
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setAddForm(null)}
+                          >
+                            Abbrechen
+                          </Button>
+                          <Button
+                            type="submit"
+                            size="sm"
+                            disabled={!addUrl.trim()}
+                          >
+                            Hinzufügen
+                          </Button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                </div>
               ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/40">
-                  <Plus className="size-8" />
-                  <p className="text-sm">
-                    Füge links deine erste Szene hinzu, um die Vorschau zu
-                    sehen.
-                  </p>
+                <div className="absolute inset-0 bg-black">
+                  {selected && (
+                    <StudioStage
+                      key={selected.id}
+                      segment={selected.segment}
+                      scrollRatio={
+                        previewRatioRef.current.get(selected.id) ?? 0
+                      }
+                      onScrollRatio={(y) => {
+                        previewRatioRef.current.set(selected.id, clamp01(y));
+                        forceRender();
+                      }}
+                    />
+                  )}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Einstellungen zur gewählten Szene */}
-          {selected && (
-            <SceneSettings
-              tab={selected}
-              status={assets.statusById[selected.id] ?? "loading"}
-              error={assets.errorById[selected.id]}
-              onRetry={() => assets.retry(selected.id)}
-              updateSegment={updateSegment}
-            />
-          )}
+          {/* Verstecktes PDF-Input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void onPdfFile(f);
+            }}
+          />
+
+          {/* Detailkarten unter dem Fenster */}
+          <div className="flex items-start gap-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-3">
+              {selected && !showNewTabPage && (
+                <>
+                  <div className="flex items-center gap-2 px-1">
+                    <span className="min-w-0 truncate text-xs font-semibold text-ink">
+                      Szene {selectedIndex + 1} von {tabs.length}:{" "}
+                      {tabLabel(selected)}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-0.5">
+                      <button
+                        type="button"
+                        aria-label="Nach vorn"
+                        disabled={selectedIndex <= 0}
+                        onClick={() => onMoveTab(selected.id, -1)}
+                        className="rounded-full p-1 text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink disabled:opacity-30"
+                      >
+                        <ChevronLeft className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Nach hinten"
+                        disabled={selectedIndex >= tabs.length - 1}
+                        onClick={() => onMoveTab(selected.id, 1)}
+                        className="rounded-full p-1 text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink disabled:opacity-30"
+                      >
+                        <ChevronRight className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Szene löschen"
+                        onClick={() => onRemoveTab(selected.id)}
+                        className="rounded-full p-1 text-ink-muted transition-colors hover:bg-danger-soft hover:text-danger"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </span>
+                  </div>
+                  <SceneSettings
+                    tab={selected}
+                    status={assets.statusById[selected.id] ?? "loading"}
+                    error={assets.errorById[selected.id]}
+                    onRetry={() => assets.retry(selected.id)}
+                    updateSegment={updateSegment}
+                  />
+                </>
+              )}
+            </div>
+
+            {/* Teleprompter */}
+            <section className="w-[300px] shrink-0 rounded-squircle-lg bg-surface p-3 shadow-card">
+              <h2 className="mb-1 px-1 text-xs font-bold uppercase tracking-wide text-ink-muted">
+                Teleprompter (optional)
+              </h2>
+              <textarea
+                value={script}
+                onChange={(e) => onScriptChange(e.target.value)}
+                rows={3}
+                placeholder="Hallo, ich habe mir eure Website angeschaut und…"
+                className="w-full resize-y rounded-squircle-sm border border-line-soft bg-surface-soft p-2.5 text-xs leading-relaxed text-ink outline-none focus:border-brand"
+              />
+              <p className="px-1 text-[10px] leading-snug text-ink-muted">
+                Läuft während der Aufnahme dezent oben mit.
+              </p>
+            </section>
+          </div>
         </div>
       </div>
 
       {/* Fußzeile */}
-      <footer className="flex items-center justify-between border-t border-white/10 px-6 py-3">
-        <p className="text-xs text-white/50">
+      <footer className="flex items-center justify-between border-t border-line-soft bg-surface/60 px-6 py-3 backdrop-blur">
+        <p className="text-xs text-ink-muted">
           {tabs.length === 0
             ? "Mindestens eine Szene wird benötigt."
             : assets.allReady
@@ -596,6 +661,17 @@ function SceneSettings({
         <Button variant="ghost" size="sm" onClick={onRetry}>
           Erneut versuchen
         </Button>
+      </div>
+    );
+  }
+
+  if (status === "loading") {
+    return (
+      <div className="flex items-center gap-2 rounded-squircle-lg bg-surface px-3 py-2.5 shadow-card">
+        <Loader2 className="size-3.5 shrink-0 animate-spin text-ink-muted" />
+        <p className="text-[11px] text-ink-muted">
+          Die Vorschau wird vorbereitet…
+        </p>
       </div>
     );
   }

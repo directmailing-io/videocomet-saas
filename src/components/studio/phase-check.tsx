@@ -26,6 +26,7 @@ import type {
   StudioPipPosition,
   StudioPipShape,
 } from "./studio-flow";
+import { StudioWordmark } from "./studio-wordmark";
 import type { UseStudioMediaResult } from "./use-studio-media";
 
 export interface PhaseCheckProps {
@@ -126,20 +127,17 @@ export function PhaseCheck({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex items-center justify-between border-b border-white/10 px-6 py-3">
-        <div>
-          <h1 className="text-sm font-bold text-white">
-            Studio-Aufnahme · Bereit-Check
-          </h1>
-          <p className="text-xs text-white/50">
-            Prüfe Kamera und Mikrofon und wähle, wo dein Kamerabild im Video
-            erscheint.
-          </p>
+      <header className="flex items-center justify-between px-6 py-4">
+        <div className="flex items-baseline gap-3">
+          <StudioWordmark />
+          <span className="text-sm font-medium text-ink-muted">
+            Bereit-Check
+          </span>
         </div>
         <button
           type="button"
           onClick={onCancel}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink"
         >
           <X className="size-3.5" />
           Abbrechen
@@ -149,7 +147,7 @@ export function PhaseCheck({
       <div className="flex min-h-0 flex-1 items-stretch justify-center gap-4 p-4">
         {/* Kamera-Vorschau */}
         <div className="flex min-w-0 max-w-3xl flex-1 flex-col gap-3">
-          <div className="relative w-full overflow-hidden rounded-squircle-lg bg-black shadow-card">
+          <div className="relative w-full overflow-hidden rounded-squircle-xl bg-black shadow-lift">
             <div className="relative aspect-video w-full">
               {media.error ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center">
@@ -307,9 +305,9 @@ export function PhaseCheck({
               So läuft die Aufnahme
             </h2>
             <ul className="flex flex-col gap-1.5 px-1 text-[11px] leading-snug text-ink-muted">
-              <li>· Unten wechselst du live zwischen deinen Szenen.</li>
+              <li>· Oben wechselst du live zwischen deinen Szenen-Tabs.</li>
               <li>· Auf der Bühne kannst du scrollen — genau das sieht dein Empfänger.</li>
-              <li>· Zum Beenden hältst du den Beenden-Knopf kurz gedrückt.</li>
+              <li>· Zum Beenden klickst du auf „Aufnahme beenden".</li>
             </ul>
           </section>
 
@@ -322,13 +320,13 @@ export function PhaseCheck({
         </div>
       </div>
 
-      <footer className="flex items-center justify-between border-t border-white/10 px-6 py-3">
+      <footer className="flex items-center justify-between border-t border-line-soft bg-surface/60 px-6 py-3 backdrop-blur">
         <Button
           variant="ghost"
           size="sm"
           onClick={onBack}
           iconLeft={<ArrowLeft className="size-3.5" />}
-          className="border-transparent bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
+          className="border-transparent bg-transparent text-ink-muted hover:bg-canvas-deep hover:text-ink"
         >
           Zurück zur Regie
         </Button>

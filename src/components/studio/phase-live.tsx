@@ -3,16 +3,15 @@
 /**
  * phase-live — Phase 3 des Studio-Flows: die eigentliche Live-Aufnahme.
  *
- * Dunkles Vollbild: mittig die 16:9-Bühne (StudioStage) mit Live-Webcam-PiP,
- * oben Teleprompter + REC-Statusleiste, unten die Szenen-Pills.
- * Ablauf im Record-Modus: Erstnutzer-Hinweise → Countdown 3-2-1 →
- * MediaRecorder.start. Übungsmodus: identischer Screen ohne Recorder.
- *
- * Beenden nur per Hold-Geste (~800 ms) — Escape bricht bewusst NICHT ab.
+ * Helles Vollbild: mittig die Bühne als „Browser-Fenster" (Chrome-Leiste mit
+ * Szenen-Tabs + REC-Uhr, darunter die 16:9-Bühne mit Live-Webcam-PiP), oben
+ * der Teleprompter. Ablauf im Record-Modus: Erstnutzer-Hinweise →
+ * Countdown 3-2-1 → MediaRecorder.start. Übungsmodus: identischer Screen
+ * ohne Recorder. Beenden per direktem Klick auf „Aufnahme beenden".
  */
 
 import * as React from "react";
-import { AlertCircle, Minus, Plus, Square, X } from "lucide-react";
+import { AlertCircle, Minus, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { StudioTab } from "@/lib/studio/types";
@@ -45,8 +44,6 @@ export interface PhaseLiveProps {
    */
   onExitPractice: () => void;
 }
-
-const HOLD_TO_STOP_MS = 800;
 
 function pipPositionClass(pos: StudioPipPosition): string {
   return pos === "bottom-left" ? "bottom-4 left-4" : "bottom-4 right-4";
@@ -89,7 +86,7 @@ export function PhaseLive({
   const ratiosRef = React.useRef<Map<string, number>>(new Map());
   const [activeRatio, setActiveRatio] = React.useState(0);
 
-  /** Verbrachte Zeit pro Szene (für die Füll-Balken der Pills). */
+  /** Verbrachte Zeit pro Szene (Basis für spätere Auswertungen). */
   const tabMsRef = React.useRef<Map<string, number>>(new Map());
   const lastTickRef = React.useRef<number | null>(null);
   const [elapsedMs, setElapsedMs] = React.useState(0);
@@ -174,7 +171,7 @@ export function PhaseLive({
     setOverlay(isRecord ? "countdown" : null);
   };
 
-  // ── Uhr + Pill-Füllstände (250-ms-Tick) ──────────────────────────────
+  // ── Uhr + Zeit pro Szene (250-ms-Tick) ───────────────────────────────
   React.useEffect(() => {
     if (!running) return;
     const iv = setInterval(() => {
@@ -274,7 +271,7 @@ export function PhaseLive({
     if (stream) void v.play().catch(() => undefined);
   }, [stream]);
 
-  // ── Beenden (Hold-Geste im Record-Modus) ─────────────────────────────
+  // ── Beenden (direkter Klick) ─────────────────────────────────────────
   const stopAll = React.useCallback(() => {
     if (isRecord) {
       setStopping(true);
@@ -284,204 +281,204 @@ export function PhaseLive({
     }
   }, [isRecord, recorder, onExitPractice]);
 
-  const totalTabMs = Math.max(1, elapsedMs);
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Statusleiste */}
-      <header className="flex h-11 shrink-0 items-center justify-between px-5">
-        <div className="flex items-center gap-2">
-          {isRecord ? (
-            <>
-              <span
-                className={cn(
-                  "size-2.5 rounded-full bg-danger",
-                  running && "animate-pulse",
-                )}
-              />
-              <span className="text-xs font-bold tabular-nums text-white">
-                {running ? formatClock(elapsedMs) : "REC"}
-              </span>
-            </>
-          ) : (
-            <span className="rounded-full bg-warn/20 px-3 py-1 text-xs font-semibold text-warn">
-              Übungsmodus — es wird nichts aufgenommen
-            </span>
-          )}
-          {liveError && (
-            <>
-              <span className="flex items-center gap-1.5 rounded-full bg-danger/15 px-3 py-1 text-xs font-medium text-danger">
-                <AlertCircle className="size-3.5" />
-                {liveError}
-              </span>
-              {isRecord && (
-                <button
-                  type="button"
-                  onClick={onExitPractice}
-                  className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20"
-                >
-                  Zurück zum Bereit-Check
-                </button>
-              )}
-            </>
-          )}
-        </div>
-        {activeTab && (
-          <span className="truncate text-xs text-white/50">
-            Aktive Szene: {tabLabel(activeTab)}
+      {/* Statuszeile: Übungs-Badge + Fehler */}
+      <div className="flex h-11 shrink-0 items-center justify-center gap-2 px-5">
+        {!isRecord && (
+          <span className="rounded-full bg-warn-soft px-3.5 py-1 text-xs font-semibold text-warn">
+            Übungsmodus — es wird nichts aufgenommen
           </span>
         )}
-      </header>
+        {liveError && (
+          <>
+            <span className="flex items-center gap-1.5 rounded-full bg-danger-soft px-3.5 py-1 text-xs font-medium text-danger">
+              <AlertCircle className="size-3.5" />
+              {liveError}
+            </span>
+            {isRecord && (
+              <button
+                type="button"
+                onClick={onExitPractice}
+                className="rounded-full border border-line bg-surface px-3.5 py-1 text-xs font-semibold text-ink shadow-card transition-colors hover:bg-surface-muted"
+              >
+                Zurück zum Bereit-Check
+              </button>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Teleprompter */}
       {script.trim().length > 0 && <Teleprompter script={script} />}
 
-      {/* Bühne */}
+      {/* Bühne als Browser-Fenster */}
       <div className="flex min-h-0 flex-1 items-center justify-center px-5 py-2">
         <div
-          className="relative aspect-video overflow-hidden rounded-squircle-lg bg-black shadow-lift"
-          style={{ width: "min(100%, calc((100vh - 220px) * 16 / 9))" }}
+          className="flex flex-col overflow-hidden rounded-squircle-xl bg-surface shadow-lift"
+          style={{ width: "min(100%, calc((100vh - 250px) * 16 / 9))" }}
         >
-          {activeTab && (
-            <StudioStage
-              key={activeTab.id}
-              segment={activeTab.segment}
-              scrollRatio={activeRatio}
-              onScrollRatio={handleScrollRatio}
-              showStaticBadge
-            />
-          )}
+          {/* Chrome-Leiste: Ampel + Szenen-Tabs + REC */}
+          <div className="flex h-11 shrink-0 items-stretch gap-3 border-b border-line-soft bg-surface-soft pl-4 pr-4">
+            <span className="flex items-center gap-1.5 self-stretch">
+              <span className="size-2.5 rounded-full bg-[#f0b9b4]" />
+              <span className="size-2.5 rounded-full bg-[#f0dcae]" />
+              <span className="size-2.5 rounded-full bg-[#bcdcc0]" />
+            </span>
 
-          {/* Scroll-Fortschrittslinie an der rechten Bühnenkante */}
-          <div
-            className={cn(
-              "pointer-events-none absolute inset-y-2 right-1 z-20 w-1 rounded-full bg-white/10 transition-opacity duration-300",
-              scrollGlow ? "opacity-100" : "opacity-0",
-            )}
-          >
-            <div
-              className="absolute left-0 h-10 w-1 rounded-full bg-brand shadow-[0_0_12px_2px_rgba(170,140,245,0.8)]"
-              style={{ top: `calc(${activeRatio * 100}% - ${activeRatio * 40}px)` }}
-            />
-          </div>
-
-          {/* Live-Webcam-PiP */}
-          <div
-            className={cn(
-              "pointer-events-none absolute z-30 w-1/4 overflow-hidden border-2 border-white/25 shadow-lift",
-              pipPositionClass(pipPosition),
-              pipShapeClass(pipShape),
-              pipShape !== "circle" && "aspect-video",
-            )}
-          >
-            <video
-              ref={pipVideoRef}
-              muted
-              playsInline
-              autoPlay
-              className="size-full -scale-x-100 object-cover"
-            />
-          </div>
-
-          {/* Escape-Hinweis */}
-          {escapeHint && (
-            <div className="absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded-full bg-ink/85 px-4 py-2 text-xs font-medium text-white backdrop-blur-sm">
-              Escape beendet nicht — halte unten rechts „Beenden" gedrückt.
+            <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto pt-1.5">
+              {tabs.map((tab, i) => {
+                const active = tab.id === activeTabId;
+                const thumb = tabThumbUrl(tab);
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => switchTab(tab.id)}
+                    className={cn(
+                      "flex h-full shrink-0 items-center gap-2 rounded-t-[10px] px-3 transition-colors",
+                      active
+                        ? "-mb-px border border-b-0 border-line-soft bg-surface"
+                        : "text-ink-muted hover:bg-canvas-deep/70",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "text-[10px] font-bold tabular-nums",
+                        active ? "text-brand-deep" : "text-ink-muted/70",
+                      )}
+                    >
+                      {i + 1}
+                    </span>
+                    {thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={thumb}
+                        alt=""
+                        className="h-[18px] w-7 shrink-0 rounded-[4px] object-cover object-top"
+                      />
+                    ) : tab.segment.kind === "text" ? (
+                      <span
+                        className="h-[18px] w-7 shrink-0 rounded-[4px] border border-line-soft"
+                        style={{ backgroundColor: tab.segment.bgColor }}
+                      />
+                    ) : (
+                      <SceneKindIcon
+                        kind={sceneKindOf(tab)}
+                        className="size-3.5 shrink-0 text-ink-muted"
+                      />
+                    )}
+                    <span
+                      className={cn(
+                        "max-w-[130px] truncate text-xs",
+                        active
+                          ? "font-semibold text-ink"
+                          : "font-medium text-ink-muted",
+                      )}
+                    >
+                      {tabLabel(tab)}
+                    </span>
+                    {active && isRecord && running && (
+                      <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-danger" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
-          )}
+
+            {isRecord && (
+              <span className="flex shrink-0 items-center gap-1.5 self-stretch">
+                <span
+                  className={cn(
+                    "size-2 rounded-full bg-danger",
+                    running && "animate-pulse",
+                  )}
+                />
+                <span className="font-mono text-xs font-semibold tabular-nums text-ink">
+                  {running ? formatClock(elapsedMs) : "REC"}
+                </span>
+              </span>
+            )}
+          </div>
+
+          {/* 16:9-Bühne */}
+          <div className="relative aspect-video w-full bg-black">
+            {activeTab && (
+              <StudioStage
+                key={activeTab.id}
+                segment={activeTab.segment}
+                scrollRatio={activeRatio}
+                onScrollRatio={handleScrollRatio}
+                showStaticBadge
+              />
+            )}
+
+            {/* Scroll-Fortschrittslinie an der rechten Bühnenkante */}
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-y-2 right-1 z-20 w-1 rounded-full bg-white/10 transition-opacity duration-300",
+                scrollGlow ? "opacity-100" : "opacity-0",
+              )}
+            >
+              <div
+                className="absolute left-0 h-10 w-1 rounded-full bg-brand shadow-[0_0_12px_2px_rgba(170,140,245,0.8)]"
+                style={{
+                  top: `calc(${activeRatio * 100}% - ${activeRatio * 40}px)`,
+                }}
+              />
+            </div>
+
+            {/* Live-Webcam-PiP */}
+            <div
+              className={cn(
+                "pointer-events-none absolute z-30 w-1/4 overflow-hidden border-2 border-white/25 shadow-lift",
+                pipPositionClass(pipPosition),
+                pipShapeClass(pipShape),
+                pipShape !== "circle" && "aspect-video",
+              )}
+            >
+              <video
+                ref={pipVideoRef}
+                muted
+                playsInline
+                autoPlay
+                className="size-full -scale-x-100 object-cover"
+              />
+            </div>
+
+            {/* Escape-Hinweis */}
+            {escapeHint && (
+              <div className="absolute left-1/2 top-4 z-40 -translate-x-1/2 whitespace-nowrap rounded-full border border-line-soft bg-white/85 px-4 py-2 text-xs font-medium text-ink shadow-card backdrop-blur">
+                Zum Beenden klick auf „Aufnahme beenden".
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Fußzeile: Szenen-Pills + Beenden */}
-      <footer className="flex shrink-0 items-end gap-3 px-5 pb-4 pt-1">
-        <div className="flex min-w-0 flex-1 items-end gap-2 overflow-x-auto pb-0.5">
-          {tabs.map((tab, i) => {
-            const active = tab.id === activeTabId;
-            const thumb = tabThumbUrl(tab);
-            const spentPct = Math.min(
-              100,
-              ((tabMsRef.current.get(tab.id) ?? 0) / totalTabMs) * 100,
-            );
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => switchTab(tab.id)}
-                className={cn(
-                  "relative flex shrink-0 items-center gap-2 overflow-hidden rounded-squircle-md border px-3 py-2 transition-all",
-                  active
-                    ? "border-brand bg-brand-soft shadow-[0_0_18px_2px_rgba(170,140,245,0.45)]"
-                    : "border-white/10 bg-white/5 hover:bg-white/10",
-                )}
-              >
-                <span
-                  className={cn(
-                    "text-xs font-bold",
-                    active ? "text-brand-deep" : "text-white/50",
-                  )}
-                >
-                  {i + 1}
-                </span>
-                {thumb ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={thumb}
-                    alt=""
-                    className="h-6 w-10 shrink-0 rounded object-cover object-top"
-                  />
-                ) : (
-                  <span
-                    className="h-6 w-10 shrink-0 rounded"
-                    style={{
-                      backgroundColor:
-                        tab.segment.kind === "text"
-                          ? tab.segment.bgColor
-                          : "#3d3a4d",
-                    }}
-                  />
-                )}
-                <SceneKindIcon
-                  kind={sceneKindOf(tab)}
-                  className={cn(
-                    "size-3.5",
-                    active ? "text-brand-deep" : "text-white/50",
-                  )}
-                />
-                <span
-                  className={cn(
-                    "max-w-[120px] truncate text-xs font-semibold",
-                    active ? "text-ink" : "text-white/80",
-                  )}
-                >
-                  {tabLabel(tab)}
-                </span>
-                {active && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-danger">
-                    <span className="size-1.5 animate-pulse rounded-full bg-danger" />
-                    Live
-                  </span>
-                )}
-                {/* Füll-Balken: relative verbrachte Zeit */}
-                <span className="absolute inset-x-0 bottom-0 h-0.5 bg-black/10">
-                  <span
-                    className="block h-full bg-brand"
-                    style={{ width: `${spentPct}%` }}
-                  />
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
+      {/* Hauptaktion: Beenden per direktem Klick */}
+      <footer className="flex shrink-0 items-center justify-center px-5 pb-5 pt-2">
         {isRecord ? (
-          <HoldToStopButton onComplete={stopAll} disabled={stopping} />
+          <button
+            type="button"
+            onClick={stopAll}
+            disabled={stopping}
+            className={cn(
+              "flex h-11 items-center gap-2.5 rounded-full bg-ink px-6 text-sm font-bold text-white shadow-ink transition-all",
+              stopping
+                ? "opacity-60"
+                : "hover:-translate-y-0.5 hover:bg-black active:translate-y-0",
+            )}
+          >
+            <span className="size-3 rounded-[3px] bg-danger" />
+            {stopping ? "Wird beendet…" : "Aufnahme beenden"}
+          </button>
         ) : (
           <Button
             variant="ghost"
             size="sm"
             onClick={stopAll}
             iconLeft={<X className="size-3.5" />}
-            className="shrink-0 border-white/20 bg-white/10 text-white hover:bg-white/20"
           >
             Übung beenden
           </Button>
@@ -490,15 +487,16 @@ export function PhaseLive({
 
       {/* Erstnutzer-Hinweise */}
       {overlay === "hints" && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-squircle-xl bg-surface p-6 shadow-lift">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur">
+          <div className="w-full max-w-md rounded-squircle-xl border border-line-soft bg-surface p-6 shadow-lift">
             <h2 className="mb-4 text-base font-bold text-ink">
               Kurz bevor es losgeht
             </h2>
             <ul className="mb-5 flex flex-col gap-3 text-sm leading-relaxed text-ink-muted">
               <li className="flex gap-2.5">
                 <span className="font-bold text-brand-deep">1.</span>
-                Wechsle die Szenen unten per Klick oder mit den Tasten 1–9.
+                Wechsle die Szenen oben per Klick auf die Tabs oder mit den
+                Tasten 1–9.
               </li>
               <li className="flex gap-2.5">
                 <span className="font-bold text-brand-deep">2.</span>
@@ -506,7 +504,7 @@ export function PhaseLive({
               </li>
               <li className="flex gap-2.5">
                 <span className="font-bold text-brand-deep">3.</span>
-                Zum Beenden hältst du den Beenden-Knopf kurz gedrückt.
+                Zum Beenden klickst du unten auf „Aufnahme beenden".
               </li>
             </ul>
             <div className="flex justify-end">
@@ -518,10 +516,10 @@ export function PhaseLive({
 
       {/* Countdown */}
       {overlay === "countdown" && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur">
           <span
             key={countdown}
-            className="animate-in zoom-in text-[120px] font-black text-white duration-300"
+            className="animate-in zoom-in text-[140px] font-semibold tracking-tight text-ink duration-300"
           >
             {countdown}
           </span>
@@ -578,7 +576,7 @@ function Teleprompter({ script }: { script: string }) {
         <button
           type="button"
           onClick={() => setHidden(false)}
-          className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-semibold text-white/60 hover:bg-white/20 hover:text-white"
+          className="rounded-full border border-line-soft bg-white/70 px-3 py-1 text-[10px] font-semibold text-ink-muted backdrop-blur transition-colors hover:text-ink"
         >
           Teleprompter einblenden
         </button>
@@ -590,7 +588,7 @@ function Teleprompter({ script }: { script: string }) {
     <div className="mx-auto flex w-full max-w-2xl shrink-0 items-center gap-2 px-5 pb-1">
       <div
         ref={viewportRef}
-        className="relative h-[3.6em] flex-1 overflow-hidden rounded-squircle-md bg-white/10 px-4 py-1.5 text-sm leading-relaxed text-white/90 backdrop-blur-sm"
+        className="relative h-[3.6em] flex-1 overflow-hidden rounded-squircle-md border border-line-soft bg-white/80 px-4 py-1.5 text-sm leading-relaxed text-ink shadow-card backdrop-blur"
       >
         <div ref={contentRef} className="whitespace-pre-wrap will-change-transform">
           {script}
@@ -602,18 +600,18 @@ function Teleprompter({ script }: { script: string }) {
             type="button"
             aria-label="Langsamer"
             onClick={() => setSpeed((s) => Math.max(10, s - 10))}
-            className="rounded-full bg-white/10 p-1 text-white/70 hover:bg-white/20"
+            className="rounded-full bg-white/80 p-1 text-ink-muted shadow-card transition-colors hover:bg-white hover:text-ink"
           >
             <Minus className="size-3" />
           </button>
-          <span className="w-7 text-center text-[10px] tabular-nums text-white/60">
+          <span className="w-7 text-center text-[10px] tabular-nums text-ink-muted">
             {speed}
           </span>
           <button
             type="button"
             aria-label="Schneller"
             onClick={() => setSpeed((s) => Math.min(120, s + 10))}
-            className="rounded-full bg-white/10 p-1 text-white/70 hover:bg-white/20"
+            className="rounded-full bg-white/80 p-1 text-ink-muted shadow-card transition-colors hover:bg-white hover:text-ink"
           >
             <Plus className="size-3" />
           </button>
@@ -621,121 +619,11 @@ function Teleprompter({ script }: { script: string }) {
         <button
           type="button"
           onClick={() => setHidden(true)}
-          className="text-[9px] font-medium text-white/40 hover:text-white/70"
+          className="text-[9px] font-medium text-ink-muted/70 hover:text-ink-muted"
         >
           Ausblenden
         </button>
       </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Hold-to-Stop                                                        */
-/* ------------------------------------------------------------------ */
-
-function HoldToStopButton({
-  onComplete,
-  disabled,
-}: {
-  onComplete: () => void;
-  disabled?: boolean;
-}) {
-  const [progress, setProgress] = React.useState(0);
-  const [tooltip, setTooltip] = React.useState(false);
-  const rafRef = React.useRef(0);
-  const startRef = React.useRef<number | null>(null);
-  const doneRef = React.useRef(false);
-  const tooltipTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-
-  const cancelHold = React.useCallback((showTooltip: boolean) => {
-    cancelAnimationFrame(rafRef.current);
-    const wasHolding = startRef.current !== null && !doneRef.current;
-    startRef.current = null;
-    setProgress(0);
-    if (showTooltip && wasHolding) {
-      setTooltip(true);
-      if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
-      tooltipTimerRef.current = setTimeout(() => setTooltip(false), 2000);
-    }
-  }, []);
-
-  const beginHold = React.useCallback(() => {
-    if (disabled || doneRef.current) return;
-    startRef.current = performance.now();
-    const tick = () => {
-      if (startRef.current === null) return;
-      const p = (performance.now() - startRef.current) / HOLD_TO_STOP_MS;
-      if (p >= 1) {
-        doneRef.current = true;
-        setProgress(1);
-        onComplete();
-        return;
-      }
-      setProgress(p);
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-  }, [disabled, onComplete]);
-
-  React.useEffect(() => {
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-      if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
-    };
-  }, []);
-
-  // SVG-Ring: r=15, Umfang ≈ 94.25.
-  const CIRC = 2 * Math.PI * 15;
-
-  return (
-    <div className="relative shrink-0">
-      {tooltip && (
-        <div className="absolute bottom-full right-0 mb-2 whitespace-nowrap rounded-full bg-ink/90 px-3 py-1.5 text-[11px] font-medium text-white backdrop-blur-sm">
-          Zum Beenden gedrückt halten
-        </div>
-      )}
-      <button
-        type="button"
-        disabled={disabled}
-        onPointerDown={beginHold}
-        onPointerUp={() => cancelHold(true)}
-        onPointerLeave={() => cancelHold(false)}
-        onContextMenu={(e) => e.preventDefault()}
-        className={cn(
-          "relative flex h-11 select-none items-center gap-2 rounded-full bg-danger px-5 text-sm font-bold text-white shadow-lift transition-transform",
-          !disabled && "hover:-translate-y-0.5",
-          disabled && "opacity-60",
-        )}
-      >
-        <span className="relative flex size-8 items-center justify-center">
-          <svg viewBox="0 0 34 34" className="absolute inset-0 -rotate-90">
-            <circle
-              cx="17"
-              cy="17"
-              r="15"
-              fill="none"
-              stroke="rgba(255,255,255,0.3)"
-              strokeWidth="3"
-            />
-            <circle
-              cx="17"
-              cy="17"
-              r="15"
-              fill="none"
-              stroke="white"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeDasharray={CIRC}
-              strokeDashoffset={CIRC * (1 - progress)}
-            />
-          </svg>
-          <Square className="size-3 fill-white" />
-        </span>
-        {disabled ? "Wird beendet…" : "Beenden"}
-      </button>
     </div>
   );
 }
