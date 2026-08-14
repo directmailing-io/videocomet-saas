@@ -6,8 +6,12 @@
 import type { Segment } from "@/lib/segments/types";
 import type { StudioEvent, StudioTab } from "@/lib/studio/types";
 
-/** Szenen-Typen, die im Studio angelegt werden können. */
-export type StudioSceneKind = "website" | "gdocs" | "pdf" | "text";
+/**
+ * Szenen-Typen, die im Studio angelegt werden können.
+ * "website" = personalisiert pro Empfänger, "ownsite" = feste Webseite für
+ * alle (WebsiteSegment mit personalized === false).
+ */
+export type StudioSceneKind = "website" | "ownsite" | "gdocs" | "pdf" | "text";
 
 /** Ergebnis einer beendeten Live-Aufnahme (vor dem Upload). */
 export interface StudioRecording {
@@ -18,16 +22,17 @@ export interface StudioRecording {
   events: StudioEvent[];
 }
 
-/** localStorage-Flag: Erstnutzer-Hinweise wurden gesehen. */
-export const STUDIO_HINTS_SEEN_KEY = "vc-studio-hints-seen";
-
 /** Gleicher Key wie der bestehende Webcam-Recorder — Skript wird geteilt. */
 export const STUDIO_PROMPTER_STORAGE_KEY = "vc-teleprompter-script";
 
 /** Szenen-Typ eines Studio-Tabs (null = im Studio nicht unterstützt). */
 export function sceneKindOf(tab: StudioTab): StudioSceneKind | null {
-  const k = tab.segment.kind;
-  if (k === "website" || k === "gdocs" || k === "pdf" || k === "text") return k;
+  const seg = tab.segment;
+  if (seg.kind === "website") {
+    return seg.personalized === false ? "ownsite" : "website";
+  }
+  const k = seg.kind;
+  if (k === "gdocs" || k === "pdf" || k === "text") return k;
   return null;
 }
 

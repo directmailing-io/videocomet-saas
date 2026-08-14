@@ -11,7 +11,6 @@ import {
   Film,
   Sparkles,
   Clapperboard,
-  ListChecks,
   Monitor,
 } from "lucide-react";
 import { RecordingHint } from "@/components/intro/recording-hint";
@@ -58,11 +57,11 @@ export interface WizardStep1Props {
    *  einblenden (kollabierbar). Nur wenn der User das Feature aktivieren will. */
   showKiHint?: boolean;
   /**
-   * Wenn gesetzt, zeigt Schritt 0 die Einstiegskarten („VIDEOCOMET Studio"
-   * als Hauptweg, „Video manuell zusammenstellen" als sekundäre Option).
-   * Klick auf die Studio-Karte ruft diesen Callback auf — der Container
-   * öffnet dann den StudioFlow als Vollbild-Overlay. Optional für
-   * Back-Compat mit älteren Callsites.
+   * Wenn gesetzt, zeigt Schritt 0 zwei gleichrangige Options-Karten
+   * („VIDEOCOMET Studio" und „Klassischer Editor"). Klick auf die
+   * Studio-Karte ruft diesen Callback auf — der Container öffnet dann den
+   * StudioFlow als Vollbild-Overlay. Optional für Back-Compat mit älteren
+   * Callsites (ohne Callback erscheint die Mediathek direkt, ohne Karten).
    */
   onStartStudio?: () => void;
 }
@@ -196,6 +195,23 @@ export function WizardStep1Webcam({
   const [pickerLoading, setPickerLoading] = React.useState(false);
   const [pickerError, setPickerError] = React.useState<string | null>(null);
 
+  // Klassischer Weg gewählt? Initial true bei bereits gewähltem Video
+  // (Wizard-Entwurf) oder bei alten Callsites ohne Studio — dann zeigen wir
+  // die Mediathek wie bisher direkt, ohne Options-Karten davor.
+  const [classicChosen, setClassicChosen] = React.useState(
+    () => value != null || !onStartStudio,
+  );
+  const mediaSectionRef = React.useRef<HTMLDivElement | null>(null);
+
+  function chooseClassic() {
+    setClassicChosen(true);
+    // Der Mediathek-Bereich mountet erst nach dem State-Update — deshalb
+    // sanft scrollen im nächsten Macrotask (React hat bis dahin committet).
+    window.setTimeout(() => {
+      mediaSectionRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 0);
+  }
+
   // When the user opens the picker, refresh the webcam list from the API so
   // newly uploaded items appear without a full page reload.
   const loadPickerItems = React.useCallback(async () => {
@@ -269,60 +285,62 @@ export function WizardStep1Webcam({
           {onStartStudio && (
             <RecordingEntryCards
               onStartStudio={onStartStudio}
-              onStartClassic={() => {
-                setUploadError(null);
-                setRecordOpen(true);
-              }}
+              onChooseClassic={chooseClassic}
+              classicChosen={classicChosen}
             />
           )}
-          <KiRecordingTeaser />
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm text-ink-muted">
-              {webcams.length === 0
-                ? "Du hast noch keine Webcam-Aufnahme oder kein Video."
-                : "Wähle eine Aufnahme oder ein Video aus deiner Mediathek."}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {webcams.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={openPicker}
-                  iconLeft={<Upload className="size-4" />}
-                >
-                  Aus Mediathek wählen
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant="subtle"
-                onClick={() => {
-                  setUploadError(null);
-                  setRecordOpen(true);
-                }}
-                iconLeft={<Video className="size-4" />}
-              >
-                Neu aufnehmen
-              </Button>
-            </div>
-          </div>
+          {classicChosen && (
+            <div ref={mediaSectionRef} className="space-y-4 scroll-mt-24">
+              <KiRecordingTeaser />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm text-ink-muted">
+                  {webcams.length === 0
+                    ? "Du hast noch keine Webcam-Aufnahme oder kein Video."
+                    : "Wähle eine Aufnahme oder ein Video aus deiner Mediathek."}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {webcams.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={openPicker}
+                      iconLeft={<Upload className="size-4" />}
+                    >
+                      Aus Mediathek wählen
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="subtle"
+                    onClick={() => {
+                      setUploadError(null);
+                      setRecordOpen(true);
+                    }}
+                    iconLeft={<Video className="size-4" />}
+                  >
+                    Neu aufnehmen
+                  </Button>
+                </div>
+              </div>
 
-          {webcams.length === 0 ? (
-            <EmptyState
-              icon={<Video />}
-              title="Keine Webcam-Aufnahmen"
-              subtitle="Nimm jetzt deine erste Webcam-Aufnahme auf, um sie hier auswählen zu können."
-            />
-          ) : (
-            <div className="grid grid-cols-2 gap-4">
-              {webcams.map((w) => (
-                <WebcamThumb
-                  key={w.id}
-                  webcam={w}
-                  active={w.id === value}
-                  onSelect={() => onChange(w.id)}
+              {webcams.length === 0 ? (
+                <EmptyState
+                  icon={<Video />}
+                  title="Keine Webcam-Aufnahmen"
+                  subtitle="Nimm jetzt deine erste Webcam-Aufnahme auf, um sie hier auswählen zu können."
                 />
-              ))}
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  {webcams.map((w) => (
+                    <WebcamThumb
+                      key={w.id}
+                      webcam={w}
+                      active={w.id === value}
+                      onSelect={() => onChange(w.id)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -453,27 +471,28 @@ function useIsDesktop(): boolean {
 }
 
 /**
- * RecordingEntryCards — Einstieg in Schritt 0 mit klarer Hierarchie:
+ * RecordingEntryCards — zwei gleichrangige Options-Karten in Schritt 0:
  *
- *   • „VIDEOCOMET Studio" (primär, groß): Szenen vorbereiten, einmal
- *     aufnehmen, live zwischen Szenen springen — Klick öffnet den StudioFlow
+ *   • „VIDEOCOMET Studio" (empfohlen): Video direkt in der App aufnehmen,
+ *     fertig geschnitten ohne Nachbearbeitung — Klick öffnet den StudioFlow
  *     als Vollbild-Overlay (Callback in den Container). Unter 1024px
  *     ausgegraut (Desktop-Guard).
- *   • „Video manuell zusammenstellen" (sekundär, dezent): für alle, die ihr
- *     Video schon haben — Mediathek-Auswahl darunter bleibt wie gehabt,
- *     der Klick öffnet den klassischen Webcam-Recorder.
+ *   • „Klassischer Editor": für alle, die ihr Video schon haben — Klick
+ *     blendet die Mediathek-Auswahl darunter ein (`classicChosen`).
  */
 function RecordingEntryCards({
-  onStartClassic,
   onStartStudio,
+  onChooseClassic,
+  classicChosen,
 }: {
-  onStartClassic: () => void;
   onStartStudio: () => void;
+  onChooseClassic: () => void;
+  classicChosen: boolean;
 }) {
   const isDesktop = useIsDesktop();
   return (
-    <div className="flex flex-col gap-3">
-      {/* Studio — Hauptweg */}
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* VIDEOCOMET Studio — empfohlener Weg */}
       <button
         type="button"
         onClick={() => {
@@ -482,55 +501,63 @@ function RecordingEntryCards({
         disabled={!isDesktop}
         aria-disabled={!isDesktop}
         className={cn(
-          "group relative flex flex-col text-left rounded-squircle-xl bg-surface shadow-card p-6 sm:p-8 transition-all duration-200 ease-spring",
+          "group relative flex flex-col text-left rounded-squircle-xl bg-surface shadow-card p-6 sm:p-7 transition-all duration-200 ease-spring",
           isDesktop
             ? "hover:shadow-card-hover hover:-translate-y-0.5"
             : "opacity-60 cursor-not-allowed",
         )}
       >
         <span className="absolute right-5 top-5 inline-flex items-center rounded-full bg-brand-soft px-2.5 py-1 text-[10px] font-semibold leading-none text-brand-deep">
-          Neu
+          Empfohlen
         </span>
-        <span className="sr-only">Studio-Aufnahme</span>
+        <span className="sr-only">VIDEOCOMET Studio</span>
         <StudioWordmark height={24} />
-        <span className="mt-3 max-w-xl text-sm text-ink-muted leading-relaxed">
-          Bereite deine Szenen vor, nimm einmal auf und springe live zwischen
-          Szenen — scrollen inklusive. Am Ende ist dein Video fertig
-          geschnitten, ganz ohne Nachbearbeitung.
+        <span className="mt-3 text-sm text-ink-muted leading-relaxed">
+          Du hast noch kein Video? Hier nimmst du es direkt auf: Vorher legst
+          du fest, was im Video zu sehen ist (zum Beispiel die Website deines
+          Empfängers), dann drückst du auf Aufnahme und sprichst einfach
+          drüber. Am Ende ist dein Video komplett fertig — ohne Schnitt und
+          ohne Technik-Wissen.
         </span>
         {isDesktop ? (
-          <span className="mt-5 inline-flex items-center gap-1.5 self-start rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white transition-colors group-hover:bg-ink/90">
-            <Clapperboard className="size-4" />
-            Studio öffnen
+          <span className="mt-auto pt-5 self-start">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white transition-colors group-hover:bg-ink/90">
+              <Clapperboard className="size-4" />
+              Studio öffnen
+            </span>
           </span>
         ) : (
-          <span className="mt-5 inline-flex items-center gap-1.5 self-start rounded-full border border-line-soft px-4 py-2 text-xs font-medium text-ink-muted">
-            <Monitor className="size-3.5" />
-            Am besten am Laptop oder Desktop
+          <span className="mt-auto pt-5 self-start">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line-soft px-4 py-2 text-xs font-medium text-ink-muted">
+              <Monitor className="size-3.5" />
+              Am besten am Laptop oder Desktop
+            </span>
           </span>
         )}
       </button>
 
-      {/* Manuell — sekundärer Weg */}
+      {/* Klassischer Editor — Video liegt schon vor */}
       <button
         type="button"
-        onClick={onStartClassic}
-        className="group flex items-start gap-3.5 text-left rounded-squircle-lg bg-surface shadow-card p-4 transition-all duration-200 ease-spring hover:shadow-card-hover hover:-translate-y-0.5"
+        onClick={onChooseClassic}
+        className={cn(
+          "group flex flex-col text-left rounded-squircle-xl bg-surface shadow-card p-6 sm:p-7 transition-all duration-200 ease-spring hover:shadow-card-hover hover:-translate-y-0.5",
+          classicChosen && "ring-2 ring-brand",
+        )}
       >
-        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-canvas-deep text-ink">
-          <ListChecks className="size-4" />
+        <span className="flex items-center gap-2 text-base font-semibold text-ink">
+          <Film className="size-5 text-ink-muted" />
+          Klassischer Editor
         </span>
-        <span className="flex min-w-0 flex-col">
-          <span className="text-sm font-semibold text-ink">
-            Video manuell zusammenstellen
-          </span>
-          <span className="mt-0.5 text-xs text-ink-muted leading-relaxed">
-            Du hast dein Video schon aufgenommen? Wähle es unten aus und baue
-            alles drumherum — oder nimm hier klassisch neu auf.
-          </span>
-          <span className="mt-2.5 inline-flex items-center gap-1.5 self-start rounded-full border border-line-soft px-3 py-1 text-xs font-semibold text-ink transition-colors group-hover:bg-canvas-deep/60">
-            <Video className="size-3.5" />
-            Video aufnehmen
+        <span className="mt-3 text-sm text-ink-muted leading-relaxed">
+          Du hast dein Video schon aufgenommen? Dann wähle es hier aus (oder
+          lade es hoch) und stelle danach selbst zusammen, was drumherum
+          gezeigt wird — Schritt für Schritt im Editor.
+        </span>
+        <span className="mt-auto pt-5 self-start">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink transition-colors group-hover:bg-canvas-deep/60">
+            <Video className="size-4" />
+            Video auswählen
           </span>
         </span>
       </button>

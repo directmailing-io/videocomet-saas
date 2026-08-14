@@ -118,6 +118,11 @@ export interface WebsiteSegment extends SegmentBase {
   urlColumn: string;
   /** Fallback-URL, falls Lead keinen Wert in urlColumn hat. */
   fallbackUrl: string;
+  /**
+   * false = feste Webseite für ALLE Empfänger (immer fallbackUrl, kein
+   * Mapping-Schritt). undefined/true = pro Lead personalisiert (Legacy).
+   */
+  personalized?: boolean;
   captureMode: WebCaptureMode;
   /** Optional, nur relevant bei captureMode = "scroll-recorded". */
   scrollFrames?: ScrollFrame[];

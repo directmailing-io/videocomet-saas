@@ -1,22 +1,24 @@
 "use client";
 
 /**
- * phase-check — Phase 2 des Studio-Flows: Kamera/Mikro-Check + PiP-Wahl.
+ * phase-check — Phase 2 des Studio-Flows: reiner Technik-Check
+ * (Kamera/Mikro + PiP-Wahl).
  *
  * Der MediaStream lebt auf Flow-Ebene (use-studio-media) und überlebt den
  * Wechsel in die Live-Phase. Hier: großes Kamerabild, Mikro-Pegel
  * (AnalyserNode), Geräte-Auswahl, PiP-Position/-Form auf einer
- * 16:9-Miniatur. Countdown + Aufnahme starten erst in Phase 3.
+ * 16:9-Miniatur. „Weiter zur Aufnahme-Ansicht" wechselt nur die Phase —
+ * die Aufnahme startet erst im Standby der Live-Phase.
  */
 
 import * as React from "react";
 import {
   AlertCircle,
   ArrowLeft,
-  Circle,
-  Dumbbell,
+  ArrowRight,
   Loader2,
   Mic,
+  Sparkles,
   Video,
   X,
 } from "lucide-react";
@@ -37,8 +39,8 @@ export interface PhaseCheckProps {
   onPipShapeChange: (shape: StudioPipShape) => void;
   /** true, sobald alle Szenen-Bilder vor-decodiert sind. */
   preloadReady: boolean;
-  onStartRecording: () => void;
-  onStartPractice: () => void;
+  /** Wechselt zur Live-Phase (Standby) — startet noch keine Aufnahme. */
+  onContinue: () => void;
   onBack: () => void;
   onCancel: () => void;
 }
@@ -94,8 +96,7 @@ export function PhaseCheck({
   onPipPositionChange,
   onPipShapeChange,
   preloadReady,
-  onStartRecording,
-  onStartPractice,
+  onContinue,
   onBack,
   onCancel,
 }: PhaseCheckProps) {
@@ -131,7 +132,7 @@ export function PhaseCheck({
         <div className="flex items-baseline gap-3">
           <StudioWordmark />
           <span className="text-sm font-medium text-ink-muted">
-            Bereit-Check
+            Technik-Check
           </span>
         </div>
         <button
@@ -199,10 +200,10 @@ export function PhaseCheck({
             </span>
           </div>
 
-          {/* Geräte-Auswahl */}
-          {(media.cameras.length > 1 || media.microphones.length > 1) && (
+          {/* Geräte-Auswahl — immer sichtbar, sobald Geräte gelistet sind */}
+          {(media.cameras.length > 0 || media.microphones.length > 0) && (
             <div className="flex gap-3">
-              {media.cameras.length > 1 && (
+              {media.cameras.length > 0 && (
                 <label className="flex min-w-0 flex-1 items-center gap-2 rounded-squircle-lg bg-surface px-3 py-2 shadow-card">
                   <Video className="size-4 shrink-0 text-ink-muted" />
                   <select
@@ -220,7 +221,7 @@ export function PhaseCheck({
                   </select>
                 </label>
               )}
-              {media.microphones.length > 1 && (
+              {media.microphones.length > 0 && (
                 <label className="flex min-w-0 flex-1 items-center gap-2 rounded-squircle-lg bg-surface px-3 py-2 shadow-card">
                   <Mic className="size-4 shrink-0 text-ink-muted" />
                   <select
@@ -311,6 +312,20 @@ export function PhaseCheck({
             </ul>
           </section>
 
+          {/* Hinweis zur persönlichen KI-Begrüßung */}
+          <section className="rounded-squircle-lg border border-brand/30 bg-brand-soft p-3 shadow-card">
+            <h2 className="mb-1 flex items-center gap-1.5 px-1 text-xs font-bold uppercase tracking-wide text-brand-deep">
+              <Sparkles className="size-3.5" />
+              Tipp: KI-Begrüßung
+            </h2>
+            <p className="px-1 text-[11px] leading-snug text-ink-muted">
+              Später kannst du die persönliche KI-Begrüßung mit dem Vornamen
+              des Empfängers aktivieren. Damit das klappt: Beginne deine
+              Aufnahme mit einer kurzen Anrede („Hi!") und mach danach 1–2
+              Sekunden Pause — da wird später der Name eingesetzt.
+            </p>
+          </section>
+
           {!preloadReady && (
             <p className="flex items-center gap-2 rounded-squircle-lg bg-surface px-3 py-2 text-[11px] text-ink-muted shadow-card">
               <Loader2 className="size-3.5 shrink-0 animate-spin" />
@@ -330,27 +345,15 @@ export function PhaseCheck({
         >
           Zurück zur Regie
         </Button>
-        <div className="flex items-center gap-2">
-          <span title={readyTitle}>
-            <Button
-              variant="ghost"
-              onClick={onStartPractice}
-              disabled={!ready}
-              iconLeft={<Dumbbell className="size-4" />}
-            >
-              Erst mal üben
-            </Button>
-          </span>
-          <span title={readyTitle}>
-            <Button
-              onClick={onStartRecording}
-              disabled={!ready}
-              iconLeft={<Circle className="size-3 fill-danger text-danger" />}
-            >
-              Aufnahme starten
-            </Button>
-          </span>
-        </div>
+        <span title={readyTitle}>
+          <Button
+            onClick={onContinue}
+            disabled={!ready}
+            iconRight={<ArrowRight className="size-4" />}
+          >
+            Weiter zur Aufnahme-Ansicht
+          </Button>
+        </span>
       </footer>
     </div>
   );

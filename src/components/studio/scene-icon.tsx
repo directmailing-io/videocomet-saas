@@ -6,7 +6,7 @@
  */
 
 import * as React from "react";
-import { FileText, FileType2, Globe, Type } from "lucide-react";
+import { FileText, FileType2, Globe, Globe2, Type } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StudioSceneKind } from "./internal";
 
@@ -21,6 +21,8 @@ export function SceneKindIcon({
   switch (kind) {
     case "website":
       return <Globe className={cls} />;
+    case "ownsite":
+      return <Globe2 className={cls} />;
     case "gdocs":
       return <FileText className={cls} />;
     case "pdf":

@@ -679,15 +679,20 @@ async function renderSegmentsBase(opts: {
         // oder "website"). resolveValue fällt ohne Mapping-Eintrag auf den
         // direkten CI-Lookup in leadData zurück (= altes Verhalten), danach
         // generische Top-Level-URL, danach statische seg.fallbackUrl.
+        // personalized === false: feste Webseite (Studio „Eigene Webseite")
+        // — immer fallbackUrl, Lead-Daten spielen keine Rolle.
+        const fixed = seg.personalized === false;
         const mappingKey = websiteSegmentMappingKey(seg);
-        const fromLead = opts.leadData
-          ? resolveValue(mappingKey, opts.leadData, opts.placeholderMapping)
-          : null;
-        const url =
-          normaliseWebsiteUrl(fromLead) ??
-          normaliseWebsiteUrl(opts.fallbackWebsite) ??
-          normaliseWebsiteUrl(seg.fallbackUrl) ??
-          null;
+        const fromLead =
+          !fixed && opts.leadData
+            ? resolveValue(mappingKey, opts.leadData, opts.placeholderMapping)
+            : null;
+        const url = fixed
+          ? normaliseWebsiteUrl(seg.fallbackUrl) ?? null
+          : normaliseWebsiteUrl(fromLead) ??
+            normaliseWebsiteUrl(opts.fallbackWebsite) ??
+            normaliseWebsiteUrl(seg.fallbackUrl) ??
+            null;
         if (!url) {
           await generateBlackClip({
             outputPath: partPath,

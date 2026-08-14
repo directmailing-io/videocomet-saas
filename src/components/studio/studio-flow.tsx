@@ -2,7 +2,7 @@
 
 /**
  * Studio-Aufnahme (Live-Regie) — Vollbild-Flow mit 4 Phasen:
- * Regie (Szenen-Setup) → Bereit-Check → Live-Aufnahme → Review.
+ * Regie (Szenen-Setup) → Technik-Check → Live (Standby + Aufnahme) → Review.
  * Konzept: docs/konzept-studio-modus.md.
  *
  * Dieser Export-Vertrag ist fix — die Wizard-Integration baut dagegen.
@@ -64,9 +64,6 @@ export function StudioFlow({ onComplete, onCancel }: StudioFlowProps) {
   const [pipPosition, setPipPosition] =
     React.useState<StudioPipPosition>("bottom-right");
   const [pipShape, setPipShape] = React.useState<StudioPipShape>("rounded");
-  const [liveMode, setLiveMode] = React.useState<"record" | "practice">(
-    "record",
-  );
   const [recording, setRecording] = React.useState<StudioRecording | null>(
     null,
   );
@@ -150,10 +147,8 @@ export function StudioFlow({ onComplete, onCancel }: StudioFlowProps) {
   // ── Phasen-Übergänge ─────────────────────────────────────────────────
   const goCheck = React.useCallback(() => setPhase("check"), []);
 
-  const startLive = React.useCallback((mode: "record" | "practice") => {
-    setLiveMode(mode);
-    setPhase("live");
-  }, []);
+  // Wechselt nur in die Live-Phase (Standby) — die Aufnahme startet dort.
+  const goLive = React.useCallback(() => setPhase("live"), []);
 
   const handleFinished = React.useCallback(
     (rec: StudioRecording) => {
@@ -165,7 +160,8 @@ export function StudioFlow({ onComplete, onCancel }: StudioFlowProps) {
     [media],
   );
 
-  const handleExitPractice = React.useCallback(() => setPhase("check"), []);
+  // Aus dem Live-Standby zurück zum Technik-Check (Kamera-Stream lebt weiter).
+  const handleLiveBack = React.useCallback(() => setPhase("check"), []);
 
   const handleRetake = React.useCallback(() => {
     setRecording(null);
@@ -214,8 +210,7 @@ export function StudioFlow({ onComplete, onCancel }: StudioFlowProps) {
           onPipPositionChange={setPipPosition}
           onPipShapeChange={setPipShape}
           preloadReady={preloadReady}
-          onStartRecording={() => startLive("record")}
-          onStartPractice={() => startLive("practice")}
+          onContinue={goLive}
           onBack={() => setPhase("regie")}
           onCancel={handleCancel}
         />
@@ -225,12 +220,11 @@ export function StudioFlow({ onComplete, onCancel }: StudioFlowProps) {
         <PhaseLive
           tabs={tabs}
           stream={media.stream}
-          mode={liveMode}
           pipPosition={pipPosition}
           pipShape={pipShape}
           script={script}
           onFinished={handleFinished}
-          onExitPractice={handleExitPractice}
+          onBack={handleLiveBack}
         />
       )}
 

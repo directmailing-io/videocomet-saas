@@ -6,8 +6,8 @@
  *
  * Die Bühne ist ein Browser-Fenster: Szenen liegen als Tabs in der
  * Chrome-Leiste, ein „+"-Tab öffnet die Neuer-Tab-Seite zum Hinzufügen
- * (Website / Google Docs / PDF / Text-Folie). Darunter: Einstellungen der
- * gewählten Szene + Teleprompter.
+ * (Website des Empfängers / Eigene Webseite / Google Docs / Präsentation).
+ * Darunter: Einstellungen der gewählten Szene + Teleprompter (opt-in).
  *
  * „Weiter" ist erst aktiv, wenn ≥1 Szene existiert und ALLE bereit sind —
  * die Live-Aufnahme braucht keine Netzwerk-Ladevorgänge mehr.
@@ -20,12 +20,13 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
-  FileType2,
   Globe,
+  Globe2,
   Loader2,
   Plus,
+  Presentation,
+  ScrollText,
   Trash2,
-  Type,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,7 +36,6 @@ import type { PdfSegment, Segment, TextSegment } from "@/lib/segments/types";
 import {
   createGDocsSegment,
   createPdfSegment,
-  createTextSegment,
   createWebsiteSegment,
 } from "@/lib/segments/defaults";
 import { StudioStage } from "./studio-stage";
@@ -98,9 +98,15 @@ const ADD_TILES: {
 }[] = [
   {
     kind: "website",
-    label: "Website",
-    hint: "z. B. die Website deines Empfängers",
+    label: "Website des Empfängers",
+    hint: "Wird im Video automatisch mit der Website des jeweiligen Empfängers gefüllt",
     icon: <Globe className="size-4" />,
+  },
+  {
+    kind: "ownsite",
+    label: "Eigene Webseite",
+    hint: "Eine feste Webseite, für alle Empfänger gleich — z. B. deine eigene",
+    icon: <Globe2 className="size-4" />,
   },
   {
     kind: "gdocs",
@@ -110,15 +116,9 @@ const ADD_TILES: {
   },
   {
     kind: "pdf",
-    label: "PDF",
-    hint: "Eigenes PDF hochladen",
-    icon: <FileType2 className="size-4" />,
-  },
-  {
-    kind: "text",
-    label: "Text-Folie",
-    hint: "Kurzer Text als Standbild",
-    icon: <Type className="size-4" />,
+    label: "Präsentation (Canva, PowerPoint)",
+    hint: "Exportiere deine Folien als PDF und lade sie hier hoch",
+    icon: <Presentation className="size-4" />,
   },
 ];
 
@@ -139,10 +139,10 @@ export function PhaseRegie({
   );
   /** „+"-Tab aktiv: Neuer-Tab-Seite statt Szenen-Vorschau. */
   const [adding, setAdding] = React.useState(tabs.length === 0);
-  /** Offenes URL-Eingabe-Formular (website/gdocs) auf der Neuer-Tab-Seite. */
-  const [addForm, setAddForm] = React.useState<"website" | "gdocs" | null>(
-    null,
-  );
+  /** Offenes URL-Eingabe-Formular auf der Neuer-Tab-Seite. */
+  const [addForm, setAddForm] = React.useState<
+    "website" | "ownsite" | "gdocs" | null
+  >(null);
   const [addUrl, setAddUrl] = React.useState("");
   const [pdfUploading, setPdfUploading] = React.useState(false);
   const [pdfError, setPdfError] = React.useState<string | null>(null);
@@ -150,6 +150,16 @@ export function PhaseRegie({
   /** Vorschau-Scrollposition pro Szene (nur für die Regie-Vorschau). */
   const previewRatioRef = React.useRef<Map<string, number>>(new Map());
   const [, forceRender] = React.useReducer((n: number) => n + 1, 0);
+
+  // Teleprompter ist opt-in: Karte erst nach Klick sichtbar. Ein bereits
+  // gespeichertes Skript (lädt im Flow asynchron aus localStorage) öffnet
+  // die Karte automatisch.
+  const [prompterOpen, setPrompterOpen] = React.useState(
+    script.trim().length > 0,
+  );
+  React.useEffect(() => {
+    if (script.trim().length > 0) setPrompterOpen(true);
+  }, [script]);
 
   // Auswahl reparieren, wenn die gewählte Szene gelöscht wurde.
   React.useEffect(() => {
@@ -178,9 +188,11 @@ export function PhaseRegie({
   const submitAddForm = () => {
     const url = normalizeUrl(addUrl);
     if (!url || !addForm) return;
-    if (addForm === "website") {
+    if (addForm === "website" || addForm === "ownsite") {
       const seg = createWebsiteSegment({ label: hostLabel(url) });
       seg.fallbackUrl = url;
+      // "ownsite": feste Webseite für ALLE Empfänger (kein Mapping).
+      if (addForm === "ownsite") seg.personalized = false;
       addScene(seg);
     } else {
       const seg = createGDocsSegment({ label: "Google Docs" });
@@ -193,16 +205,14 @@ export function PhaseRegie({
 
   const onTileClick = (kind: StudioSceneKind) => {
     setPdfError(null);
-    if (kind === "text") {
-      addScene(createTextSegment({ label: "Text-Folie" }));
-      return;
-    }
     if (kind === "pdf") {
       fileInputRef.current?.click();
       return;
     }
-    setAddForm((prev) => (prev === kind ? null : kind));
-    setAddUrl("");
+    if (kind === "website" || kind === "ownsite" || kind === "gdocs") {
+      setAddForm((prev) => (prev === kind ? null : kind));
+      setAddUrl("");
+    }
   };
 
   const onPdfFile = async (file: File) => {
@@ -459,9 +469,9 @@ export function PhaseRegie({
                         }}
                       >
                         <label className="text-[11px] font-semibold text-ink">
-                          {addForm === "website"
-                            ? "Website-Adresse"
-                            : "Link zum Google-Dokument"}
+                          {addForm === "gdocs"
+                            ? "Link zum Google-Dokument"
+                            : "Website-Adresse"}
                         </label>
                         <input
                           autoFocus
@@ -469,12 +479,21 @@ export function PhaseRegie({
                           value={addUrl}
                           onChange={(e) => setAddUrl(e.target.value)}
                           placeholder={
-                            addForm === "website"
-                              ? "z. B. beispiel-firma.de"
-                              : "https://docs.google.com/document/d/…"
+                            addForm === "gdocs"
+                              ? "https://docs.google.com/document/d/…"
+                              : addForm === "ownsite"
+                                ? "z. B. deine-firma.de"
+                                : "z. B. beispiel-firma.de"
                           }
                           className="h-9 rounded-squircle-sm border border-line-soft bg-surface px-3 text-xs text-ink outline-none focus:border-brand"
                         />
+                        {addForm === "website" && (
+                          <p className="text-[10px] leading-snug text-ink-muted">
+                            Diese Adresse ist nur für deine Vorschau — im
+                            fertigen Video wird pro Empfänger dessen Website
+                            gezeigt.
+                          </p>
+                        )}
                         {addForm === "gdocs" && (
                           <p className="text-[10px] leading-snug text-ink-muted">
                             Die Vorschau zeigt deine Vorlage mit sichtbaren{" "}
@@ -589,22 +608,44 @@ export function PhaseRegie({
               )}
             </div>
 
-            {/* Teleprompter */}
-            <section className="w-[300px] shrink-0 rounded-squircle-lg bg-surface p-3 shadow-card">
-              <h2 className="mb-1 px-1 text-xs font-bold uppercase tracking-wide text-ink-muted">
-                Teleprompter (optional)
-              </h2>
-              <textarea
-                value={script}
-                onChange={(e) => onScriptChange(e.target.value)}
-                rows={3}
-                placeholder="Hallo, ich habe mir eure Website angeschaut und…"
-                className="w-full resize-y rounded-squircle-sm border border-line-soft bg-surface-soft p-2.5 text-xs leading-relaxed text-ink outline-none focus:border-brand"
-              />
-              <p className="px-1 text-[10px] leading-snug text-ink-muted">
-                Läuft während der Aufnahme dezent oben mit.
-              </p>
-            </section>
+            {/* Teleprompter (opt-in) */}
+            {prompterOpen ? (
+              <section className="w-[300px] shrink-0 rounded-squircle-lg bg-surface p-3 shadow-card">
+                <div className="mb-1 flex items-center justify-between px-1">
+                  <h2 className="text-xs font-bold uppercase tracking-wide text-ink-muted">
+                    Teleprompter (optional)
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setPrompterOpen(false)}
+                    className="text-[10px] font-medium text-ink-muted/70 transition-colors hover:text-ink-muted"
+                  >
+                    Ausblenden
+                  </button>
+                </div>
+                <textarea
+                  value={script}
+                  onChange={(e) => onScriptChange(e.target.value)}
+                  rows={3}
+                  placeholder="Hallo, ich habe mir eure Website angeschaut und…"
+                  className="w-full resize-y rounded-squircle-sm border border-line-soft bg-surface-soft p-2.5 text-xs leading-relaxed text-ink outline-none focus:border-brand"
+                />
+                <p className="px-1 text-[10px] leading-snug text-ink-muted">
+                  Läuft während der Aufnahme dezent oben mit.
+                </p>
+              </section>
+            ) : (
+              <div className="flex w-[300px] shrink-0 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setPrompterOpen(true)}
+                  className="flex items-center gap-1.5 rounded-full border border-line-soft bg-surface/70 px-3 py-1.5 text-[11px] font-semibold text-ink-muted transition-colors hover:border-line hover:bg-surface hover:text-ink"
+                >
+                  <ScrollText className="size-3.5" />
+                  Teleprompter aktivieren
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -746,11 +787,19 @@ function SceneSettings({
   if (seg.kind === "website") {
     return (
       <div className="rounded-squircle-lg bg-surface p-3 shadow-card">
-        <p className="truncate text-[11px] text-ink-muted">
-          Vorschau-Quelle:{" "}
-          <span className="font-medium text-ink">{seg.fallbackUrl}</span> — in
-          der Kampagne wird pro Empfänger dessen Website gezeigt.
-        </p>
+        {seg.personalized === false ? (
+          <p className="truncate text-[11px] text-ink-muted">
+            Feste Webseite:{" "}
+            <span className="font-medium text-ink">{seg.fallbackUrl}</span> —
+            wird für alle Empfänger gleich gezeigt.
+          </p>
+        ) : (
+          <p className="truncate text-[11px] text-ink-muted">
+            Vorschau-Quelle:{" "}
+            <span className="font-medium text-ink">{seg.fallbackUrl}</span> —
+            in der Kampagne wird pro Empfänger dessen Website gezeigt.
+          </p>
+        )}
       </div>
     );
   }

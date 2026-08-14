@@ -186,6 +186,9 @@ function scanSegments(
       return;
     }
     if (isWebsiteSegment(seg)) {
+      // Feste Webseite (Studio „Eigene Webseite"): immer fallbackUrl,
+      // kein Mapping-Schritt nötig.
+      if (seg.personalized === false) return;
       // Website-Segmente brauchen pro Lead eine URL-Spalte. Statt sie im
       // Kampagnen-Editor festzunageln, taucht sie hier als Platzhalter im
       // Mapping-Schritt auf — der User weist die Spalte erst zu, wenn die

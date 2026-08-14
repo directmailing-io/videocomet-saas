@@ -1,17 +1,19 @@
 "use client";
 
 /**
- * phase-live — Phase 3 des Studio-Flows: die eigentliche Live-Aufnahme.
+ * phase-live — Phase 3 des Studio-Flows: Standby + Live-Aufnahme.
  *
  * Helles Vollbild: mittig die Bühne als „Browser-Fenster" (Chrome-Leiste mit
  * Szenen-Tabs + REC-Uhr, darunter die 16:9-Bühne mit Live-Webcam-PiP), oben
- * der Teleprompter. Ablauf im Record-Modus: Erstnutzer-Hinweise →
- * Countdown 3-2-1 → MediaRecorder.start. Übungsmodus: identischer Screen
- * ohne Recorder. Beenden per direktem Klick auf „Aufnahme beenden".
+ * der Teleprompter. Ablauf: Standby (exakt die Aufnahme-Ansicht, alles
+ * ausprobierbar, ohne Aufnahme) → „Aufnahme starten" → Countdown 3-2-1 →
+ * MediaRecorder.start. Beenden per direktem Klick auf „Aufnahme beenden".
+ * Tab-Wechsel/Scrollen im Standby ist gefahrlos: logTabSwitch/noteScroll
+ * greifen erst nach Aufnahme-Start (t0-Guard im Recorder).
  */
 
 import * as React from "react";
-import { AlertCircle, Minus, Plus, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { StudioTab } from "@/lib/studio/types";
@@ -19,7 +21,6 @@ import type { StudioPipPosition, StudioPipShape } from "./studio-flow";
 import { StudioStage } from "./studio-stage";
 import { SceneKindIcon } from "./scene-icon";
 import {
-  STUDIO_HINTS_SEEN_KEY,
   clamp01,
   formatClock,
   sceneKindOf,
@@ -32,17 +33,16 @@ import { useStudioRecorder } from "./use-studio-recorder";
 export interface PhaseLiveProps {
   tabs: StudioTab[];
   stream: MediaStream | null;
-  mode: "record" | "practice";
   pipPosition: StudioPipPosition;
   pipShape: StudioPipShape;
   script: string;
-  /** Record-Modus: fertige Aufnahme (Blob + Event-Log). */
+  /** Fertige Aufnahme (Blob + Event-Log). */
   onFinished: (rec: StudioRecording) => void;
   /**
-   * Zurück zum Bereit-Check: regulärer Ausgang im Übungsmodus UND
-   * Fehler-Ausweg im Record-Modus (Aufnahme konnte nicht starten / war leer).
+   * Zurück zum Technik-Check: regulärer Ausgang im Standby UND
+   * Fehler-Ausweg (Aufnahme konnte nicht starten / war leer).
    */
-  onExitPractice: () => void;
+  onBack: () => void;
 }
 
 function pipPositionClass(pos: StudioPipPosition): string {
@@ -58,24 +58,15 @@ function pipShapeClass(shape: StudioPipShape): string {
 export function PhaseLive({
   tabs,
   stream,
-  mode,
   pipPosition,
   pipShape,
   script,
   onFinished,
-  onExitPractice,
+  onBack,
 }: PhaseLiveProps) {
-  const isRecord = mode === "record";
-
-  // ── Overlay-Sequenz: hints → countdown (nur record) → läuft ─────────
-  const [overlay, setOverlay] = React.useState<"hints" | "countdown" | null>(
-    () => {
-      const seen =
-        typeof window !== "undefined" &&
-        window.localStorage.getItem(STUDIO_HINTS_SEEN_KEY) === "1";
-      if (!seen) return "hints";
-      return isRecord ? "countdown" : null;
-    },
+  // ── Ablauf: standby (Vorschau) → countdown → live (Aufnahme) ─────────
+  const [stage, setStage] = React.useState<"standby" | "countdown" | "live">(
+    "standby",
   );
   const [countdown, setCountdown] = React.useState(3);
 
@@ -126,19 +117,13 @@ export function PhaseLive({
 
   // Fehlerzustand: „Wird beendet…" darf nie hängen bleiben — bei jedem
   // Recorder-/Start-Fehler (z. B. leere Aufnahme) wieder freigeben und dem
-  // Nutzer einen Ausweg zurück zum Bereit-Check anbieten.
+  // Nutzer einen Ausweg zurück zum Technik-Check anbieten.
   const liveError = startError ?? recorder.error;
   React.useEffect(() => {
     if (liveError) setStopping(false);
   }, [liveError]);
 
-  // Übungsmodus ohne Hints: sofort loslaufen.
-  React.useEffect(() => {
-    if (!isRecord && overlay === null && !running) beginRunning();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlay]);
-
-  // Countdown 3-2-1 → Aufnahme starten. Bewusst NUR vom Overlay abhängig:
+  // Countdown 3-2-1 → Aufnahme starten. Bewusst NUR von `stage` abhängig:
   // jede weitere Dependency würde den Intervall bei Re-Renders zurücksetzen
   // und der Countdown käme nie bei 0 an.
   const startRecordingRef = React.useRef(startRecording);
@@ -146,30 +131,23 @@ export function PhaseLive({
     startRecordingRef.current = startRecording;
   }, [startRecording]);
   React.useEffect(() => {
-    if (overlay !== "countdown") return;
+    if (stage !== "countdown") return;
     setCountdown(3);
     let n = 3;
     const iv = setInterval(() => {
       n -= 1;
       if (n <= 0) {
         clearInterval(iv);
-        setOverlay(null);
+        setStage("live");
+        // Der erste tabSwitch der Aufnahme ist die im Standby aktuell
+        // gewählte Szene (activeTabIdRef in startRecording).
         startRecordingRef.current();
       } else {
         setCountdown(n);
       }
     }, 1000);
     return () => clearInterval(iv);
-  }, [overlay]);
-
-  const dismissHints = () => {
-    try {
-      window.localStorage.setItem(STUDIO_HINTS_SEEN_KEY, "1");
-    } catch {
-      /* ignore */
-    }
-    setOverlay(isRecord ? "countdown" : null);
-  };
+  }, [stage]);
 
   // ── Uhr + Zeit pro Szene (250-ms-Tick) ───────────────────────────────
   React.useEffect(() => {
@@ -192,9 +170,10 @@ export function PhaseLive({
       if (!tabs.some((t) => t.id === tabId)) return;
       setActiveTabId(tabId);
       setActiveRatio(ratiosRef.current.get(tabId) ?? 0);
-      if (isRecord) recorder.logTabSwitch(tabId);
+      // Vor Aufnahme-Start (Standby) wirkungslos — t0-Guard im Recorder.
+      recorder.logTabSwitch(tabId);
     },
-    [tabs, isRecord, recorder],
+    [tabs, recorder],
   );
 
   // ── Scroll auf der Bühne ─────────────────────────────────────────────
@@ -207,12 +186,12 @@ export function PhaseLive({
       const clamped = clamp01(y);
       ratiosRef.current.set(activeTabIdRef.current, clamped);
       setActiveRatio(clamped);
-      if (isRecord) recorder.noteScroll(activeTabIdRef.current, clamped);
+      recorder.noteScroll(activeTabIdRef.current, clamped);
       setScrollGlow(true);
       if (glowTimerRef.current) clearTimeout(glowTimerRef.current);
       glowTimerRef.current = setTimeout(() => setScrollGlow(false), 450);
     },
-    [isRecord, recorder],
+    [recorder],
   );
   React.useEffect(() => {
     return () => {
@@ -273,38 +252,27 @@ export function PhaseLive({
 
   // ── Beenden (direkter Klick) ─────────────────────────────────────────
   const stopAll = React.useCallback(() => {
-    if (isRecord) {
-      setStopping(true);
-      recorder.stop();
-    } else {
-      onExitPractice();
-    }
-  }, [isRecord, recorder, onExitPractice]);
+    setStopping(true);
+    recorder.stop();
+  }, [recorder]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Statuszeile: Übungs-Badge + Fehler */}
+      {/* Statuszeile: Fehler */}
       <div className="flex h-11 shrink-0 items-center justify-center gap-2 px-5">
-        {!isRecord && (
-          <span className="rounded-full bg-warn-soft px-3.5 py-1 text-xs font-semibold text-warn">
-            Übungsmodus — es wird nichts aufgenommen
-          </span>
-        )}
         {liveError && (
           <>
             <span className="flex items-center gap-1.5 rounded-full bg-danger-soft px-3.5 py-1 text-xs font-medium text-danger">
               <AlertCircle className="size-3.5" />
               {liveError}
             </span>
-            {isRecord && (
-              <button
-                type="button"
-                onClick={onExitPractice}
-                className="rounded-full border border-line bg-surface px-3.5 py-1 text-xs font-semibold text-ink shadow-card transition-colors hover:bg-surface-muted"
-              >
-                Zurück zum Bereit-Check
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={onBack}
+              className="rounded-full border border-line bg-surface px-3.5 py-1 text-xs font-semibold text-ink shadow-card transition-colors hover:bg-surface-muted"
+            >
+              Zurück zum Technik-Check
+            </button>
           </>
         )}
       </div>
@@ -378,7 +346,7 @@ export function PhaseLive({
                     >
                       {tabLabel(tab)}
                     </span>
-                    {active && isRecord && running && (
+                    {active && running && (
                       <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-danger" />
                     )}
                   </button>
@@ -386,7 +354,11 @@ export function PhaseLive({
               })}
             </div>
 
-            {isRecord && (
+            {stage === "standby" ? (
+              <span className="flex shrink-0 items-center self-center rounded-full bg-canvas-deep px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+                Vorschau
+              </span>
+            ) : (
               <span className="flex shrink-0 items-center gap-1.5 self-stretch">
                 <span
                   className={cn(
@@ -456,9 +428,32 @@ export function PhaseLive({
         </div>
       </div>
 
-      {/* Hauptaktion: Beenden per direktem Klick */}
+      {/* Hauptaktion: Standby-Leiste bzw. Beenden per direktem Klick */}
       <footer className="flex shrink-0 items-center justify-center px-5 pb-5 pt-2">
-        {isRecord ? (
+        {stage === "standby" ? (
+          <div className="flex w-full max-w-3xl items-center gap-4 rounded-squircle-lg border border-line-soft bg-white/70 px-4 py-3 shadow-card backdrop-blur">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onBack}
+              iconLeft={<ArrowLeft className="size-3.5" />}
+            >
+              Zurück
+            </Button>
+            <p className="min-w-0 flex-1 text-xs leading-snug text-ink-muted">
+              Das hier ist genau deine Ansicht während der Aufnahme. Wechsle
+              Szenen (Klick auf die Tabs oder Tasten 1–9), scrolle auf der
+              Bühne, probier alles aus — die Aufnahme startet erst, wenn du
+              klickst.
+            </p>
+            <Button
+              onClick={() => setStage("countdown")}
+              iconLeft={<span className="size-3 rounded-full bg-danger" />}
+            >
+              Aufnahme starten
+            </Button>
+          </div>
+        ) : stage === "live" ? (
           <button
             type="button"
             onClick={stopAll}
@@ -473,49 +468,11 @@ export function PhaseLive({
             <span className="size-3 rounded-[3px] bg-danger" />
             {stopping ? "Wird beendet…" : "Aufnahme beenden"}
           </button>
-        ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={stopAll}
-            iconLeft={<X className="size-3.5" />}
-          >
-            Übung beenden
-          </Button>
-        )}
+        ) : null}
       </footer>
 
-      {/* Erstnutzer-Hinweise */}
-      {overlay === "hints" && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur">
-          <div className="w-full max-w-md rounded-squircle-xl border border-line-soft bg-surface p-6 shadow-lift">
-            <h2 className="mb-4 text-base font-bold text-ink">
-              Kurz bevor es losgeht
-            </h2>
-            <ul className="mb-5 flex flex-col gap-3 text-sm leading-relaxed text-ink-muted">
-              <li className="flex gap-2.5">
-                <span className="font-bold text-brand-deep">1.</span>
-                Wechsle die Szenen oben per Klick auf die Tabs oder mit den
-                Tasten 1–9.
-              </li>
-              <li className="flex gap-2.5">
-                <span className="font-bold text-brand-deep">2.</span>
-                Scrolle direkt auf der Bühne — genau das sieht dein Empfänger.
-              </li>
-              <li className="flex gap-2.5">
-                <span className="font-bold text-brand-deep">3.</span>
-                Zum Beenden klickst du unten auf „Aufnahme beenden".
-              </li>
-            </ul>
-            <div className="flex justify-end">
-              <Button onClick={dismissHints}>Alles klar</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Countdown */}
-      {overlay === "countdown" && (
+      {stage === "countdown" && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur">
           <span
             key={countdown}
