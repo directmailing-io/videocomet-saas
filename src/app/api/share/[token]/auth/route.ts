@@ -43,7 +43,10 @@ requireShareCookieSecret();
 const RATE_LIMIT_WINDOW_MINUTES = 15;
 const RATE_LIMIT_MAX_FAILS = 10;
 const FAILURE_DELAY_MS = 200;
-const COOKIE_TTL_SEC = 24 * 60 * 60;
+// 30 Tage: der Link soll sich für Empfänger dauerhaft anfühlen — das
+// Passwort nur selten neu abgefragt werden. Zugriff endet trotzdem sofort,
+// wenn der Owner den Share revoked (Server prüft revoked_at pro Request).
+const COOKIE_TTL_SEC = 30 * 24 * 60 * 60;
 
 const bodySchema = z.object({
   // Server-Trim ist Defense-in-Depth: der Client trimmt auch (siehe
