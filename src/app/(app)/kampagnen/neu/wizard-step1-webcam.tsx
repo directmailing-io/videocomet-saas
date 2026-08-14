@@ -10,6 +10,9 @@ import {
   AlertCircle,
   Film,
   Sparkles,
+  Clapperboard,
+  ListChecks,
+  Monitor,
 } from "lucide-react";
 import { RecordingHint } from "@/components/intro/recording-hint";
 import { Button } from "@/components/ui/button";
@@ -53,6 +56,13 @@ export interface WizardStep1Props {
   /** Aufnahme-Tipp für die personalisierte KI-Begrüßung im Recorder
    *  einblenden (kollabierbar). Nur wenn der User das Feature aktivieren will. */
   showKiHint?: boolean;
+  /**
+   * Wenn gesetzt, zeigt Schritt 0 zwei gleichwertige Einstiegskarten
+   * („Klassisch" vs. „Studio-Aufnahme"). Klick auf die Studio-Karte ruft
+   * diesen Callback auf — der Container öffnet dann den StudioFlow als
+   * Vollbild-Overlay. Optional für Back-Compat mit älteren Callsites.
+   */
+  onStartStudio?: () => void;
 }
 
 interface MediaApiItem {
@@ -164,6 +174,7 @@ export function WizardStep1Webcam({
   onChange,
   onWebcamsChange,
   showKiHint = false,
+  onStartStudio,
 }: WizardStep1Props) {
   const [recordOpen, setRecordOpen] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
@@ -253,6 +264,15 @@ export function WizardStep1Webcam({
   return (
     <div>
       <div className="space-y-4">
+          {onStartStudio && (
+            <RecordingEntryCards
+              onStartStudio={onStartStudio}
+              onStartClassic={() => {
+                setUploadError(null);
+                setRecordOpen(true);
+              }}
+            />
+          )}
           <KiRecordingTeaser />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm text-ink-muted">
@@ -409,6 +429,115 @@ export function WizardStep1Webcam({
 /* ------------------------------------------------------------------ */
 /* Sub-Components                                                     */
 /* ------------------------------------------------------------------ */
+
+/**
+ * useIsDesktop — matchMedia-Hook für die Studio-Verfügbarkeit.
+ *
+ * Studio braucht Platz (Bühne + Tab-Leiste + Teleprompter) und eine
+ * physische Tastatur — unter 1024px graut die Karte aus und der klassische
+ * Flow bleibt der Weg. SSR-Default ist `true` (Desktop), damit auf dem
+ * typischen Laptop kein Flackern beim Hydrieren entsteht.
+ */
+function useIsDesktop(): boolean {
+  const [isDesktop, setIsDesktop] = React.useState(true);
+  React.useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setIsDesktop(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return isDesktop;
+}
+
+/**
+ * RecordingEntryCards — zwei gleichwertige Einstiegskarten in Schritt 0:
+ *
+ *   • „Klassisch — Schritt für Schritt": heutiger Flow (Webcam wählen oder
+ *     aufnehmen, danach die weiteren Schritte). Klick öffnet direkt den
+ *     Webcam-Recorder; die Auswahl-Liste darunter bleibt wie gehabt nutzbar.
+ *   • „Studio-Aufnahme" (Badge „Neu"): Szenen vorbereiten, einmal aufnehmen,
+ *     live zwischen Szenen springen — Klick öffnet den StudioFlow als
+ *     Vollbild-Overlay (Callback in den Container).
+ *
+ * Bewusst keine Bevormundung: beide Karten sind gleich groß und gleich
+ * prominent, nur die Studio-Karte trägt das Neu-Badge.
+ */
+function RecordingEntryCards({
+  onStartClassic,
+  onStartStudio,
+}: {
+  onStartClassic: () => void;
+  onStartStudio: () => void;
+}) {
+  const isDesktop = useIsDesktop();
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Klassisch */}
+      <button
+        type="button"
+        onClick={onStartClassic}
+        className="group relative flex flex-col text-left rounded-squircle-lg bg-surface shadow-card p-5 transition-all duration-200 ease-spring hover:shadow-card-hover hover:-translate-y-0.5"
+      >
+        <span className="inline-flex size-9 items-center justify-center rounded-full bg-canvas-deep text-ink">
+          <ListChecks className="size-4" />
+        </span>
+        <span className="mt-3 text-base font-semibold text-ink">
+          Klassisch — Schritt für Schritt
+        </span>
+        <span className="mt-1 text-sm text-ink-muted leading-relaxed">
+          Webcam-Video wählen oder aufnehmen, danach führt dich der Assistent
+          durch die weiteren Schritte.
+        </span>
+        <span className="mt-4 inline-flex items-center gap-1.5 self-start rounded-full bg-ink px-3.5 py-1.5 text-xs font-semibold text-white transition-colors group-hover:bg-ink/90">
+          <Video className="size-3.5" />
+          Aufnahme starten
+        </span>
+      </button>
+
+      {/* Studio */}
+      <button
+        type="button"
+        onClick={() => {
+          if (isDesktop) onStartStudio();
+        }}
+        disabled={!isDesktop}
+        aria-disabled={!isDesktop}
+        className={cn(
+          "group relative flex flex-col text-left rounded-squircle-lg bg-surface shadow-card p-5 transition-all duration-200 ease-spring",
+          isDesktop
+            ? "hover:shadow-card-hover hover:-translate-y-0.5"
+            : "opacity-60 cursor-not-allowed",
+        )}
+      >
+        <span className="absolute right-4 top-4 inline-flex items-center rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-semibold leading-none text-brand-deep">
+          Neu
+        </span>
+        <span className="inline-flex size-9 items-center justify-center rounded-full bg-brand-soft text-brand-deep">
+          <Clapperboard className="size-4" />
+        </span>
+        <span className="mt-3 text-base font-semibold text-ink">
+          Studio-Aufnahme
+        </span>
+        <span className="mt-1 text-sm text-ink-muted leading-relaxed">
+          Szenen vorbereiten, einmal aufnehmen — live zwischen Szenen springen
+          und scrollen. Fertig geschnitten.
+        </span>
+        {isDesktop ? (
+          <span className="mt-4 inline-flex items-center gap-1.5 self-start rounded-full bg-ink px-3.5 py-1.5 text-xs font-semibold text-white transition-colors group-hover:bg-ink/90">
+            <Clapperboard className="size-3.5" />
+            Studio öffnen
+          </span>
+        ) : (
+          <span className="mt-4 inline-flex items-center gap-1.5 self-start rounded-full border border-line-soft px-3.5 py-1.5 text-xs font-medium text-ink-muted">
+            <Monitor className="size-3.5" />
+            Am besten am Laptop oder Desktop
+          </span>
+        )}
+      </button>
+    </div>
+  );
+}
 
 /**
  * KiRecordingTeaser — Aufnahme-Tipp VOR der Aufnahme.

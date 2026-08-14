@@ -141,7 +141,13 @@ function isWizardState(value: unknown): value is WizardState {
   const playIconOk =
     v.thumbnailPlayIcon === undefined ||
     typeof v.thumbnailPlayIcon === "boolean";
-  return thumbEnabledOk && thumbImgOk && modeOk && playIconOk;
+  // Studio-Modus: optional, damit Drafts aus der Vor-Studio-Zeit weiterhin
+  // laden (fehlend → "classic" beim Migrate).
+  const recordingKindOk =
+    v.recordingKind === undefined ||
+    v.recordingKind === "classic" ||
+    v.recordingKind === "studio";
+  return thumbEnabledOk && thumbImgOk && modeOk && playIconOk && recordingKindOk;
 }
 
 function isEnvelope(value: unknown): value is DraftEnvelope {
@@ -172,6 +178,7 @@ function migrateWizardState(state: WizardState): WizardState {
     introEnabled?: boolean;
     introGreetingPrefix?: WizardState["introGreetingPrefix"];
     introNamePattern?: WizardState["introNamePattern"];
+    recordingKind?: WizardState["recordingKind"];
   };
   const fallbackMode: WizardState["thumbnailMode"] = prev.thumbnailImageEnabled
     ? "custom_image"
@@ -189,6 +196,8 @@ function migrateWizardState(state: WizardState): WizardState {
     introEnabled: prev.introEnabled ?? false,
     introGreetingPrefix: prev.introGreetingPrefix ?? "Hi",
     introNamePattern: prev.introNamePattern ?? "firstName",
+    // Vor-Studio-Drafts kennen das Feld nicht → klassischer Flow.
+    recordingKind: prev.recordingKind ?? "classic",
   };
 }
 
@@ -260,7 +269,8 @@ function isDefaultState(state: WizardState): boolean {
     state.thumbnailImage === null &&
     state.thumbnailMode === "frame" &&
     !state.thumbnailPlayIcon &&
-    !state.introEnabled
+    !state.introEnabled &&
+    (state.recordingKind ?? "classic") === "classic"
   );
 }
 

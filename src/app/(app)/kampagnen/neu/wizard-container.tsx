@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { buildGreetingTemplate } from "@/lib/intro";
 import { cn } from "@/lib/utils";
 
+import {
+  StudioFlow,
+  type StudioFlowResult,
+} from "@/components/studio/studio-flow";
 import { WizardStep1Webcam } from "./wizard-step1-webcam";
 import { WizardStep2Modus } from "./wizard-step2-modus";
 import { WizardStep3Editor } from "./wizard-step3-editor";
@@ -130,6 +134,15 @@ export interface WizardState {
    */
   introGreetingPrefix: import("@/lib/intro").GreetingPrefix;
   introNamePattern: import("@/lib/intro").NamePatternKey;
+  /**
+   * Wie das Webcam-Video entstanden ist:
+   *  • "classic" → heutiger Flow (Schritt für Schritt), Default.
+   *  • "studio"  → Studio-Aufnahme (Live-Regie): Segmente + PiP kommen fertig
+   *    aus dem StudioFlow, Modus ist implizit "with-presentation" und
+   *    Schritt 2 (Modus-Wahl) wird übersprungen.
+   * Optional, damit alte Drafts ohne das Feld sauber laden (→ "classic").
+   */
+  recordingKind?: "classic" | "studio";
 }
 
 export interface MediathekItem {
@@ -175,8 +188,8 @@ interface StepMeta {
 const STEP_META: StepMeta[] = [
   {
     label: "Webcam",
-    title: "Wähle dein Webcam-Video",
-    desc: "Nutze eine vorhandene Aufnahme oder nimm direkt eine neue auf.",
+    title: "Wähle, wie du aufnehmen möchtest",
+    desc: "Klassisch Schritt für Schritt — oder alles in einem Rutsch im Studio.",
   },
   {
     label: "KI-Begrüßung",
@@ -218,6 +231,14 @@ const STEP_META: StepMeta[] = [
  */
 const EDITOR_STEP_INDEX = 3;
 
+/**
+ * Modus-Step (Index 2) wird bei Studio-Aufnahmen übersprungen — der Modus
+ * ist dann implizit "with-presentation" (Segmente kommen fertig aus dem
+ * Studio). Analog zum Editor-Skip bleibt der Schritt in der Progress-
+ * Anzeige sichtbar, damit die Wizard-Länge stabil bleibt.
+ */
+const MODE_STEP_INDEX = 2;
+
 function createInitialWizardState(): WizardState {
   return {
     name: "",
@@ -246,6 +267,7 @@ function createInitialWizardState(): WizardState {
     introEnabled: false,
     introGreetingPrefix: "Hi",
     introNamePattern: "firstName",
+    recordingKind: "classic",
   };
 }
 
@@ -333,19 +355,89 @@ export function NewCampaignWizard({
     draftIO,
   );
 
+  // ── Studio-Aufnahme (Live-Regie) ────────────────────────────────────────
+  //
+  // Vollbild-Overlay über dem Wizard; bei „Übernehmen" landen Webcam,
+  // Segmente + PiP in EINEM update() im Wizard-State und es geht direkt
+  // weiter zu Schritt 1 (KI-Begrüßung). Abbruch lässt Schritt 0 unberührt.
+  const [studioOpen, setStudioOpen] = React.useState(false);
+
+  const handleStudioComplete = React.useCallback(
+    (result: StudioFlowResult) => {
+      update({
+        webcamMediaId: result.webcamMediaId,
+        mode: "with-presentation",
+        segments: result.segments,
+        pipPosition: result.pipPosition,
+        pipShape: result.pipShape,
+        recordingKind: "studio",
+      });
+      setStudioOpen(false);
+      setStep(1);
+      // Die Studio-Webcam wurde frisch über /api/media hochgeladen und ist
+      // in der server-gerenderten Liste noch nicht enthalten — nachladen,
+      // damit Editor-Preview (URL/Dauer) und Zusammenfassung sie kennen.
+      void (async () => {
+        try {
+          const res = await fetch("/api/media?type=webcam,video", {
+            credentials: "same-origin",
+          });
+          if (!res.ok) return;
+          const data = (await res.json()) as {
+            items?: Array<{
+              id: string;
+              name: string;
+              publicUrl: string;
+              durationSec: number | null;
+              type: string;
+              width: number | null;
+              height: number | null;
+            }>;
+          };
+          setWebcams(
+            (data.items ?? []).map((it) => ({
+              id: it.id,
+              name: it.name,
+              publicUrl: it.publicUrl,
+              durationSec: it.durationSec ?? null,
+              kind: it.type === "video" ? "video" : "webcam",
+              width: it.width ?? null,
+              height: it.height ?? null,
+            })),
+          );
+        } catch {
+          // Best-effort: ohne Refresh fehlt nur die Vorschau, der State
+          // (webcamMediaId) ist trotzdem korrekt gesetzt.
+        }
+      })();
+    },
+    [update],
+  );
+
   // Skip editor step if mode is webcam-only
   const totalSteps = STEP_META.length;
   const skipEditor = state.mode === "webcam-only";
+  // Studio-Aufnahme: Modus steht implizit fest → Schritt 2 überspringen.
+  const skipModeStep = (state.recordingKind ?? "classic") === "studio";
+
+  const isSkippedStep = React.useCallback(
+    (idx: number) => {
+      if (idx === EDITOR_STEP_INDEX && skipEditor) return true;
+      if (idx === MODE_STEP_INDEX && skipModeStep) return true;
+      return false;
+    },
+    [skipEditor, skipModeStep],
+  );
 
   function next() {
     let nextStep = step + 1;
-    if (nextStep === EDITOR_STEP_INDEX && skipEditor) nextStep = EDITOR_STEP_INDEX + 1;
+    while (nextStep < totalSteps - 1 && isSkippedStep(nextStep)) nextStep += 1;
     setStep(Math.min(nextStep, totalSteps - 1));
   }
 
   function back() {
     let prevStep = step - 1;
-    if (prevStep === EDITOR_STEP_INDEX && skipEditor) prevStep = EDITOR_STEP_INDEX - 1;
+    while (prevStep > 0 && isSkippedStep(prevStep)) prevStep -= 1;
     setStep(Math.max(prevStep, 0));
   }
 
@@ -479,11 +571,18 @@ export function NewCampaignWizard({
           <WizardStep1Webcam
             webcams={webcams}
             value={state.webcamMediaId}
-            onChange={(id) => update({ webcamMediaId: id })}
+            // Auswahl über den klassischen Bereich = klassischer Flow. Das
+            // setzt auch einen evtl. vorherigen Studio-Durchlauf zurück,
+            // denn dessen Segment-Dauern passen nur zur Studio-Webcam —
+            // Schritt 2 (Modus) ist damit wieder Teil des Wizards.
+            onChange={(id) =>
+              update({ webcamMediaId: id, recordingKind: "classic" })
+            }
             onWebcamsChange={setWebcams}
             // Immer anzeigen: Die KI-Entscheidung fällt erst im nächsten
             // Schritt, aufgenommen wird aber hier — der Tipp muss vorher da sein.
             showKiHint
+            onStartStudio={() => setStudioOpen(true)}
           />
         )}
         {step === 1 && (
@@ -498,7 +597,7 @@ export function NewCampaignWizard({
             }
           />
         )}
-        {step === 2 && (
+        {step === 2 && !skipModeStep && (
           <WizardStep2Modus
             value={state.mode}
             onChange={(mode) => update({ mode })}
@@ -612,7 +711,12 @@ export function NewCampaignWizard({
           {STEP_META.map((s, idx) => {
             const isActive = idx === step;
             const isDone = idx < step;
-            const isSkipped = idx === EDITOR_STEP_INDEX && skipEditor;
+            const isSkipped = isSkippedStep(idx);
+            // Studio-Aufnahme: Der Modus-Schritt ist nicht ausgelassen,
+            // sondern bereits erledigt — im Studio ist der Modus implizit
+            // „Webcam + Videopräsentation". Der Stepper zeigt ihn deshalb
+            // als abgehakt statt als übersprungen.
+            const isStudioDone = idx === MODE_STEP_INDEX && skipModeStep;
             return (
               <li key={s.label}>
                 <button
@@ -626,7 +730,7 @@ export function NewCampaignWizard({
                     isActive && "bg-surface text-ink shadow-card",
                     isDone && !isActive && "text-ink-soft hover:bg-surface/60 hover:text-ink",
                     !isActive && !isDone && "text-ink-muted opacity-60",
-                    isSkipped && "opacity-40"
+                    isSkipped && !isStudioDone && "opacity-40"
                   )}
                 >
                   <span
@@ -634,20 +738,28 @@ export function NewCampaignWizard({
                       "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
                       isActive
                         ? "bg-ink text-white"
-                        : isDone && !isSkipped
+                        : (isDone && !isSkipped) || isStudioDone
                           ? "bg-brand-soft text-brand-deep"
                           : "bg-canvas-deep text-ink-muted"
                     )}
                   >
-                    {isDone && !isSkipped ? <Check className="size-3.5" /> : idx + 1}
+                    {(isDone && !isSkipped) || isStudioDone ? (
+                      <Check className="size-3.5" />
+                    ) : (
+                      idx + 1
+                    )}
                   </span>
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate">{s.label}</span>
-                    {isSkipped && (
+                    {isStudioDone ? (
+                      <span className="text-[11px] font-normal text-ink-muted">
+                        Durch Studio-Aufnahme festgelegt
+                      </span>
+                    ) : isSkipped ? (
                       <span className="text-[11px] font-normal text-ink-muted">
                         Wird übersprungen
                       </span>
-                    )}
+                    ) : null}
                   </span>
                 </button>
               </li>
@@ -752,6 +864,16 @@ export function NewCampaignWizard({
           </div>
         </div>
       </div>
+
+      {/* Studio-Aufnahme — Vollbild-Overlay über dem gesamten Wizard. */}
+      {studioOpen && (
+        <div className="fixed inset-0 z-50 bg-canvas">
+          <StudioFlow
+            onComplete={handleStudioComplete}
+            onCancel={() => setStudioOpen(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }
