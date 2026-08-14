@@ -23,7 +23,9 @@ export const runtime = "nodejs";
  *       previewUrl: "/api/gdocs/preview/<jobId>",   // SAME-ORIGIN proxy URL
  *       docWidth: number,   // doc canvas width in CSS px (e.g. 850)
  *       docHeight: number,  // sum of rendered page heights + gaps in CSS px
- *       pageCount: number
+ *       pageCount: number,
+ *       pageImageUrls?: string[]  // permanente Bunny-CDN-Seiten-URLs
+ *                                 // (sofern der Worker sie geschrieben hat)
  *     }
  *
  *   Pending / running / failed:
@@ -98,6 +100,24 @@ export async function GET(
   // field never poisons the response — but in practice only one of the two
   // is ever written for a given job.
   if (fields.previewUrl) {
+    // Permanente Bunny-Seiten-URLs (JSON-Array im Hash-Feld `pageImageUrls`,
+    // vom Worker geschrieben). Defensiv parsen — fehlt das Feld oder ist es
+    // korrupt, bleibt die Response wie bisher (das Scroll-Recorder-Modal
+    // hängt an previewUrl/docWidth/docHeight/pageCount).
+    let pageImageUrls: string[] | undefined;
+    if (fields.pageImageUrls) {
+      try {
+        const parsed: unknown = JSON.parse(fields.pageImageUrls);
+        if (
+          Array.isArray(parsed) &&
+          parsed.every((u): u is string => typeof u === "string")
+        ) {
+          pageImageUrls = parsed;
+        }
+      } catch {
+        // korruptes JSON → Feld weglassen
+      }
+    }
     return NextResponse.json({
       status: "done" as const,
       // SAME-ORIGIN proxy URL — the Bunny CDN URL itself stays server-side.
@@ -105,6 +125,7 @@ export async function GET(
       docWidth: fields.docWidth ? Number(fields.docWidth) : 0,
       docHeight: fields.docHeight ? Number(fields.docHeight) : 0,
       pageCount: fields.pageCount ? Number(fields.pageCount) : 0,
+      ...(pageImageUrls ? { pageImageUrls } : {}),
     });
   }
 

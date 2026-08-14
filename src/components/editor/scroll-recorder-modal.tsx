@@ -24,7 +24,7 @@ import { segmentStartMs } from "@/lib/segments/timeline";
 import { WebcamMonitor } from "./webcam-monitor";
 
 /**
- * Preview source – two mutually-exclusive variants that the modal
+ * Preview source – three mutually-exclusive variants that the modal
  * needs to support side-by-side:
  *
  *  - `image`:  Legacy fullPage JPG for normal websites. Scrolled by a
@@ -33,8 +33,12 @@ import { WebcamMonitor } from "./webcam-monitor";
  *              by the iframe's own content window (so the fixed
  *              Google-Docs-style toolbar at top:0/height:160px stays
  *              put just like in the real renderer).
+ *  - `pages`:  Bereits vorgerasterte Seiten-PNGs (PDF-Segmente) — kein
+ *              Screenshot-Job nötig, der Seiten-Stapel wird direkt in
+ *              einem overflow-auto-<div> gescrollt (gleiche Sampling-
+ *              Mechanik wie `image` über imageViewportRef).
  *
- * Both produce a {t,y} ratio (0..1) stream — only the sampling source
+ * All produce a {t,y} ratio (0..1) stream — only the sampling source
  * differs (DOM div vs iframe.contentDocument.scrollingElement).
  */
 type PreviewSource =
@@ -48,7 +52,21 @@ type PreviewSource =
       docWidth: number;
       docHeight: number;
       pageCount: number;
+    }
+  | {
+      kind: "pages";
+      pageUrls: string[];
+      docWidth: number;
+      docHeight: number;
     };
+
+/** Direkte Seiten-Quelle (PDF): umgeht den Screenshot-Job komplett. */
+export interface ScrollRecorderPagesSource {
+  pageUrls: string[];
+  /** Pixel-Maße EINER Seite (150 dpi) — für das Seiten-Seitenverhältnis. */
+  docWidth: number;
+  docHeight: number;
+}
 
 type Phase =
   | { kind: "loading" }
@@ -80,12 +98,25 @@ interface ScrollRecorderModalProps {
    * (oder ohne `allSegments`) → Toggle disabled.
    */
   currentSegmentIndex?: number | null;
+  /**
+   * Optionale dritte Quelle: bereits vorgerenderte Seiten-PNGs (PDF).
+   * Wenn gesetzt, wird KEIN Screenshot-Job gestartet — der Stapel ist
+   * sofort scrollbar.
+   */
+  pages?: ScrollRecorderPagesSource | null;
+  /**
+   * Nebeneffekt-Hook: wird gefeuert, sobald der Screenshot-Job „done"
+   * meldet. Der Aufrufer kann damit die Preview-Felder am Segment
+   * persistieren (previewImageUrl bzw. previewPageUrls) — das Modal
+   * selbst kennt das Segment nicht.
+   */
+  onPreviewLoaded?: (data: ScreenshotResult) => void;
 }
 
 /** localStorage-Key für die Persistenz des Webcam-Monitor-Toggles. */
 const WEBCAM_MONITOR_STORAGE_KEY = "vc:webcam-monitor:enabled";
 
-interface ScreenshotResult {
+export interface ScreenshotResult {
   status: "pending" | "running" | "done" | "failed";
   // Website JPG flow
   imageUrl?: string;
@@ -93,6 +124,8 @@ interface ScreenshotResult {
   height?: number;
   // Google-Docs HTML preview flow
   previewUrl?: string;
+  /** Permanente Bunny-Seiten-PNGs (GDocs) — zum Persistieren am Segment. */
+  pageImageUrls?: string[];
   docWidth?: number;
   docHeight?: number;
   pageCount?: number;
@@ -135,6 +168,8 @@ export function ScrollRecorderModal({
   webcamUrl,
   allSegments,
   currentSegmentIndex,
+  pages,
+  onPreviewLoaded,
 }: ScrollRecorderModalProps) {
   const [phase, setPhase] = React.useState<Phase>({ kind: "loading" });
   const [source, setSource] = React.useState<PreviewSource | null>(null);
@@ -221,10 +256,19 @@ export function ScrollRecorderModal({
     }
   }, [open, clearTimers]);
 
+  // onPreviewLoaded in einer Ref, damit acceptDoneResponse stabil bleibt.
+  const onPreviewLoadedRef = React.useRef(onPreviewLoaded);
+  React.useEffect(() => {
+    onPreviewLoadedRef.current = onPreviewLoaded;
+  }, [onPreviewLoaded]);
+
   // Helper that turns a "done" response into a PreviewSource, or
   // signals a failure if the shape is unrecognised.
   const acceptDoneResponse = React.useCallback(
     (data: ScreenshotResult): boolean => {
+      // Nebeneffekt: Preview-Daten an den Aufrufer melden, damit er sie
+      // am Segment persistieren kann (previewImageUrl/previewPageUrls).
+      onPreviewLoadedRef.current?.(data);
       if (data.previewUrl) {
         setSource({
           kind: "iframe",
@@ -255,6 +299,18 @@ export function ScrollRecorderModal({
   // Kick off screenshot job when modal opens
   React.useEffect(() => {
     if (!open) return;
+    // Direkte Seiten-Quelle (PDF-Segmente): Seiten-PNGs existieren schon —
+    // Screenshot-Job komplett überspringen, sofort ready.
+    if (pages && pages.pageUrls.length > 0) {
+      setSource({
+        kind: "pages",
+        pageUrls: pages.pageUrls,
+        docWidth: pages.docWidth,
+        docHeight: pages.docHeight,
+      });
+      setPhase({ kind: "ready" });
+      return;
+    }
     if (!targetUrl) {
       setPhase({ kind: "failed", message: "Keine URL angegeben." });
       return;
@@ -347,7 +403,7 @@ export function ScrollRecorderModal({
       cancelled = true;
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [open, targetUrl, acceptDoneResponse]);
+  }, [open, targetUrl, acceptDoneResponse, pages]);
 
   // Read the current scroll ratio from whichever viewport is active.
   const readScrollRatio = React.useCallback((): number => {
@@ -762,6 +818,14 @@ function ViewportArea({
           onLoad={onIframeLoad}
           onError={onIframeError}
         />
+      ) : source?.kind === "pages" ? (
+        <PagesViewport
+          pageUrls={source.pageUrls}
+          docWidth={source.docWidth}
+          docHeight={source.docHeight}
+          viewportRef={imageViewportRef}
+          lockScroll={phase.kind === "countdown"}
+        />
       ) : (
         <ImageViewport
           imageUrl={source?.kind === "image" ? source.imageUrl : undefined}
@@ -817,6 +881,56 @@ function ImageViewport({
           draggable={false}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Scrollbarer Seiten-Stapel für die `pages`-Quelle (PDF): weiße Seiten mit
+ * Gap auf grauem Grund — gleiche Optik wie `DocStackPreview`, aber mit
+ * echtem overflow-auto-Scrolling (der Recorder sampelt scrollTop des Divs,
+ * identisch zum image-Flow).
+ */
+function PagesViewport({
+  pageUrls,
+  docWidth,
+  docHeight,
+  viewportRef,
+  lockScroll,
+}: {
+  pageUrls: string[];
+  docWidth: number;
+  docHeight: number;
+  viewportRef: React.MutableRefObject<HTMLDivElement | null>;
+  lockScroll: boolean;
+}) {
+  const pageAspect =
+    docWidth > 0 && docHeight > 0 ? docWidth / docHeight : 1 / Math.SQRT2;
+  return (
+    <div
+      ref={viewportRef}
+      className={cn(
+        "aspect-video w-full overflow-auto rounded-squircle-md bg-[#F1F3F4] shadow-card",
+        lockScroll && "overflow-hidden",
+      )}
+    >
+      <div className="flex flex-col items-center gap-6 py-6">
+        {pageUrls.map((url, i) => (
+          <div
+            key={`${url}-${i}`}
+            className="w-[56%] shrink-0 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
+            style={{ aspectRatio: `${pageAspect}` }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={`Seite ${i + 1}`}
+              draggable={false}
+              className="block h-full w-full select-none object-contain"
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

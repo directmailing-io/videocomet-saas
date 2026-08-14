@@ -8,10 +8,11 @@
  * 16:9 preview stage so the user sees roughly what the worker will render.
  *
  * What this file is NOT:
- *   No state, no refs, no playback loop. Pure presentation. The host component
- *   owns currentTimeMs and computes the active segment + segmentTimeMs before
- *   asking us to render. Video segment timing is driven via the `videoRef`
- *   prop so the parent can sync `currentTime` against the global scrubber.
+ *   No playback loop. The host component owns currentTimeMs and computes the
+ *   active segment + segmentTimeMs before asking us to render. Video segment
+ *   timing is driven via the `videoRef` prop so the parent can sync
+ *   `currentTime` against the global scrubber. (Website/GDocs renderers hold
+ *   minimal local state for lazy screenshot previews + size measurement.)
  */
 
 import * as React from "react";
@@ -32,11 +33,15 @@ import {
   type VideoSegment,
   type WebsiteSegment,
   type GDocsSegment,
+  type PdfSegment,
   type GSlideSegment,
   type CanvaSegment,
   type WebCaptureMode,
 } from "@/lib/segments/types";
+import { interpolateScrollRatio } from "@/lib/segments/scroll-math";
 import { SlideRender } from "@/lib/slide/slide-render";
+import { DocStackPreview } from "./doc-stack-preview";
+import { useSegmentPreview } from "./use-segment-preview";
 
 /** Lesbare deutsche Labels für die Aufnahme-Modi (Preview-Badge). */
 const CAPTURE_MODE_LABELS: Record<WebCaptureMode, string> = {
@@ -288,7 +293,107 @@ function RenderVideo({
   );
 }
 
-function RenderWebsite({ segment }: { segment: WebsiteSegment }) {
+/**
+ * Scroll-Ratio eines Web/Docs/PDF-Segments zum lokalen Zeitpunkt.
+ * `static-hero` steht immer oben (ratio 0), sonst spiegelt die Vorschau
+ * exakt die Worker-Interpolation über die ScrollFrames.
+ */
+function segmentScrollRatio(
+  segment: WebsiteSegment | GDocsSegment | PdfSegment,
+  segmentTimeMs: number,
+): number {
+  if (segment.captureMode === "static-hero") return 0;
+  return interpolateScrollRatio(segment.scrollFrames, segmentTimeMs);
+}
+
+/**
+ * FullPage-Screenshot, animiert per translateY über die skalierte
+ * Bildhöhe — deckungsgleich mit dem Worker-Scroll-Render.
+ */
+function ScrollingImagePreview({
+  imageUrl,
+  scrollRatio,
+}: {
+  imageUrl: string;
+  scrollRatio: number;
+}) {
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const imgRef = React.useRef<HTMLImageElement | null>(null);
+  const [maxScrollPx, setMaxScrollPx] = React.useState(0);
+
+  // Container- + skalierte Bildhöhe live messen (Bild lädt asynchron,
+  // Bühne resized responsive).
+  React.useEffect(() => {
+    const container = containerRef.current;
+    const img = imgRef.current;
+    if (!container || !img) return;
+    const update = () =>
+      setMaxScrollPx(Math.max(0, img.offsetHeight - container.clientHeight));
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(container);
+    ro.observe(img);
+    return () => ro.disconnect();
+  }, [imageUrl]);
+
+  const ratio = Math.min(1, Math.max(0, scrollRatio));
+  return (
+    <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-white">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        ref={imgRef}
+        src={imageUrl}
+        alt="Website-Vorschau"
+        draggable={false}
+        className="block h-auto w-full select-none"
+        style={{
+          transform: `translateY(${-ratio * maxScrollPx}px)`,
+          willChange: "transform",
+        }}
+      />
+    </div>
+  );
+}
+
+/** Overlay-Badge: markiert, dass die Vorschau nur die Fallback-URL zeigt. */
+function FallbackUrlBadge() {
+  return (
+    <span className="absolute right-2 top-2 z-10 rounded-full bg-ink/70 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+      Vorschau: Fallback-URL
+    </span>
+  );
+}
+
+function RenderWebsite({
+  segment,
+  segmentTimeMs,
+}: {
+  segment: WebsiteSegment;
+  segmentTimeMs: number;
+}) {
+  // Vorrang: am Segment persistierter Screenshot. Sonst Live-Hook über die
+  // Fallback-URL (Modul-Cache dedupliziert Jobs). Der Hook wird nur
+  // angestoßen, wenn kein persistiertes Bild existiert UND eine URL da ist.
+  const fallbackUrl = segment.fallbackUrl.trim();
+  const hookUrl =
+    !segment.previewImageUrl && fallbackUrl ? fallbackUrl : null;
+  const preview = useSegmentPreview(hookUrl);
+  const imageUrl = segment.previewImageUrl || preview.data?.imageUrl || null;
+
+  if (imageUrl) {
+    return (
+      <div className="absolute inset-0">
+        <ScrollingImagePreview
+          imageUrl={imageUrl}
+          scrollRatio={segmentScrollRatio(segment, segmentTimeMs)}
+        />
+        {/* Personalisierte URLs gibt es erst pro Lead — Vorschau zeigt
+            immer die Fallback-URL. */}
+        {segment.urlColumn && <FallbackUrlBadge />}
+      </div>
+    );
+  }
+
   const showUrl =
     segment.fallbackUrl ||
     (segment.urlColumn
@@ -307,9 +412,11 @@ function RenderWebsite({ segment }: { segment: WebsiteSegment }) {
           {showUrl}
         </p>
         <p className="text-xs leading-relaxed text-ink-muted">
-          Wird beim Generieren live aufgenommen. In der Vorschau zeigen wir
-          nur eine Platzhalter-Karte, damit dein Browser keine fremde Seite
-          öffnen muss.
+          {preview.status === "loading"
+            ? "Vorschau wird geladen — das dauert 5–15 Sekunden …"
+            : preview.status === "error"
+              ? `Vorschau konnte nicht geladen werden: ${preview.error ?? "Unbekannter Fehler"}`
+              : "Wird beim Generieren live aufgenommen. Lade im Segment-Panel eine Vorschau, um die Seite hier zu sehen."}
         </p>
       </div>
     </div>
@@ -393,7 +500,41 @@ function RenderCanva({ segment }: { segment: CanvaSegment }) {
   );
 }
 
-function RenderGDocs({ segment }: { segment: GDocsSegment }) {
+function RenderGDocs({
+  segment,
+  segmentTimeMs,
+}: {
+  segment: GDocsSegment;
+  segmentTimeMs: number;
+}) {
+  // Vorrang: persistierte Seiten-PNGs am Segment. Sonst Live-Hook über die
+  // Docs-URL (liefert nach der API-Erweiterung permanente pageImageUrls).
+  const hasPersisted =
+    !!segment.previewPageUrls && segment.previewPageUrls.length > 0;
+  const docsUrl = segment.docsUrl.trim();
+  const preview = useSegmentPreview(!hasPersisted && docsUrl ? docsUrl : null);
+
+  const pageUrls = hasPersisted
+    ? (segment.previewPageUrls as string[])
+    : (preview.data?.pageImageUrls ?? []);
+  const docWidth = hasPersisted
+    ? (segment.previewDocWidth ?? 0)
+    : (preview.data?.docWidth ?? 0);
+  const docHeight = hasPersisted
+    ? (segment.previewDocHeight ?? 0)
+    : (preview.data?.docHeight ?? 0);
+
+  if (pageUrls.length > 0) {
+    return (
+      <DocStackPreview
+        pageUrls={pageUrls}
+        docWidth={docWidth}
+        docHeight={docHeight}
+        scrollRatio={segmentScrollRatio(segment, segmentTimeMs)}
+      />
+    );
+  }
+
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-surface-soft p-8">
       <div className="w-full max-w-md rounded-squircle-md border border-line bg-surface px-6 py-5 shadow-card">
@@ -407,8 +548,49 @@ function RenderGDocs({ segment }: { segment: GDocsSegment }) {
           {segment.docsUrl || "Keine Docs-URL gesetzt"}
         </p>
         <p className="text-xs leading-relaxed text-ink-muted">
-          Google-Doc wird live geladen, wenn das Video gerendert wird. Die
-          Vorschau zeigt nur einen Platzhalter.
+          {preview.status === "loading"
+            ? "Vorschau wird geladen — das dauert 5–15 Sekunden …"
+            : preview.status === "error"
+              ? `Vorschau konnte nicht geladen werden: ${preview.error ?? "Unbekannter Fehler"}`
+              : "Google-Doc wird live geladen, wenn das Video gerendert wird."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function RenderPdf({
+  segment,
+  segmentTimeMs,
+}: {
+  segment: PdfSegment;
+  segmentTimeMs: number;
+}) {
+  // Die Seiten-PNGs entstehen synchron beim Upload — kein Hook nötig.
+  if (segment.pageUrls.length > 0) {
+    return (
+      <DocStackPreview
+        pageUrls={segment.pageUrls}
+        docWidth={segment.docWidth}
+        docHeight={segment.docHeight}
+        scrollRatio={segmentScrollRatio(segment, segmentTimeMs)}
+        fileName={segment.fileName}
+        showToolbar
+      />
+    );
+  }
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-surface-soft p-8">
+      <div className="w-full max-w-md rounded-squircle-md border border-line bg-surface px-6 py-5 shadow-card">
+        <div className="mb-3 flex items-center gap-2 text-brand-deep">
+          <FileText className="size-5" />
+          <span className="text-xs font-semibold uppercase tracking-wide">
+            PDF ({CAPTURE_MODE_LABELS[segment.captureMode]})
+          </span>
+        </div>
+        <p className="text-xs leading-relaxed text-ink-muted">
+          Noch kein PDF hochgeladen. Lade im Segment-Panel eine Datei hoch,
+          um die Vorschau zu sehen.
         </p>
       </div>
     </div>
@@ -438,7 +620,7 @@ export interface PreviewSegmentRenderProps {
 
 export function PreviewSegmentRender({
   segment,
-  segmentTimeMs: _segmentTimeMs,
+  segmentTimeMs,
   sampleData,
   videoRef,
   onVideoLoadedMetadata,
@@ -459,9 +641,11 @@ export function PreviewSegmentRender({
         />
       );
     case "website":
-      return <RenderWebsite segment={segment} />;
+      return <RenderWebsite segment={segment} segmentTimeMs={segmentTimeMs} />;
     case "gdocs":
-      return <RenderGDocs segment={segment} />;
+      return <RenderGDocs segment={segment} segmentTimeMs={segmentTimeMs} />;
+    case "pdf":
+      return <RenderPdf segment={segment} segmentTimeMs={segmentTimeMs} />;
     case "gslide":
       return <RenderGSlide segment={segment} />;
     case "canva":

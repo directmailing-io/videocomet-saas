@@ -8,6 +8,8 @@ import {
   Camera,
   CheckCircle2,
   AlertTriangle,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -19,7 +21,8 @@ import type {
   ScrollFrame,
   Segment,
 } from "@/lib/segments/types";
-import { ScrollRecorderModal } from "./scroll-recorder-modal";
+import { ScrollRecorderModal, type ScreenshotResult } from "./scroll-recorder-modal";
+import { fetchSegmentPreview } from "./use-segment-preview";
 import { PlaceholderHelper } from "./placeholder-helper";
 
 interface SegmentEditorGDocsProps {
@@ -82,6 +85,52 @@ export function SegmentEditorGDocs({
   const frames = segment.scrollFrames ?? [];
   const hasFrames = frames.length > 0;
   const lastT = hasFrames ? frames[frames.length - 1].t : 0;
+  const hasPreview = (segment.previewPageUrls?.length ?? 0) > 0;
+
+  const [previewLoading, setPreviewLoading] = React.useState(false);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
+
+  // Immer den AKTUELLEN Segment-Stand persistieren — die Callbacks feuern
+  // asynchron (Screenshot-Job), das Closure-Segment wäre sonst veraltet.
+  const segmentRef = React.useRef(segment);
+  segmentRef.current = segment;
+  const onChangeRef = React.useRef(onChange);
+  onChangeRef.current = onChange;
+
+  /**
+   * Seiten-PNGs (permanente Bunny-URLs — NIE die TTL-previewUrl!) ins
+   * Segment schreiben.
+   */
+  const persistPreview = React.useCallback(
+    (data: { pageImageUrls?: string[]; docWidth?: number; docHeight?: number }) => {
+      if (!data.pageImageUrls || data.pageImageUrls.length === 0) return;
+      onChangeRef.current({
+        ...segmentRef.current,
+        previewPageUrls: data.pageImageUrls,
+        previewDocWidth: data.docWidth,
+        previewDocHeight: data.docHeight,
+      });
+    },
+    [],
+  );
+
+  const handleLoadPreview = React.useCallback(async () => {
+    if (!urlValid) return;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const data = await fetchSegmentPreview(segmentRef.current.docsUrl, {
+        force: (segmentRef.current.previewPageUrls?.length ?? 0) > 0,
+      });
+      persistPreview(data);
+    } catch (err) {
+      setPreviewError(
+        err instanceof Error ? err.message : "Vorschau konnte nicht geladen werden.",
+      );
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [urlValid, persistPreview]);
 
   return (
     <div className="space-y-5">
@@ -100,6 +149,35 @@ export function SegmentEditorGDocs({
           <p className="mt-1 text-xs text-danger">
             Bitte eine gültige docs.google.com URL angeben.
           </p>
+        )}
+        <Button
+          type="button"
+          variant="subtle"
+          size="sm"
+          onClick={() => void handleLoadPreview()}
+          disabled={!urlValid || previewLoading}
+          iconLeft={
+            previewLoading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : hasPreview ? (
+              <RefreshCw className="size-3.5" />
+            ) : (
+              <ImageIcon className="size-3.5" />
+            )
+          }
+          className="mt-2 w-full"
+        >
+          {previewLoading
+            ? "Vorschau wird geladen …"
+            : hasPreview
+              ? "Vorschau aktualisieren"
+              : "Vorschau laden"}
+        </Button>
+        {previewError && (
+          <div className="mt-2 flex gap-2 rounded-squircle-sm bg-danger/10 p-3 text-xs text-danger">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            <span>{previewError}</span>
+          </div>
         )}
       </div>
 
@@ -183,8 +261,9 @@ export function SegmentEditorGDocs({
           segmentDurationMs={segment.durationMs}
           initialFrames={segment.scrollFrames}
           onSave={(scrollFrames: ScrollFrame[]) =>
-            onChange({ ...segment, scrollFrames })
+            onChange({ ...segmentRef.current, scrollFrames })
           }
+          onPreviewLoaded={(data: ScreenshotResult) => persistPreview(data)}
           webcamUrl={webcamUrl ?? null}
           allSegments={allSegments ?? null}
           currentSegmentIndex={currentSegmentIndex ?? null}

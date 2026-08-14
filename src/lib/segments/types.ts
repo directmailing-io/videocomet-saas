@@ -15,6 +15,7 @@ export type SegmentKind =
   | "video"
   | "website"
   | "gdocs"
+  | "pdf"
   | "gslide"
   | "canva"
   | "slide";
@@ -120,12 +121,54 @@ export interface WebsiteSegment extends SegmentBase {
   captureMode: WebCaptureMode;
   /** Optional, nur relevant bei captureMode = "scroll-recorded". */
   scrollFrames?: ScrollFrame[];
+  /**
+   * FullPage-Screenshot der fallbackUrl (Bunny-CDN) für die Editor-Vorschau.
+   * Wird beim „Vorschau laden" / Scroll-Recorder als Nebeneffekt persistiert.
+   */
+  previewImageUrl?: string;
+  previewImageWidth?: number;
+  previewImageHeight?: number;
 }
 
 export interface GDocsSegment extends SegmentBase {
   kind: "gdocs";
   /** Public Google-Docs-URL. */
   docsUrl: string;
+  captureMode: WebCaptureMode;
+  /** Optional, nur relevant bei captureMode = "scroll-recorded". */
+  scrollFrames?: ScrollFrame[];
+  /**
+   * Seiten-PNGs auf Bunny (permanente URLs, NIE die 30min-TTL-previewUrl!)
+   * für die Editor-Vorschau. Persistiert nach Screenshot-Job.
+   */
+  previewPageUrls?: string[];
+  /** Pixel-Maße EINER Seite (150 dpi). */
+  previewDocWidth?: number;
+  previewDocHeight?: number;
+}
+
+/**
+ * PDF als Präsentations-Segment (nicht personalisiert).
+ *
+ * Der Upload rastert das PDF synchron in der API-Route (`pdftoppm`, 150 dpi)
+ * zu Seiten-PNGs auf Bunny. Editor-Vorschau UND Worker-Render nutzen dieselbe
+ * Rasterung — die Vorschau ist damit exakt. Im Video wird das PDF wie in
+ * einem PDF-Viewer (Drive-Look: Seiten-Stack auf grauem Grund + Toolbar)
+ * durchgescrollt, gesteuert über `captureMode`/`scrollFrames` wie bei
+ * Website/GDocs.
+ */
+export interface PdfSegment extends SegmentBase {
+  kind: "pdf";
+  /** Bunny-CDN-URL des Original-PDF (Worker-Render-Quelle). */
+  pdfUrl: string;
+  /** Originaler Dateiname für UI + Viewer-Toolbar. */
+  fileName: string;
+  /** Vorgerenderte Seiten-PNGs (Bunny, 150 dpi). */
+  pageUrls: string[];
+  pageCount: number;
+  /** Pixel-Maße EINER Seite bei 150 dpi (Scroll-Mathe). */
+  docWidth: number;
+  docHeight: number;
   captureMode: WebCaptureMode;
   /** Optional, nur relevant bei captureMode = "scroll-recorded". */
   scrollFrames?: ScrollFrame[];
@@ -303,6 +346,7 @@ export type Segment =
   | VideoSegment
   | WebsiteSegment
   | GDocsSegment
+  | PdfSegment
   | GSlideSegment
   | CanvaSegment
   | SlideSegment;
@@ -327,6 +371,10 @@ export function isWebsiteSegment(s: Segment): s is WebsiteSegment {
 
 export function isGDocsSegment(s: Segment): s is GDocsSegment {
   return s.kind === "gdocs";
+}
+
+export function isPdfSegment(s: Segment): s is PdfSegment {
+  return s.kind === "pdf";
 }
 
 export function isGSlideSegment(s: Segment): s is GSlideSegment {

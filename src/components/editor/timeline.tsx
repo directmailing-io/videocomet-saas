@@ -7,7 +7,7 @@ import type { Segment } from "@/lib/segments/types";
 import { totalDurationMs as sumDuration } from "@/lib/segments/duration";
 import { computeReorderTargetIndex, type BlockPos } from "@/lib/segments/reorder";
 import { TimelineRuler } from "./timeline-ruler";
-import { TimelineSegmentBlock } from "./timeline-segment-block";
+import { kindLabel, TimelineSegmentBlock } from "./timeline-segment-block";
 
 export interface TimelineProps {
   segments: Segment[];
@@ -205,6 +205,33 @@ export function Timeline({
     const [removed] = next.splice(idx, 1);
     next.splice(target, 0, removed);
     onSegmentsChange(next);
+  }
+
+  // ── Segment duplizieren ──────────────────────────────────────────────
+  // Restbudget gegen das Webcam-Limit: nur wenn mindestens die Mindest-
+  // Segmentdauer frei ist, darf dupliziert werden. Die Kopie wird ggf.
+  // aufs Restbudget gekappt.
+  const remainingBudgetMs =
+    webcamDurationMs != null
+      ? Math.max(0, webcamDurationMs - segmentsTotalMs)
+      : Number.POSITIVE_INFINITY;
+  const canDuplicate = remainingBudgetMs >= MIN_SEGMENT_MS;
+
+  function duplicateSegment(id: string) {
+    if (!canDuplicate) return;
+    const idx = segments.findIndex((s) => s.id === id);
+    if (idx < 0) return;
+    const original = segments[idx];
+    const copy: Segment = {
+      ...structuredClone(original),
+      id: crypto.randomUUID(),
+      label: `${original.label?.trim() || kindLabel(original.kind)} (Kopie)`,
+      durationMs: Math.min(original.durationMs, remainingBudgetMs),
+    };
+    const next = [...segments];
+    next.splice(idx + 1, 0, copy);
+    onSegmentsChange(next);
+    onSelectSegment(copy.id);
   }
 
   function moveSegmentToIndex(id: string, targetIdx: number) {
@@ -503,6 +530,8 @@ export function Timeline({
                   onRollCommit={commitRoll}
                   onMoveLeft={(id) => moveSegment(id, -1)}
                   onMoveRight={(id) => moveSegment(id, 1)}
+                  onDuplicate={duplicateSegment}
+                  duplicateDisabled={!canDuplicate}
                   onReorderStart={handleReorderStart}
                   reordering={reorderState?.id === seg.id}
                   msPerPx={msPerPx}

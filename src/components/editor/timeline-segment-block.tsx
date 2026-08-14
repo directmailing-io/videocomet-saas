@@ -7,11 +7,13 @@ import {
   Video,
   Globe,
   FileText,
+  FileType2,
   Presentation,
   Sparkles,
   Wand2,
   ChevronLeft,
   ChevronRight,
+  Copy,
   GripVertical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -62,6 +64,15 @@ const KIND_STYLES: Record<
     label: "Google Docs",
     icon: FileText,
   },
+  pdf: {
+    // Rose als eigener Anker — klar unterscheidbar von "gdocs" (blau)
+    // und "website" (indigo).
+    bg: "bg-rose-200",
+    border: "border-rose-300",
+    text: "text-rose-900",
+    label: "PDF",
+    icon: FileType2,
+  },
   gslide: {
     bg: "bg-sky-200",
     border: "border-sky-300",
@@ -86,6 +97,11 @@ const KIND_STYLES: Record<
     icon: Sparkles,
   },
 };
+
+/** Default-Anzeigename eines Segment-Typs (z. B. für „(Kopie)"-Labels). */
+export function kindLabel(kind: SegmentKind): string {
+  return KIND_STYLES[kind].label;
+}
 
 export interface TimelineSegmentBlockProps {
   segment: Segment;
@@ -112,6 +128,10 @@ export interface TimelineSegmentBlockProps {
   onRollCommit: (id: string, deltaMs: number) => void;
   onMoveLeft: (id: string) => void;
   onMoveRight: (id: string) => void;
+  /** Segment duplizieren (Kopie direkt dahinter einfügen). */
+  onDuplicate: (id: string) => void;
+  /** True, wenn kein Webcam-Restbudget mehr für eine Kopie frei ist. */
+  duplicateDisabled?: boolean;
   /**
    * Startet einen Drag-Reorder. Der Parent hält den globalen Pointer-
    * Handler; der Block liefert nur den Auslöse-Event am Grip.
@@ -147,6 +167,8 @@ export function TimelineSegmentBlock({
   onRollCommit,
   onMoveLeft,
   onMoveRight,
+  onDuplicate,
+  duplicateDisabled,
   onReorderStart,
   reordering,
   msPerPx,
@@ -391,6 +413,28 @@ export function TimelineSegmentBlock({
             )}
           >
             <ChevronRight className="size-3" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDuplicate(segment.id);
+            }}
+            disabled={duplicateDisabled}
+            aria-label="Segment duplizieren"
+            title={
+              duplicateDisabled
+                ? "Kein Webcam-Restbudget für eine Kopie frei."
+                : "Segment duplizieren"
+            }
+            className={cn(
+              "inline-flex size-5 items-center justify-center rounded-full transition-colors",
+              "hover:bg-black/10 disabled:opacity-30 disabled:cursor-not-allowed",
+              style.text,
+            )}
+          >
+            <Copy className="size-3" />
           </button>
         </div>
       )}

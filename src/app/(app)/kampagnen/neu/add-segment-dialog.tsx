@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   FileText,
+  FileType2,
   Globe,
   Presentation,
   Video as VideoIcon,
@@ -55,6 +56,12 @@ const SEGMENT_TYPE_OPTIONS: SegmentTypeOption[] = [
     title: "Google Docs",
     description: "Ein Google-Dokument zeigen, z. B. ein Angebot.",
     Icon: FileText,
+  },
+  {
+    kind: "pdf",
+    title: "PDF",
+    description: "PDF hochladen und wie eine Präsentation durchscrollen.",
+    Icon: FileType2,
   },
 ];
 

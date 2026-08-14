@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   FileText,
+  FileType2,
   Globe,
   Image as ImageIcon,
   Presentation,
@@ -19,6 +20,7 @@ import type {
   GDocsSegment,
   GSlideSegment,
   ImageSegment,
+  PdfSegment,
   Segment,
   SegmentKind,
   SlideSegment,
@@ -32,6 +34,7 @@ import { SegmentEditorImage } from "./segment-editor-image";
 import { SegmentEditorVideo } from "./segment-editor-video";
 import { SegmentEditorWebsite } from "./segment-editor-website";
 import { SegmentEditorGDocs } from "./segment-editor-gdocs";
+import { SegmentEditorPdf } from "./segment-editor-pdf";
 import { SegmentEditorGSlide } from "./segment-editor-gslide";
 import { SegmentEditorCanva } from "./segment-editor-canva";
 import { SegmentEditorSlide } from "./segment-editor-slide";
@@ -85,6 +88,7 @@ const KIND_META: Record<SegmentKind, { label: string; Icon: React.ComponentType<
   video: { label: "Video", Icon: VideoIcon },
   website: { label: "Website", Icon: Globe },
   gdocs: { label: "Google Docs", Icon: FileText },
+  pdf: { label: "PDF", Icon: FileType2 },
   gslide: { label: "Google Slide", Icon: Presentation },
   canva: { label: "Canva-Folie", Icon: Wand2 },
   slide: { label: "Freie Folie", Icon: Sparkles },
@@ -225,6 +229,16 @@ function SegmentBody({
         <SegmentEditorGDocs
           segment={segment}
           onChange={(s: GDocsSegment) => onChange(s)}
+          webcamUrl={webcamUrl}
+          allSegments={allSegments ?? undefined}
+          currentSegmentIndex={currentSegmentIndex}
+        />
+      );
+    case "pdf":
+      return (
+        <SegmentEditorPdf
+          segment={segment}
+          onChange={(s: PdfSegment) => onChange(s)}
           webcamUrl={webcamUrl}
           allSegments={allSegments ?? undefined}
           currentSegmentIndex={currentSegmentIndex}

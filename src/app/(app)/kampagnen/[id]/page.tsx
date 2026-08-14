@@ -244,6 +244,7 @@ export default async function CampaignDetailPage({
               campaignId={campaign.id}
               campaignName={campaign.name}
               appUrl={appUrl}
+              showVideoEditor={campaign.mode === "with-presentation"}
             />
           </>
         }

@@ -322,6 +322,17 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
             <Button variant="ghost" asChild iconLeft={<ArrowLeft className="size-4" />}>
               <Link href={`/kampagnen/${id}`}>Zurück</Link>
             </Button>
+            {state.mode === "with-presentation" && (
+              <Button
+                variant="ghost"
+                asChild
+                iconLeft={<MonitorPlay className="size-4" />}
+              >
+                <Link href={`/kampagnen/${id}/editor`}>
+                  Video-Editor öffnen
+                </Link>
+              </Button>
+            )}
             <Button
               onClick={() => {
                 void saveAll();

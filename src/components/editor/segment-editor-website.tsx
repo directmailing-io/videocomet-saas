@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   ChevronDown,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -20,7 +22,8 @@ import type {
   ScrollFrame,
   Segment,
 } from "@/lib/segments/types";
-import { ScrollRecorderModal } from "./scroll-recorder-modal";
+import { ScrollRecorderModal, type ScreenshotResult } from "./scroll-recorder-modal";
+import { fetchSegmentPreview } from "./use-segment-preview";
 
 interface SegmentEditorWebsiteProps {
   segment: WebsiteSegment;
@@ -83,6 +86,49 @@ export function SegmentEditorWebsite({
   const frames = segment.scrollFrames ?? [];
   const hasFrames = frames.length > 0;
   const lastT = hasFrames ? frames[frames.length - 1].t : 0;
+  const hasPreview = Boolean(segment.previewImageUrl);
+
+  const [previewLoading, setPreviewLoading] = React.useState(false);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
+
+  // Immer den AKTUELLEN Segment-Stand persistieren — die Callbacks feuern
+  // asynchron (Screenshot-Job), das Closure-Segment wäre sonst veraltet.
+  const segmentRef = React.useRef(segment);
+  segmentRef.current = segment;
+  const onChangeRef = React.useRef(onChange);
+  onChangeRef.current = onChange;
+
+  /** Vorschau-Felder aus einem Screenshot-Ergebnis ins Segment schreiben. */
+  const persistPreview = React.useCallback(
+    (data: { imageUrl?: string; width?: number; height?: number }) => {
+      if (!data.imageUrl) return;
+      onChangeRef.current({
+        ...segmentRef.current,
+        previewImageUrl: data.imageUrl,
+        previewImageWidth: data.width,
+        previewImageHeight: data.height,
+      });
+    },
+    [],
+  );
+
+  const handleLoadPreview = React.useCallback(async () => {
+    if (!previewUrlValid) return;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const data = await fetchSegmentPreview(previewUrl, {
+        force: Boolean(segmentRef.current.previewImageUrl),
+      });
+      persistPreview(data);
+    } catch (err) {
+      setPreviewError(
+        err instanceof Error ? err.message : "Vorschau konnte nicht geladen werden.",
+      );
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [previewUrl, previewUrlValid, persistPreview]);
 
   return (
     <div className="space-y-5">
@@ -99,6 +145,44 @@ export function SegmentEditorWebsite({
         <p className="mt-1 text-xs text-ink-muted">
           Mit dieser Seite nimmst du auf und testest die Vorschau.
         </p>
+        <Button
+          type="button"
+          variant="subtle"
+          size="sm"
+          onClick={() => void handleLoadPreview()}
+          disabled={!previewUrlValid || previewLoading}
+          iconLeft={
+            previewLoading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : hasPreview ? (
+              <RefreshCw className="size-3.5" />
+            ) : (
+              <ImageIcon className="size-3.5" />
+            )
+          }
+          className="mt-2 w-full"
+        >
+          {previewLoading
+            ? "Vorschau wird geladen …"
+            : hasPreview
+              ? "Vorschau aktualisieren"
+              : "Vorschau laden"}
+        </Button>
+        {previewError && (
+          <div className="mt-2 flex gap-2 rounded-squircle-sm bg-danger/10 p-3 text-xs text-danger">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            <span>{previewError}</span>
+          </div>
+        )}
+        {segment.urlColumn.trim().length > 0 && (
+          <p className="mt-2 flex gap-2 text-xs leading-snug text-ink-muted">
+            <Info className="mt-0.5 size-3.5 shrink-0" />
+            <span>
+              Die Vorschau zeigt die Fallback-URL; im Video wird pro Lead die
+              personalisierte URL verwendet.
+            </span>
+          </p>
+        )}
       </div>
 
       <div>
@@ -173,8 +257,9 @@ export function SegmentEditorWebsite({
           segmentDurationMs={segment.durationMs}
           initialFrames={segment.scrollFrames}
           onSave={(scrollFrames: ScrollFrame[]) =>
-            onChange({ ...segment, scrollFrames })
+            onChange({ ...segmentRef.current, scrollFrames })
           }
+          onPreviewLoaded={(data: ScreenshotResult) => persistPreview(data)}
           webcamUrl={webcamUrl ?? null}
           allSegments={allSegments ?? null}
           currentSegmentIndex={currentSegmentIndex ?? null}

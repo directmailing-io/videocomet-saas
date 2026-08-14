@@ -13,6 +13,7 @@ import type {
   ImageSegment,
   Layer,
   LayerKind,
+  PdfSegment,
   Segment,
   SegmentKind,
   ShapeLayer,
@@ -46,6 +47,7 @@ export const SEGMENT_KIND_LABELS: Record<SegmentKind, string> = {
   video: "Video",
   website: "Website",
   gdocs: "Google Docs",
+  pdf: "PDF",
   gslide: "Google Slide",
   canva: "Canva-Folie",
   slide: "Freie Folie",
@@ -150,6 +152,24 @@ export function createGDocsSegment(opts?: CreateSegmentOptions): GDocsSegment {
     ...baseFields("gdocs", opts),
     kind: "gdocs",
     docsUrl: "",
+    captureMode: "static-hero",
+  };
+}
+
+/**
+ * Factory für ein PDF-Segment. Die Datei-Felder starten leer; das UI füllt
+ * sie nach erfolgreichem Upload (`/api/pdf-segment/upload`).
+ */
+export function createPdfSegment(opts?: CreateSegmentOptions): PdfSegment {
+  return {
+    ...baseFields("pdf", opts),
+    kind: "pdf",
+    pdfUrl: "",
+    fileName: "",
+    pageUrls: [],
+    pageCount: 0,
+    docWidth: 0,
+    docHeight: 0,
     captureMode: "static-hero",
   };
 }
@@ -362,6 +382,8 @@ export function createSegment(
       return createWebsiteSegment(opts);
     case "gdocs":
       return createGDocsSegment(opts);
+    case "pdf":
+      return createPdfSegment(opts);
     case "gslide":
       return createGSlideSegment(opts);
     case "canva":

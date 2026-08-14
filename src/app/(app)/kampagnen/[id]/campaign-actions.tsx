@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Clapperboard,
   Pencil,
   Trash2,
   AlertTriangle,
@@ -36,12 +37,18 @@ export interface CampaignActionsProps {
   campaignId: string;
   campaignName: string;
   appUrl: string;
+  /**
+   * Editor-Re-Entry: nur Kampagnen im Modus "with-presentation" haben eine
+   * Segment-Timeline — für alle anderen bleibt der Button ausgeblendet.
+   */
+  showVideoEditor?: boolean;
 }
 
 export function CampaignActions({
   campaignId,
   campaignName,
   appUrl,
+  showVideoEditor = false,
 }: CampaignActionsProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -106,6 +113,17 @@ export function CampaignActions({
       >
         Teilen
       </Button>
+      {showVideoEditor && (
+        <Button
+          variant="ghost"
+          iconLeft={<Clapperboard className="size-4" />}
+          asChild
+        >
+          <Link href={`/kampagnen/${campaignId}/editor`}>
+            Video-Editor öffnen
+          </Link>
+        </Button>
+      )}
       <Button
         variant="ghost"
         iconLeft={<Pencil className="size-4" />}

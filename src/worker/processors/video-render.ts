@@ -833,6 +833,30 @@ async function renderSegmentsBase(opts: {
             outputPath: partPath,
           });
         }
+      } else if (seg.kind === "pdf") {
+        // PDF-Segment: NICHT personalisiert — das hochgeladene PDF wird im
+        // Drive-Viewer-Look (dunkle Toolbar + Seiten-Stack auf grauem
+        // Grund) durchgescrollt. Der Renderer rastert das Original-PDF
+        // selbst neu (pdftoppm, 150 dpi — identisch zur Editor-Vorschau)
+        // und cached das fertige MP4 prozessweit, weil das Ergebnis für
+        // alle Leads einer Kampagne identisch ist.
+        if (!seg.pdfUrl?.trim()) {
+          await generateBlackClip({
+            outputPath: partPath,
+            durationSec: durationMs / 1000,
+          });
+        } else {
+          console.log(
+            `[render] pdf segment ${seg.id}: "${seg.fileName}" (${seg.pageCount} Seiten, mode=${seg.captureMode})`,
+          );
+          const { renderPdfSegment } = await import("../lib/pdf-segment-render");
+          await renderPdfSegment({
+            segment: seg,
+            durationMs,
+            outputDir: join(opts.outDir, `pdf-${i}`),
+            outputPath: partPath,
+          });
+        }
       } else {
         // image / video not yet rendered in v1 — black clip placeholder.
         console.warn(
