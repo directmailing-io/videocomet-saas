@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  FileType2,
   Globe,
   Globe2,
   Image as ImageIcon,
@@ -44,6 +45,7 @@ import {
 } from "@/lib/placeholders/website-url";
 import {
   createGDocsSegment,
+  createGSlideSegment,
   createPdfSegment,
   createWebsiteSegment,
 } from "@/lib/segments/defaults";
@@ -102,18 +104,24 @@ interface AddTile {
   icon: React.ReactNode;
 }
 
-/** Inhalte, die sich automatisch an jeden Empfänger anpassen. */
+/** Inhalte, die sich automatisch an jeden Lead anpassen. */
 const PERSONALIZED_TILES: AddTile[] = [
   {
     kind: "website",
-    label: "Website des Empfängers",
-    hint: "Zeigt automatisch die Website des jeweiligen Empfängers",
+    label: "Website des Leads",
+    hint: "Jeder Lead sieht automatisch seine eigene Website",
     icon: <Globe className="size-4" />,
+  },
+  {
+    kind: "gslide",
+    label: "Präsentation (Google Slides)",
+    hint: "Deine Folien mit Platzhaltern, pro Lead ausgefüllt",
+    icon: <Presentation className="size-4" />,
   },
   {
     kind: "gdocs",
     label: "Google Docs",
-    hint: "Dokument mit Platzhaltern, wird pro Empfänger ausgefüllt",
+    hint: "Dein Dokument mit Platzhaltern, pro Lead ausgefüllt",
     icon: <FileText className="size-4" />,
   },
 ];
@@ -128,20 +136,20 @@ const STATIC_TILES: AddTile[] = [
   },
   {
     kind: "pdf",
-    label: "Präsentation (Canva, PowerPoint)",
-    hint: "Exportiere deine Folien als PDF und lade sie hier hoch",
-    icon: <Presentation className="size-4" />,
+    label: "PDF-Folien (Canva, PowerPoint)",
+    hint: "Folien als PDF exportieren und hier hochladen",
+    icon: <FileType2 className="size-4" />,
   },
   {
     kind: "image",
     label: "Bild",
-    hint: "Ein Bild als eigene Szene zeigen",
+    hint: "Ein Bild als eigene Szene",
     icon: <ImageIcon className="size-4" />,
   },
   {
     kind: "video",
     label: "Video",
-    hint: "Startest du live per Klick, der Ton läuft mit",
+    hint: "Startest du live per Klick, mit Ton",
     icon: <PlaySquare className="size-4" />,
   },
 ];
@@ -165,7 +173,7 @@ export function PhaseRegie({
   const [adding, setAdding] = React.useState(tabs.length === 0);
   /** Offenes URL-Eingabe-Formular auf der Neuer-Tab-Seite. */
   const [addForm, setAddForm] = React.useState<
-    "website" | "ownsite" | "gdocs" | null
+    "website" | "ownsite" | "gdocs" | "gslide" | null
   >(null);
   const [addUrl, setAddUrl] = React.useState("");
   /** Name der weiteren Empfänger-Seite (z. B. „Karriereseite"). */
@@ -187,15 +195,9 @@ export function PhaseRegie({
   const previewRatioRef = React.useRef<Map<string, number>>(new Map());
   const [, forceRender] = React.useReducer((n: number) => n + 1, 0);
 
-  // Teleprompter ist opt-in: Karte erst nach Klick sichtbar. Ein bereits
-  // gespeichertes Skript (lädt im Flow asynchron aus localStorage) öffnet
-  // die Karte automatisch.
-  const [prompterOpen, setPrompterOpen] = React.useState(
-    script.trim().length > 0,
-  );
-  React.useEffect(() => {
-    if (script.trim().length > 0) setPrompterOpen(true);
-  }, [script]);
+  // Teleprompter ist opt-in: standardmäßig ausgeblendet, Karte erscheint
+  // erst nach Klick auf den Toggle im Kopf (auch bei gespeichertem Skript).
+  const [prompterOpen, setPrompterOpen] = React.useState(false);
 
   // Auswahl reparieren, wenn die gewählte Szene gelöscht wurde.
   React.useEffect(() => {
@@ -236,8 +238,80 @@ export function PhaseRegie({
   }, [tabs]);
   const hasRecipientWebsite = personalizedWebsiteKeys.length > 0;
 
+  /** Laufender Google-Slides-Import (dauert je nach Deck 10-60 s). */
+  const [gslideImporting, setGslideImporting] = React.useState(false);
+
+  const submitGSlideForm = async () => {
+    const urlErr = urlInputError(addUrl);
+    if (urlErr) {
+      setAddFormError(urlErr);
+      return;
+    }
+    setGslideImporting(true);
+    setAddFormError(null);
+    try {
+      const res = await fetch("/api/gslides/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ publishedUrl: normalizeUrlInput(addUrl) }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        error?: string;
+        code?: string;
+        canonicalUrl?: string;
+        slides?: {
+          slideIndex: number;
+          thumbnailUrl: string | null;
+          detectedPlaceholders: string[];
+        }[];
+      } | null;
+      if (!res.ok) {
+        if (data?.code === "edit-url") {
+          throw new Error(
+            "Das ist der Bearbeitungs-Link. Geh in Google Slides auf „Datei“ → „Freigeben“ → „Im Web veröffentlichen“ und kopiere den Link von dort.",
+          );
+        }
+        throw new Error(
+          data?.error ||
+            "Die Präsentation konnte nicht geladen werden. Bitte versuche es erneut.",
+        );
+      }
+      const slides = (data?.slides ?? []).filter((s) => !!s.thumbnailUrl);
+      if (!data?.canonicalUrl || slides.length === 0) {
+        throw new Error(
+          "In der Präsentation wurden keine Folien gefunden. Prüfe den Link und versuche es erneut.",
+        );
+      }
+      for (const s of slides) {
+        const seg = createGSlideSegment({
+          label: `Folie ${s.slideIndex + 1}`,
+        });
+        seg.publishedUrl = data.canonicalUrl;
+        seg.slideIndex = s.slideIndex;
+        seg.thumbnailUrl = s.thumbnailUrl;
+        seg.detectedPlaceholders = s.detectedPlaceholders;
+        onAddTab(seg);
+      }
+      setAddUrl("");
+      setAddForm(null);
+    } catch (err) {
+      setAddFormError(
+        err instanceof Error
+          ? err.message
+          : "Die Präsentation konnte nicht geladen werden.",
+      );
+    } finally {
+      setGslideImporting(false);
+    }
+  };
+
   const submitAddForm = () => {
     if (!addForm) return;
+    if (addForm === "gslide") {
+      void submitGSlideForm();
+      return;
+    }
     const urlErr = urlInputError(addUrl);
     if (urlErr) {
       setAddFormError(urlErr);
@@ -257,13 +331,13 @@ export function PhaseRegie({
         const slug = slugifyUrlColumn(name);
         if (!slug) {
           setAddFormError(
-            "Bitte gib an, welche Seite des Empfängers gezeigt werden soll, zum Beispiel Karriereseite.",
+            "Bitte gib an, welche Seite des Leads gezeigt werden soll, zum Beispiel Karriereseite.",
           );
           return;
         }
         if (slug === "website" || personalizedWebsiteKeys.includes(slug)) {
           setAddFormError(
-            "Diese Seite des Empfängers ist schon als Szene vorhanden. Wähle einen anderen Namen, zum Beispiel Karriereseite.",
+            "Diese Seite des Leads ist schon als Szene vorhanden. Wähle einen anderen Namen, zum Beispiel Karriereseite.",
           );
           return;
         }
@@ -299,7 +373,12 @@ export function PhaseRegie({
       }
       return;
     }
-    if (kind === "website" || kind === "ownsite" || kind === "gdocs") {
+    if (
+      kind === "website" ||
+      kind === "ownsite" ||
+      kind === "gdocs" ||
+      kind === "gslide"
+    ) {
       setAddForm((prev) => (prev === kind ? null : kind));
       setAddUrl("");
       setAddPageName("");
@@ -381,7 +460,9 @@ export function PhaseRegie({
   /** Einheitliche Szenen-Kachel; personalisierte Kacheln mit Violett-Akzent. */
   const renderAddTile = (tile: AddTile, personalized: boolean) => {
     const busy =
-      (tile.kind === "pdf" && pdfUploading) || tile.kind === mediaUploading;
+      (tile.kind === "pdf" && pdfUploading) ||
+      (tile.kind === "gslide" && gslideImporting) ||
+      tile.kind === mediaUploading;
     const activeForm = addForm === tile.kind;
     return (
       <button
@@ -417,9 +498,11 @@ export function PhaseRegie({
         </span>
         <span className="text-[10px] leading-snug text-ink-muted">
           {busy
-            ? tile.kind === mediaUploading && mediaProgress > 0
-              ? `Wird hochgeladen… ${mediaProgress} %`
-              : "Wird hochgeladen…"
+            ? tile.kind === "gslide"
+              ? "Folien werden geladen…"
+              : tile.kind === mediaUploading && mediaProgress > 0
+                ? `Wird hochgeladen… ${mediaProgress} %`
+                : "Wird hochgeladen…"
             : tile.hint}
         </span>
       </button>
@@ -590,7 +673,7 @@ export function PhaseRegie({
                         Neue Szene
                       </h2>
                       <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-                        Während der Aufnahme wechselst du live zwischen deinen
+                        Beim Aufnehmen springst du live zwischen deinen
                         Szenen, wie zwischen Browser-Tabs.
                       </p>
                     </div>
@@ -599,12 +682,11 @@ export function PhaseRegie({
                       <div className="mb-1.5 flex items-center gap-1.5 px-1">
                         <Sparkles className="size-3.5 text-brand-deep" />
                         <h3 className="text-[11px] font-bold uppercase tracking-wide text-brand-deep">
-                          Pro Empfänger personalisiert
+                          Pro Lead personalisiert
                         </h3>
                       </div>
                       <p className="mb-2 px-1 text-[10px] leading-snug text-ink-muted">
-                        Diese Inhalte passen sich automatisch an jeden
-                        Empfänger an.
+                        Passt sich automatisch an jeden Lead an.
                       </p>
                       <div className="grid w-full grid-cols-2 gap-2.5">
                         {PERSONALIZED_TILES.map((tile) =>
@@ -616,11 +698,11 @@ export function PhaseRegie({
                     <section className="w-full">
                       <div className="mb-1.5 px-1">
                         <h3 className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">
-                          Für alle Empfänger gleich
+                          Für alle gleich
                         </h3>
                       </div>
                       <p className="mb-2 px-1 text-[10px] leading-snug text-ink-muted">
-                        Diese Inhalte sind in jedem Video identisch.
+                        In jedem Video identisch.
                       </p>
                       <div className="grid w-full grid-cols-2 gap-2.5">
                         {STATIC_TILES.map((tile) =>
@@ -655,7 +737,7 @@ export function PhaseRegie({
                         {addForm === "website" && hasRecipientWebsite && (
                           <>
                             <label className="text-[11px] font-semibold text-ink">
-                              Welche Seite des Empfängers?
+                              Welche Seite des Leads?
                             </label>
                             <input
                               autoFocus
@@ -669,16 +751,18 @@ export function PhaseRegie({
                               className="h-9 rounded-squircle-sm border border-line-soft bg-surface px-3 text-xs text-ink outline-none focus:border-brand"
                             />
                             <p className="text-[10px] leading-snug text-ink-muted">
-                              Du zeigst bereits die Website des Empfängers.
-                              Für diese weitere Seite ordnest du beim Versand
-                              eine eigene Spalte deiner Empfängerliste zu.
+                              Du zeigst schon die Website des Leads. Für diese
+                              weitere Seite ordnest du beim Versand eine
+                              eigene Spalte deiner Liste zu.
                             </p>
                           </>
                         )}
                         <label className="text-[11px] font-semibold text-ink">
                           {addForm === "gdocs"
                             ? "Link zum Google-Dokument"
-                            : "Website-Adresse"}
+                            : addForm === "gslide"
+                              ? "Link zur veröffentlichten Präsentation"
+                              : "Website-Adresse"}
                         </label>
                         <input
                           autoFocus={
@@ -693,9 +777,11 @@ export function PhaseRegie({
                           placeholder={
                             addForm === "gdocs"
                               ? "https://docs.google.com/document/d/…"
-                              : addForm === "ownsite"
-                                ? "z. B. deine-firma.de"
-                                : "z. B. beispiel-firma.de"
+                              : addForm === "gslide"
+                                ? "https://docs.google.com/presentation/d/e/…/pub"
+                                : addForm === "ownsite"
+                                  ? "z. B. deine-firma.de"
+                                  : "z. B. beispiel-firma.de"
                           }
                           className="h-9 rounded-squircle-sm border border-line-soft bg-surface px-3 text-xs text-ink outline-none focus:border-brand"
                         />
@@ -708,8 +794,8 @@ export function PhaseRegie({
                         {addForm === "website" && (
                           <p className="text-[10px] leading-snug text-ink-muted">
                             Diese Adresse ist nur für deine Vorschau. Im
-                            fertigen Video wird pro Empfänger dessen Website
-                            gezeigt.
+                            fertigen Video sieht jeder Lead seine eigene
+                            Website.
                           </p>
                         )}
                         {addForm === "gdocs" && (
@@ -717,9 +803,19 @@ export function PhaseRegie({
                             Die Vorschau zeigt deine Vorlage mit sichtbaren{" "}
                             <code className="rounded bg-surface-muted px-1">
                               {"{{platzhaltern}}"}
+                            </code>
+                            . Im fertigen Video werden sie pro Lead ersetzt.
+                          </p>
+                        )}
+                        {addForm === "gslide" && (
+                          <p className="text-[10px] leading-snug text-ink-muted">
+                            So kommst du an den Link: In Google Slides auf
+                            „Datei“ → „Freigeben“ → „Im Web veröffentlichen“.
+                            Jede Folie wird eine eigene Szene. Platzhalter wie{" "}
+                            <code className="rounded bg-surface-muted px-1">
+                              {"{{firma}}"}
                             </code>{" "}
-                            . Im fertigen Video werden sie pro Empfänger
-                            ersetzt.
+                            werden pro Lead ersetzt.
                           </p>
                         )}
                         <div className="flex justify-end gap-2">
@@ -727,6 +823,7 @@ export function PhaseRegie({
                             type="button"
                             variant="ghost"
                             size="sm"
+                            disabled={gslideImporting}
                             onClick={() => setAddForm(null)}
                           >
                             Abbrechen
@@ -734,11 +831,24 @@ export function PhaseRegie({
                           <Button
                             type="submit"
                             size="sm"
-                            disabled={!addUrl.trim()}
+                            disabled={!addUrl.trim() || gslideImporting}
+                            iconLeft={
+                              gslideImporting ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : undefined
+                            }
                           >
-                            Hinzufügen
+                            {gslideImporting
+                              ? "Folien werden geladen…"
+                              : "Hinzufügen"}
                           </Button>
                         </div>
+                        {addForm === "gslide" && gslideImporting && (
+                          <p className="text-[10px] leading-snug text-ink-muted">
+                            Das kann bis zu einer Minute dauern, bitte lass
+                            das Fenster offen.
+                          </p>
+                        )}
                       </form>
                     )}
                   </div>
@@ -999,8 +1109,40 @@ function SceneSettings({
           <code className="rounded bg-surface-muted px-1">
             {"{{platzhaltern}}"}
           </code>
-          . Im fertigen Video wird das Dokument pro Empfänger personalisiert.
-          Du kannst in der Vorschau scrollen, genau so sieht es später aus.
+          . Im fertigen Video werden sie pro Lead ersetzt. Scroll ruhig,
+          genau so sieht es später aus.
+        </p>
+      </div>
+    );
+  }
+
+  if (seg.kind === "gslide") {
+    return (
+      <div className="rounded-squircle-lg bg-surface p-3 shadow-card">
+        <p className="text-[11px] leading-relaxed text-ink-muted">
+          Folie {seg.slideIndex + 1} deiner Präsentation.{" "}
+          {seg.detectedPlaceholders.length > 0 ? (
+            <>
+              Platzhalter auf dieser Folie (werden pro Lead ersetzt):{" "}
+              {seg.detectedPlaceholders.map((p, i) => (
+                <React.Fragment key={p}>
+                  {i > 0 && ", "}
+                  <code className="rounded bg-surface-muted px-1">
+                    {`{{${p}}}`}
+                  </code>
+                </React.Fragment>
+              ))}
+            </>
+          ) : (
+            <>
+              Platzhalter wie{" "}
+              <code className="rounded bg-surface-muted px-1">
+                {"{{firma}}"}
+              </code>{" "}
+              würden pro Lead ersetzt, auf dieser Folie wurden keine
+              gefunden.
+            </>
+          )}
         </p>
       </div>
     );
@@ -1013,23 +1155,23 @@ function SceneSettings({
           <p className="truncate text-[11px] text-ink-muted">
             Feste Webseite:{" "}
             <span className="font-medium text-ink">{seg.fallbackUrl}</span>.
-            Wird für alle Empfänger gleich gezeigt.
+            In jedem Video gleich.
           </p>
         ) : seg.urlColumn ? (
           <p className="text-[11px] leading-relaxed text-ink-muted">
-            Zeigt pro Empfänger die Seite{" "}
+            Zeigt pro Lead die Seite{" "}
             <span className="font-medium text-ink">
               {seg.label || seg.urlColumn}
             </span>
-            . Beim Versand ordnest du dafür eine Spalte deiner Empfängerliste
-            zu. Vorschau-Quelle:{" "}
+            . Beim Versand ordnest du dafür eine Spalte deiner Liste zu.
+            Vorschau-Quelle:{" "}
             <span className="font-medium text-ink">{seg.fallbackUrl}</span>
           </p>
         ) : (
           <p className="truncate text-[11px] text-ink-muted">
             Vorschau-Quelle:{" "}
             <span className="font-medium text-ink">{seg.fallbackUrl}</span>.
-            In der Kampagne wird pro Empfänger dessen Website gezeigt.
+            Im fertigen Video sieht jeder Lead seine eigene Website.
           </p>
         )}
       </div>
@@ -1052,8 +1194,7 @@ function SceneSettings({
     return (
       <div className="rounded-squircle-lg bg-surface p-3 shadow-card">
         <p className="text-[11px] leading-relaxed text-ink-muted">
-          Das Bild wird für alle Empfänger gleich gezeigt, genau wie in der
-          Vorschau.
+          Das Bild ist in jedem Video gleich, genau wie hier in der Vorschau.
         </p>
       </div>
     );
@@ -1063,9 +1204,8 @@ function SceneSettings({
     return (
       <div className="rounded-squircle-lg bg-surface p-3 shadow-card">
         <p className="text-[11px] leading-relaxed text-ink-muted">
-          Während der Aufnahme startest du das Video per Klick auf den
-          Play-Button, der Ton läuft im fertigen Video mit. Bis dahin steht es
-          als Standbild.
+          Das Video startest du während der Aufnahme per Klick auf Play, der
+          Ton läuft mit. Bis dahin steht es als Standbild.
         </p>
       </div>
     );

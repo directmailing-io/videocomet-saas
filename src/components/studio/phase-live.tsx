@@ -16,11 +16,15 @@ import * as React from "react";
 import {
   AlertCircle,
   ArrowLeft,
+  Check,
   Minus,
   Pause,
+  Pencil,
   Play,
   Plus,
+  ScrollText,
   Sparkles,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -43,7 +47,12 @@ export interface PhaseLiveProps {
   stream: MediaStream | null;
   pipPosition: StudioPipPosition;
   pipShape: StudioPipShape;
+  /** PiP-Wahl passiert hier im Standby, live am echten Kamerabild. */
+  onPipPositionChange: (pos: StudioPipPosition) => void;
+  onPipShapeChange: (shape: StudioPipShape) => void;
   script: string;
+  /** Teleprompter-Text ist im Standby direkt bearbeitbar. */
+  onScriptChange: (script: string) => void;
   /** Fertige Aufnahme (Blob + Event-Log). */
   onFinished: (rec: StudioRecording) => void;
   /**
@@ -63,12 +72,21 @@ function pipShapeClass(shape: StudioPipShape): string {
   return "rounded-full aspect-square";
 }
 
+const PIP_SHAPE_OPTIONS: { value: StudioPipShape; label: string }[] = [
+  { value: "square", label: "Eckig" },
+  { value: "rounded", label: "Rund" },
+  { value: "circle", label: "Kreis" },
+];
+
 export function PhaseLive({
   tabs,
   stream,
   pipPosition,
   pipShape,
+  onPipPositionChange,
+  onPipShapeChange,
   script,
+  onScriptChange,
   onFinished,
   onBack,
 }: PhaseLiveProps) {
@@ -104,14 +122,13 @@ export function PhaseLive({
    *  wegklickbar, lokaler State pro Studio-Session reicht. */
   const [hintDismissed, setHintDismissed] = React.useState(false);
 
-  // Der Teleprompter meldet seine Höhe (variiert mit Schriftgröße/hidden),
-  // damit die Bühne exakt den restlichen Platz füllt statt zu überlaufen.
-  // 184px = Statuszeile + Paddings + Footer (ohne Prompter).
-  const hasScript = script.trim().length > 0;
-  const [prompterHeight, setPrompterHeight] = React.useState(
-    hasScript ? 123 : 0,
-  );
-  const stageChrome = 184 + (hasScript ? prompterHeight : 0);
+  // Teleprompter ist opt-in: standardmäßig ausgeblendet (nicht jeder will
+  // einen), Toggle sitzt oben rechts. Der Prompter meldet seine Höhe
+  // (variiert mit der Schriftgröße), damit die Bühne exakt den restlichen
+  // Platz füllt. 184px = Statuszeile + Paddings + Footer (ohne Prompter).
+  const [prompterVisible, setPrompterVisible] = React.useState(false);
+  const [prompterHeight, setPrompterHeight] = React.useState(123);
+  const stageChrome = 184 + (prompterVisible ? prompterHeight : 0);
 
   const activeTabIdRef = React.useRef(activeTabId);
   React.useEffect(() => {
@@ -303,8 +320,8 @@ export function PhaseLive({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Statuszeile: Fehler */}
-      <div className="flex h-11 shrink-0 items-center justify-center gap-2 px-5">
+      {/* Statuszeile: Fehler mittig, Teleprompter-Toggle rechts */}
+      <div className="relative flex h-11 shrink-0 items-center justify-center gap-2 px-5">
         {liveError && (
           <>
             <span className="flex items-center gap-1.5 rounded-full bg-danger-soft px-3.5 py-1 text-xs font-medium text-danger">
@@ -320,13 +337,28 @@ export function PhaseLive({
             </button>
           </>
         )}
+        <button
+          type="button"
+          onClick={() => setPrompterVisible((v) => !v)}
+          className={cn(
+            "absolute right-5 top-1/2 flex -translate-y-1/2 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+            prompterVisible
+              ? "bg-brand-soft text-brand-deep"
+              : "text-ink-muted hover:bg-canvas-deep hover:text-ink",
+          )}
+        >
+          <ScrollText className="size-3.5" />
+          Teleprompter
+        </button>
       </div>
 
-      {/* Teleprompter */}
-      {hasScript && (
+      {/* Teleprompter (opt-in) */}
+      {prompterVisible && (
         <Teleprompter
           script={script}
           stage={stage}
+          onScriptChange={onScriptChange}
+          onHide={() => setPrompterVisible(false)}
           onHeightChange={setPrompterHeight}
         />
       )}
@@ -476,6 +508,47 @@ export function PhaseLive({
               />
             </div>
 
+            {/* PiP-Wahl im Standby: Position + Form, Wirkung sofort live
+             * am echten Kamerabild sichtbar. */}
+            {stage === "standby" && (
+              <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-line-soft bg-white/90 px-1.5 py-1 shadow-card backdrop-blur">
+                <span className="px-1.5 text-[10px] font-semibold text-ink-muted">
+                  Dein Kamerabild:
+                </span>
+                {(["bottom-left", "bottom-right"] as const).map((pos) => (
+                  <button
+                    key={pos}
+                    type="button"
+                    onClick={() => onPipPositionChange(pos)}
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors",
+                      pipPosition === pos
+                        ? "bg-ink text-white"
+                        : "text-ink-muted hover:bg-canvas-deep hover:text-ink",
+                    )}
+                  >
+                    {pos === "bottom-left" ? "Links" : "Rechts"}
+                  </button>
+                ))}
+                <span className="mx-1 h-3 w-px bg-line" />
+                {PIP_SHAPE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => onPipShapeChange(opt.value)}
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors",
+                      pipShape === opt.value
+                        ? "bg-ink text-white"
+                        : "text-ink-muted hover:bg-canvas-deep hover:text-ink",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Standby-Hinweiskarte: So läuft die Aufnahme + KI-Tipp.
              * Liegt über der Bühne (z-40, über PiP), die Bedienleiste unten
              * bleibt frei sichtbar und klickbar. */}
@@ -488,7 +561,7 @@ export function PhaseLive({
                   <ol className="mt-3 flex flex-col gap-2.5 text-sm leading-snug text-ink-muted">
                     {[
                       "Mit den Tabs oben wechselst du die Szene.",
-                      "Auf der Bühne kannst du scrollen. Genau so sieht es dein Empfänger.",
+                      "Auf der Bühne kannst du scrollen. Genau so sieht es dein Lead.",
                       'Fertig? Klick unten auf „Aufnahme beenden".',
                     ].map((text, i) => (
                       <li key={i} className="flex items-start gap-2.5">
@@ -601,31 +674,40 @@ const PROMPTER_VISIBLE_LINES = 3.6;
 const PROMPTER_LINE_HEIGHT = 1.5;
 
 /**
- * Teleprompter v2 — dunkler, halbtransparenter Balken über der Bühne mit
+ * Teleprompter v3 — dunkler, halbtransparenter Balken über der Bühne mit
  * echtem Auto-Scroll:
  *
+ *   • Sichtbarkeit steuert der Parent (Toggle oben rechts, default AUS).
  *   • Text scrollt rAF-basiert langsam nach oben, Tempo in Stufen 1–5
  *     (px/s skaliert mit der Schriftgröße, damit „Stufe 3" bei jeder
  *     Textgröße gleich viele Zeilen pro Sekunde bedeutet).
  *   • Beim Wechsel in stage==="live" startet das Scrollen automatisch von
  *     oben; im Standby kann man es zum Üben manuell starten (Play/Pause).
- *   • Weiche Fade-Kanten oben/unten via CSS-Masken, Schriftgröße +/- und
- *     „Ausblenden" bleiben erhalten.
+ *   • Im Standby ist der Text direkt bearbeitbar (Stift-Button); ohne
+ *     Text startet der Prompter gleich im Bearbeiten-Modus.
+ *   • Alle Regler sitzen kompakt IM Balken oben rechts, damit nichts
+ *     drumherum flattert.
  */
 function Teleprompter({
   script,
   stage,
+  onScriptChange,
+  onHide,
   onHeightChange,
 }: {
   script: string;
   stage: "standby" | "countdown" | "live";
+  onScriptChange: (script: string) => void;
+  /** Blendet den Prompter aus (gleicher Effekt wie der Toggle im Kopf). */
+  onHide: () => void;
   /** Meldet die aktuelle Balken-Höhe (px), damit die Bühne exakt passt. */
   onHeightChange?: (px: number) => void;
 }) {
-  const [hidden, setHidden] = React.useState(false);
   const [playing, setPlaying] = React.useState(false);
   const [speedLevel, setSpeedLevel] = React.useState(3); // 1..5
   const [fontSize, setFontSize] = React.useState(22); // px, 16..32
+  /** Ohne Text direkt im Bearbeiten-Modus starten. */
+  const [editing, setEditing] = React.useState(script.trim().length === 0);
 
   const contentRef = React.useRef<HTMLDivElement | null>(null);
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
@@ -646,16 +728,17 @@ function Teleprompter({
     }
   }, []);
 
-  // Aufnahme läuft → Teleprompter von vorn und automatisch mitscrollen.
+  // Aufnahme läuft → Bearbeiten schließen, von vorn und automatisch scrollen.
   React.useEffect(() => {
     if (stage === "live") {
+      setEditing(false);
       resetScroll();
       setPlaying(true);
     }
   }, [stage, resetScroll]);
 
   React.useEffect(() => {
-    if (hidden || !playing) return;
+    if (editing || !playing) return;
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
@@ -680,16 +763,15 @@ function Teleprompter({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [hidden, playing]);
+  }, [editing, playing]);
 
   const lineHeightPx = fontSize * PROMPTER_LINE_HEIGHT;
   const viewportHeight = Math.round(lineHeightPx * PROMPTER_VISIBLE_LINES);
 
-  // Höhe an den Parent melden (Balken + pb-1); im hidden-Zustand nur der
-  // kleine „einblenden"-Pill.
+  // Höhe an den Parent melden (Balken + pb-1).
   React.useEffect(() => {
-    onHeightChange?.(hidden ? 28 : viewportHeight + 4);
-  }, [hidden, viewportHeight, onHeightChange]);
+    onHeightChange?.(viewportHeight + 4);
+  }, [viewportHeight, onHeightChange]);
 
   const togglePlay = React.useCallback(() => {
     setPlaying((was) => {
@@ -705,124 +787,166 @@ function Teleprompter({
     });
   }, [resetScroll]);
 
-  if (hidden) {
-    return (
-      <div className="flex shrink-0 justify-center pb-1">
-        <button
-          type="button"
-          onClick={() => setHidden(false)}
-          className="rounded-full border border-line-soft bg-white/70 px-3 py-1 text-[10px] font-semibold text-ink-muted backdrop-blur transition-colors hover:text-ink"
-        >
-          Teleprompter einblenden
-        </button>
-      </div>
-    );
-  }
-
   const fadeMask =
     "linear-gradient(to bottom, transparent 0%, black 22%, black 78%, transparent 100%)";
 
+  const controlBtn =
+    "rounded-full p-1 text-white/70 transition-colors hover:bg-white/15 hover:text-white";
+  const controlDivider = <span className="mx-0.5 h-3 w-px bg-white/20" />;
+
   return (
-    <div className="mx-auto flex w-full max-w-3xl shrink-0 items-center gap-2 px-5 pb-1">
+    <div className="mx-auto w-full max-w-3xl shrink-0 px-5 pb-1">
       {/* Prompter-Balken: dunkel, halbtransparent, Fade oben/unten */}
-      <div className="min-w-0 flex-1 overflow-hidden rounded-squircle-lg bg-ink/85 shadow-lift backdrop-blur">
-        <div
-          ref={viewportRef}
-          className="overflow-hidden px-8"
-          style={{
-            height: viewportHeight,
-            maskImage: fadeMask,
-            WebkitMaskImage: fadeMask,
-          }}
-        >
-          <div
-            ref={contentRef}
-            className="whitespace-pre-wrap text-center font-medium text-white will-change-transform"
+      <div className="relative overflow-hidden rounded-squircle-lg bg-ink/85 shadow-lift backdrop-blur">
+        {editing ? (
+          <textarea
+            autoFocus
+            value={script}
+            onChange={(e) => onScriptChange(e.target.value)}
+            placeholder="Hallo, ich habe mir eure Website angeschaut und…"
+            className="block w-full resize-none bg-transparent px-8 text-center font-medium text-white outline-none placeholder:text-white/40"
             style={{
+              height: viewportHeight,
               fontSize,
               lineHeight: PROMPTER_LINE_HEIGHT,
-              // Erste Zeile startet unter der oberen Fade-Kante, unten genug
-              // Auslauf, damit die letzte Zeile bis zur Mitte scrollen kann.
               paddingTop: Math.round(lineHeightPx * 0.6),
-              paddingBottom: Math.round(lineHeightPx * 2),
+              paddingBottom: Math.round(lineHeightPx * 0.6),
+            }}
+          />
+        ) : (
+          <div
+            ref={viewportRef}
+            className="overflow-hidden px-8"
+            style={{
+              height: viewportHeight,
+              maskImage: fadeMask,
+              WebkitMaskImage: fadeMask,
             }}
           >
-            {script}
+            <div
+              ref={contentRef}
+              className="whitespace-pre-wrap text-center font-medium text-white will-change-transform"
+              style={{
+                fontSize,
+                lineHeight: PROMPTER_LINE_HEIGHT,
+                // Erste Zeile startet unter der oberen Fade-Kante, unten
+                // genug Auslauf, damit die letzte Zeile zur Mitte scrollt.
+                paddingTop: Math.round(lineHeightPx * 0.6),
+                paddingBottom: Math.round(lineHeightPx * 2),
+              }}
+            >
+              {script}
+            </div>
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* Steuerung: Play/Pause, Tempo, Schriftgröße, Ausblenden */}
-      <div className="flex shrink-0 flex-col items-center gap-1.5">
-        <button
-          type="button"
-          aria-label={playing ? "Scrollen pausieren" : "Scrollen starten"}
-          onClick={togglePlay}
-          className="flex size-8 items-center justify-center rounded-full bg-ink text-white shadow-card transition-colors hover:bg-black"
-        >
-          {playing ? (
-            <Pause className="size-3.5 fill-current" />
+        {/* Kompakte Steuerung im Balken oben rechts */}
+        <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-full bg-black/40 px-1.5 py-1 backdrop-blur-sm">
+          {editing ? (
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+            >
+              <Check className="size-3" />
+              Fertig
+            </button>
           ) : (
-            <Play className="size-3.5 translate-x-px fill-current" />
+            <>
+              <button
+                type="button"
+                aria-label={
+                  playing ? "Scrollen pausieren" : "Scrollen starten"
+                }
+                onClick={togglePlay}
+                className={controlBtn}
+              >
+                {playing ? (
+                  <Pause className="size-3 fill-current" />
+                ) : (
+                  <Play className="size-3 translate-x-px fill-current" />
+                )}
+              </button>
+              {controlDivider}
+              <button
+                type="button"
+                aria-label="Langsamer"
+                title="Tempo"
+                onClick={() => setSpeedLevel((s) => Math.max(1, s - 1))}
+                className={controlBtn}
+              >
+                <Minus className="size-3" />
+              </button>
+              <span
+                title="Tempo"
+                className="w-3 text-center text-[9px] font-semibold tabular-nums text-white/70"
+              >
+                {speedLevel}
+              </span>
+              <button
+                type="button"
+                aria-label="Schneller"
+                title="Tempo"
+                onClick={() => setSpeedLevel((s) => Math.min(5, s + 1))}
+                className={controlBtn}
+              >
+                <Plus className="size-3" />
+              </button>
+              {controlDivider}
+              <button
+                type="button"
+                aria-label="Schrift kleiner"
+                title="Schriftgröße"
+                onClick={() => setFontSize((s) => Math.max(16, s - 2))}
+                className={controlBtn}
+              >
+                <Minus className="size-3" />
+              </button>
+              <span
+                title="Schriftgröße"
+                className="text-[9px] font-bold text-white/70"
+              >
+                A
+              </span>
+              <button
+                type="button"
+                aria-label="Schrift größer"
+                title="Schriftgröße"
+                onClick={() => setFontSize((s) => Math.min(32, s + 2))}
+                className={controlBtn}
+              >
+                <Plus className="size-3" />
+              </button>
+              {stage === "standby" && (
+                <>
+                  {controlDivider}
+                  <button
+                    type="button"
+                    aria-label="Text bearbeiten"
+                    title="Text bearbeiten"
+                    onClick={() => {
+                      setPlaying(false);
+                      setEditing(true);
+                    }}
+                    className={controlBtn}
+                  >
+                    <Pencil className="size-3" />
+                  </button>
+                </>
+              )}
+            </>
           )}
-        </button>
-        <div className="flex items-center gap-1" title="Tempo">
+          {controlDivider}
           <button
             type="button"
-            aria-label="Langsamer"
-            onClick={() => setSpeedLevel((s) => Math.max(1, s - 1))}
-            className="rounded-full bg-white/80 p-1 text-ink-muted shadow-card transition-colors hover:bg-white hover:text-ink"
+            aria-label="Teleprompter ausblenden"
+            title="Ausblenden"
+            onClick={onHide}
+            className={controlBtn}
           >
-            <Minus className="size-3" />
-          </button>
-          <span className="w-9 text-center text-[9px] font-medium leading-tight text-ink-muted">
-            Tempo
-            <br />
-            <span className="text-[10px] font-semibold tabular-nums text-ink">
-              {speedLevel}
-            </span>
-          </span>
-          <button
-            type="button"
-            aria-label="Schneller"
-            onClick={() => setSpeedLevel((s) => Math.min(5, s + 1))}
-            className="rounded-full bg-white/80 p-1 text-ink-muted shadow-card transition-colors hover:bg-white hover:text-ink"
-          >
-            <Plus className="size-3" />
+            <X className="size-3" />
           </button>
         </div>
-        <div className="flex items-center gap-1" title="Schriftgröße">
-          <button
-            type="button"
-            aria-label="Schrift kleiner"
-            onClick={() => setFontSize((s) => Math.max(16, s - 2))}
-            className="rounded-full bg-white/80 p-1 text-ink-muted shadow-card transition-colors hover:bg-white hover:text-ink"
-          >
-            <Minus className="size-3" />
-          </button>
-          <span className="w-9 text-center text-[9px] font-medium leading-tight text-ink-muted">
-            Schrift
-            <br />
-            <span className="text-[10px] font-semibold tabular-nums text-ink">
-              {fontSize}
-            </span>
-          </span>
-          <button
-            type="button"
-            aria-label="Schrift größer"
-            onClick={() => setFontSize((s) => Math.min(32, s + 2))}
-            className="rounded-full bg-white/80 p-1 text-ink-muted shadow-card transition-colors hover:bg-white hover:text-ink"
-          >
-            <Plus className="size-3" />
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={() => setHidden(true)}
-          className="text-[9px] font-medium text-ink-muted/70 hover:text-ink-muted"
-        >
-          Ausblenden
-        </button>
       </div>
     </div>
   );

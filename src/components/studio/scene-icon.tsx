@@ -13,6 +13,7 @@ import {
   Globe2,
   Image as ImageIcon,
   PlaySquare,
+  Presentation,
   Type,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,8 @@ export function SceneKindIcon({
       return <Globe2 className={cls} />;
     case "gdocs":
       return <FileText className={cls} />;
+    case "gslide":
+      return <Presentation className={cls} />;
     case "pdf":
       return <FileType2 className={cls} />;
     case "image":

@@ -205,10 +205,6 @@ export function StudioFlow({ onComplete, onCancel }: StudioFlowProps) {
       {phase === "check" && (
         <PhaseCheck
           media={media}
-          pipPosition={pipPosition}
-          pipShape={pipShape}
-          onPipPositionChange={setPipPosition}
-          onPipShapeChange={setPipShape}
           preloadReady={preloadReady}
           onContinue={goLive}
           onBack={() => setPhase("regie")}
@@ -222,7 +218,10 @@ export function StudioFlow({ onComplete, onCancel }: StudioFlowProps) {
           stream={media.stream}
           pipPosition={pipPosition}
           pipShape={pipShape}
+          onPipPositionChange={setPipPosition}
+          onPipShapeChange={setPipShape}
           script={script}
+          onScriptChange={handleScriptChange}
           onFinished={handleFinished}
           onBack={handleLiveBack}
         />

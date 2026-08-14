@@ -24,6 +24,7 @@ export type StudioSceneKind =
   | "website"
   | "ownsite"
   | "gdocs"
+  | "gslide"
   | "pdf"
   | "text"
   | "image"
@@ -48,7 +49,7 @@ export function sceneKindOf(tab: StudioTab): StudioSceneKind | null {
     return seg.personalized === false ? "ownsite" : "website";
   }
   const k = seg.kind;
-  if (k === "gdocs" || k === "pdf" || k === "text") return k;
+  if (k === "gdocs" || k === "gslide" || k === "pdf" || k === "text") return k;
   if (k === "image" || k === "video") return k;
   return null;
 }
@@ -64,6 +65,9 @@ export function isTabReady(tab: StudioTab): boolean {
       return !!seg.previewImageUrl;
     case "gdocs":
       return !!seg.previewPageUrls && seg.previewPageUrls.length > 0;
+    case "gslide":
+      // Thumbnail kommt direkt aus dem Import → sofort bereit.
+      return !!seg.thumbnailUrl;
     case "pdf":
       return seg.pageUrls.length > 0;
     case "text":
@@ -85,6 +89,8 @@ export function tabImageUrls(tab: StudioTab): string[] {
       return seg.previewImageUrl ? [seg.previewImageUrl] : [];
     case "gdocs":
       return seg.previewPageUrls ?? [];
+    case "gslide":
+      return seg.thumbnailUrl ? [seg.thumbnailUrl] : [];
     case "pdf":
       return seg.pageUrls;
     case "image":
@@ -111,6 +117,8 @@ export function tabLabel(tab: StudioTab): string {
       return "Website";
     case "gdocs":
       return "Google Docs";
+    case "gslide":
+      return "Folie";
     case "pdf":
       return seg.fileName || "PDF";
     case "text":

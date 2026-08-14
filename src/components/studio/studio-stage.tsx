@@ -221,6 +221,19 @@ export function StudioStage({
         showToolbar={doc.showToolbar}
       />
     );
+  } else if (segment.kind === "gslide" && segment.thumbnailUrl) {
+    // Folie aus der Google-Slides-Präsentation: Standbild, contain auf Weiß.
+    content = (
+      <div className="absolute inset-0 bg-white">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={segment.thumbnailUrl}
+          alt=""
+          draggable={false}
+          className="size-full select-none object-contain"
+        />
+      </div>
+    );
   } else if (segment.kind === "text") {
     content = <PreviewSegmentRender segment={segment} segmentTimeMs={0} />;
   } else if (segment.kind === "image" && segment.publicUrl) {

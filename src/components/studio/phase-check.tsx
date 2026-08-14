@@ -2,13 +2,14 @@
 
 /**
  * phase-check — Phase 2 des Studio-Flows: reiner Technik-Check
- * (Kamera/Mikro + PiP-Wahl).
+ * (Kamera/Mikro).
  *
  * Der MediaStream lebt auf Flow-Ebene (use-studio-media) und überlebt den
  * Wechsel in die Live-Phase. Hier: großes Kamerabild, Mikro-Pegel
- * (AnalyserNode), Geräte-Auswahl, PiP-Position/-Form auf einer
- * 16:9-Miniatur. „Weiter zur Aufnahme-Ansicht" wechselt nur die Phase —
- * die Aufnahme startet erst im Standby der Live-Phase.
+ * (AnalyserNode), Geräte-Auswahl. Die PiP-Wahl (Position/Form des
+ * Kamerabilds) sitzt im Standby der Aufnahme-Ansicht — dort sieht man die
+ * Wirkung live am echten Bild. „Weiter zur Aufnahme-Ansicht" wechselt nur
+ * die Phase — die Aufnahme startet erst im Standby der Live-Phase.
  */
 
 import * as React from "react";
@@ -21,21 +22,12 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import type {
-  StudioPipPosition,
-  StudioPipShape,
-} from "./studio-flow";
 import { StudioWordmark } from "./studio-wordmark";
 import type { UseStudioMediaResult } from "./use-studio-media";
 
 export interface PhaseCheckProps {
   media: UseStudioMediaResult;
-  pipPosition: StudioPipPosition;
-  pipShape: StudioPipShape;
-  onPipPositionChange: (pos: StudioPipPosition) => void;
-  onPipShapeChange: (shape: StudioPipShape) => void;
   /** true, sobald alle Szenen-Bilder vor-decodiert sind. */
   preloadReady: boolean;
   /** Wechselt zur Live-Phase (Standby) — startet noch keine Aufnahme. */
@@ -82,18 +74,8 @@ function useMicLevel(stream: MediaStream | null): number {
   return level;
 }
 
-const SHAPE_OPTIONS: { value: StudioPipShape; label: string }[] = [
-  { value: "square", label: "Eckig" },
-  { value: "rounded", label: "Abgerundet" },
-  { value: "circle", label: "Kreis" },
-];
-
 export function PhaseCheck({
   media,
-  pipPosition,
-  pipShape,
-  onPipPositionChange,
-  onPipShapeChange,
   preloadReady,
   onContinue,
   onBack,
@@ -240,67 +222,8 @@ export function PhaseCheck({
               )}
             </div>
           )}
-        </div>
 
-        {/* PiP-Wahl */}
-        <div className="flex w-[280px] shrink-0 flex-col gap-3">
-          <section className="rounded-squircle-lg bg-surface p-3 shadow-card">
-            <h2 className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-ink-muted">
-              Dein Kamerabild im Video
-            </h2>
-            {/* 16:9-Miniatur mit klickbaren Positionen */}
-            <div className="relative aspect-video w-full overflow-hidden rounded-squircle-sm bg-ink/90">
-              <div className="absolute inset-2 rounded border border-dashed border-white/20" />
-              {(["bottom-left", "bottom-right"] as const).map((pos) => {
-                const active = pipPosition === pos;
-                return (
-                  <button
-                    key={pos}
-                    type="button"
-                    aria-label={
-                      pos === "bottom-left" ? "Unten links" : "Unten rechts"
-                    }
-                    onClick={() => onPipPositionChange(pos)}
-                    className={cn(
-                      "absolute bottom-2 h-[28%] w-[25%] border-2 transition-all",
-                      pos === "bottom-left" ? "left-2" : "right-2",
-                      pipShape === "circle"
-                        ? "aspect-square h-auto rounded-full"
-                        : pipShape === "rounded"
-                          ? "rounded-lg"
-                          : "rounded-none",
-                      active
-                        ? "border-brand bg-brand/60 shadow-lift"
-                        : "border-white/30 bg-white/10 hover:bg-white/20",
-                    )}
-                  />
-                );
-              })}
-            </div>
-            <p className="mt-2 px-1 text-[10px] leading-snug text-ink-muted">
-              Klicke auf eine Ecke, um die Position zu wählen.
-            </p>
-
-            <div className="mt-3 flex gap-1.5">
-              {SHAPE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => onPipShapeChange(opt.value)}
-                  className={cn(
-                    "flex-1 rounded-full px-2 py-1.5 text-[11px] font-semibold transition-colors",
-                    pipShape === opt.value
-                      ? "bg-ink text-white"
-                      : "bg-surface-soft text-ink-muted hover:bg-surface-muted",
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </section>
-
-          {/* Ablauf-Bullets + KI-Begrüßungs-Tipp leben jetzt als wegklickbare
+          {/* Ablauf-Bullets + KI-Begrüßungs-Tipp leben als wegklickbare
            * Karte im Standby der Aufnahme-Ansicht (phase-live) — dort, wo
            * sie gebraucht werden. */}
           {!preloadReady && (
