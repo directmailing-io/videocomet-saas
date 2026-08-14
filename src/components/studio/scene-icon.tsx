@@ -6,7 +6,15 @@
  */
 
 import * as React from "react";
-import { FileText, FileType2, Globe, Globe2, Type } from "lucide-react";
+import {
+  FileText,
+  FileType2,
+  Globe,
+  Globe2,
+  Image as ImageIcon,
+  PlaySquare,
+  Type,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StudioSceneKind } from "./internal";
 
@@ -27,6 +35,10 @@ export function SceneKindIcon({
       return <FileText className={cls} />;
     case "pdf":
       return <FileType2 className={cls} />;
+    case "image":
+      return <ImageIcon className={cls} />;
+    case "video":
+      return <PlaySquare className={cls} />;
     case "text":
     default:
       return <Type className={cls} />;

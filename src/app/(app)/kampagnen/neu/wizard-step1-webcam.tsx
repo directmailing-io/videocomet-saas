@@ -471,14 +471,15 @@ function useIsDesktop(): boolean {
 }
 
 /**
- * RecordingEntryCards — zwei gleichrangige Options-Karten in Schritt 0:
+ * RecordingEntryCards — Options-Karten in Schritt 0 mit klarer Hierarchie:
  *
- *   • „VIDEOCOMET Studio" (empfohlen): Video direkt in der App aufnehmen,
- *     fertig geschnitten ohne Nachbearbeitung — Klick öffnet den StudioFlow
- *     als Vollbild-Overlay (Callback in den Container). Unter 1024px
- *     ausgegraut (Desktop-Guard).
- *   • „Klassischer Editor": für alle, die ihr Video schon haben — Klick
- *     blendet die Mediathek-Auswahl darunter ein (`classicChosen`).
+ *   • „VIDEOCOMET Studio" (primär, empfohlen): violette Premium-Optik,
+ *     zentrierter Inhalt, Ink-Pill-CTA — Klick öffnet den StudioFlow als
+ *     Vollbild-Overlay (Callback in den Container). Unter 1024px ausgegraut
+ *     (Desktop-Guard).
+ *   • „Klassischer Editor" (sekundär, bewusst zurückgenommen): für alle,
+ *     die ihr Video schon haben — Klick blendet die Mediathek-Auswahl
+ *     darunter ein (`classicChosen`). Lebt beim Hover leicht auf.
  */
 function RecordingEntryCards({
   onStartStudio,
@@ -491,8 +492,8 @@ function RecordingEntryCards({
 }) {
   const isDesktop = useIsDesktop();
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {/* VIDEOCOMET Studio — empfohlener Weg */}
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-5 sm:items-stretch">
+      {/* VIDEOCOMET Studio — primär, violette Premium-Optik, zentriert */}
       <button
         type="button"
         onClick={() => {
@@ -501,34 +502,33 @@ function RecordingEntryCards({
         disabled={!isDesktop}
         aria-disabled={!isDesktop}
         className={cn(
-          "group relative flex flex-col text-left rounded-squircle-xl bg-surface shadow-card p-6 sm:p-7 transition-all duration-200 ease-spring",
+          "group relative flex flex-col items-center rounded-squircle-xl bg-gradient-to-b from-brand-soft to-white p-7 text-center ring-1 ring-brand/30 shadow-lift transition-all duration-200 ease-spring sm:col-span-3 sm:p-8",
           isDesktop
-            ? "hover:shadow-card-hover hover:-translate-y-0.5"
+            ? "hover:-translate-y-0.5 hover:ring-brand/50"
             : "opacity-60 cursor-not-allowed",
         )}
       >
-        <span className="absolute right-5 top-5 inline-flex items-center rounded-full bg-brand-soft px-2.5 py-1 text-[10px] font-semibold leading-none text-brand-deep">
+        <span className="inline-flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-semibold leading-none text-brand-deep ring-1 ring-brand/25 backdrop-blur">
+          <Sparkles className="size-3" />
           Empfohlen
         </span>
         <span className="sr-only">VIDEOCOMET Studio</span>
-        <StudioWordmark height={24} />
-        <span className="mt-3 text-sm text-ink-muted leading-relaxed">
-          Du hast noch kein Video? Hier nimmst du es direkt auf: Vorher legst
-          du fest, was im Video zu sehen ist (zum Beispiel die Website deines
-          Empfängers), dann drückst du auf Aufnahme und sprichst einfach
-          drüber. Am Ende ist dein Video komplett fertig — ohne Schnitt und
-          ohne Technik-Wissen.
+        <StudioWordmark height={28} className="mt-4" />
+        <span className="mt-3 max-w-sm text-sm text-ink-muted leading-relaxed">
+          Noch kein Video? Hier nimmst du es direkt auf. Du sprichst in die
+          Kamera, VIDEOCOMET zeigt dabei zum Beispiel die Website deines
+          Empfängers. Ohne Schnitt, ohne Vorkenntnisse.
         </span>
         {isDesktop ? (
-          <span className="mt-auto pt-5 self-start">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white transition-colors group-hover:bg-ink/90">
+          <span className="mt-auto pt-6">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white transition-colors group-hover:bg-ink/90">
               <Clapperboard className="size-4" />
               Studio öffnen
             </span>
           </span>
         ) : (
-          <span className="mt-auto pt-5 self-start">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-line-soft px-4 py-2 text-xs font-medium text-ink-muted">
+          <span className="mt-auto pt-6">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line-soft bg-white/60 px-4 py-2 text-xs font-medium text-ink-muted">
               <Monitor className="size-3.5" />
               Am besten am Laptop oder Desktop
             </span>
@@ -536,26 +536,25 @@ function RecordingEntryCards({
         )}
       </button>
 
-      {/* Klassischer Editor — Video liegt schon vor */}
+      {/* Klassischer Editor — sekundär, bewusst zurückgenommen */}
       <button
         type="button"
         onClick={onChooseClassic}
         className={cn(
-          "group flex flex-col text-left rounded-squircle-xl bg-surface shadow-card p-6 sm:p-7 transition-all duration-200 ease-spring hover:shadow-card-hover hover:-translate-y-0.5",
-          classicChosen && "ring-2 ring-brand",
+          "group flex flex-col text-left rounded-squircle-xl bg-surface-muted p-5 transition-all duration-200 ease-spring hover:bg-surface hover:shadow-card sm:col-span-2 sm:p-6",
+          classicChosen && "bg-surface ring-2 ring-brand shadow-card",
         )}
       >
-        <span className="flex items-center gap-2 text-base font-semibold text-ink">
-          <Film className="size-5 text-ink-muted" />
+        <span className="flex items-center gap-2 text-sm font-semibold text-ink-muted transition-colors group-hover:text-ink">
+          <Film className="size-4" />
           Klassischer Editor
         </span>
-        <span className="mt-3 text-sm text-ink-muted leading-relaxed">
-          Du hast dein Video schon aufgenommen? Dann wähle es hier aus (oder
-          lade es hoch) und stelle danach selbst zusammen, was drumherum
-          gezeigt wird — Schritt für Schritt im Editor.
+        <span className="mt-2 text-sm text-ink-muted leading-relaxed">
+          Video schon fertig? Wähle es aus und gestalte danach alles
+          drumherum.
         </span>
         <span className="mt-auto pt-5 self-start">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink transition-colors group-hover:bg-canvas-deep/60">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink-muted transition-colors group-hover:border-ink/30 group-hover:text-ink">
             <Video className="size-4" />
             Video auswählen
           </span>

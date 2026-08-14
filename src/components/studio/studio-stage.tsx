@@ -15,9 +15,10 @@
  */
 
 import * as React from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Pause, Play, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Segment } from "@/lib/segments/types";
+import { MEDIA_STAGE_BG, type Segment } from "@/lib/segments/types";
+import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
 import { DocStackPreview } from "@/components/editor/doc-stack-preview";
 import { PreviewSegmentRender } from "@/components/editor/preview-segment-render";
 import { clamp01 } from "./internal";
@@ -30,6 +31,21 @@ export interface StudioStageProps {
   onScrollRatio?: (y: number) => void;
   /** Badge „Standbild" auf Text-Folien anzeigen (Live-Phase). */
   showStaticBadge?: boolean;
+  /**
+   * Video-Szene: Quell-Position (Sekunden), an der das Video steht bzw.
+   * beim nächsten Play fortsetzt. Default: trimStartMs des Segments.
+   */
+  mediaStartSec?: number;
+  /**
+   * Video-Szene: Play/Pause-Meldung an den Host (inkl. aktueller
+   * Quell-Position in Sekunden). Ohne Callback ist das Video gesperrt.
+   */
+  onMediaPlayback?: (playing: boolean, timeSec: number) => void;
+  /**
+   * Video-Szene: bei Erhöhung pausiert das Video und springt zurück auf
+   * `mediaStartSec` (Aufnahme-Start: Standby → Countdown).
+   */
+  mediaResetNonce?: number;
   className?: string;
 }
 
@@ -81,6 +97,9 @@ export function StudioStage({
   scrollRatio,
   onScrollRatio,
   showStaticBadge = false,
+  mediaStartSec,
+  onMediaPlayback,
+  mediaResetNonce = 0,
   className,
 }: StudioStageProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -204,6 +223,32 @@ export function StudioStage({
     );
   } else if (segment.kind === "text") {
     content = <PreviewSegmentRender segment={segment} segmentTimeMs={0} />;
+  } else if (segment.kind === "image" && segment.publicUrl) {
+    // Bild-Szene: contain auf dunklem Grund — identisch zum Worker-Render
+    // (MEDIA_STAGE_BG, media-segment-render.ts).
+    content = (
+      <div
+        className="absolute inset-0"
+        style={{ backgroundColor: MEDIA_STAGE_BG }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={segment.publicUrl}
+          alt=""
+          draggable={false}
+          className="size-full select-none object-contain"
+        />
+      </div>
+    );
+  } else if (segment.kind === "video" && segment.publicUrl) {
+    content = (
+      <StageVideo
+        url={segment.publicUrl}
+        startSec={mediaStartSec ?? segment.trimStartMs / 1000}
+        resetNonce={mediaResetNonce}
+        onPlayback={onMediaPlayback}
+      />
+    );
   } else {
     content = (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface-soft text-ink-muted">
@@ -238,6 +283,180 @@ export function StudioStage({
         <span className="absolute left-3 top-3 z-20 rounded-full bg-ink/70 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">
           Standbild
         </span>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Video-Szene                                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * StageVideo — Video-Szene mit eigenem großen Play/Pause-Overlay (keine
+ * nativen Controls). Contain auf MEDIA_STAGE_BG, exakt wie der spätere
+ * Worker-Render. Der Host bekommt jede Play/Pause-Aktion inkl. aktueller
+ * Quell-Position gemeldet (Live-Phase loggt daraus mediaPlay/mediaPause);
+ * beim Unmount (Szenenwechsel) wird automatisch pausiert + gemeldet.
+ *
+ * Der Play-Button liegt auf z-20 ÜBER dem Klick-Schutz der Bühne (z-10).
+ * Während der Wiedergabe blendet er aus und erscheint beim Hover wieder.
+ */
+function StageVideo({
+  url,
+  startSec,
+  resetNonce,
+  onPlayback,
+}: {
+  url: string;
+  startSec: number;
+  resetNonce: number;
+  onPlayback?: (playing: boolean, timeSec: number) => void;
+}) {
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
+  const [playing, setPlaying] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
+  /** Erzwingt frisches Laden nach „Erneut versuchen". */
+  const [loadNonce, setLoadNonce] = React.useState(0);
+
+  // Bunny-Stream-HLS → progressive MP4 (480p existiert für jedes Video).
+  const src = React.useMemo(() => pickBunnyMp4Fallback(url), [url]);
+
+  const startSecRef = React.useRef(startSec);
+  React.useEffect(() => {
+    startSecRef.current = startSec;
+  }, [startSec]);
+  const onPlaybackRef = React.useRef(onPlayback);
+  React.useEffect(() => {
+    onPlaybackRef.current = onPlayback;
+  }, [onPlayback]);
+  const playingRef = React.useRef(false);
+  React.useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
+
+  // Initial (und nach Retry) auf die Fortsetzungsposition springen —
+  // das ist zugleich das Poster-Standbild.
+  React.useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const seek = () => {
+      if (startSecRef.current > 0) v.currentTime = startSecRef.current;
+    };
+    if (v.readyState >= 1) seek();
+    else v.addEventListener("loadedmetadata", seek, { once: true });
+    return () => v.removeEventListener("loadedmetadata", seek);
+  }, [loadNonce]);
+
+  // Aufnahme-Start (Standby → Countdown): pausieren + zurückspulen.
+  const mountedNonceRef = React.useRef(resetNonce);
+  React.useEffect(() => {
+    if (resetNonce === mountedNonceRef.current) return;
+    mountedNonceRef.current = resetNonce;
+    const v = videoRef.current;
+    if (!v) return;
+    v.pause();
+    v.currentTime = startSecRef.current;
+    setPlaying(false);
+  }, [resetNonce]);
+
+  // Unmount (Szenenwechsel/Phasenwechsel): laufende Wiedergabe pausiert
+  // implizit → dem Host melden, damit Position + mediaPause-Event stimmen.
+  React.useEffect(() => {
+    return () => {
+      const v = videoRef.current;
+      if (v && playingRef.current) {
+        v.pause();
+        onPlaybackRef.current?.(false, v.currentTime);
+      }
+    };
+  }, []);
+
+  const toggle = React.useCallback(() => {
+    const v = videoRef.current;
+    if (!v || !onPlaybackRef.current) return;
+    if (v.paused) {
+      void v
+        .play()
+        .then(() => {
+          setPlaying(true);
+          onPlaybackRef.current?.(true, v.currentTime);
+        })
+        .catch(() => setFailed(true));
+    } else {
+      v.pause();
+      setPlaying(false);
+      onPlaybackRef.current?.(false, v.currentTime);
+    }
+  }, []);
+
+  const handleEnded = React.useCallback(() => {
+    const v = videoRef.current;
+    setPlaying(false);
+    onPlaybackRef.current?.(false, v ? v.currentTime : 0);
+  }, []);
+
+  const retry = React.useCallback(() => {
+    setFailed(false);
+    setPlaying(false);
+    setLoadNonce((n) => n + 1);
+    videoRef.current?.load();
+  }, []);
+
+  const locked = !onPlayback;
+
+  return (
+    <div
+      className="group absolute inset-0"
+      style={{ backgroundColor: MEDIA_STAGE_BG }}
+    >
+      <video
+        key={loadNonce}
+        ref={videoRef}
+        src={src}
+        playsInline
+        preload="metadata"
+        onEnded={handleEnded}
+        onError={() => setFailed(true)}
+        className="size-full object-contain"
+      />
+
+      {failed ? (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/50 text-white">
+          <AlertCircle className="size-6" />
+          <p className="max-w-xs text-center text-xs leading-relaxed">
+            Das Video konnte nicht geladen werden. Direkt nach dem Hochladen
+            kann die Aufbereitung noch einen Moment dauern.
+          </p>
+          <button
+            type="button"
+            onClick={retry}
+            className="flex items-center gap-1.5 rounded-full bg-white/90 px-4 py-1.5 text-xs font-semibold text-ink shadow-card transition-colors hover:bg-white"
+          >
+            <RotateCcw className="size-3.5" />
+            Erneut versuchen
+          </button>
+        </div>
+      ) : (
+        !locked && (
+          <button
+            type="button"
+            aria-label={playing ? "Video pausieren" : "Video abspielen"}
+            onClick={toggle}
+            className={cn(
+              "absolute left-1/2 top-1/2 z-20 flex size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink shadow-lift backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:bg-white",
+              playing
+                ? "opacity-0 group-hover:opacity-100"
+                : "opacity-100",
+            )}
+          >
+            {playing ? (
+              <Pause className="size-6 fill-current" />
+            ) : (
+              <Play className="size-6 translate-x-0.5 fill-current" />
+            )}
+          </button>
+        )
       )}
     </div>
   );

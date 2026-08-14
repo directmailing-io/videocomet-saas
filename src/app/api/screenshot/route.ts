@@ -76,7 +76,8 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     return NextResponse.json(
       {
-        error: "Konnte Job nicht initialisieren.",
+        error:
+          "Die Vorschau konnte nicht gestartet werden. Bitte versuche es gleich noch einmal.",
         details: err instanceof Error ? err.message : null,
       },
       { status: 500 },

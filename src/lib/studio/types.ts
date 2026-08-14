@@ -48,7 +48,31 @@ export interface StudioScrollEvent {
   y: number;
 }
 
-export type StudioEvent = StudioTabSwitchEvent | StudioScrollEvent;
+/**
+ * Nutzer startet die Wiedergabe einer Video-Szene (Klick auf Play).
+ * Die Wiedergabe läuft, bis ein `mediaPause` für dieselbe Szene kommt,
+ * die Szene gewechselt wird (implizite Pause) oder die Aufnahme endet.
+ */
+export interface StudioMediaPlayEvent {
+  /** ms seit MediaRecorder.onstart. */
+  t: number;
+  type: "mediaPlay";
+  tabId: string;
+}
+
+/** Nutzer pausiert die Wiedergabe einer Video-Szene. */
+export interface StudioMediaPauseEvent {
+  /** ms seit MediaRecorder.onstart. */
+  t: number;
+  type: "mediaPause";
+  tabId: string;
+}
+
+export type StudioEvent =
+  | StudioTabSwitchEvent
+  | StudioScrollEvent
+  | StudioMediaPlayEvent
+  | StudioMediaPauseEvent;
 
 /** Ein aus der Aufnahme abgeleitetes Segment inkl. Review-Metadaten. */
 export interface DerivedStudioSegment {

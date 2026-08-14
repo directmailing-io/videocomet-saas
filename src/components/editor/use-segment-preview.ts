@@ -14,6 +14,7 @@
  */
 
 import * as React from "react";
+import { friendlyScreenshotError } from "@/lib/screenshot-error-text";
 
 /**
  * Vereinigtes Ergebnis beider Screenshot-Flows. Die API liefert je nach
@@ -134,7 +135,9 @@ async function runScreenshotJob(url: string): Promise<SegmentPreviewData> {
       return result;
     }
     if (data.status === "failed") {
-      throw new Error(data.error || "Vorschau-Erzeugung fehlgeschlagen.");
+      // Worker-Fehler sind rohe Puppeteer-/Netzwerk-Meldungen — für die
+      // UI in Laien-Deutsch übersetzen.
+      throw new Error(friendlyScreenshotError(data.error));
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }

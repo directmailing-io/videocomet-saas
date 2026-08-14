@@ -189,7 +189,7 @@ const STEP_META: StepMeta[] = [
   {
     label: "Webcam",
     title: "Wie möchtest du dein Video erstellen?",
-    desc: "Neu aufnehmen im VIDEOCOMET Studio — oder ein fertiges Video im klassischen Editor verwenden.",
+    desc: "Nimm es neu auf oder verwende ein fertiges Video.",
   },
   {
     label: "KI-Begrüßung",

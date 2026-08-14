@@ -91,6 +91,27 @@ export interface ImageSegment extends SegmentBase {
   heightPct: number;
 }
 
+/**
+ * Wiedergabe-Fenster eines Video-Segments (Studio-Modus).
+ *
+ * Zeiten sind RELATIV zum Segment-Start in ms. Semantik:
+ *   - Außerhalb der Fenster steht das Video als Standbild (Poster = Frame
+ *     bei `trimStartMs`, nach einem Fenster = eingefrorener letzter Frame).
+ *   - Innerhalb eines Fensters läuft das Video ab der aufsummierten bereits
+ *     abgespielten Stelle weiter (Quell-Startpunkt des ersten Fensters =
+ *     `trimStartMs`; jedes weitere Fenster setzt dort fort, wo das vorige
+ *     endete). Ein Szenenwechsel pausiert implizit — offene Fenster enden
+ *     deshalb spätestens bei `durationMs`.
+ *   - Der Original-Ton des Videos läuft GENAU in den Fenstern mit und wird
+ *     im Worker mit der Webcam-Stimme gemischt.
+ */
+export interface VideoPlaybackWindow {
+  /** Wiedergabe-Start relativ zum Segment-Start in ms. */
+  startMs: number;
+  /** Wiedergabe-Stopp relativ zum Segment-Start in ms (> startMs). */
+  stopMs: number;
+}
+
 export interface VideoSegment extends SegmentBase {
   kind: "video";
   mediaId: string | null;
@@ -106,7 +127,20 @@ export interface VideoSegment extends SegmentBase {
   showAsBrowserFrame: boolean;
   browserTabName: string;
   browserTabUrl: string;
+  /**
+   * Studio-Modus: Wiedergabe-Fenster aus den mediaPlay/mediaPause-Events
+   * der Live-Aufnahme (siehe `VideoPlaybackWindow`). undefined/leer =
+   * Poster-Standbild über die gesamte Segmentdauer.
+   */
+  playbackWindows?: VideoPlaybackWindow[];
 }
+
+/**
+ * Hintergrundfarbe der Bühne für Bild-/Video-Szenen (contain auf dunklem
+ * Grund). MUSS zwischen Studio-Stage (CSS) und Worker-Render (sharp/ffmpeg)
+ * identisch sein, damit Vorschau und fertiges Video übereinstimmen.
+ */
+export const MEDIA_STAGE_BG = "#101014";
 
 export interface WebsiteSegment extends SegmentBase {
   kind: "website";

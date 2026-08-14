@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ScrollFrame, Segment } from "@/lib/segments/types";
+import { friendlyScreenshotError } from "@/lib/screenshot-error-text";
 import { segmentStartMs } from "@/lib/segments/timeline";
 import { WebcamMonitor } from "./webcam-monitor";
 
@@ -351,7 +352,7 @@ export function ScrollRecorderModal({
         if (data.status === "failed") {
           setPhase({
             kind: "failed",
-            message: data.error || "Vorschau-Erzeugung fehlgeschlagen.",
+            message: friendlyScreenshotError(data.error),
           });
           return;
         }

@@ -3,15 +3,31 @@
  * Export-Vertrags von studio-flow.tsx).
  */
 
-import type { Segment } from "@/lib/segments/types";
+import type {
+  ImageSegment,
+  Segment,
+  VideoSegment,
+} from "@/lib/segments/types";
+import {
+  createImageSegment,
+  createVideoSegment,
+} from "@/lib/segments/defaults";
 import type { StudioEvent, StudioTab } from "@/lib/studio/types";
 
 /**
  * Szenen-Typen, die im Studio angelegt werden können.
  * "website" = personalisiert pro Empfänger, "ownsite" = feste Webseite für
- * alle (WebsiteSegment mit personalized === false).
+ * alle (WebsiteSegment mit personalized === false). "image"/"video" =
+ * hochgeladene Medien (für alle Empfänger gleich).
  */
-export type StudioSceneKind = "website" | "ownsite" | "gdocs" | "pdf" | "text";
+export type StudioSceneKind =
+  | "website"
+  | "ownsite"
+  | "gdocs"
+  | "pdf"
+  | "text"
+  | "image"
+  | "video";
 
 /** Ergebnis einer beendeten Live-Aufnahme (vor dem Upload). */
 export interface StudioRecording {
@@ -33,6 +49,7 @@ export function sceneKindOf(tab: StudioTab): StudioSceneKind | null {
   }
   const k = seg.kind;
   if (k === "gdocs" || k === "pdf" || k === "text") return k;
+  if (k === "image" || k === "video") return k;
   return null;
 }
 
@@ -51,6 +68,10 @@ export function isTabReady(tab: StudioTab): boolean {
       return seg.pageUrls.length > 0;
     case "text":
       return true;
+    case "image":
+    case "video":
+      // Entstehen erst NACH dem Upload → publicUrl liegt sofort vor.
+      return !!seg.publicUrl;
     default:
       return false;
   }
@@ -66,6 +87,10 @@ export function tabImageUrls(tab: StudioTab): string[] {
       return seg.previewPageUrls ?? [];
     case "pdf":
       return seg.pageUrls;
+    case "image":
+      return seg.publicUrl ? [seg.publicUrl] : [];
+    // "video": das Poster ist ein Video-Frame (kein Bild-Asset) — das
+    // <video preload>-Element der Stage übernimmt das Vorladen selbst.
     default:
       return [];
   }
@@ -90,6 +115,10 @@ export function tabLabel(tab: StudioTab): string {
       return seg.fileName || "PDF";
     case "text":
       return "Text-Folie";
+    case "image":
+      return "Bild";
+    case "video":
+      return "Video";
     default:
       return "Szene";
   }
@@ -220,6 +249,118 @@ export function uploadStudioRecording(
     };
     xhr.send(form);
   });
+}
+
+/** Erlaubte Datei-Typen pro Medien-Szene (muss zu src/lib/upload.ts passen). */
+export const STUDIO_MEDIA_ACCEPT: Record<"image" | "video", string> = {
+  image: "image/jpeg,image/png,image/svg+xml",
+  video: "video/mp4,video/webm,video/quicktime",
+};
+
+/**
+ * Upload einer Bild-/Video-Datei zu POST /api/media — gleiches XHR-Muster
+ * wie `uploadStudioRecording`, aber mit medienspezifischen Fehlertexten.
+ */
+export function uploadStudioMediaFile(
+  file: File,
+  kind: "image" | "video",
+  onProgress: (pct: number) => void,
+): Promise<StudioUploadedMedia> {
+  return new Promise((resolve, reject) => {
+    const noun = kind === "image" ? "Das Bild" : "Das Video";
+
+    const form = new FormData();
+    form.append("file", file);
+    form.append("kind", kind);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/media");
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+    xhr.onerror = () =>
+      reject(
+        new Error(
+          "Keine Verbindung zum Server. Prüfe dein Internet und versuche es erneut.",
+        ),
+      );
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        let msg =
+          xhr.status === 413
+            ? `${noun} ist zu groß zum Hochladen. Bitte wähle eine kleinere Datei.`
+            : `${noun} konnte nicht hochgeladen werden (Fehler ${xhr.status}). Bitte versuche es erneut.`;
+        try {
+          const j = JSON.parse(xhr.responseText) as { error?: string };
+          if (j.error) msg = j.error;
+        } catch {
+          /* ignore */
+        }
+        return reject(new Error(msg));
+      }
+      try {
+        const j = JSON.parse(xhr.responseText) as {
+          media: {
+            id: string;
+            name: string;
+            publicUrl: string;
+            durationSec: number | null;
+          };
+        };
+        resolve({
+          id: j.media.id,
+          name: j.media.name,
+          publicUrl: j.media.publicUrl,
+          durationSec: j.media.durationSec ?? null,
+        });
+      } catch (e) {
+        reject(
+          e instanceof Error
+            ? e
+            : new Error("Antwort konnte nicht gelesen werden."),
+        );
+      }
+    };
+    xhr.send(form);
+  });
+}
+
+/** Dateiname ohne Endung (für Szenen-Labels). */
+function stripExtension(name: string): string {
+  const i = name.lastIndexOf(".");
+  return i > 0 ? name.slice(0, i) : name;
+}
+
+/**
+ * Bild-Szene nach erfolgreichem Upload: Vollbild (contain rendert der
+ * Worker/Stage auf MEDIA_STAGE_BG — siehe Segment-Typen).
+ */
+export function createStudioImageSegment(
+  media: StudioUploadedMedia,
+): ImageSegment {
+  const seg = createImageSegment({ label: stripExtension(media.name) });
+  seg.mediaId = media.id;
+  seg.publicUrl = media.publicUrl;
+  seg.displayMode = "fullscreen";
+  return seg;
+}
+
+/**
+ * Video-Szene nach erfolgreichem Upload: kein Browser-Frame, contain auf
+ * dunklem Grund; Wiedergabefenster entstehen erst aus der Live-Aufnahme.
+ */
+export function createStudioVideoSegment(
+  media: StudioUploadedMedia,
+): VideoSegment {
+  const seg = createVideoSegment({ label: stripExtension(media.name) });
+  seg.mediaId = media.id;
+  seg.publicUrl = media.publicUrl;
+  seg.originalDurationSec = media.durationSec;
+  seg.showAsBrowserFrame = false;
+  return seg;
 }
 
 /** Anzahl clamp-en (Hilfsfunktion für Scroll-Ratios). */

@@ -43,7 +43,9 @@ export function StudioWordmark({
           fontSize,
           lineHeight: 1,
           letterSpacing: "-0.02em",
-          color: "#1d1d1b",
+          // Brand-Violett (tailwind `brand.deep`): genug Kontrast auf Weiß
+          // (#fff) und Lavendel-Canvas, hebt „Studio" als Sub-Brand ab.
+          color: "#7c5ce8",
         }}
       >
         Studio

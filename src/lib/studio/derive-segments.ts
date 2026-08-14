@@ -13,9 +13,20 @@
  * - ScrollFrames pro Segment sind auf den Segment-Start renormiert und
  *   beginnen immer bei t=0 (Format identisch zum bestehenden
  *   Scroll-Recorder → `buildScrollPlanFromFrames` im Worker unverändert).
+ * - Video-Szenen: `mediaPlay`/`mediaPause`-Events werden pro Segment zu
+ *   `playbackWindows` (relativ zum Segment-Start). Jedes Segment startet
+ *   pausiert (Szenenwechsel pausiert implizit); ein am Segment-Ende noch
+ *   offenes Fenster wird dort geschlossen. Die bereits abgespielte Zeit
+ *   wird pro Szene über die Timeline akkumuliert und beim nächsten Besuch
+ *   in `trimStartMs` eingebrannt — der Worker rendert Segmente unabhängig
+ *   und setzt die Wiedergabe so exakt an der gemerkten Stelle fort.
  */
 
-import type { ScrollFrame, Segment } from "@/lib/segments/types";
+import type {
+  ScrollFrame,
+  Segment,
+  VideoPlaybackWindow,
+} from "@/lib/segments/types";
 import {
   isScrollableStudioSegment,
   type DerivedStudioSegment,
@@ -87,6 +98,8 @@ export function deriveStudioSegments(
   const endMs = scale === 1 ? recorded : totalMs;
 
   const lastY = new Map<string, number>();
+  /** Pro Video-Szene: bereits abgespielte Quell-Zeit (ms) über alle Besuche. */
+  const playedMs = new Map<string, number>();
   const result: DerivedStudioSegment[] = [];
   let cursor = 0;
 
@@ -123,6 +136,44 @@ export function deriveStudioSegments(
       } else {
         segment.captureMode = "static-hero";
         delete segment.scrollFrames;
+      }
+    }
+
+    if (segment.kind === "video") {
+      // Play/Pause-Events dieses Intervalls → Wiedergabefenster relativ
+      // zum Segment-Start. Jedes Segment startet pausiert.
+      const windows: VideoPlaybackWindow[] = [];
+      let openAt: number | null = null;
+      for (const e of sorted) {
+        if (e.tabId !== tab.id) continue;
+        if (e.type !== "mediaPlay" && e.type !== "mediaPause") continue;
+        const t = Math.round(e.t * scale);
+        if (t < start || t >= rawEnd) continue;
+        const rel = Math.min(t - start, durationMs);
+        if (e.type === "mediaPlay") {
+          // Doppelte Play-Events ignorieren; Play exakt am Segment-Ende
+          // (negativer lastAdjust) hätte keine Wirkung mehr.
+          if (openAt === null && rel < durationMs) openAt = rel;
+        } else if (openAt !== null) {
+          if (rel > openAt) windows.push({ startMs: openAt, stopMs: rel });
+          openAt = null;
+        }
+      }
+      if (openAt !== null && durationMs > openAt) {
+        windows.push({ startMs: openAt, stopMs: durationMs });
+      }
+
+      const playedBefore = playedMs.get(tab.id) ?? 0;
+      segment.trimStartMs = (segment.trimStartMs ?? 0) + playedBefore;
+      if (windows.length > 0) {
+        segment.playbackWindows = windows;
+        playedMs.set(
+          tab.id,
+          playedBefore +
+            windows.reduce((sum, w) => sum + (w.stopMs - w.startMs), 0),
+        );
+      } else {
+        delete segment.playbackWindows;
       }
     }
 
@@ -171,6 +222,18 @@ export function removeDerivedSegment(
       receiver.segment.scrollFrames = receiver.segment.scrollFrames.map(
         (f) => ({ t: f.t + removedMs, y: f.y }),
       );
+    }
+    // Video-Wiedergabefenster bleiben synchron zur Webcam → ebenfalls
+    // nach hinten schieben (vorn entsteht Standbild).
+    if (
+      receiver.segment.kind === "video" &&
+      receiver.segment.playbackWindows
+    ) {
+      receiver.segment.playbackWindows =
+        receiver.segment.playbackWindows.map((w) => ({
+          startMs: w.startMs + removedMs,
+          stopMs: w.stopMs + removedMs,
+        }));
     }
   }
   receiver.segment.durationMs += removedMs;

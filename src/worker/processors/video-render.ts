@@ -24,6 +24,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  addSilentAudioTrack,
   composePip,
   concatClips,
   generateBlackClip,
@@ -205,7 +206,12 @@ export interface VideoRenderOutput {
   durationSec: number;
 }
 
-async function fetchToFile(url: string, outPath: string): Promise<void> {
+/**
+ * Lädt eine Media-URL auf Disk. Exportiert für media-segment-render.ts
+ * (Studio-Bild/Video-Segmente) — die Bunny-Stream-HLS-Auflösung (beste
+ * MP4-Variante statt playlist.m3u8) soll es nur einmal geben.
+ */
+export async function fetchToFile(url: string, outPath: string): Promise<void> {
   if (url.startsWith("file://")) {
     return; // Already on local disk; caller handles this branch.
   }
@@ -572,6 +578,12 @@ export async function runVideoRender(
     });
   }
 
+  // Studio-Video-Segmente mit Wiedergabefenstern bringen Original-Ton auf
+  // der Base-Spur mit → beide Tonspuren mischen statt nur Webcam-Audio.
+  const mixBaseAudio = (input.segments ?? []).some(
+    (s) => s.kind === "video" && (s.playbackWindows?.length ?? 0) > 0,
+  );
+
   await composePip({
     basePath,
     webcamPath: webcamLocal,
@@ -579,6 +591,7 @@ export async function runVideoRender(
     position: input.pip?.position ?? "right",
     shape: input.pip?.shape ?? "rounded",
     durationSec: duration,
+    mixBaseAudio,
   });
 
   // Final-Trim als Safety-Net: auch wenn composePip's -t schon greift,
@@ -862,10 +875,49 @@ async function renderSegmentsBase(opts: {
             outputPath: partPath,
           });
         }
+      } else if (seg.kind === "image") {
+        // Bild-Segment (Studio): statisches Bild, contain auf dunklem
+        // Bühnen-Grund — für alle Leads identisch, prozessweit gecached.
+        if (!seg.publicUrl?.trim()) {
+          await generateBlackClip({
+            outputPath: partPath,
+            durationSec: durationMs / 1000,
+          });
+        } else {
+          const { renderImageSegment } = await import(
+            "../lib/media-segment-render"
+          );
+          await renderImageSegment({
+            segment: seg,
+            durationMs,
+            outputDir: join(opts.outDir, `img-${i}`),
+            outputPath: partPath,
+          });
+        }
+      } else if (seg.kind === "video") {
+        // Video-Segment (Studio): Poster-Standbild + Play-Abschnitte exakt
+        // in den Wiedergabefenstern (playbackWindows) inkl. Original-Ton.
+        // Ohne Fenster: Poster-Still über die gesamte Segmentdauer.
+        if (!seg.publicUrl?.trim()) {
+          await generateBlackClip({
+            outputPath: partPath,
+            durationSec: durationMs / 1000,
+          });
+        } else {
+          const { renderVideoSegment } = await import(
+            "../lib/media-segment-render"
+          );
+          await renderVideoSegment({
+            segment: seg,
+            durationMs,
+            outputDir: join(opts.outDir, `vid-${i}`),
+            outputPath: partPath,
+          });
+        }
       } else {
-        // image / video not yet rendered in v1 — black clip placeholder.
+        // Unbekannter Segment-Typ — black clip placeholder.
         console.warn(
-          `[render] segment kind=${seg.kind} not yet supported in v1 — using placeholder`,
+          `[render] segment kind=${(seg as Segment).kind} not supported — using placeholder`,
         );
         await generateBlackClip({
           outputPath: partPath,
@@ -883,6 +935,33 @@ async function renderSegmentsBase(opts: {
         durationSec: durationMs / 1000,
       });
       parts.push(partPath);
+    }
+  }
+
+  // Wenn ein Studio-Video-Segment Original-Ton mitbringt (mixBaseAudio in
+  // composePip), muss die Base-Audio-Timeline exakt sein: der concat-Demuxer
+  // (`-c copy`) braucht dafür in JEDEM Teil eine Audio-Spur — Website-/
+  // GDocs-Clips aus imageSeqToMp4 haben keine → stille AAC-Spur nachrüsten.
+  const needsBaseAudio = opts.segments.some(
+    (s) => s.kind === "video" && (s.playbackWindows?.length ?? 0) > 0,
+  );
+  if (needsBaseAudio && parts.length > 1) {
+    const { probeHasAudioStream } = await import("../../lib/ffprobe");
+    for (let i = 0; i < parts.length; i++) {
+      if (await probeHasAudioStream(parts[i])) continue;
+      const fixedPath = parts[i].replace(/\.mp4$/, "-audio.mp4");
+      try {
+        await addSilentAudioTrack({
+          inputPath: parts[i],
+          outputPath: fixedPath,
+        });
+        parts[i] = fixedPath;
+      } catch (e) {
+        console.warn(
+          `[render] silent-audio remux failed for part ${i} — base audio may drift:`,
+          e instanceof Error ? e.message : e,
+        );
+      }
     }
   }
 

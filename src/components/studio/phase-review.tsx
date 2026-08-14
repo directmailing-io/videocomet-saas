@@ -221,7 +221,7 @@ export function PhaseReview({
               </div>
               <p className="px-2 text-xs text-ink-muted">
                 Schau dir deine Aufnahme an. Verdächtig kurze Szenen kannst du
-                rechts entfernen — dein Video bleibt dabei ungeschnitten.
+                rechts entfernen. Dein Video bleibt dabei ungeschnitten.
               </p>
             </div>
 
@@ -232,7 +232,7 @@ export function PhaseReview({
               </h2>
               {derived.length === 0 && (
                 <p className="rounded-squircle-md bg-surface-soft px-3 py-3 text-xs leading-relaxed text-ink-muted">
-                  Aus dieser Aufnahme konnten keine Szenen abgeleitet werden —
+                  Aus dieser Aufnahme konnten keine Szenen abgeleitet werden,
                   vermutlich war sie zu kurz. Klicke unten links auf „Neu
                   aufnehmen" und versuche es noch einmal.
                 </p>
@@ -285,7 +285,7 @@ export function PhaseReview({
               })}
               <p className="px-1 text-[10px] leading-snug text-ink-muted">
                 Entfernst du eine Szene, übernimmt die vorherige Szene deren
-                Zeit — Bild und Ton bleiben synchron.
+                Zeit. Bild und Ton bleiben synchron.
               </p>
             </div>
           </>

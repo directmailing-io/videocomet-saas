@@ -29,6 +29,10 @@ export interface UseStudioRecorderResult {
   logTabSwitch: (tabId: string) => void;
   /** Aktuelle Scroll-Position melden (wird 50-ms-gesampelt). */
   noteScroll: (tabId: string, y: number) => void;
+  /** Video-Szene: Play geloggt (nur während laufender Aufnahme wirksam). */
+  logMediaPlay: (tabId: string) => void;
+  /** Video-Szene: Pause geloggt (nur während laufender Aufnahme wirksam). */
+  logMediaPause: (tabId: string) => void;
 }
 
 export function useStudioRecorder(
@@ -194,6 +198,26 @@ export function useStudioRecorder(
     pendingScrollRef.current = { tabId, y };
   }, []);
 
+  const logMediaPlay = React.useCallback((tabId: string) => {
+    const t0 = t0Ref.current;
+    if (t0 === null) return;
+    eventsRef.current.push({
+      t: performance.now() - t0,
+      type: "mediaPlay",
+      tabId,
+    });
+  }, []);
+
+  const logMediaPause = React.useCallback((tabId: string) => {
+    const t0 = t0Ref.current;
+    if (t0 === null) return;
+    eventsRef.current.push({
+      t: performance.now() - t0,
+      type: "mediaPause",
+      tabId,
+    });
+  }, []);
+
   // Cleanup beim Unmount: Recorder hart stoppen, Ergebnis verwerfen.
   React.useEffect(() => {
     disposedRef.current = false;
@@ -216,7 +240,25 @@ export function useStudioRecorder(
   // Ergebnis — ein neues Objekt pro Render würde z. B. den Countdown-Effekt
   // bei jedem Tick zurücksetzen (Countdown käme nie bei 0 an).
   return React.useMemo(
-    () => ({ recording, error, start, stop, logTabSwitch, noteScroll }),
-    [recording, error, start, stop, logTabSwitch, noteScroll],
+    () => ({
+      recording,
+      error,
+      start,
+      stop,
+      logTabSwitch,
+      noteScroll,
+      logMediaPlay,
+      logMediaPause,
+    }),
+    [
+      recording,
+      error,
+      start,
+      stop,
+      logTabSwitch,
+      noteScroll,
+      logMediaPlay,
+      logMediaPause,
+    ],
   );
 }

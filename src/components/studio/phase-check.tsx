@@ -18,7 +18,6 @@ import {
   ArrowRight,
   Loader2,
   Mic,
-  Sparkles,
   Video,
   X,
 } from "lucide-react";
@@ -301,31 +300,9 @@ export function PhaseCheck({
             </div>
           </section>
 
-          <section className="rounded-squircle-lg bg-surface p-3 shadow-card">
-            <h2 className="mb-1 px-1 text-xs font-bold uppercase tracking-wide text-ink-muted">
-              So läuft die Aufnahme
-            </h2>
-            <ul className="flex flex-col gap-1.5 px-1 text-[11px] leading-snug text-ink-muted">
-              <li>· Oben wechselst du live zwischen deinen Szenen-Tabs.</li>
-              <li>· Auf der Bühne kannst du scrollen — genau das sieht dein Empfänger.</li>
-              <li>· Zum Beenden klickst du auf „Aufnahme beenden".</li>
-            </ul>
-          </section>
-
-          {/* Hinweis zur persönlichen KI-Begrüßung */}
-          <section className="rounded-squircle-lg border border-brand/30 bg-brand-soft p-3 shadow-card">
-            <h2 className="mb-1 flex items-center gap-1.5 px-1 text-xs font-bold uppercase tracking-wide text-brand-deep">
-              <Sparkles className="size-3.5" />
-              Tipp: KI-Begrüßung
-            </h2>
-            <p className="px-1 text-[11px] leading-snug text-ink-muted">
-              Später kannst du die persönliche KI-Begrüßung mit dem Vornamen
-              des Empfängers aktivieren. Damit das klappt: Beginne deine
-              Aufnahme mit einer kurzen Anrede („Hi!") und mach danach 1–2
-              Sekunden Pause — da wird später der Name eingesetzt.
-            </p>
-          </section>
-
+          {/* Ablauf-Bullets + KI-Begrüßungs-Tipp leben jetzt als wegklickbare
+           * Karte im Standby der Aufnahme-Ansicht (phase-live) — dort, wo
+           * sie gebraucht werden. */}
           {!preloadReady && (
             <p className="flex items-center gap-2 rounded-squircle-lg bg-surface px-3 py-2 text-[11px] text-ink-muted shadow-card">
               <Loader2 className="size-3.5 shrink-0 animate-spin" />

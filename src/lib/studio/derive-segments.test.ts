@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { Segment, TextSegment, WebsiteSegment } from "@/lib/segments/types";
+import type {
+  Segment,
+  TextSegment,
+  VideoSegment,
+  WebsiteSegment,
+} from "@/lib/segments/types";
 import {
   deriveStudioSegments,
   removeDerivedSegment,
@@ -29,6 +34,23 @@ function textSegment(id: string): TextSegment {
     textAlign: "center",
     fontWeight: "600",
     italic: false,
+  };
+}
+
+function videoSegment(id: string): VideoSegment {
+  return {
+    id,
+    kind: "video",
+    durationMs: 5000,
+    mediaId: "media-1",
+    publicUrl: "https://cdn.example.com/abc/playlist.m3u8",
+    originalDurationSec: 60,
+    trimStartMs: 0,
+    trimEndMs: null,
+    cropRatio: "16:9",
+    showAsBrowserFrame: false,
+    browserTabName: "",
+    browserTabUrl: "",
   };
 }
 
@@ -328,6 +350,165 @@ describe("deriveStudioSegments", () => {
   });
 });
 
+describe("deriveStudioSegments — Video-Wiedergabefenster", () => {
+  it("leitet Play/Pause-Paare als Fenster relativ zum Segment-Start ab", () => {
+    const tabs = [
+      tab("a", textSegment("seg-a")),
+      tab("v", videoSegment("seg-v")),
+    ];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "a" },
+      { t: 4000, type: "tabSwitch", tabId: "v" },
+      { t: 5000, type: "mediaPlay", tabId: "v" },
+      { t: 8000, type: "mediaPause", tabId: "v" },
+    ];
+    const out = deriveStudioSegments(tabs, events, 12_000);
+    const seg = out[1].segment as VideoSegment;
+    expect(seg.playbackWindows).toEqual([{ startMs: 1000, stopMs: 4000 }]);
+    expect(seg.trimStartMs).toBe(0);
+  });
+
+  it("schließt ein offenes Fenster am Segment-Ende (Szenenwechsel pausiert implizit)", () => {
+    const tabs = [
+      tab("v", videoSegment("seg-v")),
+      tab("b", textSegment("seg-b")),
+    ];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "v" },
+      { t: 2000, type: "mediaPlay", tabId: "v" },
+      { t: 6000, type: "tabSwitch", tabId: "b" },
+    ];
+    const out = deriveStudioSegments(tabs, events, 10_000);
+    const seg = out[0].segment as VideoSegment;
+    expect(seg.playbackWindows).toEqual([{ startMs: 2000, stopMs: 6000 }]);
+  });
+
+  it("schließt ein bis zum Aufnahme-Ende offenes Fenster bei durationMs", () => {
+    const tabs = [tab("v", videoSegment("seg-v"))];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "v" },
+      { t: 3000, type: "mediaPlay", tabId: "v" },
+    ];
+    const out = deriveStudioSegments(tabs, events, 9000);
+    const seg = out[0].segment as VideoSegment;
+    expect(seg.playbackWindows).toEqual([{ startMs: 3000, stopMs: 9000 }]);
+  });
+
+  it("unterstützt mehrere Fenster in einem Segment", () => {
+    const tabs = [tab("v", videoSegment("seg-v"))];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "v" },
+      { t: 1000, type: "mediaPlay", tabId: "v" },
+      { t: 3000, type: "mediaPause", tabId: "v" },
+      { t: 5000, type: "mediaPlay", tabId: "v" },
+      { t: 7000, type: "mediaPause", tabId: "v" },
+    ];
+    const out = deriveStudioSegments(tabs, events, 10_000);
+    const seg = out[0].segment as VideoSegment;
+    expect(seg.playbackWindows).toEqual([
+      { startMs: 1000, stopMs: 3000 },
+      { startMs: 5000, stopMs: 7000 },
+    ]);
+  });
+
+  it("akkumuliert die abgespielte Zeit über Besuche in trimStartMs", () => {
+    const draft = videoSegment("seg-v");
+    draft.trimStartMs = 500;
+    const tabs = [tab("v", draft), tab("b", textSegment("seg-b"))];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "v" },
+      { t: 1000, type: "mediaPlay", tabId: "v" },
+      { t: 4000, type: "mediaPause", tabId: "v" },
+      { t: 6000, type: "tabSwitch", tabId: "b" },
+      { t: 8000, type: "tabSwitch", tabId: "v" },
+      { t: 9000, type: "mediaPlay", tabId: "v" },
+    ];
+    const out = deriveStudioSegments(tabs, events, 12_000);
+    expect(out).toHaveLength(3);
+    const first = out[0].segment as VideoSegment;
+    const revisit = out[2].segment as VideoSegment;
+    // Erster Besuch: Basis-Trim bleibt, 3 s gespielt.
+    expect(first.trimStartMs).toBe(500);
+    expect(first.playbackWindows).toEqual([{ startMs: 1000, stopMs: 4000 }]);
+    // Zweiter Besuch: setzt bei 500 + 3000 ms im Quellvideo fort.
+    expect(revisit.trimStartMs).toBe(3500);
+    expect(revisit.playbackWindows).toEqual([{ startMs: 1000, stopMs: 4000 }]);
+  });
+
+  it("bleibt ohne Play-Events beim Poster-Standbild (keine Fenster)", () => {
+    const tabs = [tab("v", videoSegment("seg-v"))];
+    const events: StudioEvent[] = [{ t: 0, type: "tabSwitch", tabId: "v" }];
+    const out = deriveStudioSegments(tabs, events, 8000);
+    const seg = out[0].segment as VideoSegment;
+    expect(seg.playbackWindows).toBeUndefined();
+  });
+
+  it("ignoriert doppelte Play-Events und Pause ohne vorheriges Play", () => {
+    const tabs = [tab("v", videoSegment("seg-v"))];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "v" },
+      { t: 500, type: "mediaPause", tabId: "v" },
+      { t: 1000, type: "mediaPlay", tabId: "v" },
+      { t: 2000, type: "mediaPlay", tabId: "v" },
+      { t: 3000, type: "mediaPause", tabId: "v" },
+    ];
+    const out = deriveStudioSegments(tabs, events, 8000);
+    const seg = out[0].segment as VideoSegment;
+    expect(seg.playbackWindows).toEqual([{ startMs: 1000, stopMs: 3000 }]);
+  });
+
+  it("verwirft Null-Längen-Fenster (Play+Pause im selben Moment)", () => {
+    const tabs = [tab("v", videoSegment("seg-v"))];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "v" },
+      { t: 2000, type: "mediaPlay", tabId: "v" },
+      { t: 2000, type: "mediaPause", tabId: "v" },
+    ];
+    const out = deriveStudioSegments(tabs, events, 8000);
+    const seg = out[0].segment as VideoSegment;
+    expect(seg.playbackWindows).toBeUndefined();
+    expect(seg.trimStartMs).toBe(0);
+  });
+
+  it("skaliert Fenster-Zeiten proportional mit", () => {
+    const tabs = [tab("v", videoSegment("seg-v"))];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "v" },
+      { t: 2000, type: "mediaPlay", tabId: "v" },
+      { t: 4000, type: "mediaPause", tabId: "v" },
+    ];
+    const out = deriveStudioSegments(tabs, events, 10_000, { totalMs: 20_000 });
+    const seg = out[0].segment as VideoSegment;
+    expect(seg.durationMs).toBe(20_000);
+    expect(seg.playbackWindows).toEqual([{ startMs: 4000, stopMs: 8000 }]);
+  });
+
+  it("klemmt Fenster bei negativem lastAdjust auf das Segment-Ende", () => {
+    const tabs = [tab("v", videoSegment("seg-v"))];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "v" },
+      { t: 9900, type: "mediaPlay", tabId: "v" },
+    ];
+    // totalMs 9500 → lastAdjust -500 → durationMs 9500 < Play-Zeitpunkt 9900.
+    const out = deriveStudioSegments(tabs, events, 10_000, { totalMs: 9500 });
+    const seg = out[0].segment as VideoSegment;
+    expect(seg.durationMs).toBe(9500);
+    expect(seg.playbackWindows).toBeUndefined();
+  });
+
+  it("lässt Nicht-Video-Segmente von Media-Events unberührt", () => {
+    const tabs = [tab("a", websiteSegment("seg-a"))];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "a" },
+      { t: 1000, type: "mediaPlay", tabId: "a" },
+      { t: 2000, type: "mediaPause", tabId: "a" },
+    ];
+    const out = deriveStudioSegments(tabs, events, 8000);
+    const seg = out[0].segment;
+    expect("playbackWindows" in seg).toBe(false);
+  });
+});
+
 describe("removeDerivedSegment", () => {
   function derived(): ReturnType<typeof deriveStudioSegments> {
     const tabs = [
@@ -372,6 +553,25 @@ describe("removeDerivedSegment", () => {
       { t: 2000, y: 0 },
       { t: 3000, y: 1 },
     ]);
+  });
+
+  it("verschiebt beim ersten Segment auch Video-Wiedergabefenster nach hinten", () => {
+    const tabs = [
+      tab("a", textSegment("seg-a")),
+      tab("v", videoSegment("seg-v")),
+    ];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "a" },
+      { t: 2000, type: "tabSwitch", tabId: "v" },
+      { t: 3000, type: "mediaPlay", tabId: "v" },
+      { t: 5000, type: "mediaPause", tabId: "v" },
+    ];
+    const list = deriveStudioSegments(tabs, events, 10_000);
+    const out = removeDerivedSegment(list, 0);
+    expect(out).toHaveLength(1);
+    const seg = out[0].segment as VideoSegment;
+    expect(seg.durationMs).toBe(10_000);
+    expect(seg.playbackWindows).toEqual([{ startMs: 3000, stopMs: 5000 }]);
   });
 
   it("entflaggt den Empfänger, wenn er durch den Merge lang genug wird", () => {

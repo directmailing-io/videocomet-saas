@@ -22,10 +22,13 @@ import {
   FileText,
   Globe,
   Globe2,
+  Image as ImageIcon,
   Loader2,
+  PlaySquare,
   Plus,
   Presentation,
   ScrollText,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -33,6 +36,12 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { StudioTab } from "@/lib/studio/types";
 import type { PdfSegment, Segment, TextSegment } from "@/lib/segments/types";
+import { friendlyScreenshotError } from "@/lib/screenshot-error-text";
+import { normalizeUrlInput, urlInputError } from "@/lib/studio/url-input";
+import {
+  slugifyUrlColumn,
+  websiteSegmentMappingKey,
+} from "@/lib/placeholders/website-url";
 import {
   createGDocsSegment,
   createPdfSegment,
@@ -43,9 +52,13 @@ import { SceneKindIcon } from "./scene-icon";
 import { StudioWordmark } from "./studio-wordmark";
 import {
   clamp01,
+  createStudioImageSegment,
+  createStudioVideoSegment,
   sceneKindOf,
+  STUDIO_MEDIA_ACCEPT,
   tabLabel,
   tabThumbUrl,
+  uploadStudioMediaFile,
   type StudioSceneKind,
   type UpdateSegmentFn,
 } from "./internal";
@@ -62,14 +75,6 @@ export interface PhaseRegieProps {
   onScriptChange: (script: string) => void;
   onNext: () => void;
   onCancel: () => void;
-}
-
-/** URL normalisieren: https:// voranstellen, wenn kein Protokoll da ist. */
-function normalizeUrl(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) return "";
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
 }
 
 /** Host einer URL als Anzeigename (Fallback: die URL selbst). */
@@ -90,35 +95,54 @@ interface PdfUploadResponse {
   fileName: string;
 }
 
-const ADD_TILES: {
+interface AddTile {
   kind: StudioSceneKind;
   label: string;
   hint: string;
   icon: React.ReactNode;
-}[] = [
+}
+
+/** Inhalte, die sich automatisch an jeden Empfänger anpassen. */
+const PERSONALIZED_TILES: AddTile[] = [
   {
     kind: "website",
     label: "Website des Empfängers",
-    hint: "Wird im Video automatisch mit der Website des jeweiligen Empfängers gefüllt",
+    hint: "Zeigt automatisch die Website des jeweiligen Empfängers",
     icon: <Globe className="size-4" />,
-  },
-  {
-    kind: "ownsite",
-    label: "Eigene Webseite",
-    hint: "Eine feste Webseite, für alle Empfänger gleich — z. B. deine eigene",
-    icon: <Globe2 className="size-4" />,
   },
   {
     kind: "gdocs",
     label: "Google Docs",
-    hint: "Dokument-Vorlage mit Platzhaltern",
+    hint: "Dokument mit Platzhaltern, wird pro Empfänger ausgefüllt",
     icon: <FileText className="size-4" />,
+  },
+];
+
+/** Inhalte, die in jedem Video identisch sind. */
+const STATIC_TILES: AddTile[] = [
+  {
+    kind: "ownsite",
+    label: "Eigene Webseite",
+    hint: "Eine feste Webseite, zum Beispiel deine eigene",
+    icon: <Globe2 className="size-4" />,
   },
   {
     kind: "pdf",
     label: "Präsentation (Canva, PowerPoint)",
     hint: "Exportiere deine Folien als PDF und lade sie hier hoch",
     icon: <Presentation className="size-4" />,
+  },
+  {
+    kind: "image",
+    label: "Bild",
+    hint: "Ein Bild als eigene Szene zeigen",
+    icon: <ImageIcon className="size-4" />,
+  },
+  {
+    kind: "video",
+    label: "Video",
+    hint: "Startest du live per Klick, der Ton läuft mit",
+    icon: <PlaySquare className="size-4" />,
   },
 ];
 
@@ -144,9 +168,21 @@ export function PhaseRegie({
     "website" | "ownsite" | "gdocs" | null
   >(null);
   const [addUrl, setAddUrl] = React.useState("");
+  /** Name der weiteren Empfänger-Seite (z. B. „Karriereseite"). */
+  const [addPageName, setAddPageName] = React.useState("");
+  const [addFormError, setAddFormError] = React.useState<string | null>(null);
   const [pdfUploading, setPdfUploading] = React.useState(false);
   const [pdfError, setPdfError] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  /** Laufender Bild-/Video-Upload (null = keiner). */
+  const [mediaUploading, setMediaUploading] = React.useState<
+    "image" | "video" | null
+  >(null);
+  const [mediaProgress, setMediaProgress] = React.useState(0);
+  const [mediaError, setMediaError] = React.useState<string | null>(null);
+  const mediaInputRef = React.useRef<HTMLInputElement | null>(null);
+  /** Welcher Medien-Typ zuletzt geklickt wurde (bestimmt accept + kind). */
+  const mediaKindRef = React.useRef<"image" | "video">("image");
   /** Vorschau-Scrollposition pro Szene (nur für die Regie-Vorschau). */
   const previewRatioRef = React.useRef<Map<string, number>>(new Map());
   const [, forceRender] = React.useReducer((n: number) => n + 1, 0);
@@ -185,14 +221,55 @@ export function PhaseRegie({
     prevCountRef.current = tabs.length;
   }, [tabs]);
 
+  // Mapping-Keys aller bereits vorhandenen personalisierten Website-Szenen
+  // (erste Szene = Standard-Key "website"). Basis für den Guard: dieselbe
+  // Empfänger-Seite soll nicht doppelt eingebaut werden.
+  const personalizedWebsiteKeys = React.useMemo(() => {
+    const keys: string[] = [];
+    for (const t of tabs) {
+      const s = t.segment;
+      if (s.kind === "website" && s.personalized !== false) {
+        keys.push(websiteSegmentMappingKey(s));
+      }
+    }
+    return keys;
+  }, [tabs]);
+  const hasRecipientWebsite = personalizedWebsiteKeys.length > 0;
+
   const submitAddForm = () => {
-    const url = normalizeUrl(addUrl);
-    if (!url || !addForm) return;
+    if (!addForm) return;
+    const urlErr = urlInputError(addUrl);
+    if (urlErr) {
+      setAddFormError(urlErr);
+      return;
+    }
+    const url = normalizeUrlInput(addUrl);
     if (addForm === "website" || addForm === "ownsite") {
       const seg = createWebsiteSegment({ label: hostLabel(url) });
       seg.fallbackUrl = url;
       // "ownsite": feste Webseite für ALLE Empfänger (kein Mapping).
       if (addForm === "ownsite") seg.personalized = false;
+      if (addForm === "website" && hasRecipientWebsite) {
+        // Zweite Empfänger-Seite (z. B. Karriereseite): braucht einen
+        // eigenen Mapping-Key, der beim Versand einer Spalte der
+        // Empfängerliste zugeordnet wird.
+        const name = addPageName.trim();
+        const slug = slugifyUrlColumn(name);
+        if (!slug) {
+          setAddFormError(
+            "Bitte gib an, welche Seite des Empfängers gezeigt werden soll, zum Beispiel Karriereseite.",
+          );
+          return;
+        }
+        if (slug === "website" || personalizedWebsiteKeys.includes(slug)) {
+          setAddFormError(
+            "Diese Seite des Empfängers ist schon als Szene vorhanden. Wähle einen anderen Namen, zum Beispiel Karriereseite.",
+          );
+          return;
+        }
+        seg.urlColumn = slug;
+        seg.label = name;
+      }
       addScene(seg);
     } else {
       const seg = createGDocsSegment({ label: "Google Docs" });
@@ -200,18 +277,32 @@ export function PhaseRegie({
       addScene(seg);
     }
     setAddUrl("");
+    setAddPageName("");
+    setAddFormError(null);
     setAddForm(null);
   };
 
   const onTileClick = (kind: StudioSceneKind) => {
     setPdfError(null);
+    setMediaError(null);
+    setAddFormError(null);
     if (kind === "pdf") {
       fileInputRef.current?.click();
+      return;
+    }
+    if (kind === "image" || kind === "video") {
+      mediaKindRef.current = kind;
+      const input = mediaInputRef.current;
+      if (input) {
+        input.accept = STUDIO_MEDIA_ACCEPT[kind];
+        input.click();
+      }
       return;
     }
     if (kind === "website" || kind === "ownsite" || kind === "gdocs") {
       setAddForm((prev) => (prev === kind ? null : kind));
       setAddUrl("");
+      setAddPageName("");
     }
   };
 
@@ -254,6 +345,27 @@ export function PhaseRegie({
     }
   };
 
+  const onMediaFile = async (file: File) => {
+    const kind = mediaKindRef.current;
+    setMediaUploading(kind);
+    setMediaProgress(0);
+    setMediaError(null);
+    try {
+      const media = await uploadStudioMediaFile(file, kind, setMediaProgress);
+      addScene(
+        kind === "image"
+          ? createStudioImageSegment(media)
+          : createStudioVideoSegment(media),
+      );
+    } catch (err) {
+      setMediaError(
+        err instanceof Error ? err.message : "Upload fehlgeschlagen.",
+      );
+    } finally {
+      setMediaUploading(null);
+    }
+  };
+
   const canContinue = tabs.length > 0 && assets.allReady;
   const continueTitle = canContinue
     ? undefined
@@ -266,6 +378,54 @@ export function PhaseRegie({
     ? tabs.findIndex((t) => t.id === selected.id)
     : -1;
 
+  /** Einheitliche Szenen-Kachel; personalisierte Kacheln mit Violett-Akzent. */
+  const renderAddTile = (tile: AddTile, personalized: boolean) => {
+    const busy =
+      (tile.kind === "pdf" && pdfUploading) || tile.kind === mediaUploading;
+    const activeForm = addForm === tile.kind;
+    return (
+      <button
+        key={tile.kind}
+        type="button"
+        onClick={() => onTileClick(tile.kind)}
+        disabled={busy}
+        className={cn(
+          "flex min-h-[86px] flex-col items-start gap-1.5 rounded-squircle-md border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-card-hover",
+          personalized
+            ? activeForm
+              ? "border-brand bg-brand-soft"
+              : "border-brand/30 bg-brand-soft/40 hover:border-brand/60 hover:bg-brand-soft"
+            : activeForm
+              ? "border-brand bg-brand-soft"
+              : "border-line-soft bg-surface-soft hover:border-line hover:bg-surface-muted",
+          busy && "opacity-60",
+        )}
+      >
+        <span
+          className={cn(
+            "flex size-7 items-center justify-center rounded-squircle-sm",
+            personalized
+              ? "bg-brand/20 text-brand-deep"
+              : "bg-surface-muted text-ink-muted",
+          )}
+        >
+          {busy ? <Loader2 className="size-4 animate-spin" /> : tile.icon}
+        </span>
+        <span className="flex w-full items-center gap-1.5 text-xs font-bold text-ink">
+          {tile.label}
+          <Plus className="ml-auto size-3 shrink-0 text-ink-muted" />
+        </span>
+        <span className="text-[10px] leading-snug text-ink-muted">
+          {busy
+            ? tile.kind === mediaUploading && mediaProgress > 0
+              ? `Wird hochgeladen… ${mediaProgress} %`
+              : "Wird hochgeladen…"
+            : tile.hint}
+        </span>
+      </button>
+    );
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Kopfzeile */}
@@ -274,14 +434,29 @@ export function PhaseRegie({
           <StudioWordmark />
           <span className="text-sm font-medium text-ink-muted">Regie</span>
         </div>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink"
-        >
-          <X className="size-3.5" />
-          Abbrechen
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setPrompterOpen((o) => !o)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+              prompterOpen
+                ? "bg-brand-soft text-brand-deep"
+                : "text-ink-muted hover:bg-canvas-deep hover:text-ink",
+            )}
+          >
+            <ScrollText className="size-3.5" />
+            Teleprompter
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink"
+          >
+            <X className="size-3.5" />
+            Abbrechen
+          </button>
+        </div>
       </header>
 
       {/* Browser-Fenster + Detailkarten */}
@@ -409,53 +584,62 @@ export function PhaseRegie({
             <div className="relative aspect-video w-full">
               {showNewTabPage ? (
                 <div className="absolute inset-0 overflow-y-auto bg-surface">
-                  <div className="mx-auto flex min-h-full max-w-lg flex-col items-center justify-center gap-5 px-6 py-8">
+                  <div className="mx-auto flex min-h-full max-w-xl flex-col items-center justify-center gap-4 px-6 py-8">
                     <div className="text-center">
                       <h2 className="text-base font-bold text-ink">
                         Neue Szene
                       </h2>
                       <p className="mt-1 text-xs leading-relaxed text-ink-muted">
                         Während der Aufnahme wechselst du live zwischen deinen
-                        Szenen — wie zwischen Browser-Tabs.
+                        Szenen, wie zwischen Browser-Tabs.
                       </p>
                     </div>
-                    <div className="grid w-full grid-cols-2 gap-2.5">
-                      {ADD_TILES.map((tile) => (
-                        <button
-                          key={tile.kind}
-                          type="button"
-                          onClick={() => onTileClick(tile.kind)}
-                          disabled={tile.kind === "pdf" && pdfUploading}
-                          className={cn(
-                            "flex flex-col items-start gap-1 rounded-squircle-md border p-3 text-left transition-colors",
-                            addForm === tile.kind
-                              ? "border-brand bg-brand-soft"
-                              : "border-line-soft bg-surface-soft hover:border-line hover:bg-surface-muted",
-                            tile.kind === "pdf" && pdfUploading && "opacity-60",
-                          )}
-                        >
-                          <span className="flex w-full items-center gap-1.5 text-xs font-bold text-ink">
-                            {tile.kind === "pdf" && pdfUploading ? (
-                              <Loader2 className="size-4 animate-spin" />
-                            ) : (
-                              tile.icon
-                            )}
-                            {tile.label}
-                            <Plus className="ml-auto size-3 text-ink-muted" />
-                          </span>
-                          <span className="text-[10px] leading-snug text-ink-muted">
-                            {tile.kind === "pdf" && pdfUploading
-                              ? "Wird hochgeladen…"
-                              : tile.hint}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+
+                    <section className="w-full">
+                      <div className="mb-1.5 flex items-center gap-1.5 px-1">
+                        <Sparkles className="size-3.5 text-brand-deep" />
+                        <h3 className="text-[11px] font-bold uppercase tracking-wide text-brand-deep">
+                          Pro Empfänger personalisiert
+                        </h3>
+                      </div>
+                      <p className="mb-2 px-1 text-[10px] leading-snug text-ink-muted">
+                        Diese Inhalte passen sich automatisch an jeden
+                        Empfänger an.
+                      </p>
+                      <div className="grid w-full grid-cols-2 gap-2.5">
+                        {PERSONALIZED_TILES.map((tile) =>
+                          renderAddTile(tile, true),
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="w-full">
+                      <div className="mb-1.5 px-1">
+                        <h3 className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+                          Für alle Empfänger gleich
+                        </h3>
+                      </div>
+                      <p className="mb-2 px-1 text-[10px] leading-snug text-ink-muted">
+                        Diese Inhalte sind in jedem Video identisch.
+                      </p>
+                      <div className="grid w-full grid-cols-2 gap-2.5">
+                        {STATIC_TILES.map((tile) =>
+                          renderAddTile(tile, false),
+                        )}
+                      </div>
+                    </section>
 
                     {pdfError && (
                       <p className="flex w-full items-start gap-1.5 rounded-squircle-sm bg-danger-soft px-3 py-2 text-[11px] text-danger">
                         <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
                         {pdfError}
+                      </p>
+                    )}
+
+                    {mediaError && (
+                      <p className="flex w-full items-start gap-1.5 rounded-squircle-sm bg-danger-soft px-3 py-2 text-[11px] text-danger">
+                        <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                        {mediaError}
                       </p>
                     )}
 
@@ -468,16 +652,44 @@ export function PhaseRegie({
                           submitAddForm();
                         }}
                       >
+                        {addForm === "website" && hasRecipientWebsite && (
+                          <>
+                            <label className="text-[11px] font-semibold text-ink">
+                              Welche Seite des Empfängers?
+                            </label>
+                            <input
+                              autoFocus
+                              type="text"
+                              value={addPageName}
+                              onChange={(e) => {
+                                setAddPageName(e.target.value);
+                                setAddFormError(null);
+                              }}
+                              placeholder="z. B. Karriereseite"
+                              className="h-9 rounded-squircle-sm border border-line-soft bg-surface px-3 text-xs text-ink outline-none focus:border-brand"
+                            />
+                            <p className="text-[10px] leading-snug text-ink-muted">
+                              Du zeigst bereits die Website des Empfängers.
+                              Für diese weitere Seite ordnest du beim Versand
+                              eine eigene Spalte deiner Empfängerliste zu.
+                            </p>
+                          </>
+                        )}
                         <label className="text-[11px] font-semibold text-ink">
                           {addForm === "gdocs"
                             ? "Link zum Google-Dokument"
                             : "Website-Adresse"}
                         </label>
                         <input
-                          autoFocus
+                          autoFocus={
+                            !(addForm === "website" && hasRecipientWebsite)
+                          }
                           type="text"
                           value={addUrl}
-                          onChange={(e) => setAddUrl(e.target.value)}
+                          onChange={(e) => {
+                            setAddUrl(e.target.value);
+                            setAddFormError(null);
+                          }}
                           placeholder={
                             addForm === "gdocs"
                               ? "https://docs.google.com/document/d/…"
@@ -487,9 +699,15 @@ export function PhaseRegie({
                           }
                           className="h-9 rounded-squircle-sm border border-line-soft bg-surface px-3 text-xs text-ink outline-none focus:border-brand"
                         />
+                        {addFormError && (
+                          <p className="flex items-start gap-1.5 rounded-squircle-sm bg-danger-soft px-3 py-2 text-[11px] text-danger">
+                            <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                            {addFormError}
+                          </p>
+                        )}
                         {addForm === "website" && (
                           <p className="text-[10px] leading-snug text-ink-muted">
-                            Diese Adresse ist nur für deine Vorschau — im
+                            Diese Adresse ist nur für deine Vorschau. Im
                             fertigen Video wird pro Empfänger dessen Website
                             gezeigt.
                           </p>
@@ -500,7 +718,7 @@ export function PhaseRegie({
                             <code className="rounded bg-surface-muted px-1">
                               {"{{platzhaltern}}"}
                             </code>{" "}
-                            — im fertigen Video werden sie pro Empfänger
+                            . Im fertigen Video werden sie pro Empfänger
                             ersetzt.
                           </p>
                         )}
@@ -558,6 +776,19 @@ export function PhaseRegie({
             }}
           />
 
+          {/* Verstecktes Bild-/Video-Input (accept wird per Klick gesetzt) */}
+          <input
+            ref={mediaInputRef}
+            type="file"
+            accept={STUDIO_MEDIA_ACCEPT.image}
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void onMediaFile(f);
+            }}
+          />
+
           {/* Detailkarten unter dem Fenster */}
           <div className="flex items-start gap-3">
             <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -608,8 +839,8 @@ export function PhaseRegie({
               )}
             </div>
 
-            {/* Teleprompter (opt-in) */}
-            {prompterOpen ? (
+            {/* Teleprompter (opt-in, Toggle sitzt im Kopf neben Abbrechen) */}
+            {prompterOpen && (
               <section className="w-[300px] shrink-0 rounded-squircle-lg bg-surface p-3 shadow-card">
                 <div className="mb-1 flex items-center justify-between px-1">
                   <h2 className="text-xs font-bold uppercase tracking-wide text-ink-muted">
@@ -634,17 +865,6 @@ export function PhaseRegie({
                   Läuft während der Aufnahme dezent oben mit.
                 </p>
               </section>
-            ) : (
-              <div className="flex w-[300px] shrink-0 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setPrompterOpen(true)}
-                  className="flex items-center gap-1.5 rounded-full border border-line-soft bg-surface/70 px-3 py-1.5 text-[11px] font-semibold text-ink-muted transition-colors hover:border-line hover:bg-surface hover:text-ink"
-                >
-                  <ScrollText className="size-3.5" />
-                  Teleprompter aktivieren
-                </button>
-              </div>
             )}
           </div>
         </div>
@@ -697,7 +917,9 @@ function SceneSettings({
       <div className="flex items-center justify-between gap-3 rounded-squircle-lg bg-surface p-3 shadow-card">
         <p className="flex items-start gap-1.5 text-xs text-danger">
           <AlertCircle className="mt-0.5 size-4 shrink-0" />
-          {error ?? "Die Vorschau konnte nicht erstellt werden."}
+          {error
+            ? friendlyScreenshotError(error)
+            : "Die Vorschau konnte nicht erstellt werden."}
         </p>
         <Button variant="ghost" size="sm" onClick={onRetry}>
           Erneut versuchen
@@ -778,7 +1000,7 @@ function SceneSettings({
             {"{{platzhaltern}}"}
           </code>
           . Im fertigen Video wird das Dokument pro Empfänger personalisiert.
-          Du kannst in der Vorschau scrollen — genau so sieht es später aus.
+          Du kannst in der Vorschau scrollen, genau so sieht es später aus.
         </p>
       </div>
     );
@@ -790,14 +1012,24 @@ function SceneSettings({
         {seg.personalized === false ? (
           <p className="truncate text-[11px] text-ink-muted">
             Feste Webseite:{" "}
-            <span className="font-medium text-ink">{seg.fallbackUrl}</span> —
-            wird für alle Empfänger gleich gezeigt.
+            <span className="font-medium text-ink">{seg.fallbackUrl}</span>.
+            Wird für alle Empfänger gleich gezeigt.
+          </p>
+        ) : seg.urlColumn ? (
+          <p className="text-[11px] leading-relaxed text-ink-muted">
+            Zeigt pro Empfänger die Seite{" "}
+            <span className="font-medium text-ink">
+              {seg.label || seg.urlColumn}
+            </span>
+            . Beim Versand ordnest du dafür eine Spalte deiner Empfängerliste
+            zu. Vorschau-Quelle:{" "}
+            <span className="font-medium text-ink">{seg.fallbackUrl}</span>
           </p>
         ) : (
           <p className="truncate text-[11px] text-ink-muted">
             Vorschau-Quelle:{" "}
-            <span className="font-medium text-ink">{seg.fallbackUrl}</span> —
-            in der Kampagne wird pro Empfänger dessen Website gezeigt.
+            <span className="font-medium text-ink">{seg.fallbackUrl}</span>.
+            In der Kampagne wird pro Empfänger dessen Website gezeigt.
           </p>
         )}
       </div>
@@ -809,8 +1041,31 @@ function SceneSettings({
       <div className="rounded-squircle-lg bg-surface p-3 shadow-card">
         <p className="truncate text-[11px] text-ink-muted">
           {seg.fileName || "PDF"} · {seg.pageCount}{" "}
-          {seg.pageCount === 1 ? "Seite" : "Seiten"} — scrolle in der Vorschau,
+          {seg.pageCount === 1 ? "Seite" : "Seiten"}. Scrolle in der Vorschau,
           um durch das Dokument zu blättern.
+        </p>
+      </div>
+    );
+  }
+
+  if (seg.kind === "image") {
+    return (
+      <div className="rounded-squircle-lg bg-surface p-3 shadow-card">
+        <p className="text-[11px] leading-relaxed text-ink-muted">
+          Das Bild wird für alle Empfänger gleich gezeigt, genau wie in der
+          Vorschau.
+        </p>
+      </div>
+    );
+  }
+
+  if (seg.kind === "video") {
+    return (
+      <div className="rounded-squircle-lg bg-surface p-3 shadow-card">
+        <p className="text-[11px] leading-relaxed text-ink-muted">
+          Während der Aufnahme startest du das Video per Klick auf den
+          Play-Button, der Ton läuft im fertigen Video mit. Bis dahin steht es
+          als Standbild.
         </p>
       </div>
     );

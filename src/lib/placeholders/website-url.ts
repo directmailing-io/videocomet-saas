@@ -19,3 +19,21 @@ export function websiteSegmentMappingKey(
 ): string {
   return seg.urlColumn?.trim() || DEFAULT_WEBSITE_URL_KEY;
 }
+
+/**
+ * Leitet aus einem vom Nutzer eingegebenen Seiten-Namen (z. B.
+ * „Karriereseite") einen Mapping-Key/`urlColumn`-Slug ab: lowercase,
+ * Umlaute transliteriert, alles Nicht-Alphanumerische zu Bindestrichen.
+ * Leerer Rückgabewert = kein brauchbarer Name.
+ */
+export function slugifyUrlColumn(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}

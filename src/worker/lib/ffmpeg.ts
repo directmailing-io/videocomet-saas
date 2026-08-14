@@ -239,6 +239,13 @@ export interface ComposePipInput {
   position: PipPosition;
   shape: PipShape;
   durationSec: number;
+  /**
+   * Studio-Video-Segmente: Original-Ton der Base-Spur (läuft exakt in den
+   * Wiedergabefenstern) mit der Webcam-Stimme mischen (amix, normalize=0 —
+   * beide Spuren in voller Lautstärke). Default false: nur Webcam-Audio,
+   * die Base-Spur enthält üblicherweise anullsrc-Stille.
+   */
+  mixBaseAudio?: boolean;
 }
 
 /**
@@ -316,6 +323,26 @@ export async function composePip(input: ComposePipInput): Promise<void> {
       `[0:v][pip]overlay=${x}:${y}:format=auto,format=yuv420p[vout]`;
   }
 
+  // Audio-Mapping: Standard = nur Webcam-Ton (Base ist anullsrc-Stille).
+  // mixBaseAudio (Studio-Video-Segmente): Base-Ton + Webcam-Ton via amix,
+  // normalize=0 (keine Pegel-Halbierung). amix scheitert an fehlenden
+  // Streams — deshalb vorab proben und degradiert zurückfallen.
+  let audioMapArgs: string[] = ["-map", "1:a?"];
+  if (input.mixBaseAudio) {
+    const { probeHasAudioStream } = await import("@/lib/ffprobe");
+    const [baseHasAudio, webcamHasAudio] = await Promise.all([
+      probeHasAudioStream(input.basePath),
+      probeHasAudioStream(input.webcamPath),
+    ]);
+    if (baseHasAudio && webcamHasAudio) {
+      filterComplex +=
+        ";[0:a][1:a]amix=inputs=2:duration=first:normalize=0[aout]";
+      audioMapArgs = ["-map", "[aout]"];
+    } else if (baseHasAudio) {
+      audioMapArgs = ["-map", "0:a"];
+    }
+  }
+
   await runFfmpeg([
     "-y",
     "-i",
@@ -329,8 +356,7 @@ export async function composePip(input: ComposePipInput): Promise<void> {
     "[vout]",
     // Webcam audio takes priority. The `?` makes it optional so silent
     // webcams don't fail the encode.
-    "-map",
-    "1:a?",
+    ...audioMapArgs,
     "-c:v",
     "libx264",
     "-preset",
@@ -665,6 +691,44 @@ export async function trimVideoToDuration(input: {
     input.durationSec.toFixed(3),
     "-c",
     "copy",
+    "-movflags",
+    "+faststart",
+    input.outputPath,
+  ]);
+}
+
+/**
+ * Fügt einem MP4 ohne Audio-Stream eine stille AAC-Spur (stereo/44100)
+ * hinzu — Video wird re-encode-frei kopiert. Wird vor dem Base-Concat
+ * gebraucht, wenn composePip's `mixBaseAudio` greift: der concat-Demuxer
+ * (`-c copy`) verlangt ein konsistentes Stream-Layout über alle Teile, und
+ * Website-/GDocs-Clips aus `imageSeqToMp4` kommen ohne Audio-Spur — ohne
+ * diese Normalisierung würde der Original-Ton eines Studio-Video-Segments
+ * auf der Base-Timeline nach vorne rutschen.
+ */
+export async function addSilentAudioTrack(input: {
+  inputPath: string;
+  outputPath: string;
+}): Promise<void> {
+  await runFfmpeg([
+    "-y",
+    "-i",
+    input.inputPath,
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=channel_layout=stereo:sample_rate=44100",
+    "-shortest",
+    "-map",
+    "0:v:0",
+    "-map",
+    "1:a:0",
+    "-c:v",
+    "copy",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
     "-movflags",
     "+faststart",
     input.outputPath,

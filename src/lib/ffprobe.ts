@@ -225,6 +225,36 @@ export async function probeVideoDuration(
 }
 
 /**
+ * Prüft, ob die Datei mindestens einen Audio-Stream enthält. Wird im
+ * Worker genutzt, um beim Audio-Mixing (Studio-Video-Segmente) nicht an
+ * fehlenden Streams zu scheitern. Fehler → false (konservativ).
+ */
+export async function probeHasAudioStream(
+  filePath: string,
+): Promise<boolean> {
+  try {
+    const out = await runFfprobe([
+      "-v",
+      "error",
+      "-select_streams",
+      "a",
+      "-show_entries",
+      "stream=index",
+      "-of",
+      "csv=p=0",
+      filePath,
+    ]);
+    return out.split(/\r?\n/).some((l) => l.trim().length > 0);
+  } catch (err) {
+    console.warn(
+      "[ffprobe] audio-stream probe failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return false;
+  }
+}
+
+/**
  * Probt einen Buffer (z.B. ein gerade hochgeladener Webcam-Recording-Blob).
  * Schreibt temporär nach /tmp, ffprobe, räumt auf.
  */
