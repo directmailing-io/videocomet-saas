@@ -25,7 +25,33 @@ describe("parseLpFormSubmission", () => {
       email: "max@example.com",
       phone: "+49 170 1234567",
       message: "Bitte ruf mich zurück.",
+      extra: [],
     });
+  });
+
+  it("übernimmt Zusatzfelder (extra) getrimmt und gekappt", () => {
+    const res = parseLpFormSubmission(
+      validBody({
+        extra: [
+          { label: " Firma ", value: " ACME GmbH " },
+          { label: "Leer", value: "   " },
+          { label: "", value: "ohne Label" },
+          "kaputt",
+          { label: "L".repeat(200), value: "V".repeat(2000) },
+        ],
+      }),
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok || res.honeypot) throw new Error("expected value result");
+    expect(res.value.extra).toEqual([
+      { label: "Firma", value: "ACME GmbH" },
+      { label: "L".repeat(80), value: "V".repeat(1000) },
+    ]);
+  });
+
+  it("lehnt extra ab, wenn es kein Array ist", () => {
+    const res = parseLpFormSubmission(validBody({ extra: "nope" }));
+    expect(res.ok).toBe(false);
   });
 
   it("akzeptiert einen minimalen Body ohne phone/message", () => {

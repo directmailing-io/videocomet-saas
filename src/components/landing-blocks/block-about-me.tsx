@@ -3,6 +3,7 @@ import { renderPlaceholders } from "@/lib/landing-blocks/placeholders";
 import type { BlockRenderProps } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
 import { EditableText, MaybeEmptyField } from "./editable-text";
+import { ImagePlaceholder } from "./image-placeholder";
 
 /**
  * About-Me block — portrait + name + role + bio. Stacks vertically on
@@ -37,7 +38,7 @@ export function BlockAboutMe({
       defaults={{ paddingY: "md", maxWidth: "normal", alignment: "left" }}
     >
       <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-        {portraitUrl && (
+        {portraitUrl ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={portraitUrl}
@@ -45,6 +46,12 @@ export function BlockAboutMe({
             width={96}
             height={96}
             className="size-24 rounded-full object-cover shrink-0"
+          />
+        ) : (
+          <ImagePlaceholder
+            label="Foto"
+            className="size-24 shrink-0 gap-1 px-2 py-0"
+            style={{ borderRadius: "9999px" }}
           />
         )}
         <div className="text-center sm:text-left">

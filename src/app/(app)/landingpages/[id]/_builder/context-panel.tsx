@@ -25,7 +25,10 @@ import type { Block } from "@/lib/landing-blocks/types";
 import { cn } from "@/lib/utils";
 
 import { BLOCK_LABELS, FORM_REGISTRY } from "../_editor/inspector-fields";
-import { VariantPicker } from "../_editor/inspector-fields/variant-picker";
+import {
+  VariantPicker,
+  hasVariants,
+} from "../_editor/inspector-fields/variant-picker";
 
 /** Erlaubte Hintergrund-Stufen pro Sektion (Konzept 6.3). */
 export type SectionBackground = "plain" | "soft" | "tinted";
@@ -106,13 +109,19 @@ export function ContextPanel({
             </button>
           </div>
 
-          {/* Inhalt (scrollbar) */}
-          <div className="flex-1 overflow-y-auto px-4 py-4">
-            <VariantPicker block={block} onSelect={onChangeVariant} />
-            <BlockForm block={block} onChange={onChangeData} />
-
-            {/* Hintergrund der Sektion */}
-            <div className="mt-5 border-t border-line pt-4">
+          {/* Inhalt (scrollbar) — drei klare Gruppen: Layout / Inhalt /
+              Design. key={block.id} setzt die Auf/Zu-Zustände beim
+              Sektionswechsel auf die Defaults zurück. */}
+          <div key={block.id} className="flex-1 overflow-y-auto">
+            {hasVariants(block.type) && (
+              <PanelSection title="Layout" defaultOpen>
+                <VariantPicker block={block} onSelect={onChangeVariant} />
+              </PanelSection>
+            )}
+            <PanelSection title="Inhalt" defaultOpen>
+              <BlockForm block={block} onChange={onChangeData} />
+            </PanelSection>
+            <PanelSection title="Design" defaultOpen={false}>
               <Label>Hintergrund</Label>
               <div
                 className="mt-1.5 grid grid-cols-3 gap-1.5"
@@ -155,7 +164,7 @@ export function ContextPanel({
                   );
                 })}
               </div>
-            </div>
+            </PanelSection>
           </div>
 
           {/* Fuß: dezente Sektions-Aktionen */}
@@ -178,6 +187,57 @@ export function ContextPanel({
         </>
       )}
     </aside>
+  );
+}
+
+/**
+ * Aufklappbare Panel-Gruppe (Layout / Inhalt / Design). Reduziert die
+ * UI-Dichte: Nutzer sehen erst die drei Überschriften und öffnen nur,
+ * was sie gerade brauchen.
+ */
+function PanelSection({
+  title,
+  defaultOpen,
+  children,
+}: {
+  title: string;
+  defaultOpen: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <section className="border-b border-line">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+      >
+        <span className="text-xs font-bold uppercase tracking-wide text-ink">
+          {title}
+        </span>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          aria-hidden
+          className={cn(
+            "text-ink-muted transition-transform",
+            open && "rotate-180",
+          )}
+        >
+          <path
+            d="M2.5 4.5L6 8l3.5-3.5"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      {open && <div className="px-4 pb-4">{children}</div>}
+    </section>
   );
 }
 

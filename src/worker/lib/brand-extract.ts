@@ -27,6 +27,12 @@ const GOTO_FALLBACK_TIMEOUT_MS = 10_000;
 const VIEWPORT = { width: 1280, height: 900 };
 /** Kurze Settle-Zeit nach dem Load, damit Webfonts/CSS-Transitions stehen. */
 const SETTLE_MS = 800;
+/**
+ * Realistischer Desktop-UA: der Default enthält "HeadlessChrome" und wird
+ * von vielen Bot-Blockern (Cloudflare, Wordfence) sofort abgewiesen.
+ */
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 export type BrandExtractPhase = "loading" | "analyzing";
 
@@ -198,6 +204,8 @@ export async function runBrandExtraction(
       height: VIEWPORT.height,
       deviceScaleFactor: 1,
     });
+    await page.setUserAgent(USER_AGENT);
+    await page.setExtraHTTPHeaders({ "Accept-Language": "de-DE,de;q=0.9,en;q=0.7" });
 
     try {
       await page.goto(url, {
@@ -220,6 +228,10 @@ export async function runBrandExtraction(
 
     if (onPhase) await onPhase("analyzing");
 
+    // tsx/esbuild (keepNames) fügt in die serialisierte Funktion `__name()`-
+    // Helper-Aufrufe ein, die es im Browser-Kontext nicht gibt → vorher
+    // shimmen, sonst crasht JEDE Extraktion mit "__name is not defined".
+    await page.evaluate("window.__name = window.__name || ((f) => f)");
     const raw = await page.evaluate(collectRawInBrowser);
 
     if (isEmptyExtraction(raw)) {

@@ -3,15 +3,9 @@ import { describe, expect, it } from "vitest";
 import { buildStarterBlocks } from "./starter-page";
 
 describe("buildStarterBlocks", () => {
-  it("liefert die Standard-Reihenfolge Hero → Content → Rezensionen → FAQ → CTA", () => {
+  it("liefert genau eine fertige Hero-Sektion (Hero-first-Einstieg)", () => {
     const blocks = buildStarterBlocks();
-    expect(blocks.map((b) => b.type)).toEqual([
-      "hero",
-      "rich-text",
-      "testimonials",
-      "faq",
-      "cta-banner",
-    ]);
+    expect(blocks.map((b) => b.type)).toEqual(["hero"]);
   });
 
   it("erzeugt pro Aufruf frische, eindeutige IDs", () => {
@@ -26,13 +20,5 @@ describe("buildStarterBlocks", () => {
     expect(hero.data.showVideo).toBe(true);
     expect(hero.data.alignment).toBe("center");
     expect(String(hero.data.headline)).toContain("{{vorname|");
-  });
-
-  it("Testimonials und FAQ sind vorbefüllt (kein leerer Editor)", () => {
-    const blocks = buildStarterBlocks();
-    const testi = blocks.find((b) => b.type === "testimonials")!;
-    const faq = blocks.find((b) => b.type === "faq")!;
-    expect((testi.data.items as unknown[]).length).toBeGreaterThanOrEqual(2);
-    expect((faq.data.items as unknown[]).length).toBeGreaterThanOrEqual(3);
   });
 });

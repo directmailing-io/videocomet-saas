@@ -6,7 +6,8 @@ import {
   type BlockRenderProps,
 } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
-import { EditableText, MaybeEmptyField } from "./editable-text";
+import { EditableText, EditSwitch, MaybeEmptyField } from "./editable-text";
+import { ImagePlaceholder } from "./image-placeholder";
 import { parseMiniMarkdown } from "./mini-markdown";
 
 /**
@@ -48,7 +49,7 @@ export function BlockContent({
   const imageUrl = typeof imageRaw.url === "string" ? imageRaw.url : "";
   const imageAlt = typeof imageRaw.alt === "string" ? imageRaw.alt : "";
 
-  const hasMedia = layout !== "text-only" && !!imageUrl;
+  const wantsMedia = layout !== "text-only";
   const rawHeadline = typeof data.headline === "string" ? data.headline : "";
 
   const textNode = (
@@ -96,19 +97,9 @@ export function BlockContent({
     </BlockFrame>
   );
 
-  if (!headline && !body.trim() && !hasMedia) {
-    // Public: unveraendert null. Im Builder: leere Felder mit Hint
-    // rendern, damit ein leer getippter Block anklickbar bleibt.
-    return <MaybeEmptyField present={false}>{textOnlyFrame}</MaybeEmptyField>;
-  }
-
-  if (!hasMedia) {
-    return textOnlyFrame;
-  }
-
   const mediaRight = layout === "media-right";
 
-  return (
+  const mediaFrame = (
     <BlockFrame
       style={style}
       defaults={{ paddingY: "md", maxWidth: "wide", alignment: "left" }}
@@ -120,19 +111,45 @@ export function BlockContent({
           {textNode}
         </div>
         <div className={mediaRight ? "md:order-2" : "md:order-1"}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={imageUrl}
-            alt={imageAlt}
-            loading="lazy"
-            className="w-full object-cover"
-            style={{
-              borderRadius: "var(--lp-radius-image)",
-              boxShadow: "var(--lp-shadow-card)",
-            }}
-          />
+          {imageUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={imageUrl}
+              alt={imageAlt}
+              loading="lazy"
+              className="w-full object-cover"
+              style={{
+                borderRadius: "var(--lp-radius-image)",
+                boxShadow: "var(--lp-shadow-card)",
+              }}
+            />
+          ) : (
+            <ImagePlaceholder />
+          )}
         </div>
       </div>
     </BlockFrame>
   );
+
+  if (!headline && !body.trim() && !imageUrl) {
+    // Public: unveraendert null. Im Builder: leere Felder mit Hint
+    // rendern, damit ein leer getippter Block anklickbar bleibt.
+    return (
+      <MaybeEmptyField present={false}>
+        {wantsMedia ? mediaFrame : textOnlyFrame}
+      </MaybeEmptyField>
+    );
+  }
+
+  if (!wantsMedia) {
+    return textOnlyFrame;
+  }
+
+  if (!imageUrl) {
+    // Public faellt (wie bisher) auf die text-only-Darstellung zurueck,
+    // der Builder zeigt das zweispaltige Grid mit Bild-Platzhalter.
+    return <EditSwitch editing={mediaFrame} fallback={textOnlyFrame} />;
+  }
+
+  return mediaFrame;
 }

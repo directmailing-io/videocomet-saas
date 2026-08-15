@@ -3,6 +3,10 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/tracker";
+import {
+  prefillValue,
+  type LpFormFieldDef,
+} from "@/lib/landing-blocks/form-fields";
 
 /**
  * Formular-Variante des CTA-Banners (Konzept 5.6): kurzes Kontaktformular
@@ -19,6 +23,14 @@ export interface LpFormCtaProps {
   /** Vorbefuellung aus den Lead-CSV-Spalten (serverseitig abgeleitet). */
   defaultName?: string;
   defaultEmail?: string;
+  /**
+   * Formular-Baukasten: eigene Zusatzfelder statt der Defaults
+   * Telefon + Nachricht. Ohne `fields` bleibt das bisherige Verhalten
+   * (und der bisherige POST-Body) unveraendert.
+   */
+  fields?: LpFormFieldDef[];
+  /** Lead-Spalten fuer die Vorbefuellung (prefillKey). */
+  leadData?: Record<string, string | undefined>;
 }
 
 type FormPhase = "idle" | "submitting" | "success" | "error";
@@ -36,13 +48,27 @@ const inputClass =
 
 const labelClass = "mb-1.5 block text-left text-sm font-medium";
 
-export function LpFormCta({ leadId, defaultName, defaultEmail }: LpFormCtaProps) {
+export function LpFormCta({
+  leadId,
+  defaultName,
+  defaultEmail,
+  fields,
+  leadData,
+}: LpFormCtaProps) {
   const [phase, setPhase] = React.useState<FormPhase>("idle");
   const [name, setName] = React.useState(defaultName ?? "");
   const [email, setEmail] = React.useState(defaultEmail ?? "");
   const [phone, setPhone] = React.useState("");
   const [message, setMessage] = React.useState("");
   const [website, setWebsite] = React.useState("");
+  /** Werte der Baukasten-Felder, key = field.id (Vorbefuellung aus Lead). */
+  const [values, setValues] = React.useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const f of fields ?? []) {
+      init[f.id] = prefillValue(leadData, f.prefillKey);
+    }
+    return init;
+  });
 
   const handleSubmit = React.useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
@@ -51,17 +77,31 @@ export function LpFormCta({ leadId, defaultName, defaultEmail }: LpFormCtaProps)
       setPhase("submitting");
       track("cta_click", { label: "form_submit", url: "", position: "primary" });
       try {
+        const body = fields
+          ? {
+              leadId,
+              name,
+              email,
+              website,
+              extra: fields
+                .map((f) => ({
+                  label: f.label.trim() || "Feld",
+                  value: (values[f.id] ?? "").trim(),
+                }))
+                .filter((f) => f.value.length > 0),
+            }
+          : { leadId, name, email, phone, message, website };
         const res = await fetch("/api/lp/form", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ leadId, name, email, phone, message, website }),
+          body: JSON.stringify(body),
         });
         setPhase(res.ok ? "success" : "error");
       } catch {
         setPhase("error");
       }
     },
-    [phase, leadId, name, email, phone, message, website],
+    [phase, leadId, name, email, phone, message, website, fields, values],
   );
 
   if (phase === "success") {
@@ -127,35 +167,80 @@ export function LpFormCta({ leadId, defaultName, defaultEmail }: LpFormCtaProps)
             style={inputStyle}
           />
         </div>
-        <div>
-          <label htmlFor="lp-form-phone" className={labelClass}>
-            Telefon <span style={{ color: "var(--lp-color-muted)" }}>(optional)</span>
-          </label>
-          <input
-            id="lp-form-phone"
-            name="phone"
-            type="tel"
-            autoComplete="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className={inputClass}
-            style={inputStyle}
-          />
-        </div>
-        <div>
-          <label htmlFor="lp-form-message" className={labelClass}>
-            Nachricht <span style={{ color: "var(--lp-color-muted)" }}>(optional)</span>
-          </label>
-          <textarea
-            id="lp-form-message"
-            name="message"
-            rows={4}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            className={cn(inputClass, "resize-y")}
-            style={inputStyle}
-          />
-        </div>
+        {fields ? (
+          fields.map((f) => {
+            const fieldId = `lp-form-x-${f.id}`;
+            const label = f.label.trim() || "Feld";
+            const value = values[f.id] ?? "";
+            const onChange = (v: string) =>
+              setValues((prev) => ({ ...prev, [f.id]: v }));
+            return (
+              <div key={f.id}>
+                <label htmlFor={fieldId} className={labelClass}>
+                  {label}{" "}
+                  {!f.required && (
+                    <span style={{ color: "var(--lp-color-muted)" }}>
+                      (optional)
+                    </span>
+                  )}
+                </label>
+                {f.type === "textarea" ? (
+                  <textarea
+                    id={fieldId}
+                    rows={4}
+                    required={f.required}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    className={cn(inputClass, "resize-y")}
+                    style={inputStyle}
+                  />
+                ) : (
+                  <input
+                    id={fieldId}
+                    type={f.type}
+                    required={f.required}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    className={inputClass}
+                    style={inputStyle}
+                  />
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <>
+            <div>
+              <label htmlFor="lp-form-phone" className={labelClass}>
+                Telefon <span style={{ color: "var(--lp-color-muted)" }}>(optional)</span>
+              </label>
+              <input
+                id="lp-form-phone"
+                name="phone"
+                type="tel"
+                autoComplete="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className={inputClass}
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label htmlFor="lp-form-message" className={labelClass}>
+                Nachricht <span style={{ color: "var(--lp-color-muted)" }}>(optional)</span>
+              </label>
+              <textarea
+                id="lp-form-message"
+                name="message"
+                rows={4}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                className={cn(inputClass, "resize-y")}
+                style={inputStyle}
+              />
+            </div>
+          </>
+        )}
         {/* Honeypot: fuer Menschen unsichtbar, Bots fuellen es aus. */}
         <div style={{ display: "none" }} aria-hidden="true">
           <label htmlFor="lp-form-website">Website</label>

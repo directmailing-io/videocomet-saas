@@ -130,6 +130,27 @@ export function MaybeEmptyField({
   return <>{children}</>;
 }
 
+/**
+ * Client-Helfer fuer Stellen, an denen der Builder etwas ANDERES rendern
+ * soll als die Public-Seite (z. B. Bild-Platzhalter statt gar kein Bild):
+ *
+ *   <EditSwitch editing={<GridMitPlatzhalter />} fallback={textOnlyFrame} />
+ *
+ * Ohne Provider oder im Beispiel-Lead-Modus wird `fallback` gerendert —
+ * das Server-HTML der Public-Seite bleibt byte-identisch.
+ */
+export function EditSwitch({
+  editing,
+  fallback,
+}: {
+  editing: React.ReactNode;
+  fallback: React.ReactNode;
+}): React.ReactNode {
+  const ctx = useEditableBlock();
+  if (!ctx || ctx.sampleMode) return <>{fallback}</>;
+  return <>{editing}</>;
+}
+
 /* ------------------------------------------------------------------ */
 /* Chip-DOM                                                            */
 /* ------------------------------------------------------------------ */
@@ -188,14 +209,26 @@ function ChipSpan({
  * zu Platzhaltern, <br> und Block-Elemente (falls ein Browser doch welche
  * einfuegt) zu Zeilenumbruechen, alles andere zu Text. nbsp und
  * Zero-Width-Spaces (Caret-Anker) werden normalisiert.
+ *
+ * markdown=true (WYSIWYG-Felder): <b>/<strong> wird als **fett**
+ * serialisiert, sichtbare Aufz\u00e4hlungspunkte ("\u2022 ") am Zeilenanfang werden
+ * zurueck in die gespeicherte "- "-Syntax uebersetzt.
  */
-export function domToSegments(root: HTMLElement): Segment[] {
+export function domToSegments(
+  root: HTMLElement,
+  markdown?: boolean,
+): Segment[] {
   const out: Segment[] = [];
   const pushText = (text: string) => {
     if (!text) return;
     const last = out[out.length - 1];
     if (last && last.type === "text") last.text += text;
     else out.push({ type: "text", text });
+  };
+  const isBoldEl = (el: HTMLElement): boolean => {
+    if (el.tagName === "B" || el.tagName === "STRONG") return true;
+    const fw = el.style ? el.style.fontWeight : "";
+    return fw === "bold" || (parseInt(fw, 10) || 0) >= 600;
   };
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -220,11 +253,21 @@ export function domToSegments(root: HTMLElement): Segment[] {
       pushText("\n");
       return;
     }
+    const bold = markdown === true && isBoldEl(el) && el.textContent !== "";
     const isBlock = /^(DIV|P|LI|UL|OL|H[1-6])$/.test(el.tagName);
     if (isBlock && out.length > 0) pushText("\n");
+    if (bold) pushText("**");
     el.childNodes.forEach(walk);
+    if (bold) pushText("**");
   };
   root.childNodes.forEach(walk);
+  if (markdown) {
+    for (const seg of out) {
+      if (seg.type === "text") {
+        seg.text = seg.text.replace(/(^|\n)[\u2022\u00b7]\s?/g, "$1- ");
+      }
+    }
+  }
   return out;
 }
 
@@ -236,6 +279,24 @@ const TOOLBAR_BTN =
   "flex h-7 min-w-7 items-center justify-center rounded-md px-1.5 text-xs " +
   "font-medium text-neutral-700 hover:bg-brand-soft hover:text-brand-deep " +
   "transition-colors";
+
+/**
+ * WYSIWYG-Darstellung eines Text-Segments in Markdown-Feldern:
+ * **fett** wird als echtes <strong> gerendert, "- " am Zeilenanfang als
+ * sichtbarer Aufzählungspunkt ("• "). Der Nutzer sieht nie Syntax-Zeichen;
+ * domToSegments übersetzt beides beim Commit zurück.
+ */
+function renderMarkdownText(text: string): React.ReactNode {
+  const display = text.replace(/(^|\n)- /g, "$1• ");
+  const parts = display.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.length > 4 && part.startsWith("**") && part.endsWith("**") ? (
+      <strong key={i}>{part.slice(2, -2)}</strong>
+    ) : (
+      <React.Fragment key={i}>{part}</React.Fragment>
+    ),
+  );
+}
 
 type MenuSource = "trigger" | "toolbar";
 
@@ -280,14 +341,14 @@ function EditableTextImpl({
   const commit = React.useCallback(() => {
     const root = rootRef.current;
     if (!root) return;
-    const serialized = serializeSegments(domToSegments(root));
+    const serialized = serializeSegments(domToSegments(root, markdown));
     if (serialized !== localRawRef.current) {
       localRawRef.current = serialized;
       ctx.update(path, serialized);
     }
     setSegments(parseRawToSegments(serialized));
     setVersion((v) => v + 1);
-  }, [ctx, path]);
+  }, [ctx, path, markdown]);
 
   /* -------------------- Fokus / Blur ------------------------------- */
 
@@ -410,8 +471,16 @@ function EditableTextImpl({
   const applyBold = () => {
     const root = rootRef.current;
     if (!root) return;
+    const doc = root.ownerDocument;
     root.focus();
-    const sel = root.ownerDocument.defaultView?.getSelection();
+    try {
+      // Echtes WYSIWYG: der Browser togglet <b>/<strong> auf der Auswahl;
+      // domToSegments serialisiert das beim Commit zurück zu **fett**.
+      if (doc.execCommand("bold")) return;
+    } catch {
+      // execCommand nicht verfügbar (z. B. jsdom) → Marker-Fallback.
+    }
+    const sel = doc.defaultView?.getSelection();
     const selected = sel && !sel.isCollapsed ? sel.toString() : "";
     insertPlainText("**" + (selected || "Text") + "**");
   };
@@ -431,7 +500,7 @@ function EditableTextImpl({
     before.setEnd(probe.startContainer, probe.startOffset);
     const textBefore = before.toString();
     const atLineStart = textBefore === "" || textBefore.endsWith("\n");
-    insertPlainText(atLineStart ? "- " : "\n- ");
+    insertPlainText(atLineStart ? "• " : "\n• ");
   };
 
   /* -------------------- Tastatur ------------------------------------ */
@@ -454,7 +523,25 @@ function EditableTextImpl({
         return;
       }
       if (multiline) {
-        insertPlainText("\n");
+        // Aufzählung fortsetzen: steht die aktuelle Zeile auf "• …",
+        // beginnt die nächste Zeile automatisch mit einem Punkt.
+        let insert = "\n";
+        const root = rootRef.current;
+        if (root) {
+          const doc = root.ownerDocument;
+          const sel = doc.defaultView?.getSelection();
+          if (sel && sel.rangeCount > 0) {
+            const probe = sel.getRangeAt(0).cloneRange();
+            probe.collapse(true);
+            const before = doc.createRange();
+            before.selectNodeContents(root);
+            before.setEnd(probe.startContainer, probe.startOffset);
+            const textBefore = before.toString();
+            const line = textBefore.slice(textBefore.lastIndexOf("\n") + 1);
+            if (line.startsWith("• ") && line.trim() !== "•") insert = "\n• ";
+          }
+        }
+        insertPlainText(insert);
       } else {
         // Einzeilig: Enter = uebernehmen. Der Blur loest den Commit aus.
         rootRef.current?.blur();
@@ -605,7 +692,9 @@ function EditableTextImpl({
       >
         {segments.map((seg, idx) =>
           seg.type === "text" ? (
-            <React.Fragment key={idx}>{seg.text}</React.Fragment>
+            <React.Fragment key={idx}>
+              {markdown ? renderMarkdownText(seg.text) : seg.text}
+            </React.Fragment>
           ) : (
             <ChipSpan key={idx} segment={seg} placeholders={ctx.placeholders} />
           ),
@@ -615,17 +704,18 @@ function EditableTextImpl({
       {menuOpen !== null && (
         <span
           className={cn(
-            "absolute top-full left-0 z-50 mt-1.5 flex max-h-64 min-w-60 flex-col",
+            "absolute top-full left-0 z-50 mt-1.5 flex max-h-72 min-w-64 flex-col",
             "overflow-auto rounded-xl border border-line bg-white p-1",
             "font-sans text-sm font-normal normal-case tracking-normal text-neutral-800 shadow-lift",
           )}
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={(e) => {
+            // Fokus im Textfeld halten — außer der Klick zielt auf das
+            // "Eigene Spalte"-Eingabefeld.
+            if ((e.target as HTMLElement).tagName !== "INPUT") {
+              e.preventDefault();
+            }
+          }}
         >
-          {ctx.placeholders.length === 0 && (
-            <span className="px-2.5 py-2 text-xs text-neutral-500">
-              Keine Platzhalter verfügbar
-            </span>
-          )}
           {ctx.placeholders.map((p) => (
             <button
               key={p.key}
@@ -639,6 +729,7 @@ function EditableTextImpl({
               </span>
             </button>
           ))}
+          <CustomPlaceholderRow onInsert={insertPlaceholder} />
         </span>
       )}
 
@@ -651,6 +742,57 @@ function EditableTextImpl({
           onClose={() => setChipPopover(null)}
         />
       )}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* "Eigene Spalte" — freie Platzhalter-Eingabe im {{-Menü              */
+/* ------------------------------------------------------------------ */
+
+/** Entfernt Zeichen, die die {{…}}-Syntax brechen würden. */
+function sanitizePlaceholderKey(input: string): string {
+  return input.replace(/[{}|]/g, "").trim();
+}
+
+function CustomPlaceholderRow({
+  onInsert,
+}: {
+  onInsert: (key: string) => void;
+}): React.ReactElement {
+  const [value, setValue] = React.useState("");
+  const submit = () => {
+    const key = sanitizePlaceholderKey(value);
+    if (key) onInsert(key);
+  };
+  return (
+    <span className="mt-1 flex flex-col gap-1 border-t border-line px-2.5 pb-1.5 pt-2">
+      <span className="text-[11px] font-medium text-neutral-500">
+        Eigene Spalte aus deiner Lead-Liste
+      </span>
+      <span className="flex items-center gap-1.5">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="z. B. umsatz"
+          className="w-full min-w-0 rounded-lg border border-line px-2 py-1 text-xs outline-none focus:border-brand-300"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
+              submit();
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="shrink-0 rounded-lg bg-brand-deep px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-800 disabled:opacity-40"
+          disabled={!sanitizePlaceholderKey(value)}
+          onClick={submit}
+        >
+          Einfügen
+        </button>
+      </span>
     </span>
   );
 }

@@ -7,6 +7,7 @@ import {
   bookingPrefillFromLead,
   detectBookingLink,
 } from "@/lib/booking-link";
+import { asFormFields } from "@/lib/landing-blocks/form-fields";
 import { BlockFrame } from "./block-frame";
 import { CtaButton } from "./cta-button";
 import { EditableText, MaybeEmptyField } from "./editable-text";
@@ -25,6 +26,16 @@ function asCta(value: unknown): CtaConfig | undefined {
   const url = typeof r.url === "string" ? r.url : undefined;
   if (!label || !url) return undefined;
   return { label, url };
+}
+
+/** Rohwerte auch bei unvollständigen Buttons (für die Builder-Platzhalter). */
+function asPartialCta(value: unknown): { label: string; url: string } {
+  if (!value || typeof value !== "object") return { label: "", url: "" };
+  const r = value as Record<string, unknown>;
+  return {
+    label: typeof r.label === "string" ? r.label : "",
+    url: typeof r.url === "string" ? r.url : "",
+  };
 }
 
 /** Sicherheitsregel: als Fallback-Link nur http(s)-URLs zulassen. */
@@ -178,6 +189,8 @@ export function BlockCtaBanner({
             leadId={leadId}
             defaultName={prefill.name}
             defaultEmail={prefill.email}
+            fields={asFormFields(data.formFields) ?? undefined}
+            leadData={leadData}
           />
         </div>
       </BlockFrame>
@@ -273,7 +286,108 @@ export function BlockCtaBanner({
       ? { label: primary?.label ?? DEFAULT_BOOKING_LABEL, url: bookingUrl }
       : primary;
 
-  if (!headline && !effectivePrimary && !secondary) return null;
+  // Rohwerte auch bei unvollständigen Buttons (nur Label ODER nur Link) —
+  // im Builder bleibt der Button damit immer sichtbar und beschreibbar.
+  const primaryRaw = asPartialCta(data.primaryButton);
+  const secondaryRaw = asPartialCta(data.secondaryButton);
+  const hasPrimary = !!effectivePrimary;
+  const hasSecondary = !!secondary;
+
+  if (!headline && !hasPrimary && !hasSecondary) {
+    // Public: komplett leerer Banner rendert wie bisher gar nicht.
+    // Builder: als beschreibbare Platzhalter-Sektion sichtbar.
+    return (
+      <MaybeEmptyField present={false}>
+        <BlockFrame
+          style={style}
+          defaults={{ paddingY: "lg", maxWidth: "normal", alignment: "center" }}
+        >
+          {headlineNode}
+          {subheadlineNode}
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <span className={cn(primaryBtnClass, "cursor-text")} style={primaryStyle}>
+              <EditableText
+                path="primaryButton.label"
+                raw={primaryRaw.label}
+                emptyHint="Button-Text eingeben"
+              >
+                {primaryRaw.label}
+              </EditableText>
+            </span>
+          </div>
+        </BlockFrame>
+      </MaybeEmptyField>
+    ) as React.ReactElement;
+  }
+
+  const primaryNode = hasPrimary ? (
+    <CtaButton
+      leadId={leadId}
+      label={
+        renderPlaceholders(effectivePrimary!.label, leadData) ||
+        effectivePrimary!.label!
+      }
+      href={
+        renderPlaceholders(effectivePrimary!.url, leadData) ||
+        effectivePrimary!.url!
+      }
+      position="primary"
+      className={primaryBtnClass}
+      style={primaryStyle}
+    >
+      {editableLabel(
+        "primaryButton",
+        primary?.label ?? "",
+        renderPlaceholders(effectivePrimary!.label, leadData) ||
+          effectivePrimary!.label,
+      )}
+    </CtaButton>
+  ) : (
+    <MaybeEmptyField present={false}>
+      <span className={cn(primaryBtnClass, "cursor-text")} style={primaryStyle}>
+        <EditableText
+          path="primaryButton.label"
+          raw={primaryRaw.label}
+          emptyHint="Button-Text eingeben"
+        >
+          {renderPlaceholders(primaryRaw.label, leadData) || primaryRaw.label}
+        </EditableText>
+      </span>
+    </MaybeEmptyField>
+  );
+
+  const secondaryBtnClass = cn(
+    btnClass,
+    "border bg-[color:var(--lp-color-surface)] hover:bg-[color:var(--lp-color-primary-soft)]",
+  );
+  const secondaryNode = hasSecondary ? (
+    <CtaButton
+      leadId={leadId}
+      label={renderPlaceholders(secondary!.label, leadData) || secondary!.label!}
+      href={renderPlaceholders(secondary!.url, leadData) || secondary!.url!}
+      position="secondary"
+      className={secondaryBtnClass}
+      style={secondaryStyle}
+    >
+      {editableLabel(
+        "secondaryButton",
+        secondary!.label!,
+        renderPlaceholders(secondary!.label, leadData) || secondary!.label,
+      )}
+    </CtaButton>
+  ) : secondaryRaw.label || secondaryRaw.url ? (
+    <MaybeEmptyField present={false}>
+      <span className={cn(secondaryBtnClass, "cursor-text")} style={secondaryStyle}>
+        <EditableText
+          path="secondaryButton.label"
+          raw={secondaryRaw.label}
+          emptyHint="Button-Text eingeben"
+        >
+          {renderPlaceholders(secondaryRaw.label, leadData) || secondaryRaw.label}
+        </EditableText>
+      </span>
+    </MaybeEmptyField>
+  ) : null;
 
   return (
     <BlockFrame
@@ -282,52 +396,12 @@ export function BlockCtaBanner({
     >
       {headlineNode}
       {subheadlineNode}
-      {(effectivePrimary || secondary) && (
+      <MaybeEmptyField present={hasPrimary || hasSecondary}>
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-          {effectivePrimary && effectivePrimary.label && effectivePrimary.url && (
-            <CtaButton
-              leadId={leadId}
-              label={
-                renderPlaceholders(effectivePrimary.label, leadData) ||
-                effectivePrimary.label
-              }
-              href={
-                renderPlaceholders(effectivePrimary.url, leadData) ||
-                effectivePrimary.url
-              }
-              position="primary"
-              className={primaryBtnClass}
-              style={primaryStyle}
-            >
-              {editableLabel(
-                "primaryButton",
-                primary?.label ?? "",
-                renderPlaceholders(effectivePrimary.label, leadData) ||
-                  effectivePrimary.label,
-              )}
-            </CtaButton>
-          )}
-          {secondary && secondary.label && secondary.url && (
-            <CtaButton
-              leadId={leadId}
-              label={renderPlaceholders(secondary.label, leadData) || secondary.label}
-              href={renderPlaceholders(secondary.url, leadData) || secondary.url}
-              position="secondary"
-              className={cn(
-                btnClass,
-                "border bg-[color:var(--lp-color-surface)] hover:bg-[color:var(--lp-color-primary-soft)]",
-              )}
-              style={secondaryStyle}
-            >
-              {editableLabel(
-                "secondaryButton",
-                secondary.label,
-                renderPlaceholders(secondary.label, leadData) || secondary.label,
-              )}
-            </CtaButton>
-          )}
+          {primaryNode}
+          {secondaryNode}
         </div>
-      )}
+      </MaybeEmptyField>
     </BlockFrame>
   );
 }

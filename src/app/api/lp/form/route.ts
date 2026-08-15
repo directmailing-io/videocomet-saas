@@ -154,6 +154,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       email: form.email,
       phone: form.phone,
       message: form.message,
+      ...(form.extra.length > 0 ? { extra: form.extra } : {}),
     },
     ipHash: hashIp(getClientIp(req), getTrackingSecret()),
   });
@@ -169,6 +170,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         email: form.email,
         phone: form.phone,
         message: form.message,
+        extra: form.extra,
       },
       contactUrl: `${appBaseUrl()}/kampagnen/${ctx.campaignId}/runs/${ctx.runId}`,
     });

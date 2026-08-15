@@ -8,8 +8,16 @@ import {
   detectBookingLink,
   type BookingProvider,
 } from "@/lib/booking-link";
+import {
+  asFormFields,
+  DEFAULT_FORM_FIELDS,
+  MAX_FORM_FIELDS,
+  type LpFormFieldDef,
+  type LpFormFieldType,
+} from "@/lib/landing-blocks/form-fields";
 import { resolveVariant, type Block } from "@/lib/landing-blocks/types";
-import { asObject, asString } from "./shared";
+import { Switch } from "@/components/ui/switch";
+import { asObject, asString, Repeater } from "./shared";
 
 const PROVIDER_NAMES: Record<Exclude<BookingProvider, "unknown">, string> = {
   calendly: "Calendly",
@@ -71,10 +79,17 @@ export function BlockCtaBannerForm({
         </div>
       )}
       {variant === "form" && (
-        <p className="text-[11px] text-ink-muted leading-relaxed rounded-squircle-sm bg-surface-soft border border-line px-3 py-2">
-          Anfragen landen in deinem CRM am Kontakt und du bekommst eine
-          E-Mail.
-        </p>
+        <>
+          <p className="text-[11px] text-ink-muted leading-relaxed rounded-squircle-sm bg-surface-soft border border-line px-3 py-2">
+            Anfragen landen in deinem CRM am Kontakt und du bekommst eine
+            E-Mail. Name und E-Mail sind immer dabei, weitere Felder
+            bestimmst du selbst.
+          </p>
+          <FormFieldsEditor
+            fields={asFormFields(data.formFields) ?? DEFAULT_FORM_FIELDS}
+            onChange={(fields) => onChange({ formFields: fields })}
+          />
+        </>
       )}
       <ButtonFieldset
         title="Primärer Button"
@@ -84,8 +99,7 @@ export function BlockCtaBannerForm({
           onChange({ primaryButton: { label, url } })
         }
       />
-      <ButtonFieldset
-        title="Sekundärer Button (optional)"
+      <SecondaryButtonDisclosure
         label={asString(secondary.label)}
         url={asString(secondary.url)}
         onChange={(label, url) =>
@@ -93,6 +107,140 @@ export function BlockCtaBannerForm({
         }
       />
     </div>
+  );
+}
+
+/** Zweiter Button erst auf Klick — hält das Panel im Normalfall schlank. */
+function SecondaryButtonDisclosure({
+  label,
+  url,
+  onChange,
+}: {
+  label: string;
+  url: string;
+  onChange: (label: string, url: string) => void;
+}) {
+  const hasContent = !!(label || url);
+  const [open, setOpen] = React.useState(hasContent);
+  if (!open && !hasContent) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-xs font-semibold text-brand-deep hover:underline"
+      >
+        + Zweiten Button hinzufügen
+      </button>
+    );
+  }
+  return (
+    <div className="space-y-1.5">
+      <ButtonFieldset
+        title="Zweiter Button"
+        label={label}
+        url={url}
+        onChange={onChange}
+      />
+      <button
+        type="button"
+        onClick={() => {
+          onChange("", "");
+          setOpen(false);
+        }}
+        className="text-xs font-medium text-danger hover:opacity-80"
+      >
+        Zweiten Button entfernen
+      </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Formular-Baukasten (Variante "form")                                */
+/* ------------------------------------------------------------------ */
+
+const FIELD_TYPE_LABELS: Record<LpFormFieldType, string> = {
+  text: "Text (eine Zeile)",
+  email: "E-Mail",
+  tel: "Telefon",
+  textarea: "Text (mehrzeilig)",
+};
+
+function makeFieldId(): string {
+  return "f" + Math.random().toString(36).slice(2, 10);
+}
+
+function FormFieldsEditor({
+  fields,
+  onChange,
+}: {
+  fields: LpFormFieldDef[];
+  onChange: (fields: LpFormFieldDef[]) => void;
+}) {
+  return (
+    <Repeater<LpFormFieldDef>
+      label="Formularfelder"
+      items={fields.slice(0, MAX_FORM_FIELDS)}
+      onChange={onChange}
+      makeEmpty={() => ({
+        id: makeFieldId(),
+        label: "",
+        type: "text",
+        required: false,
+      })}
+      preview={(f) => f.label || FIELD_TYPE_LABELS[f.type]}
+      renderItem={(f, update) => (
+        <>
+          <div>
+            <Label>Beschriftung</Label>
+            <Input
+              value={f.label}
+              onChange={(e) => update({ label: e.target.value })}
+              placeholder="z. B. Firma"
+            />
+          </div>
+          <div>
+            <Label>Feldtyp</Label>
+            <select
+              value={f.type}
+              onChange={(e) =>
+                update({ type: e.target.value as LpFormFieldType })
+              }
+              className="w-full rounded-squircle-sm border border-line bg-surface px-2.5 py-2 text-sm outline-none focus:border-brand"
+            >
+              {(Object.keys(FIELD_TYPE_LABELS) as LpFormFieldType[]).map(
+                (t) => (
+                  <option key={t} value={t}>
+                    {FIELD_TYPE_LABELS[t]}
+                  </option>
+                ),
+              )}
+            </select>
+          </div>
+          <div className="flex items-center justify-between">
+            <Label className="mb-0">Pflichtfeld</Label>
+            <Switch
+              checked={f.required}
+              onCheckedChange={(c) => update({ required: c })}
+            />
+          </div>
+          <div>
+            <Label>Vorbefüllen aus Lead-Spalte (optional)</Label>
+            <Input
+              value={f.prefillKey ?? ""}
+              onChange={(e) =>
+                update({ prefillKey: e.target.value || undefined })
+              }
+              placeholder="z. B. firma"
+            />
+            <p className="text-[11px] text-ink-muted mt-1 leading-relaxed">
+              Name der Spalte aus deiner Lead-Liste. Das Feld ist dann für
+              jeden Empfänger schon ausgefüllt.
+            </p>
+          </div>
+        </>
+      )}
+    />
   );
 }
 

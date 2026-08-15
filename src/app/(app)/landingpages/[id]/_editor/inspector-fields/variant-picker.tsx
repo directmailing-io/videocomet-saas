@@ -13,7 +13,6 @@
 
 import * as React from "react";
 
-import { Label } from "@/components/ui/label";
 import {
   BLOCK_VARIANTS,
   resolveVariant,
@@ -389,10 +388,9 @@ export function VariantPicker({
   const active = resolveVariant(type, block.variant);
   const labels = VARIANT_LABELS[type];
   return (
-    <div className="mb-4">
-      <Label>Layout</Label>
+    <div>
       <div
-        className="grid grid-cols-3 gap-1.5 mt-1.5"
+        className="grid grid-cols-3 gap-1.5"
         role="group"
         aria-label="Layout wählen"
       >

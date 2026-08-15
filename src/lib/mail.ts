@@ -1079,6 +1079,8 @@ export interface SendLpFormSubmissionMailInput {
     email: string;
     phone: string | null;
     message: string | null;
+    /** Zusatzfelder aus dem Formular-Baukasten: [{label, value}]. */
+    extra?: Array<{ label: string; value: string }>;
   };
   /** Link zur Kontakt-/Runden-Ansicht in der App. */
   contactUrl: string;
@@ -1113,6 +1115,7 @@ export async function sendLpFormSubmissionMail(
     ? escapeHtml(input.form.message).replace(/\r?\n/g, "<br />")
     : null;
 
+  const extra = input.form.extra ?? [];
   const rows = [
     fieldRow("Name", `<strong>${escapeHtml(input.form.name)}</strong>`),
     fieldRow(
@@ -1121,6 +1124,9 @@ export async function sendLpFormSubmissionMail(
     ),
     ...(input.form.phone ? [fieldRow("Telefon", escapeHtml(input.form.phone))] : []),
     ...(messageHtml ? [fieldRow("Nachricht", messageHtml)] : []),
+    ...extra.map((f) =>
+      fieldRow(f.label, escapeHtml(f.value).replace(/\r?\n/g, "<br />")),
+    ),
   ].join("");
 
   const body = `
@@ -1166,6 +1172,7 @@ export async function sendLpFormSubmissionMail(
     `E-Mail: ${input.form.email}`,
     ...(input.form.phone ? [`Telefon: ${input.form.phone}`] : []),
     ...(input.form.message ? ["", "Nachricht:", input.form.message] : []),
+    ...extra.map((f) => `${f.label}: ${f.value}`),
     "",
     "Kontakt ansehen:",
     input.contactUrl,

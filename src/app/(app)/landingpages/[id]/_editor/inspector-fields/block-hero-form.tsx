@@ -136,6 +136,76 @@ export function BlockHeroForm({
           </div>
         </>
       )}
+      <SecondaryCtaFields
+        label={asString(data.ctaSecondaryLabel)}
+        url={asString(data.ctaSecondaryUrl)}
+        onChange={(label, url) =>
+          onChange({ ctaSecondaryLabel: label, ctaSecondaryUrl: url })
+        }
+      />
     </div>
+  );
+}
+
+/**
+ * Zweiter (dezenter) Button — erst per "+ Zweiten Button hinzufügen"
+ * einblenden, damit das Panel für den Normalfall schlank bleibt.
+ */
+function SecondaryCtaFields({
+  label,
+  url,
+  onChange,
+}: {
+  label: string;
+  url: string;
+  onChange: (label: string, url: string) => void;
+}) {
+  const hasContent = !!(label || url);
+  const [open, setOpen] = React.useState(hasContent);
+  if (!open && !hasContent) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-xs font-semibold text-brand-deep hover:underline"
+      >
+        + Zweiten Button hinzufügen
+      </button>
+    );
+  }
+  return (
+    <fieldset className="rounded-squircle-sm border border-line p-3 space-y-2">
+      <legend className="px-1 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+        Zweiter Button
+      </legend>
+      <div>
+        <Label htmlFor="hero-cta2-label">Beschriftung</Label>
+        <Input
+          id="hero-cta2-label"
+          value={label}
+          onChange={(e) => onChange(e.target.value, url)}
+          placeholder="Mehr erfahren"
+        />
+      </div>
+      <div>
+        <Label htmlFor="hero-cta2-url">Link</Label>
+        <Input
+          id="hero-cta2-url"
+          value={url}
+          onChange={(e) => onChange(label, e.target.value)}
+          placeholder="https://deine-website.de"
+        />
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          onChange("", "");
+          setOpen(false);
+        }}
+        className="text-xs font-medium text-danger hover:opacity-80"
+      >
+        Zweiten Button entfernen
+      </button>
+    </fieldset>
   );
 }

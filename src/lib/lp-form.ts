@@ -19,6 +19,8 @@ export interface LpFormValues {
   email: string;
   phone: string | null;
   message: string | null;
+  /** Zusatzfelder aus dem Formular-Baukasten: [{label, value}]. */
+  extra: Array<{ label: string; value: string }>;
 }
 
 export type LpFormParseResult =
@@ -31,6 +33,9 @@ export const LP_FORM_LIMITS = {
   email: 200,
   phone: 50,
   message: 2000,
+  extraCount: 12,
+  extraLabel: 80,
+  extraValue: 1000,
 } as const;
 
 // Kein /u-Flag (altes TS-Target).
@@ -129,9 +134,33 @@ export function parseLpFormSubmission(body: unknown): LpFormParseResult {
     message = m.length > 0 ? m : null;
   }
 
+  // Zusatzfelder aus dem Formular-Baukasten. Lenient: einzelne kaputte
+  // Einträge werden übersprungen, nur ein komplett falscher Typ ist 422.
+  const extra: Array<{ label: string; value: string }> = [];
+  if (obj.extra != null) {
+    if (!Array.isArray(obj.extra)) {
+      return {
+        ok: false,
+        error:
+          "Deine Anfrage konnte nicht verarbeitet werden. Bitte lade die Seite neu und versuche es noch einmal.",
+      };
+    }
+    for (const entry of obj.extra.slice(0, LP_FORM_LIMITS.extraCount)) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const rec = entry as Record<string, unknown>;
+      const label = asTrimmedString(rec.label) ?? "";
+      const value = asTrimmedString(rec.value) ?? "";
+      if (!label || !value) continue;
+      extra.push({
+        label: label.slice(0, LP_FORM_LIMITS.extraLabel),
+        value: value.slice(0, LP_FORM_LIMITS.extraValue),
+      });
+    }
+  }
+
   return {
     ok: true,
     honeypot: false,
-    value: { leadId, name, email, phone, message },
+    value: { leadId, name, email, phone, message, extra },
   };
 }

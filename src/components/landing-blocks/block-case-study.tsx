@@ -4,7 +4,8 @@ import { renderPlaceholders } from "@/lib/landing-blocks/placeholders";
 import { resolveVariant } from "@/lib/landing-blocks/types";
 import type { BlockRenderProps } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
-import { EditableText, MaybeEmptyField } from "./editable-text";
+import { EditableText, EditSwitch, MaybeEmptyField } from "./editable-text";
+import { ImagePlaceholder } from "./image-placeholder";
 
 /* ------------------------------------------------------------------ */
 /* Defensive narrowing of the persisted data shape                     */
@@ -98,6 +99,11 @@ const LABEL_STYLE: React.CSSProperties = {
 /* ------------------------------------------------------------------ */
 
 function MediumNode({ medium }: { medium: CaseStudyMedium }) {
+  if (!medium.url) {
+    // Nur im Builder sichtbar (Public rendert diesen Zweig nie mit
+    // leerer URL bzw. ImagePlaceholder ergibt dort null).
+    return <ImagePlaceholder />;
+  }
   if (medium.kind === "video") {
     return (
       <video
@@ -409,31 +415,25 @@ export function BlockCaseStudy({
 
   /* ---------- Layout --------------------------------------------------- */
 
-  let body: React.ReactNode;
+  const textWithClient = (
+    <>
+      {textNode}
+      {showClientLine && (
+        <div className="mt-8">
+          <ClientLine client={client} />
+        </div>
+      )}
+    </>
+  );
 
-  if (!hasMedium) {
-    body = (
-      <div className="max-w-3xl">
-        {textNode}
-        {showClientLine && (
-          <div className="mt-8">
-            <ClientLine client={client} />
-          </div>
-        )}
-      </div>
-    );
-  } else if (layout === "media-top") {
-    body = (
+  const textOnlyBody = <div className="max-w-3xl">{textWithClient}</div>;
+
+  let mediaBody: React.ReactNode;
+  if (layout === "media-top") {
+    mediaBody = (
       <div>
         <MediumNode medium={medium} />
-        <div className="mt-8 sm:mt-10 max-w-3xl">
-          {textNode}
-          {showClientLine && (
-            <div className="mt-8">
-              <ClientLine client={client} />
-            </div>
-          )}
-        </div>
+        <div className="mt-8 sm:mt-10 max-w-3xl">{textWithClient}</div>
       </div>
     );
   } else {
@@ -441,22 +441,23 @@ export function BlockCaseStudy({
     // deshalb steht das Medium im DOM immer vorn und wandert per Order).
     const mediaOrder = layout === "media-right" ? "md:order-2" : "md:order-1";
     const textOrder = layout === "media-right" ? "md:order-1" : "md:order-2";
-    body = (
+    mediaBody = (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
         <div className={cn("min-w-0", mediaOrder)}>
           <MediumNode medium={medium} />
         </div>
-        <div className={cn("min-w-0", textOrder)}>
-          {textNode}
-          {showClientLine && (
-            <div className="mt-8">
-              <ClientLine client={client} />
-            </div>
-          )}
-        </div>
+        <div className={cn("min-w-0", textOrder)}>{textWithClient}</div>
       </div>
     );
   }
+
+  // Ohne Medium: Public rendert (wie bisher) die reine Text-Spalte,
+  // der Builder zeigt das Medien-Layout mit Bild-Platzhalter.
+  const body: React.ReactNode = hasMedium ? (
+    mediaBody
+  ) : (
+    <EditSwitch editing={mediaBody} fallback={textOnlyBody} />
+  );
 
   const frame = (
     <BlockFrame

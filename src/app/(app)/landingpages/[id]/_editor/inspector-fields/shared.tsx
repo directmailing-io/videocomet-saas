@@ -73,6 +73,19 @@ export interface RepeaterProps<T> {
   renderItem: (item: T, update: (patch: Partial<T>) => void) => React.ReactNode;
   /** Hide the "Eintrag entfernen" button when only one item remains. */
   minOne?: boolean;
+  /** Vorschau-Text fuer die kollabierte Kopfzeile eines Eintrags. */
+  preview?: (item: T) => string;
+}
+
+/** Erster nicht-leerer String-Wert eines Eintrags — Default-Vorschau. */
+function defaultPreview(item: unknown): string {
+  if (typeof item === "string") return item;
+  if (item && typeof item === "object") {
+    for (const value of Object.values(item as Record<string, unknown>)) {
+      if (typeof value === "string" && value.trim()) return value;
+    }
+  }
+  return "";
 }
 
 export function Repeater<T>({
@@ -82,7 +95,12 @@ export function Repeater<T>({
   makeEmpty,
   renderItem,
   minOne,
+  preview,
 }: RepeaterProps<T>) {
+  // Kollabierte Eintraege mit Vorschau-Zeile: nur der offene Eintrag zeigt
+  // sein Formular. Neu hinzugefuegte Eintraege klappen automatisch auf.
+  const [openIdx, setOpenIdx] = React.useState<number | null>(null);
+
   function update(idx: number, patch: Partial<T>) {
     const next = items.map((it, i) => (i === idx ? { ...it, ...patch } : it));
     onChange(next);
@@ -90,39 +108,84 @@ export function Repeater<T>({
   function remove(idx: number) {
     if (minOne && items.length <= 1) return;
     onChange(items.filter((_, i) => i !== idx));
+    setOpenIdx((open) =>
+      open === null ? null : open === idx ? null : open > idx ? open - 1 : open,
+    );
   }
   function add() {
     onChange([...items, makeEmpty()]);
+    setOpenIdx(items.length);
   }
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <div className="space-y-2.5">
-        {items.map((item, idx) => (
-          <div
-            key={idx}
-            className="rounded-squircle-sm border border-line bg-surface-soft p-3 space-y-2 relative"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-ink-muted">
-                #{idx + 1}
-              </span>
-              <button
-                type="button"
-                onClick={() => remove(idx)}
-                disabled={minOne && items.length <= 1}
-                className={cn(
-                  "inline-flex items-center text-ink-muted hover:text-danger transition-colors",
-                  minOne && items.length <= 1 && "opacity-40 cursor-not-allowed",
-                )}
-                title="Eintrag entfernen"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
+      <div className="space-y-2">
+        {items.map((item, idx) => {
+          const isOpen = openIdx === idx;
+          const previewText =
+            (preview ? preview(item) : defaultPreview(item)).trim() ||
+            "Leerer Eintrag";
+          return (
+            <div
+              key={idx}
+              className="rounded-squircle-sm border border-line bg-surface-soft relative"
+            >
+              <div className="flex items-center gap-2 px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => setOpenIdx(isOpen ? null : idx)}
+                  aria-expanded={isOpen}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                >
+                  <span className="text-[11px] font-medium text-ink-muted shrink-0">
+                    #{idx + 1}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-ink">
+                    {previewText}
+                  </span>
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    aria-hidden
+                    className={cn(
+                      "shrink-0 text-ink-muted transition-transform",
+                      isOpen && "rotate-180",
+                    )}
+                  >
+                    <path
+                      d="M2.5 4.5L6 8l3.5-3.5"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => remove(idx)}
+                  disabled={minOne && items.length <= 1}
+                  className={cn(
+                    "inline-flex items-center text-ink-muted hover:text-danger transition-colors shrink-0",
+                    minOne &&
+                      items.length <= 1 &&
+                      "opacity-40 cursor-not-allowed",
+                  )}
+                  title="Eintrag entfernen"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+              {isOpen && (
+                <div className="space-y-2 border-t border-line px-3 py-2.5">
+                  {renderItem(item, (patch) => update(idx, patch))}
+                </div>
+              )}
             </div>
-            {renderItem(item, (patch) => update(idx, patch))}
-          </div>
-        ))}
+          );
+        })}
       </div>
       <Button
         type="button"
@@ -139,10 +202,10 @@ export function Repeater<T>({
 }
 
 /**
- * Lightweight URL picker — text field + "Aus Mediathek wählen" button that
- * opens a modal listing the user's media items of the given type. Kept
- * inline here rather than as a top-level component because every inspector
- * form needs a slightly different filter.
+ * Lightweight URL picker — text field + Direkt-Upload + "Aus Mediathek
+ * wählen" button that opens a modal listing the user's media items of the
+ * given type. Kept inline here rather than as a top-level component because
+ * every inspector form needs a slightly different filter.
  */
 export function MediaUrlField({
   label,
@@ -158,6 +221,40 @@ export function MediaUrlField({
   placeholder?: string;
 }) {
   const [open, setOpen] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadError, setUploadError] = React.useState<string | null>(null);
+  const fileRef = React.useRef<HTMLInputElement | null>(null);
+
+  async function uploadFile(file: File) {
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const fd = new FormData();
+      fd.append("kind", type);
+      fd.append("file", file);
+      const res = await fetch("/api/media", {
+        method: "POST",
+        body: fd,
+        credentials: "same-origin",
+      });
+      const json = (await res.json().catch(() => null)) as {
+        media?: { publicUrl?: string };
+        error?: string;
+      } | null;
+      if (!res.ok || !json?.media?.publicUrl) {
+        throw new Error(json?.error ?? `Upload fehlgeschlagen (${res.status})`);
+      }
+      onChange(json.media.publicUrl);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : "Upload fehlgeschlagen.",
+      );
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
@@ -167,6 +264,25 @@ export function MediaUrlField({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder ?? "https://..."}
         />
+        <input
+          ref={fileRef}
+          type="file"
+          accept={type === "video" || type === "webcam" ? "video/*" : "image/*"}
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void uploadFile(file);
+          }}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={uploading}
+          onClick={() => fileRef.current?.click()}
+        >
+          {uploading ? "Lädt…" : "Hochladen"}
+        </Button>
         <Button
           type="button"
           variant="ghost"
@@ -176,6 +292,9 @@ export function MediaUrlField({
           Mediathek
         </Button>
       </div>
+      {uploadError && (
+        <p className="text-xs text-danger">Fehler: {uploadError}</p>
+      )}
       {value && (
         <div className="mt-1">
           {type === "image" || type === "logo" ? (
