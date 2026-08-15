@@ -1,5 +1,4 @@
 import * as React from "react";
-import { cn } from "@/lib/utils";
 import { renderPlaceholders } from "@/lib/landing-blocks/placeholders";
 import type { BlockRenderProps } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
@@ -39,10 +38,14 @@ export function BlockImage({
         <img
           src={url}
           alt={alt}
-          className={cn(
-            "w-full h-auto",
-            fullWidth ? "" : "rounded-2xl",
-          )}
+          className="w-full h-auto"
+          // Full-bleed-Bilder bleiben eckig (Kante an Kante); sonst kommt
+          // die Rundung aus der Theme-Rundungsskala fuer Bilder.
+          style={
+            fullWidth
+              ? undefined
+              : { borderRadius: "var(--lp-radius-image)" }
+          }
         />
         {caption && (
           <figcaption className="mt-2 text-xs sm:text-sm opacity-60">

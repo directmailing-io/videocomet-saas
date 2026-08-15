@@ -40,11 +40,15 @@ export function BlockFaq({
       style={style}
       defaults={{ paddingY: "md", maxWidth: "normal", alignment: "left" }}
     >
-      <ul className="divide-y divide-line/30 border-y border-line/30">
+      {/* Linien + Hover-Flaeche kommen aus dem Token-System: Border-Ton
+          passt sich hell/dunkel an, die Hover-Flaeche nutzt den weichen
+          Primaerfarb-Ton (--lp-color-primary-soft). Negative Margins +
+          Padding halten den Text trotz Hover-Flaeche buendig. */}
+      <ul className="divide-y divide-[color:var(--lp-color-border)] border-y border-[color:var(--lp-color-border)]">
         {items.map((item, idx) => (
           <li key={idx}>
             <details className="group py-4">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-medium">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-medium -mx-3 -my-2 px-3 py-2 transition-colors rounded-[var(--lp-radius-input)] hover:bg-[color:var(--lp-color-primary-soft)]">
                 <span>{renderPlaceholders(item.q, leadData)}</span>
                 <span className="text-xl leading-none opacity-50 transition group-open:rotate-45">
                   +

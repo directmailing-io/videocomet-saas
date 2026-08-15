@@ -48,7 +48,10 @@ export function BlockHero({
       defaults={{ paddingY: "lg", maxWidth: "normal", alignment }}
     >
       {headline && (
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-balance">
+        <h1
+          className="text-3xl sm:text-4xl font-bold tracking-tight text-balance"
+          style={{ fontFamily: "var(--lp-font-heading)" }}
+        >
           {headline}
         </h1>
       )}
@@ -72,7 +75,13 @@ export function BlockHero({
             {slot}
           </div>
         ) : (
-          <div className="mt-8 rounded-squircle-lg overflow-hidden shadow-card text-left">
+          <div
+            className="mt-8 overflow-hidden text-left"
+            style={{
+              borderRadius: "var(--lp-radius-card)",
+              boxShadow: "var(--lp-shadow-card)",
+            }}
+          >
             {slot}
           </div>
         )

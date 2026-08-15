@@ -19,6 +19,11 @@ import { hostname } from "node:os";
 import { and, eq, lt, inArray, sql } from "drizzle-orm";
 import { pipelineWorker, pipelineQueue, getRedisConnection } from "./queue";
 import { screenshotWorker, type ScreenshotJobData } from "./screenshot-queue";
+import {
+  brandExtractWorker,
+  type BrandExtractJobData,
+} from "./brand-extract-queue";
+import { brandExtractProcessor } from "./processors/brand-extract";
 import { crmSyncWorker, type CrmSyncJob } from "./crm-queue";
 import { emailGifWorker, type EmailGifJobData } from "./email-gif-queue";
 import { processEmailGifJob } from "./jobs/email-gif";
@@ -921,6 +926,44 @@ async function main(): Promise<void> {
     log("error", "screenshot worker error:", err.message);
   });
 
+  // Brand-Extraktion (Landingpage v3): Website-URL → BrandKit + Logo-
+  // Kandidaten. Läuft im selben Prozess und teilt sich den Browser-Pool
+  // mit den Screenshot-Jobs. Concurrency default 2
+  // (BRAND_EXTRACT_WORKER_CONCURRENCY).
+  const brandExtractW = brandExtractWorker(
+    async (job: Job<BrandExtractJobData>) => {
+      incrementInFlight();
+      try {
+        log(
+          "info",
+          `brand-extract start job=${job.id} extractJob=${job.data.jobId}`,
+        );
+        const result = await brandExtractProcessor(job);
+        log(
+          "info",
+          `brand-extract done  job=${job.id} extractJob=${job.data.jobId}`,
+        );
+        return result;
+      } catch (err) {
+        log(
+          "error",
+          `brand-extract fail  job=${job?.id} extractJob=${job?.data?.jobId}`,
+          err,
+        );
+        throw err;
+      } finally {
+        decrementInFlight();
+      }
+    },
+  );
+
+  brandExtractW.on("failed", (job, err) => {
+    log("error", `brand-extract job ${job?.id} failed:`, err?.message);
+  });
+  brandExtractW.on("error", (err) => {
+    log("error", "brand-extract worker error:", err.message);
+  });
+
   // CRM-Sync worker — pushes lead-event aggregates to external CRMs
   // (HubSpot/Salessuite/Close) on a 30s debounce. Concurrency is
   // deliberately small (default 2) to stay inside Salessuite's
@@ -1264,6 +1307,11 @@ async function main(): Promise<void> {
       await screenshotW.close();
     } catch (err) {
       log("error", "screenshot worker close failed:", err);
+    }
+    try {
+      await brandExtractW.close();
+    } catch (err) {
+      log("error", "brand-extract worker close failed:", err);
     }
     try {
       await crmSyncW.close();

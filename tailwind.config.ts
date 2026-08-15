@@ -90,10 +90,15 @@ const config: Config = {
           '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
           '50%': { transform: 'translate(-14px, 12px) scale(1.08)' },
         },
+        'slide-in-right': {
+          '0%': { opacity: '0', transform: 'translateX(24px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1)',
         'slide-up': 'slide-up 250ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+        'slide-in-right': 'slide-in-right 250ms cubic-bezier(0.2, 0.8, 0.2, 1)',
         'shimmer': 'shimmer 1.8s linear infinite',
         'pop': 'pop 450ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
         'glow-drift': 'glow-drift 8s ease-in-out infinite',

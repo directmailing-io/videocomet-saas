@@ -26,6 +26,12 @@ export interface CtaButtonProps {
   href: string;
   position?: CtaPosition;
   className?: string;
+  /**
+   * Inline styles for token consumption (border-radius, shadow, colours
+   * via `var(--lp-…)`). Hover states cannot live here — callers use
+   * Tailwind-arbitrary classes (`hover:bg-[color:var(--lp-…)]`) instead.
+   */
+  style?: React.CSSProperties;
   children: React.ReactNode;
 }
 
@@ -62,6 +68,7 @@ export function CtaButton({
   href,
   position = "primary",
   className,
+  style,
   children,
 }: CtaButtonProps) {
   const handleClick = React.useCallback(() => {
@@ -76,6 +83,7 @@ export function CtaButton({
       onClick={handleClick}
       onAuxClick={handleClick}
       className={className}
+      style={style}
     >
       {children}
     </a>

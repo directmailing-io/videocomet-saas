@@ -51,7 +51,13 @@ export function BlockTestimonials({
         {items.map((item, idx) => (
           <figure
             key={idx}
-            className="rounded-2xl border border-line/30 p-5 bg-white/5"
+            className="p-5"
+            style={{
+              backgroundColor: "var(--lp-color-surface)",
+              border: "1px solid var(--lp-color-border)",
+              borderRadius: "var(--lp-radius-card)",
+              boxShadow: "var(--lp-shadow-card)",
+            }}
           >
             <blockquote className="text-sm sm:text-base leading-relaxed">
               &ldquo;{renderPlaceholders(item.quote, leadData)}&rdquo;

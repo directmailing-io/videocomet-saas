@@ -113,6 +113,14 @@ export const users = pgTable("users", {
    */
   notifyRunEmails: boolean("notify_run_emails").notNull().default(true),
 
+  /**
+   * Account-weiter Standard-Brand-Kit (Migration 0053, Landingpage v3).
+   * Shape: `BrandKit` aus `src/lib/landing-theme/brand-kit.ts` — wird beim
+   * Schreiben via `brandKitSchema` validiert, beim Lesen defensiv geparst.
+   * NULL = noch kein Standard gespeichert.
+   */
+  brandKitDefault: jsonb("brand_kit_default").$type<Record<string, unknown>>(),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),

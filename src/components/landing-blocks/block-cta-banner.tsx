@@ -46,10 +46,23 @@ export function BlockCtaBanner({
   const secondary = asCta(data.secondaryButton);
   if (!headline && !primary && !secondary) return null;
 
+  // Buttons konsumieren ausschliesslich Theme-Tokens: Radius/Schatten/
+  // Textfarbe als Inline-Style, Hintergrund + Hover als Tailwind-
+  // Arbitrary-Klassen (Hover geht nicht per Inline-Style, und ein
+  // Inline-Background wuerde die Hover-Klasse ueberdecken).
   const btnClass = cn(
     "inline-flex items-center justify-center px-7 py-3.5",
-    "text-sm font-semibold rounded-full transition-all duration-150",
+    "text-sm font-semibold transition-all duration-150",
+    "rounded-[var(--lp-radius-button)]",
   );
+  const primaryStyle: React.CSSProperties = {
+    color: "var(--lp-color-on-primary)",
+    boxShadow: "var(--lp-shadow-cta)",
+  };
+  const secondaryStyle: React.CSSProperties = {
+    color: "var(--lp-color-text)",
+    borderColor: "var(--lp-color-border)",
+  };
 
   return (
     <BlockFrame
@@ -57,7 +70,10 @@ export function BlockCtaBanner({
       defaults={{ paddingY: "lg", maxWidth: "normal", alignment: "center" }}
     >
       {headline && (
-        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-balance">
+        <h2
+          className="text-2xl sm:text-3xl font-bold tracking-tight text-balance"
+          style={{ fontFamily: "var(--lp-font-heading)" }}
+        >
           {headline}
         </h2>
       )}
@@ -72,7 +88,11 @@ export function BlockCtaBanner({
               label={renderPlaceholders(primary.label, leadData) || primary.label}
               href={renderPlaceholders(primary.url, leadData) || primary.url}
               position="primary"
-              className={cn(btnClass, "bg-ink text-white hover:bg-ink-soft shadow-card")}
+              className={cn(
+                btnClass,
+                "bg-[color:var(--lp-color-primary)] hover:bg-[color:var(--lp-color-primary-hover)]",
+              )}
+              style={primaryStyle}
             >
               {renderPlaceholders(primary.label, leadData) || primary.label}
             </CtaButton>
@@ -83,7 +103,11 @@ export function BlockCtaBanner({
               label={renderPlaceholders(secondary.label, leadData) || secondary.label}
               href={renderPlaceholders(secondary.url, leadData) || secondary.url}
               position="secondary"
-              className={cn(btnClass, "bg-surface text-ink border border-line hover:bg-surface-muted")}
+              className={cn(
+                btnClass,
+                "border bg-[color:var(--lp-color-surface)] hover:bg-[color:var(--lp-color-primary-soft)]",
+              )}
+              style={secondaryStyle}
             >
               {renderPlaceholders(secondary.label, leadData) || secondary.label}
             </CtaButton>

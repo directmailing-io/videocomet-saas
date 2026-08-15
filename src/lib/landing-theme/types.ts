@@ -22,6 +22,29 @@ export type ThemePresetId =
 export type SpacingScale = "compact" | "cozy" | "spacious";
 export type RadiusScale = "sharp" | "rounded" | "pill";
 
+/** Hell/Dunkel-Modus der Seite (v3 Brand-Kit). */
+export type ThemeMode = "light" | "dark";
+
+/**
+ * Neue 4-Stufen-Rundungsskala (v3). Das alte 3-stufige `radius` bleibt
+ * für Bestandsdaten erhalten — `LEGACY_RADIUS_TO_SCALE` mappt alt → neu.
+ */
+export type RadiusScaleV3 = "none" | "subtle" | "soft" | "round";
+
+/** Schatten-Intensität (v3): Flach / Weich / Ausgeprägt. */
+export type ShadowScale = "flat" | "soft" | "bold";
+
+/**
+ * Mapping der alten Radius-Skala auf die neue. "rounded" landet bewusst
+ * auf "soft" (nicht "subtle") — das entspricht dem bisherigen 12px-Look
+ * am ehesten.
+ */
+export const LEGACY_RADIUS_TO_SCALE: Record<RadiusScale, RadiusScaleV3> = {
+  sharp: "none",
+  rounded: "soft",
+  pill: "round",
+};
+
 /**
  * Six semantic colour roles. Every block must reference these via the
  * CSS custom properties (`--lp-color-*`) — never via Tailwind brand tokens —
@@ -67,6 +90,19 @@ export interface ThemeConfig {
   fonts: ThemeFonts;
   spacing: SpacingScale;
   radius: RadiusScale;
+
+  // ── v3 Brand-Kit-Felder — alle optional, damit Bestandsdaten ohne
+  //    Migration weiter funktionieren. Fehlende Werte werden beim Lesen
+  //    (extract.ts) bzw. Rendern (css-vars.ts) aus den alten abgeleitet. ──
+
+  /** Hell/Dunkel-Modus. Fehlt er, wird er aus der Luminanz von `colors.bg` erkannt. Default "light". */
+  mode?: ThemeMode;
+  /** Neue 4-Stufen-Rundungsskala. Fehlt sie, greift `LEGACY_RADIUS_TO_SCALE[radius]`. */
+  radiusScale?: RadiusScaleV3;
+  /** Schatten-Stil. Default "soft". */
+  shadow?: ShadowScale;
+  /** ID eines kuratierten Font-Paars (font-pairs.ts). Metadaten — gerendert wird immer `fonts`. */
+  fontPairId?: string;
 }
 
 /**

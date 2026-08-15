@@ -11,10 +11,20 @@
  */
 
 import { buildFontFamilyValue } from "./fonts";
-import type {
-  RadiusScale,
-  SpacingScale,
-  ThemeConfig,
+import {
+  borderTone,
+  hoverTone,
+  modeFromBackground,
+  onColor,
+  softTone,
+} from "./derived-colors";
+import {
+  LEGACY_RADIUS_TO_SCALE,
+  type RadiusScaleV3,
+  type ShadowScale,
+  type SpacingScale,
+  type ThemeConfig,
+  type ThemeMode,
 } from "./types";
 
 /** Section vertical padding (top + bottom) per spacing scale. */
@@ -24,11 +34,52 @@ const SPACING_PX: Record<SpacingScale, string> = {
   spacious: "56px",
 };
 
-/** Corner-radius per radius scale. `pill` uses 999px so circular buttons "just work". */
-const RADIUS_PX: Record<RadiusScale, string> = {
-  sharp: "0px",
-  rounded: "12px",
-  pill: "999px",
+/**
+ * v3-Rundungsskala: pro Stufe fest definierte Werte je Element-Rolle —
+ * "round" macht Buttons zur Pille UND Karten weicher, konsistent überall
+ * (Konzept Abschnitt 4). Kein Pixel-Input für User.
+ */
+const RADIUS_SCALE_PX: Record<
+  RadiusScaleV3,
+  { card: string; button: string; input: string; image: string }
+> = {
+  none: { card: "0px", button: "0px", input: "0px", image: "0px" },
+  subtle: { card: "8px", button: "8px", input: "6px", image: "8px" },
+  soft: { card: "16px", button: "12px", input: "10px", image: "14px" },
+  round: { card: "24px", button: "9999px", input: "12px", image: "20px" },
+};
+
+/**
+ * Schatten-Stile je Intensität und Modus. Dark-Schatten sind schwärzer,
+ * aber dezenter gestreut — auf dunklem Grund tragen sonst schon kleine
+ * Schatten zu dick auf.
+ */
+const SHADOWS: Record<
+  ThemeMode,
+  Record<ShadowScale, { card: string; cta: string }>
+> = {
+  light: {
+    flat: { card: "none", cta: "none" },
+    soft: {
+      card: "0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.08)",
+      cta: "0 2px 6px rgba(15, 23, 42, 0.10), 0 6px 16px rgba(15, 23, 42, 0.12)",
+    },
+    bold: {
+      card: "0 2px 4px rgba(15, 23, 42, 0.10), 0 18px 44px rgba(15, 23, 42, 0.18)",
+      cta: "0 4px 12px rgba(15, 23, 42, 0.18), 0 10px 28px rgba(15, 23, 42, 0.22)",
+    },
+  },
+  dark: {
+    flat: { card: "none", cta: "none" },
+    soft: {
+      card: "0 1px 2px rgba(0, 0, 0, 0.40), 0 8px 20px rgba(0, 0, 0, 0.35)",
+      cta: "0 2px 6px rgba(0, 0, 0, 0.45)",
+    },
+    bold: {
+      card: "0 2px 4px rgba(0, 0, 0, 0.50), 0 14px 36px rgba(0, 0, 0, 0.50)",
+      cta: "0 4px 12px rgba(0, 0, 0, 0.55)",
+    },
+  },
 };
 
 /**
@@ -42,6 +93,16 @@ const RADIUS_PX: Record<RadiusScale, string> = {
 export function buildThemeCssVars(
   theme: ThemeConfig,
 ): Record<string, string> {
+  // v3-Felder sind optional — fehlende Werte werden hier (nicht nur in
+  // extract.ts) abgeleitet, weil Presets/hand-gebaute Themes auch direkt
+  // an den Renderer gehen können.
+  const mode: ThemeMode = theme.mode ?? modeFromBackground(theme.colors.bg);
+  const radiusScale: RadiusScaleV3 =
+    theme.radiusScale ?? LEGACY_RADIUS_TO_SCALE[theme.radius];
+  const shadow: ShadowScale = theme.shadow ?? "soft";
+  const radius = RADIUS_SCALE_PX[radiusScale];
+  const shadows = SHADOWS[mode][shadow];
+
   return {
     "--lp-color-primary": theme.colors.primary,
     "--lp-color-accent": theme.colors.accent,
@@ -49,9 +110,23 @@ export function buildThemeCssVars(
     "--lp-color-surface": theme.colors.surface,
     "--lp-color-text": theme.colors.text,
     "--lp-color-muted": theme.colors.muted,
+    "--lp-color-on-primary": onColor(theme.colors.primary),
+    "--lp-color-primary-soft": softTone(theme.colors.primary, mode),
+    "--lp-color-primary-hover": hoverTone(theme.colors.primary, mode),
+    "--lp-color-border": borderTone(theme.colors.bg, mode),
     "--lp-font-heading": buildFontFamilyValue(theme.fonts.heading),
     "--lp-font-body": buildFontFamilyValue(theme.fonts.body),
-    "--lp-radius": RADIUS_PX[theme.radius],
+    // Bestand: alte Blöcke lesen weiter --lp-radius — ab v3 einheitlich
+    // der Card-Wert. Legacy "pill" wandert damit bewusst von 999px auf
+    // 24px: Karten mit 999px waren nie gewollt, Buttons holen sich die
+    // Pille jetzt über --lp-radius-button.
+    "--lp-radius": radius.card,
+    "--lp-radius-card": radius.card,
+    "--lp-radius-button": radius.button,
+    "--lp-radius-input": radius.input,
+    "--lp-radius-image": radius.image,
+    "--lp-shadow-card": shadows.card,
+    "--lp-shadow-cta": shadows.cta,
     "--lp-space-y": SPACING_PX[theme.spacing],
   };
 }

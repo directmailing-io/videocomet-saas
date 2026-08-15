@@ -4,7 +4,8 @@
  * Block-basierter Landing-Page Editor.
  *
  * Layout:
- *   - Top: Name-Input, Theme-Picker (Preset-Dropdown), Save-Status
+ *   - Top: Name-Input, Styleguide-Button (öffnet das Brand-Kit-Panel
+ *     rechts — siehe `_editor/styleguide-panel.tsx`), Save-Status
  *   - Linke Spalte: Block-Liste mit Add-Menü, Up/Down/Delete pro Block
  *   - Mittlere Spalte: Inspector für den aktiven Block (typ-spezifisches
  *     Form oder JSON-Fallback) + Brand-Panel (Logo + Footer)
@@ -25,6 +26,7 @@ import {
   Copy,
   ListPlus,
   Loader2,
+  Palette,
   Save,
   Sparkles,
   Trash2,
@@ -36,17 +38,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { Block, BlockType } from "@/lib/landing-blocks/types";
-import { THEME_PRESET_ORDER, THEME_PRESETS } from "@/lib/landing-theme/presets";
-import type { ThemePresetId } from "@/lib/landing-theme/types";
 import {
   BLOCK_LABELS,
   FORM_REGISTRY,
@@ -56,6 +49,7 @@ import {
   useLpEditorState,
   type LpEditorInitialTemplate,
 } from "./_editor/state";
+import { StyleguidePanel } from "./_editor/styleguide-panel";
 import { LpPreview } from "./lp-preview";
 
 export interface LpEditorTemplate extends LpEditorInitialTemplate {}
@@ -63,6 +57,7 @@ export interface LpEditorTemplate extends LpEditorInitialTemplate {}
 export function LpEditor({ template }: { template: LpEditorTemplate }) {
   const s = useLpEditorState(template);
   const activeBlock = s.blocks.find((b) => b.id === s.activeBlockId) ?? null;
+  const [styleguideOpen, setStyleguideOpen] = React.useState(false);
 
   return (
     <>
@@ -87,13 +82,15 @@ export function LpEditor({ template }: { template: LpEditorTemplate }) {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <ThemePresetPicker
-              current={s.theme.preset}
-              onChange={(preset) => {
-                if (!preset || preset === "custom") return;
-                s.setTheme(THEME_PRESETS[preset]);
-              }}
-            />
+            <Button
+              variant="ghost"
+              type="button"
+              size="sm"
+              onClick={() => setStyleguideOpen(true)}
+              iconLeft={<Palette className="size-3.5" />}
+            >
+              Styleguide
+            </Button>
             <SaveIndicator state={s.saveState} lastSavedAt={s.lastSavedAt} />
             <Button
               variant="ghost"
@@ -200,6 +197,15 @@ export function LpEditor({ template }: { template: LpEditorTemplate }) {
           />
         </div>
       </div>
+
+      <StyleguidePanel
+        open={styleguideOpen}
+        onClose={() => setStyleguideOpen(false)}
+        theme={s.theme}
+        brand={s.brand}
+        setTheme={s.setTheme}
+        setBrand={s.setBrand}
+      />
     </>
   );
 }
@@ -521,48 +527,6 @@ function BrandPanel({
         )}
       </div>
     </div>
-  );
-}
-
-// ── Theme-Preset-Picker ─────────────────────────────────────────────────────
-
-function ThemePresetPicker({
-  current,
-  onChange,
-}: {
-  current: string | undefined;
-  onChange: (preset: ThemePresetId | null) => void;
-}) {
-  // `current` can be "custom" (or any value coming from older data) — fall
-  // back to "noir" for the select display while passing the user's choice
-  // through unchanged to onChange.
-  type PresetKey = (typeof THEME_PRESET_ORDER)[number];
-  const selectValue: PresetKey =
-    current && (THEME_PRESET_ORDER as readonly string[]).includes(current)
-      ? (current as PresetKey)
-      : "noir";
-  return (
-    <Select
-      value={selectValue}
-      onValueChange={(v) => onChange(v as ThemePresetId)}
-    >
-      <SelectTrigger className="h-9 w-[180px] text-xs">
-        <SelectValue placeholder="Theme wählen" />
-      </SelectTrigger>
-      <SelectContent>
-        {THEME_PRESET_ORDER.map((p) => (
-          <SelectItem key={p} value={p}>
-            <span className="flex items-center gap-2">
-              <span
-                className="inline-block size-3 rounded-full"
-                style={{ background: THEME_PRESETS[p].colors.primary }}
-              />
-              <span className="capitalize">{p}</span>
-            </span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 

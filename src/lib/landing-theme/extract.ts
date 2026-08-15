@@ -1,10 +1,12 @@
 import {
   DEFAULT_BRAND,
   DEFAULT_THEME,
+  LEGACY_RADIUS_TO_SCALE,
   type BrandConfig,
   type ThemeConfig,
 } from "@/lib/landing-theme/types";
 import { themeFromPreset } from "@/lib/landing-theme/presets";
+import { modeFromBackground } from "@/lib/landing-theme/derived-colors";
 
 /**
  * Best-effort theme/brand extraction from the stored template JSON.
@@ -33,13 +35,32 @@ export function extractThemeAndBrand(
   }
   // Legacy v1: only the column-level themeId is meaningful.
   return {
-    theme: themeFromPreset(themeId as Parameters<typeof themeFromPreset>[0]),
+    theme: withDerivedThemeFields(
+      themeFromPreset(themeId as Parameters<typeof themeFromPreset>[0]),
+    ),
     brand: { ...DEFAULT_BRAND },
   };
 }
 
+/**
+ * Leitet die v3-Felder (mode, radiusScale, shadow) aus den alten ab,
+ * falls sie fehlen — Bestandsdaten kennen sie noch nicht. `fontPairId`
+ * wird bewusst NICHT geraten: Metadaten ohne verlässliche Quelle wären
+ * schlimmer als keine (Rück-Mapping macht `themeToBrandKit` best effort).
+ */
+function withDerivedThemeFields(theme: ThemeConfig): ThemeConfig {
+  return {
+    ...theme,
+    mode: theme.mode ?? modeFromBackground(theme.colors.bg),
+    radiusScale: theme.radiusScale ?? LEGACY_RADIUS_TO_SCALE[theme.radius],
+    shadow: theme.shadow ?? "soft",
+  };
+}
+
 function mergeTheme(raw: unknown): ThemeConfig {
-  if (!raw || typeof raw !== "object") return { ...DEFAULT_THEME };
+  if (!raw || typeof raw !== "object") {
+    return withDerivedThemeFields({ ...DEFAULT_THEME });
+  }
   const t = raw as Record<string, unknown>;
   const colors = (t.colors && typeof t.colors === "object"
     ? (t.colors as Record<string, unknown>)
@@ -51,7 +72,7 @@ function mergeTheme(raw: unknown): ThemeConfig {
     typeof t.preset === "string"
       ? (t.preset as ThemeConfig["preset"])
       : DEFAULT_THEME.preset;
-  return {
+  const base: ThemeConfig = {
     preset,
     colors: {
       primary: pickStr(colors.primary, DEFAULT_THEME.colors.primary),
@@ -74,6 +95,24 @@ function mergeTheme(raw: unknown): ThemeConfig {
         ? t.radius
         : DEFAULT_THEME.radius,
   };
+  // v3-Felder: gespeicherte Werte gewinnen, ungültige/fehlende werden
+  // aus den alten Feldern abgeleitet (withDerivedThemeFields).
+  if (t.mode === "light" || t.mode === "dark") base.mode = t.mode;
+  if (
+    t.radiusScale === "none" ||
+    t.radiusScale === "subtle" ||
+    t.radiusScale === "soft" ||
+    t.radiusScale === "round"
+  ) {
+    base.radiusScale = t.radiusScale;
+  }
+  if (t.shadow === "flat" || t.shadow === "soft" || t.shadow === "bold") {
+    base.shadow = t.shadow;
+  }
+  if (typeof t.fontPairId === "string" && t.fontPairId.length > 0) {
+    base.fontPairId = t.fontPairId;
+  }
+  return withDerivedThemeFields(base);
 }
 
 function mergeBrand(raw: unknown): BrandConfig {
