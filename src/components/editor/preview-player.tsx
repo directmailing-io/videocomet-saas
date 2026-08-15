@@ -30,7 +30,7 @@
  */
 
 import * as React from "react";
-import { Play, Pause, Loader2, Volume2, VolumeX } from "lucide-react";
+import { Play, Pause, Loader2, VideoOff, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Segment } from "@/lib/segments/types";
 import { segmentStartMs } from "@/lib/segments/timeline";
@@ -70,6 +70,12 @@ const DRIFT_THRESHOLD_SEC = 0.15;
 
 /** Drift-Check Intervall in ms (nicht jeden Frame, sonst stottert es). */
 const DRIFT_CHECK_INTERVAL_MS = 250;
+
+/** Max. automatische Neulade-Versuche der Webcam-Spur (mit Cache-Buster). */
+const WEBCAM_MAX_RETRIES = 2;
+
+/** Nach so vielen ms ohne dekodierbares Frame gilt die Webcam als hängend. */
+const WEBCAM_STALL_TIMEOUT_MS = 10_000;
 
 /* ------------------------------------------------------------------ */
 /* Formatierung                                                       */
@@ -156,6 +162,62 @@ export function PreviewPlayer({
    * unmuted play() ist erlaubt.
    */
   const [webcamMuted, setWebcamMuted] = React.useState(false);
+  /**
+   * Tatsächliche src der Webcam-Spur. Weicht von `webcamUrl` ab, sobald der
+   * Selbstheiler mit Cache-Buster neu lädt: Browser wie CDN-Edges cachen die
+   * Datei bis zu 30 Tage — eine direkt nach dem Upload gecachte kaputte
+   * Kopie würde sonst dauerhaft als schwarzer PiP ausgeliefert.
+   */
+  const [webcamSrc, setWebcamSrc] = React.useState(webcamUrl);
+  /** True, wenn auch alle Neulade-Versuche kein Bild geliefert haben. */
+  const [webcamFailed, setWebcamFailed] = React.useState(false);
+  const webcamRetryRef = React.useRef(0);
+  /** Spiegel von webcamSrc — macht den Retry idempotent pro fehlgeschlagener src. */
+  const webcamSrcRef = React.useRef(webcamUrl);
+  React.useEffect(() => {
+    webcamRetryRef.current = 0;
+    webcamSrcRef.current = webcamUrl;
+    setWebcamFailed(false);
+    setWebcamSrc(webcamUrl);
+  }, [webcamUrl]);
+
+  const retryWebcamLoad = React.useCallback(
+    (failedSrc: string | null) => {
+      // onError + Watchdog (+ StrictMode-Doppel-Effects) können denselben
+      // Fehler mehrfach melden — nur der erste Melder pro src zählt.
+      if (!webcamUrl || !failedSrc || webcamSrcRef.current !== failedSrc)
+        return;
+      if (webcamRetryRef.current >= WEBCAM_MAX_RETRIES) {
+        setWebcamFailed(true);
+        return;
+      }
+      webcamRetryRef.current += 1;
+      const sep = webcamUrl.includes("?") ? "&" : "?";
+      const next = `${webcamUrl}${sep}vcretry=${webcamRetryRef.current}-${Date.now()}`;
+      webcamSrcRef.current = next;
+      setWebcamSrc(next);
+    },
+    [webcamUrl],
+  );
+
+  // Watchdog: Wenn die Webcam nach dem (Neu-)Laden nicht binnen Timeout
+  // mindestens ein Frame dekodieren konnte (readyState < HAVE_CURRENT_DATA),
+  // einmal mit Cache-Buster neu laden. Der Sofort-Check fängt Fehler ab, die
+  // schon vor der React-Hydration gefeuert haben — das SSR-<video> beginnt
+  // sofort zu laden, onError ist da noch nicht verdrahtet.
+  React.useEffect(() => {
+    if (!webcamSrc || webcamFailed) return;
+    const el = webcamRef.current;
+    if (el && el.error) {
+      retryWebcamLoad(webcamSrc);
+      return;
+    }
+    const timer = setTimeout(() => {
+      const current = webcamRef.current;
+      if (current && current.readyState < 2) retryWebcamLoad(webcamSrc);
+    }, WEBCAM_STALL_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [webcamSrc, webcamFailed, retryWebcamLoad]);
 
   // ── Refs ────────────────────────────────────────────────────────────
   /** Letzter timestamp aus rAF — für Delta-Berechnung. */
@@ -562,7 +624,9 @@ export function PreviewPlayer({
     const target = computeStageTargetSec(playheadRef.current);
     if (target !== null) {
       try {
-        el.currentTime = target;
+        // Gleicher Guard wie bei der Webcam: kein Demuxer-Seek auf die
+        // (fast) identische Position — tödlich für unindizierte WebMs.
+        if (Math.abs(el.currentTime - target) > 0.05) el.currentTime = target;
       } catch {
         /* ignore */
       }
@@ -585,7 +649,11 @@ export function PreviewPlayer({
     if (!el) return;
     const target = computeWebcamTargetSec(playheadRef.current);
     try {
-      el.currentTime = target;
+      // Nur seeken, wenn die Position wirklich abweicht: Eine currentTime-
+      // Zuweisung direkt in loadedmetadata (auch auf 0!) triggert bei
+      // unindizierten MediaRecorder-WebMs einen Demuxer-Seek, der mit
+      // PIPELINE_ERROR_READ scheitert und das Video tötet → schwarzer PiP.
+      if (Math.abs(el.currentTime - target) > 0.05) el.currentTime = target;
     } catch {
       /* ignore */
     }
@@ -695,16 +763,27 @@ export function PreviewPlayer({
                 : { width: "25%", aspectRatio: "16 / 9" }
             }
           >
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-            <video
-              ref={webcamRef}
-              src={webcamUrl}
-              muted={webcamMuted}
-              playsInline
-              preload="auto"
-              className="h-full w-full object-cover"
-              onLoadedMetadata={onWebcamLoadedMetadata}
-            />
+            {webcamFailed ? (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-white/70">
+                <VideoOff className="size-5" />
+                <span className="px-2 text-center text-[10px] leading-tight">
+                  Video lädt nicht — Seite neu laden
+                </span>
+              </div>
+            ) : (
+              // eslint-disable-next-line jsx-a11y/media-has-caption
+              <video
+                key={webcamSrc ?? "none"}
+                ref={webcamRef}
+                src={webcamSrc ?? undefined}
+                muted={webcamMuted}
+                playsInline
+                preload="auto"
+                className="h-full w-full object-cover"
+                onLoadedMetadata={onWebcamLoadedMetadata}
+                onError={() => retryWebcamLoad(webcamSrc)}
+              />
+            )}
           </div>
         )}
       </div>

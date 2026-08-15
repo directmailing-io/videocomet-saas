@@ -32,6 +32,23 @@ export interface DocStackPreviewProps {
 /** Abstand zwischen den Seiten + Außen-Padding des Stapels (px). */
 const PAGE_GAP_PX = 24;
 
+/**
+ * Rechnet die Gesamthöhe eines Seiten-Stapels (Σ Seitenhöhen + Gaps, wie
+ * die GDocs-Pipeline sie als `docHeight` liefert) auf die Höhe EINER Seite
+ * um — `DocStackPreview` erwartet Einzelseiten-Maße (PDF liefert die
+ * bereits, GDocs nicht).
+ */
+export function perPageHeightFromStackHeight(
+  stackHeight: number,
+  pageCount: number,
+): number {
+  if (pageCount <= 0) return 0;
+  return Math.max(
+    0,
+    (stackHeight - Math.max(0, pageCount - 1) * PAGE_GAP_PX) / pageCount,
+  );
+}
+
 /** Seitenbreite relativ zur Bühnenbreite (Drive-Viewer-artige Ränder). */
 const PAGE_WIDTH_RATIO = 0.56;
 

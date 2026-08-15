@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
+import { BlockTemplateThumb } from "@/components/landing-blocks/block-template-thumb";
+import { CopyKiPromptButton } from "./custom/_components/ki-prompt";
 
 interface LpListItem {
   id: string;
@@ -50,19 +52,6 @@ interface CustomLpRow {
   updatedAt: string;
 }
 
-/**
- * Theme swatches for the block-template cards.
- */
-const THEME_SWATCH: Record<string, { bg: string; accent: string }> = {
-  noir: { bg: "#07070f", accent: "#818cf8" },
-  clean: { bg: "#ffffff", accent: "#2563eb" },
-  gradient: {
-    bg: "linear-gradient(135deg, #a855f7, #6366f1 55%, #2563eb)",
-    accent: "#f59e0b",
-  },
-  warm: { bg: "#fdf8f3", accent: "#c2622c" },
-};
-
 function formatDate(iso: string | null): string {
   if (!iso) return "";
   try {
@@ -74,10 +63,6 @@ function formatDate(iso: string | null): string {
   } catch {
     return "";
   }
-}
-
-function asString(value: unknown): string {
-  return typeof value === "string" ? value : "";
 }
 
 /**
@@ -277,11 +262,6 @@ export function LpList({
           : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {items.map((tpl) => {
-                const swatch = THEME_SWATCH[tpl.themeId] ?? THEME_SWATCH.clean!;
-                const bgOverride = asString(tpl.content.bgColor);
-                const accentOverride = asString(tpl.content.accentColor);
-                const bg = bgOverride || swatch.bg;
-                const accent = accentOverride || swatch.accent;
                 const isPending = pendingId === tpl.id;
 
                 return (
@@ -299,13 +279,10 @@ export function LpList({
                       aria-label={`Vorlage ${tpl.name} bearbeiten`}
                     >
                       <CardContent className="p-4">
-                        <div
-                          className="aspect-[4/3] rounded-squircle-sm mb-3 flex items-end justify-start p-3 ring-1 ring-inset ring-ink/5"
-                          style={{ background: bg }}
-                        >
-                          <span
-                            className="size-6 rounded-full shadow-sm"
-                            style={{ background: accent }}
+                        <div className="mb-3 rounded-squircle-sm ring-1 ring-inset ring-ink/5 overflow-hidden">
+                          <BlockTemplateThumb
+                            content={tpl.content}
+                            themeId={tpl.themeId}
                           />
                         </div>
                         <div className="flex items-center gap-2 mb-1">
@@ -402,12 +379,14 @@ export function LpList({
                     Starter-Kit herunterladen
                   </a>
                 </Button>
+                <CopyKiPromptButton />
               </div>
             }
           />
         ) : (
           <>
             <div className="flex items-center justify-end mb-4 gap-2">
+              <CopyKiPromptButton />
               <Button
                 variant="ghost"
                 asChild

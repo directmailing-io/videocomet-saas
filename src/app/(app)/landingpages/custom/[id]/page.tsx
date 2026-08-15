@@ -41,6 +41,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { CopyKiPromptButton } from "../_components/ki-prompt";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -423,6 +424,7 @@ export default function CustomLpDetailPage() {
         }
         actions={
           <>
+            <CopyKiPromptButton />
             <Button
               variant="ghost"
               asChild

@@ -17,9 +17,12 @@ import {
   AlertCircle,
   ArrowLeft,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Minus,
   Pause,
   Pencil,
+  PictureInPicture2,
   Play,
   Plus,
   ScrollText,
@@ -128,7 +131,29 @@ export function PhaseLive({
   // Platz füllt. 184px = Statuszeile + Paddings + Footer (ohne Prompter).
   const [prompterVisible, setPrompterVisible] = React.useState(false);
   const [prompterHeight, setPrompterHeight] = React.useState(123);
-  const stageChrome = 184 + (prompterVisible ? prompterHeight : 0);
+  // Overlay-Modus: Prompter schwebt über der Bühne statt darüber anzudocken
+  // (User-Wahl, gemerkt über Studio-Sessions hinweg).
+  const [prompterOverlay, setPrompterOverlay] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      setPrompterOverlay(localStorage.getItem("vc-prompter-overlay") === "1");
+    } catch {
+      // localStorage gesperrt → Default (angedockt) behalten.
+    }
+  }, []);
+  const togglePrompterOverlay = React.useCallback(() => {
+    setPrompterOverlay((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("vc-prompter-overlay", next ? "1" : "0");
+      } catch {
+        // Ignorieren — dann gilt die Wahl nur für diese Session.
+      }
+      return next;
+    });
+  }, []);
+  const stageChrome =
+    184 + (prompterVisible && !prompterOverlay ? prompterHeight : 0);
 
   const activeTabIdRef = React.useRef(activeTabId);
   React.useEffect(() => {
@@ -352,11 +377,13 @@ export function PhaseLive({
         </button>
       </div>
 
-      {/* Teleprompter (opt-in) */}
-      {prompterVisible && (
+      {/* Teleprompter (opt-in, angedockt über der Bühne) */}
+      {prompterVisible && !prompterOverlay && (
         <Teleprompter
           script={script}
           stage={stage}
+          overlay={false}
+          onToggleOverlay={togglePrompterOverlay}
           onScriptChange={onScriptChange}
           onHide={() => setPrompterVisible(false)}
           onHeightChange={setPrompterHeight}
@@ -475,6 +502,20 @@ export function PhaseLive({
               />
             )}
 
+            {/* Teleprompter im Overlay-Modus: schwebt über der Bühne,
+             * Wheel/Klicks gehen durch (pointer-events-none im Prompter),
+             * nur die Steuerleiste bleibt bedienbar. */}
+            {prompterVisible && prompterOverlay && (
+              <Teleprompter
+                script={script}
+                stage={stage}
+                overlay
+                onToggleOverlay={togglePrompterOverlay}
+                onScriptChange={onScriptChange}
+                onHide={() => setPrompterVisible(false)}
+              />
+            )}
+
             {/* Scroll-Fortschrittslinie an der rechten Bühnenkante */}
             <div
               className={cn(
@@ -520,7 +561,7 @@ export function PhaseLive({
                   <ol className="mt-3 flex flex-col gap-2.5 text-sm leading-snug text-ink-muted">
                     {[
                       "Mit den Tabs oben wechselst du die Szene.",
-                      "Auf der Bühne kannst du scrollen. Genau so sieht es dein Lead.",
+                      "Auf der Bühne kannst du scrollen. Genau so sieht es dein Lead — scroll möglichst langsam, dann wirkt das Video flüssig.",
                       'Fertig? Klick unten auf „Aufnahme beenden".',
                     ].map((text, i) => (
                       <li key={i} className="flex items-start gap-2.5">
@@ -685,44 +726,91 @@ export function PhaseLive({
 /* ------------------------------------------------------------------ */
 
 /** Sichtbare Zeilen im Teleprompter-Fenster (Höhe = Zeilen × Zeilenhöhe). */
-const PROMPTER_VISIBLE_LINES = 3.6;
+const PROMPTER_VISIBLE_LINES = 4.2;
 const PROMPTER_LINE_HEIGHT = 1.5;
 
+/** Gespeicherte Prompter-Einstellung lesen (localStorage, mit Grenzen). */
+function readPrompterSetting(key: string, fallback: number, min: number, max: number): number {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+  } catch {
+    return fallback;
+  }
+}
+
+function storePrompterSetting(key: string, value: number) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // localStorage gesperrt → Einstellung gilt nur für diese Session.
+  }
+}
+
 /**
- * Teleprompter v3 — dunkler, halbtransparenter Balken über der Bühne mit
- * echtem Auto-Scroll:
+ * Teleprompter v4 — Fokus-Prompter mit voller manueller Kontrolle:
  *
  *   • Sichtbarkeit steuert der Parent (Toggle oben rechts, default AUS).
- *   • Text scrollt rAF-basiert langsam nach oben, Tempo in Stufen 1–5
- *     (px/s skaliert mit der Schriftgröße, damit „Stufe 3" bei jeder
- *     Textgröße gleich viele Zeilen pro Sekunde bedeutet).
- *   • Beim Wechsel in stage==="live" startet das Scrollen automatisch von
- *     oben; im Standby kann man es zum Üben manuell starten (Play/Pause).
- *   • Im Standby ist der Text direkt bearbeitbar (Stift-Button); ohne
- *     Text startet der Prompter gleich im Bearbeiten-Modus.
- *   • Alle Regler sitzen kompakt IM Balken oben rechts, damit nichts
- *     drumherum flattert.
+ *   • Auto-Scroll rAF-basiert, Tempo in Stufen 1–5 (px/s skaliert mit der
+ *     Schriftgröße). Pfeiltasten ↑/↓ ändern das Tempo jederzeit.
+ *   • Manuell scrollen: Mausrad/Trackpad direkt auf dem Text (auch während
+ *     des Auto-Scrolls, zum Vor-/Zurückspringen).
+ *   • Fokus-Band: Die aktuelle Zeile steht zwischen zwei Pfeil-Markern in
+ *     der Mitte, Text darüber/darunter ist stark abgedunkelt — so bleibt
+ *     das Auge auch bei langen Sätzen auf einer Zeile.
+ *   • Overlay-Modus (User-Wahl, gemerkt): Prompter schwebt halbtransparent
+ *     ÜBER der Bühne statt darüber anzudocken. Mausrad und Klicks gehen
+ *     durch den Text hindurch auf die Bühne — Szenen-Scrollen bleibt frei,
+ *     nur die kleine Steuerleiste ist bedienbar.
+ *   • Tempo + Schriftgröße werden gemerkt (localStorage).
  */
 function Teleprompter({
   script,
   stage,
+  overlay,
+  onToggleOverlay,
   onScriptChange,
   onHide,
   onHeightChange,
 }: {
   script: string;
   stage: "standby" | "countdown" | "live";
+  /** true = schwebt über der Bühne (klick-durchlässig). */
+  overlay: boolean;
+  onToggleOverlay: () => void;
   onScriptChange: (script: string) => void;
   /** Blendet den Prompter aus (gleicher Effekt wie der Toggle im Kopf). */
   onHide: () => void;
-  /** Meldet die aktuelle Balken-Höhe (px), damit die Bühne exakt passt. */
+  /** Meldet die Balken-Höhe (px) — nur im angedockten Modus relevant. */
   onHeightChange?: (px: number) => void;
 }) {
   const [playing, setPlaying] = React.useState(false);
-  const [speedLevel, setSpeedLevel] = React.useState(3); // 1..5
-  const [fontSize, setFontSize] = React.useState(22); // px, 16..32
+  const [speedLevel, setSpeedLevel] = React.useState(() =>
+    readPrompterSetting("vc-prompter-speed", 3, 1, 5),
+  );
+  const [fontSize, setFontSize] = React.useState(() =>
+    readPrompterSetting("vc-prompter-font", 22, 16, 40),
+  );
   /** Ohne Text direkt im Bearbeiten-Modus starten. */
   const [editing, setEditing] = React.useState(script.trim().length === 0);
+
+  const changeSpeed = React.useCallback((delta: number) => {
+    setSpeedLevel((s) => {
+      const next = Math.min(5, Math.max(1, s + delta));
+      storePrompterSetting("vc-prompter-speed", next);
+      return next;
+    });
+  }, []);
+  const changeFont = React.useCallback((delta: number) => {
+    setFontSize((s) => {
+      const next = Math.min(40, Math.max(16, s + delta));
+      storePrompterSetting("vc-prompter-font", next);
+      return next;
+    });
+  }, []);
 
   const contentRef = React.useRef<HTMLDivElement | null>(null);
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
@@ -735,6 +823,15 @@ function Teleprompter({
   React.useEffect(() => {
     fontRef.current = fontSize;
   }, [fontSize]);
+
+  const applyOffset = React.useCallback((px: number) => {
+    const content = contentRef.current;
+    const viewport = viewportRef.current;
+    if (!content || !viewport) return;
+    const max = Math.max(0, content.scrollHeight - viewport.clientHeight);
+    offsetRef.current = Math.min(max, Math.max(0, px));
+    content.style.transform = `translateY(${-offsetRef.current}px)`;
+  }, []);
 
   const resetScroll = React.useCallback(() => {
     offsetRef.current = 0;
@@ -780,13 +877,49 @@ function Teleprompter({
     return () => cancelAnimationFrame(raf);
   }, [editing, playing]);
 
+  // ── Manuell scrollen (Mausrad/Trackpad, non-passive) ─────────────────
+  // Im Overlay-Modus ist der Text klick-durchlässig — dort scrollt das Rad
+  // bewusst die Bühne, nicht den Prompter.
+  React.useEffect(() => {
+    if (editing || overlay) return;
+    const el = viewportRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const deltaPx = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      applyOffset(offsetRef.current + deltaPx);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [editing, overlay, applyOffset]);
+
+  // ── Pfeiltasten ↑/↓: Tempo jederzeit anpassen ────────────────────────
+  React.useEffect(() => {
+    if (editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && /^(input|textarea|select)$/i.test(target.tagName)) return;
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        changeSpeed(1);
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        changeSpeed(-1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing, changeSpeed]);
+
   const lineHeightPx = fontSize * PROMPTER_LINE_HEIGHT;
   const viewportHeight = Math.round(lineHeightPx * PROMPTER_VISIBLE_LINES);
+  /** Oberkante der Fokus-Zeile: mittig im Fenster. */
+  const focusTopPx = Math.round(viewportHeight / 2 - lineHeightPx / 2);
 
-  // Höhe an den Parent melden (Balken + pb-1).
+  // Höhe an den Parent melden (Balken + pb-1) — nur angedockt relevant.
   React.useEffect(() => {
-    onHeightChange?.(viewportHeight + 4);
-  }, [viewportHeight, onHeightChange]);
+    if (!overlay) onHeightChange?.(viewportHeight + 4);
+  }, [viewportHeight, overlay, onHeightChange]);
 
   const togglePlay = React.useCallback(() => {
     setPlaying((was) => {
@@ -802,24 +935,40 @@ function Teleprompter({
     });
   }, [resetScroll]);
 
-  const fadeMask =
-    "linear-gradient(to bottom, transparent 0%, black 22%, black 78%, transparent 100%)";
+  // Fokus-Band: nur die Zeile in der Mitte ist voll sichtbar, der Rest
+  // stark abgedunkelt — das Auge bleibt auf einer Zeile.
+  const focusMask =
+    "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.25) 18%, rgba(0,0,0,0.35) 38%, black 44%, black 60%, rgba(0,0,0,0.35) 66%, rgba(0,0,0,0.25) 84%, transparent 100%)";
 
   const controlBtn =
     "rounded-full p-1 text-white/70 transition-colors hover:bg-white/15 hover:text-white";
   const controlDivider = <span className="mx-0.5 h-3 w-px bg-white/20" />;
 
   return (
-    <div className="mx-auto w-full max-w-3xl shrink-0 px-5 pb-1">
-      {/* Prompter-Balken: dunkel, halbtransparent, Fade oben/unten */}
-      <div className="relative overflow-hidden rounded-squircle-lg bg-ink/85 shadow-lift backdrop-blur">
+    <div
+      className={cn(
+        overlay
+          ? "pointer-events-none absolute inset-x-0 top-2 z-[35] mx-auto w-[74%] max-w-3xl"
+          : "mx-auto w-full max-w-3xl shrink-0 px-5 pb-1",
+      )}
+    >
+      {/* Prompter-Balken: dunkel, halbtransparent, Fokus-Band in der Mitte */}
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-squircle-lg shadow-lift",
+          overlay ? "bg-ink/60" : "bg-ink/85 backdrop-blur",
+        )}
+      >
         {editing ? (
           <textarea
             autoFocus
             value={script}
             onChange={(e) => onScriptChange(e.target.value)}
             placeholder="Hallo, ich habe mir eure Website angeschaut und…"
-            className="block w-full resize-none bg-transparent px-8 text-center font-medium text-white outline-none placeholder:text-white/40"
+            className={cn(
+              "block w-full resize-none bg-transparent px-8 text-center font-medium text-white outline-none placeholder:text-white/40",
+              overlay && "pointer-events-auto",
+            )}
             style={{
               height: viewportHeight,
               fontSize,
@@ -829,34 +978,57 @@ function Teleprompter({
             }}
           />
         ) : (
-          <div
-            ref={viewportRef}
-            className="overflow-hidden px-8"
-            style={{
-              height: viewportHeight,
-              maskImage: fadeMask,
-              WebkitMaskImage: fadeMask,
-            }}
-          >
+          <>
             <div
-              ref={contentRef}
-              className="whitespace-pre-wrap text-center font-medium text-white will-change-transform"
+              ref={viewportRef}
+              className="overflow-hidden px-10"
               style={{
-                fontSize,
-                lineHeight: PROMPTER_LINE_HEIGHT,
-                // Erste Zeile startet unter der oberen Fade-Kante, unten
-                // genug Auslauf, damit die letzte Zeile zur Mitte scrollt.
-                paddingTop: Math.round(lineHeightPx * 0.6),
-                paddingBottom: Math.round(lineHeightPx * 2),
+                height: viewportHeight,
+                maskImage: focusMask,
+                WebkitMaskImage: focusMask,
               }}
             >
-              {script}
+              <div
+                ref={contentRef}
+                className="mx-auto max-w-xl whitespace-pre-wrap text-center font-medium text-white will-change-transform"
+                style={{
+                  fontSize,
+                  lineHeight: PROMPTER_LINE_HEIGHT,
+                  // Erste Zeile startet exakt im Fokus-Band; unten genug
+                  // Auslauf, damit auch die letzte Zeile dorthin scrollt.
+                  paddingTop: focusTopPx,
+                  paddingBottom: Math.round(viewportHeight - focusTopPx),
+                }}
+              >
+                {script}
+              </div>
             </div>
-          </div>
+
+            {/* Fokus-Marker links + rechts auf Höhe der aktuellen Zeile */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute left-2 text-brand"
+              style={{ top: focusTopPx + lineHeightPx / 2 - 8 }}
+            >
+              <ChevronRight className="size-4" />
+            </span>
+            <span
+              aria-hidden
+              className="pointer-events-none absolute right-2 text-brand"
+              style={{ top: focusTopPx + lineHeightPx / 2 - 8 }}
+            >
+              <ChevronLeft className="size-4" />
+            </span>
+          </>
         )}
 
         {/* Kompakte Steuerung im Balken oben rechts */}
-        <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-full bg-black/40 px-1.5 py-1 backdrop-blur-sm">
+        <div
+          className={cn(
+            "absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-full bg-black/40 px-1.5 py-1 backdrop-blur-sm",
+            overlay && "pointer-events-auto",
+          )}
+        >
           {editing ? (
             <button
               type="button"
@@ -885,24 +1057,24 @@ function Teleprompter({
               {controlDivider}
               <button
                 type="button"
-                aria-label="Langsamer"
-                title="Tempo"
-                onClick={() => setSpeedLevel((s) => Math.max(1, s - 1))}
+                aria-label="Langsamer (Pfeiltaste ↓)"
+                title="Tempo — auch mit Pfeiltasten ↑/↓"
+                onClick={() => changeSpeed(-1)}
                 className={controlBtn}
               >
                 <Minus className="size-3" />
               </button>
               <span
-                title="Tempo"
+                title="Tempo — auch mit Pfeiltasten ↑/↓"
                 className="w-3 text-center text-[9px] font-semibold tabular-nums text-white/70"
               >
                 {speedLevel}
               </span>
               <button
                 type="button"
-                aria-label="Schneller"
-                title="Tempo"
-                onClick={() => setSpeedLevel((s) => Math.min(5, s + 1))}
+                aria-label="Schneller (Pfeiltaste ↑)"
+                title="Tempo — auch mit Pfeiltasten ↑/↓"
+                onClick={() => changeSpeed(1)}
                 className={controlBtn}
               >
                 <Plus className="size-3" />
@@ -912,7 +1084,7 @@ function Teleprompter({
                 type="button"
                 aria-label="Schrift kleiner"
                 title="Schriftgröße"
-                onClick={() => setFontSize((s) => Math.max(16, s - 2))}
+                onClick={() => changeFont(-2)}
                 className={controlBtn}
               >
                 <Minus className="size-3" />
@@ -927,10 +1099,28 @@ function Teleprompter({
                 type="button"
                 aria-label="Schrift größer"
                 title="Schriftgröße"
-                onClick={() => setFontSize((s) => Math.min(32, s + 2))}
+                onClick={() => changeFont(2)}
                 className={controlBtn}
               >
                 <Plus className="size-3" />
+              </button>
+              {controlDivider}
+              <button
+                type="button"
+                aria-label={
+                  overlay
+                    ? "Prompter über der Bühne andocken"
+                    : "Prompter über die Bühne legen"
+                }
+                title={
+                  overlay
+                    ? "Andocken: Prompter sitzt wieder über der Bühne"
+                    : "Overlay: Prompter schwebt über der Bühne (Scrollen geht durch)"
+                }
+                onClick={onToggleOverlay}
+                className={cn(controlBtn, overlay && "text-brand")}
+              >
+                <PictureInPicture2 className="size-3" />
               </button>
               {stage === "standby" && (
                 <>

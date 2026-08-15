@@ -19,7 +19,10 @@ import { AlertCircle, Pause, Play, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MEDIA_STAGE_BG, type Segment } from "@/lib/segments/types";
 import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
-import { DocStackPreview } from "@/components/editor/doc-stack-preview";
+import {
+  DocStackPreview,
+  perPageHeightFromStackHeight,
+} from "@/components/editor/doc-stack-preview";
 import { PreviewSegmentRender } from "@/components/editor/preview-segment-render";
 import { clamp01 } from "./internal";
 
@@ -72,10 +75,15 @@ function docStackMeta(segment: Segment): DocStackMeta | null {
     if (!segment.previewPageUrls || segment.previewPageUrls.length === 0) {
       return null;
     }
+    // previewDocHeight ist die GESAMT-Stapelhöhe (Pipeline-Semantik) —
+    // DocStackPreview braucht die Höhe EINER Seite.
     return {
       pageUrls: segment.previewPageUrls,
       docWidth: segment.previewDocWidth ?? 0,
-      docHeight: segment.previewDocHeight ?? 0,
+      docHeight: perPageHeightFromStackHeight(
+        segment.previewDocHeight ?? 0,
+        segment.previewPageUrls.length,
+      ),
       showToolbar: false,
     };
   }

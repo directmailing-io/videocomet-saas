@@ -24,7 +24,7 @@ import {
   renderSlugTemplate,
 } from "@/lib/slug";
 import { WizardReloadButton } from "./wizard-reload-button";
-import { BlockTemplateThumb } from "./block-template-thumb";
+import { BlockTemplateThumb } from "@/components/landing-blocks/block-template-thumb";
 
 interface Template {
   id: string;

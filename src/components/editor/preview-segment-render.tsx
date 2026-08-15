@@ -40,7 +40,10 @@ import {
 } from "@/lib/segments/types";
 import { interpolateScrollRatio } from "@/lib/segments/scroll-math";
 import { SlideRender } from "@/lib/slide/slide-render";
-import { DocStackPreview } from "./doc-stack-preview";
+import {
+  DocStackPreview,
+  perPageHeightFromStackHeight,
+} from "./doc-stack-preview";
 import { useSegmentPreview } from "./use-segment-preview";
 
 /** Lesbare deutsche Labels für die Aufnahme-Modi (Preview-Badge). */
@@ -520,9 +523,14 @@ function RenderGDocs({
   const docWidth = hasPersisted
     ? (segment.previewDocWidth ?? 0)
     : (preview.data?.docWidth ?? 0);
-  const docHeight = hasPersisted
-    ? (segment.previewDocHeight ?? 0)
-    : (preview.data?.docHeight ?? 0);
+  // Die GDocs-Pipeline liefert als docHeight die GESAMT-Stapelhöhe —
+  // DocStackPreview erwartet die Höhe EINER Seite.
+  const docHeight = perPageHeightFromStackHeight(
+    hasPersisted
+      ? (segment.previewDocHeight ?? 0)
+      : (preview.data?.docHeight ?? 0),
+    pageUrls.length,
+  );
 
   if (pageUrls.length > 0) {
     return (

@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toaster";
+import { KiPromptCard } from "../_components/ki-prompt";
 
 export default function NeueCustomLpPage() {
   const router = useRouter();
@@ -142,6 +143,8 @@ export default function NeueCustomLpPage() {
         </Card>
 
         <div className="space-y-4">
+          <KiPromptCard />
+
           <Card>
             <CardContent className="p-5">
               <div className="flex items-start gap-3">

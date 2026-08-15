@@ -1305,7 +1305,8 @@ function SceneSettings({
             {"{{platzhaltern}}"}
           </code>
           . Im fertigen Video werden sie pro Lead ersetzt. Scroll ruhig,
-          genau so sieht es später aus.
+          genau so sieht es später aus — am besten möglichst langsam, dann
+          wirkt das Video schön flüssig.
         </p>
       </div>
     );
@@ -1402,6 +1403,11 @@ function SceneSettings({
             Im fertigen Video sieht jeder Lead seine eigene Website.
           </p>
         )}
+        <p className="mt-1.5 text-[11px] leading-relaxed text-ink-muted">
+          Gut zu wissen: In der Vorschau können einzelne Elemente der Webseite
+          fehlen — im fertigen Video sind sie zu sehen. Und scroll möglichst
+          langsam, dann wirkt das Video später schön flüssig.
+        </p>
       </div>
     );
   }
@@ -1409,10 +1415,11 @@ function SceneSettings({
   if (seg.kind === "pdf") {
     return (
       <div className="rounded-squircle-lg bg-surface p-3 shadow-card">
-        <p className="truncate text-[11px] text-ink-muted">
+        <p className="text-[11px] leading-relaxed text-ink-muted">
           {seg.fileName || "PDF"} · {seg.pageCount}{" "}
           {seg.pageCount === 1 ? "Seite" : "Seiten"}. Scrolle in der Vorschau,
-          um durch das Dokument zu blättern.
+          um durch das Dokument zu blättern — am besten möglichst langsam,
+          dann wirkt das Video schön flüssig.
         </p>
       </div>
     );
