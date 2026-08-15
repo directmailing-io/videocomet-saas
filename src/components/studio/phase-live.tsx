@@ -25,6 +25,7 @@ import {
   PictureInPicture2,
   Play,
   Plus,
+  Rows3,
   ScrollText,
   Sparkles,
   X,
@@ -286,7 +287,9 @@ export function PhaseLive({
     setStage("countdown");
   }, []);
 
-  // ── Tastatur: 1–9, Pfeile, Escape-Hinweis ────────────────────────────
+  // ── Tastatur: 1–9 = Szenen, Escape-Hinweis ───────────────────────────
+  // Die Pfeiltasten gehören komplett dem Teleprompter (←/→ Tempo, ↑/↓
+  // zeilenweise scrollen) — Szenen wechseln nur per Klick oder Ziffern.
   const [escapeHint, setEscapeHint] = React.useState(false);
   const escapeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -301,17 +304,6 @@ export function PhaseLive({
           e.preventDefault();
           switchTab(tabs[idx].id);
         }
-        return;
-      }
-      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-        e.preventDefault();
-        const cur = tabs.findIndex((t) => t.id === activeTabIdRef.current);
-        if (cur < 0) return;
-        const next =
-          e.key === "ArrowRight"
-            ? Math.min(tabs.length - 1, cur + 1)
-            : Math.max(0, cur - 1);
-        switchTab(tabs[next].id);
         return;
       }
       if (e.key === "Escape") {
@@ -725,9 +717,10 @@ export function PhaseLive({
 /* Teleprompter                                                        */
 /* ------------------------------------------------------------------ */
 
-/** Sichtbare Zeilen im Teleprompter-Fenster (Höhe = Zeilen × Zeilenhöhe). */
-const PROMPTER_VISIBLE_LINES = 4.2;
 const PROMPTER_LINE_HEIGHT = 1.5;
+/** Grenzen für die einstellbare Zeilenanzahl im Prompter-Fenster. */
+const PROMPTER_MIN_LINES = 2;
+const PROMPTER_MAX_LINES = 8;
 
 /** Gespeicherte Prompter-Einstellung lesen (localStorage, mit Grenzen). */
 function readPrompterSetting(key: string, fallback: number, min: number, max: number): number {
@@ -755,9 +748,12 @@ function storePrompterSetting(key: string, value: number) {
  *
  *   • Sichtbarkeit steuert der Parent (Toggle oben rechts, default AUS).
  *   • Auto-Scroll rAF-basiert, Tempo in Stufen 1–5 (px/s skaliert mit der
- *     Schriftgröße). Pfeiltasten ↑/↓ ändern das Tempo jederzeit.
- *   • Manuell scrollen: Mausrad/Trackpad direkt auf dem Text (auch während
- *     des Auto-Scrolls, zum Vor-/Zurückspringen).
+ *     Schriftgröße). Pfeiltasten ←/→ ändern das Tempo jederzeit.
+ *   • Manuell scrollen: Mausrad/Trackpad direkt auf dem Text sowie
+ *     Pfeiltasten ↑/↓ (eine Zeile zurück/vor) — auch während des
+ *     Auto-Scrolls, zum Vor-/Zurückspringen.
+ *   • Größe: Schriftgröße (A −/+) und sichtbare Zeilenanzahl (2–8) sind
+ *     einstellbar und werden gemerkt.
  *   • Fokus-Band: Die aktuelle Zeile steht zwischen zwei Pfeil-Markern in
  *     der Mitte, Text darüber/darunter ist stark abgedunkelt — so bleibt
  *     das Auge auch bei langen Sätzen auf einer Zeile.
@@ -794,6 +790,14 @@ function Teleprompter({
   const [fontSize, setFontSize] = React.useState(() =>
     readPrompterSetting("vc-prompter-font", 22, 16, 40),
   );
+  const [visibleLines, setVisibleLines] = React.useState(() =>
+    readPrompterSetting(
+      "vc-prompter-lines",
+      4,
+      PROMPTER_MIN_LINES,
+      PROMPTER_MAX_LINES,
+    ),
+  );
   /** Ohne Text direkt im Bearbeiten-Modus starten. */
   const [editing, setEditing] = React.useState(script.trim().length === 0);
 
@@ -808,6 +812,16 @@ function Teleprompter({
     setFontSize((s) => {
       const next = Math.min(40, Math.max(16, s + delta));
       storePrompterSetting("vc-prompter-font", next);
+      return next;
+    });
+  }, []);
+  const changeLines = React.useCallback((delta: number) => {
+    setVisibleLines((s) => {
+      const next = Math.min(
+        PROMPTER_MAX_LINES,
+        Math.max(PROMPTER_MIN_LINES, s + delta),
+      );
+      storePrompterSetting("vc-prompter-lines", next);
       return next;
     });
   }, []);
@@ -893,26 +907,33 @@ function Teleprompter({
     return () => el.removeEventListener("wheel", onWheel);
   }, [editing, overlay, applyOffset]);
 
-  // ── Pfeiltasten ↑/↓: Tempo jederzeit anpassen ────────────────────────
+  // ── Pfeiltasten: ←/→ Tempo, ↑/↓ eine Zeile zurück/vor ────────────────
   React.useEffect(() => {
     if (editing) return;
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && /^(input|textarea|select)$/i.test(target.tagName)) return;
-      if (e.key === "ArrowUp") {
+      if (e.key === "ArrowRight") {
         e.preventDefault();
         changeSpeed(1);
-      } else if (e.key === "ArrowDown") {
+      } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         changeSpeed(-1);
+      } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        const linePx = fontRef.current * PROMPTER_LINE_HEIGHT;
+        applyOffset(
+          offsetRef.current + (e.key === "ArrowDown" ? linePx : -linePx),
+        );
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [editing, changeSpeed]);
+  }, [editing, changeSpeed, applyOffset]);
 
   const lineHeightPx = fontSize * PROMPTER_LINE_HEIGHT;
-  const viewportHeight = Math.round(lineHeightPx * PROMPTER_VISIBLE_LINES);
+  // +0,2 Zeilen als An-Schnitt oben/unten — signalisiert „hier geht's weiter".
+  const viewportHeight = Math.round(lineHeightPx * (visibleLines + 0.2));
   /** Oberkante der Fokus-Zeile: mittig im Fenster. */
   const focusTopPx = Math.round(viewportHeight / 2 - lineHeightPx / 2);
 
@@ -936,9 +957,11 @@ function Teleprompter({
   }, [resetScroll]);
 
   // Fokus-Band: nur die Zeile in der Mitte ist voll sichtbar, der Rest
-  // stark abgedunkelt — das Auge bleibt auf einer Zeile.
-  const focusMask =
-    "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.25) 18%, rgba(0,0,0,0.35) 38%, black 44%, black 60%, rgba(0,0,0,0.35) 66%, rgba(0,0,0,0.25) 84%, transparent 100%)";
+  // stark abgedunkelt — das Auge bleibt auf einer Zeile. Die Stops richten
+  // sich nach der Zeilenhöhe, damit das Band bei jeder Zeilenanzahl exakt
+  // eine Zeile hoch bleibt.
+  const halfLinePct = (lineHeightPx / viewportHeight) * 50;
+  const focusMask = `linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.25) ${(50 - halfLinePct * 2.2).toFixed(1)}%, rgba(0,0,0,0.35) ${(50 - halfLinePct * 1.3).toFixed(1)}%, black ${(50 - halfLinePct).toFixed(1)}%, black ${(50 + halfLinePct).toFixed(1)}%, rgba(0,0,0,0.35) ${(50 + halfLinePct * 1.3).toFixed(1)}%, rgba(0,0,0,0.25) ${(50 + halfLinePct * 2.2).toFixed(1)}%, transparent 100%)`;
 
   const controlBtn =
     "rounded-full p-1 text-white/70 transition-colors hover:bg-white/15 hover:text-white";
@@ -1057,23 +1080,23 @@ function Teleprompter({
               {controlDivider}
               <button
                 type="button"
-                aria-label="Langsamer (Pfeiltaste ↓)"
-                title="Tempo — auch mit Pfeiltasten ↑/↓"
+                aria-label="Langsamer (Pfeiltaste ←)"
+                title="Tempo — auch mit Pfeiltasten ←/→"
                 onClick={() => changeSpeed(-1)}
                 className={controlBtn}
               >
                 <Minus className="size-3" />
               </button>
               <span
-                title="Tempo — auch mit Pfeiltasten ↑/↓"
+                title="Tempo — auch mit Pfeiltasten ←/→"
                 className="w-3 text-center text-[9px] font-semibold tabular-nums text-white/70"
               >
                 {speedLevel}
               </span>
               <button
                 type="button"
-                aria-label="Schneller (Pfeiltaste ↑)"
-                title="Tempo — auch mit Pfeiltasten ↑/↓"
+                aria-label="Schneller (Pfeiltaste →)"
+                title="Tempo — auch mit Pfeiltasten ←/→"
                 onClick={() => changeSpeed(1)}
                 className={controlBtn}
               >
@@ -1100,6 +1123,32 @@ function Teleprompter({
                 aria-label="Schrift größer"
                 title="Schriftgröße"
                 onClick={() => changeFont(2)}
+                className={controlBtn}
+              >
+                <Plus className="size-3" />
+              </button>
+              {controlDivider}
+              <button
+                type="button"
+                aria-label="Weniger Zeilen anzeigen"
+                title="Sichtbare Zeilen"
+                onClick={() => changeLines(-1)}
+                className={controlBtn}
+              >
+                <Minus className="size-3" />
+              </button>
+              <span
+                title="Sichtbare Zeilen"
+                className="flex items-center gap-0.5 text-[9px] font-semibold tabular-nums text-white/70"
+              >
+                <Rows3 className="size-3" />
+                {visibleLines}
+              </span>
+              <button
+                type="button"
+                aria-label="Mehr Zeilen anzeigen"
+                title="Sichtbare Zeilen"
+                onClick={() => changeLines(1)}
                 className={controlBtn}
               >
                 <Plus className="size-3" />
