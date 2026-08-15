@@ -8,9 +8,11 @@
  *  - Pflichtfelder: `firstName` und `websiteUrl` in `lead.data`. Diese Keys
  *    sind die im Column-Mapping verwendeten Placeholder, die das Frontend
  *    in der Mapping-Phase setzt.
- *  - URLs müssen ein gültiges http/https-Schema und einen externen Host
- *    haben (kein localhost / private-IP-Range — Akquise-Webseiten sind
- *    immer öffentlich erreichbar).
+ *  - URLs brauchen KEIN Schema: Gekaufte Lead-Listen enthalten oft nackte
+ *    Domains („zahnarzt-mueller.de") — wir stellen https:// voran, genau
+ *    wie url-probe/scroll-recorder es beim tatsächlichen Zugriff tun.
+ *    Der Host muss extern sein (kein localhost / private-IP-Range —
+ *    Akquise-Webseiten sind immer öffentlich erreichbar).
  *  - Duplikate werden über normalisierte URL UND/ODER lowercase-Email
  *    erkannt. Das erste Vorkommen ist "Original" und behält seinen Slot.
  */
@@ -68,10 +70,19 @@ function pick(data: Record<string, unknown>, keys: string[]): string | null {
   return null;
 }
 
+/**
+ * Stellt fehlendem Schema `https://` voran — dieselbe Konvention wie
+ * `normaliseUrl` (url-probe) und `normaliseWebsiteUrl` (scroll-recorder).
+ */
+function withScheme(raw: string): string {
+  const t = raw.trim();
+  return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+}
+
 function isValidUrl(raw: string): boolean {
   let u: URL;
   try {
-    u = new URL(raw);
+    u = new URL(withScheme(raw));
   } catch {
     return false;
   }
@@ -138,7 +149,7 @@ export function validateLeadInline(
  */
 function normalizeHost(rawUrl: string): string | null {
   try {
-    const u = new URL(rawUrl);
+    const u = new URL(withScheme(rawUrl));
     let h = u.hostname.toLowerCase();
     if (h.startsWith("www.")) h = h.slice(4);
     if (h.endsWith(".")) h = h.slice(0, -1);

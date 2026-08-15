@@ -710,6 +710,9 @@ export async function pipelineProcessor(
             webcamUrl: webcam.publicUrl,
             webcamDurationSec: webcam.durationSec ?? 30,
             website: lead.data?.website ?? null,
+            // Render-relevanter Input: die verifizierte Capture-URL aus dem
+            // Preflight (siehe VideoRenderInput.preflightFinalUrl).
+            preflightFinalUrl: lead.preflightFinalUrl ?? null,
             segments: campaign.segments ?? [],
             leadData: lead.data ?? {},
             placeholderMapping: placeholderMapping ?? null,
@@ -831,6 +834,7 @@ export async function pipelineProcessor(
               : webcam.publicUrl!,
             introTrimMs: personalizedWebcamPath ? introStartTrimMs : 0,
             website: lead.data?.website ?? null,
+            preflightFinalUrl: lead.preflightFinalUrl ?? null,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             segments: (campaign.segments as any) ?? [],
             leadData: (lead.data ?? {}) as Record<string, string>,

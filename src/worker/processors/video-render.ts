@@ -63,6 +63,14 @@ export interface VideoRenderInput {
   webcamSourceUrl: string;
   /** Lead's target website (used for scroll-capture). */
   website?: string | null;
+  /**
+   * Vom Preflight verifizierte finale URL (nach Redirects, ggf. `http://`
+   * wenn die Site kein TLS hat). Wird für Website-Segmente bevorzugt, wenn
+   * ihr Host mit der aus den Lead-Daten aufgelösten URL übereinstimmt —
+   * so landen schemalose Lead-URLs auf dem tatsächlich erreichbaren Ziel,
+   * ohne Segmente mit abweichender urlColumn (z.B. Karriereseite) zu stören.
+   */
+  preflightFinalUrl?: string | null;
   /** PiP configuration when mode = with-presentation. */
   pip?: {
     position: PipPosition;
@@ -300,6 +308,17 @@ export async function fetchToFile(url: string, outPath: string): Promise<void> {
  *   3. Placeholder page ALSO throws → black clip (so the pipeline never gets
  *      stuck on a bad website + a missing browser).
  */
+/** Host einer URL ohne `www.`-Präfix — für den "gleiche Site?"-Vergleich. */
+function comparableHost(u: string): string | null {
+  try {
+    let h = new URL(u).hostname.toLowerCase();
+    if (h.startsWith("www.")) h = h.slice(4);
+    return h || null;
+  } catch {
+    return null;
+  }
+}
+
 async function renderPresentationBase(opts: {
   website: string | null | undefined;
   outDir: string;
@@ -566,12 +585,15 @@ export async function runVideoRender(
       outDir: input.outDir,
       basePath,
       fallbackWebsite: input.website ?? null,
+      preflightFinalUrl: input.preflightFinalUrl ?? null,
       totalDurationSec: duration,
       introTrimMs: input.introTrimMs ?? 0,
     });
   } else {
     await renderPresentationBase({
-      website: input.website ?? null,
+      // Legacy-Pfad zeigt immer die Haupt-Website des Leads — die vom
+      // Preflight verifizierte finale URL ist hier die verlässlichste Quelle.
+      website: input.preflightFinalUrl ?? input.website ?? null,
       outDir: input.outDir,
       basePath,
       durationSec: duration,
@@ -630,6 +652,7 @@ async function renderSegmentsBase(opts: {
   outDir: string;
   basePath: string;
   fallbackWebsite: string | null;
+  preflightFinalUrl?: string | null;
   totalDurationSec: number;
   introTrimMs?: number;
 }): Promise<void> {
@@ -700,12 +723,22 @@ async function renderSegmentsBase(opts: {
           !fixed && opts.leadData
             ? resolveValue(mappingKey, opts.leadData, opts.placeholderMapping)
             : null;
-        const url = fixed
+        const leadUrl = fixed
           ? normaliseWebsiteUrl(seg.fallbackUrl) ?? null
           : normaliseWebsiteUrl(fromLead) ??
             normaliseWebsiteUrl(opts.fallbackWebsite) ??
             normaliseWebsiteUrl(seg.fallbackUrl) ??
             null;
+        // Preflight-verifizierte URL bevorzugen, wenn sie zur selben Site
+        // gehört: deckt http-only-Domains und www-Redirects ab, ohne
+        // Segmente mit anderer urlColumn (z.B. Karriereseite) umzubiegen.
+        const probed = !fixed
+          ? normaliseWebsiteUrl(opts.preflightFinalUrl ?? null) ?? null
+          : null;
+        const url =
+          probed && leadUrl && comparableHost(probed) === comparableHost(leadUrl)
+            ? probed
+            : leadUrl;
         if (!url) {
           await generateBlackClip({
             outputPath: partPath,

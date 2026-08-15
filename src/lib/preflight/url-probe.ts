@@ -311,6 +311,12 @@ async function checkParkingHost(host: string): Promise<boolean> {
  * capped by the per-hop timeouts (DNS 3 s + up to 5 redirects × 5 s = ~28 s
  * worst case; typical successful probe is < 1 s).
  *
+ * Schema-Handling: Lead-Listen enthalten oft nackte Domains ohne Schema.
+ * Wir versuchen zuerst `https://`; scheitert das auf VERBINDUNGSEBENE
+ * (TLS-Fehler oder Timeout/Refused — NICHT HTTP-4xx/5xx, Bot-Wall oder
+ * Parking) UND die Original-URL hatte kein explizites Schema, probieren wir
+ * einmal `http://` — manche alten Firmen-Sites haben schlicht kein TLS.
+ *
  * Pass an `AbortSignal` to allow the BullMQ worker to cancel mid-flight
  * when the run is cancelled.
  */
@@ -332,6 +338,32 @@ export async function probeUrl(
     };
   }
 
+  const hadExplicitScheme = /^https?:\/\//i.test((rawUrl ?? "").trim());
+  const first = await probeParsedUrl(url, startedAt, signal);
+
+  const connectionLevelFailure =
+    (first.status === "tls_error" || first.status === "url_dead") &&
+    first.httpStatus === null;
+  if (
+    connectionLevelFailure &&
+    !hadExplicitScheme &&
+    url.protocol === "https:" &&
+    !signal?.aborted
+  ) {
+    const httpUrl = new URL(url.toString());
+    httpUrl.protocol = "http:";
+    const second = await probeParsedUrl(httpUrl, startedAt, signal);
+    if (second.ok) return second;
+  }
+
+  return first;
+}
+
+async function probeParsedUrl(
+  url: URL,
+  startedAt: number,
+  signal?: AbortSignal,
+): Promise<UrlProbeResult> {
   // Stage 1 — DNS.
   const dnsRes = await resolveWithTimeout(url.hostname, signal);
   if (!dnsRes.ok) {
