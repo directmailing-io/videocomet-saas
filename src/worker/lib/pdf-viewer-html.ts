@@ -18,6 +18,13 @@
  * Lineal); der Drive-PDF-Viewer hat nur EINE dunkle Leiste, daher 56px.
  */
 
+import {
+  DOC_STACK_MAX_WIDTH_PX,
+  DOC_STACK_HPAD_PX,
+  DOC_PAGE_GAP_PX,
+  PDF_TOOLBAR_HEIGHT_PX as SHARED_PDF_TOOLBAR_HEIGHT_PX,
+} from "@/lib/segments/doc-geometry";
+
 export interface PdfToolbarOptions {
   /** Sichtbarer Dateiname in der Toolbar (wird HTML-escaped). */
   fileName: string;
@@ -30,12 +37,12 @@ export interface PdfToolbarOptions {
  * identisch zu Device-Pixeln — gleiche Konvention wie
  * `GDOCS_TOOLBAR_HEIGHT_PX` in gdocs-render-pipeline.ts).
  */
-export const PDF_TOOLBAR_HEIGHT_PX = 56;
+export const PDF_TOOLBAR_HEIGHT_PX = SHARED_PDF_TOOLBAR_HEIGHT_PX;
 
 /** Seiten-Stack max-width in CSS-Pixeln — identisch zur GDocs-Pipeline. */
-export const PDF_DOC_WIDTH_PX = 850;
+export const PDF_DOC_WIDTH_PX = DOC_STACK_MAX_WIDTH_PX;
 /** Abstand zwischen gestapelten Seiten — identisch zur GDocs-Pipeline. */
-export const PDF_PAGE_GAP_PX = 24;
+export const PDF_PAGE_GAP_PX = DOC_PAGE_GAP_PX;
 
 /**
  * Hintergrund der Dokument-Fläche (Drive-/Chrome-PDF-Viewer-Grau).
@@ -236,8 +243,10 @@ export function getPdfViewerCss(): string {
     /* Dokument-Fläche: zentrierter Seiten-Stack — Maße wie GDocs-Pipeline. */
     .pdfv-doc-stack {
       max-width: ${PDF_DOC_WIDTH_PX}px;
-      margin: ${PDF_PAGE_GAP_PX}px auto;
-      padding: 0 12px;
+      /* Kein Außenrand: Doc sitzt bündig unter der Toolbar — identisch zum
+         Screenshot-Crop im Worker und zur Client-Vorschau (doc-geometry). */
+      margin: 0 auto;
+      padding: 0 ${DOC_STACK_HPAD_PX}px;
       display: flex;
       flex-direction: column;
       gap: ${PDF_PAGE_GAP_PX}px;

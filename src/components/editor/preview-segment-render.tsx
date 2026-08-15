@@ -539,6 +539,7 @@ function RenderGDocs({
         docWidth={docWidth}
         docHeight={docHeight}
         scrollRatio={segmentScrollRatio(segment, segmentTimeMs)}
+        variant="gdocs"
       />
     );
   }
@@ -583,7 +584,7 @@ function RenderPdf({
         docHeight={segment.docHeight}
         scrollRatio={segmentScrollRatio(segment, segmentTimeMs)}
         fileName={segment.fileName}
-        showToolbar
+        variant="pdf"
       />
     );
   }

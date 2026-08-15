@@ -463,6 +463,7 @@ export function SegmentEditorPdf({
             pageUrls: segment.pageUrls,
             docWidth: segment.docWidth,
             docHeight: segment.docHeight,
+            fileName: segment.fileName,
           }}
         />
       )}

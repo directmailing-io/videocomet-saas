@@ -24,6 +24,10 @@ import {
   perPageHeightFromStackHeight,
 } from "@/components/editor/doc-stack-preview";
 import { PreviewSegmentRender } from "@/components/editor/preview-segment-render";
+import {
+  docStackLayout,
+  type DocViewerVariant,
+} from "@/lib/segments/doc-geometry";
 import { clamp01 } from "./internal";
 
 export interface StudioStageProps {
@@ -52,22 +56,12 @@ export interface StudioStageProps {
   className?: string;
 }
 
-/**
- * Layout-Konstanten des Seiten-Stapels — MÜSSEN mit
- * `@/components/editor/doc-stack-preview` übereinstimmen (PAGE_GAP_PX,
- * PAGE_WIDTH_RATIO, Toolbar h-8), damit die Wheel→Ratio-Umrechnung exakt
- * zur sichtbaren Bewegung passt.
- */
-const DOC_PAGE_GAP_PX = 24;
-const DOC_PAGE_WIDTH_RATIO = 0.56;
-const DOC_TOOLBAR_HEIGHT_PX = 32;
-
 interface DocStackMeta {
   pageUrls: string[];
   docWidth: number;
   docHeight: number;
   fileName?: string;
-  showToolbar: boolean;
+  variant: DocViewerVariant;
 }
 
 function docStackMeta(segment: Segment): DocStackMeta | null {
@@ -84,7 +78,7 @@ function docStackMeta(segment: Segment): DocStackMeta | null {
         segment.previewDocHeight ?? 0,
         segment.previewPageUrls.length,
       ),
-      showToolbar: false,
+      variant: "gdocs",
     };
   }
   if (segment.kind === "pdf") {
@@ -94,7 +88,7 @@ function docStackMeta(segment: Segment): DocStackMeta | null {
       docWidth: segment.docWidth,
       docHeight: segment.docHeight,
       fileName: segment.fileName,
-      showToolbar: true,
+      variant: "pdf",
     };
   }
   return null;
@@ -154,13 +148,14 @@ export function StudioStage({
           doc.docWidth > 0 && doc.docHeight > 0
             ? doc.docWidth / doc.docHeight
             : 1 / Math.SQRT2;
-        const viewportH =
-          h - (doc.showToolbar ? DOC_TOOLBAR_HEIGHT_PX : 0);
-        const pageH = (w * DOC_PAGE_WIDTH_RATIO) / aspect;
-        const n = doc.pageUrls.length;
-        const stackH =
-          DOC_PAGE_GAP_PX * 2 + n * pageH + Math.max(0, n - 1) * DOC_PAGE_GAP_PX;
-        setMaxScrollPx(Math.max(0, stackH - viewportH));
+        const layout = docStackLayout({
+          stageWidth: w,
+          stageHeight: h,
+          pageAspect: aspect,
+          pageCount: doc.pageUrls.length,
+          variant: doc.variant,
+        });
+        setMaxScrollPx(layout.maxScrollPx);
         return;
       }
       setMaxScrollPx(0);
@@ -226,7 +221,7 @@ export function StudioStage({
         docHeight={doc.docHeight}
         scrollRatio={ratio}
         fileName={doc.fileName}
-        showToolbar={doc.showToolbar}
+        variant={doc.variant}
       />
     );
   } else if (

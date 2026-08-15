@@ -22,6 +22,16 @@ import { cn } from "@/lib/utils";
 import type { ScrollFrame, Segment } from "@/lib/segments/types";
 import { friendlyScreenshotError } from "@/lib/screenshot-error-text";
 import { segmentStartMs } from "@/lib/segments/timeline";
+import {
+  DOC_VIEWER_HEIGHT_PX,
+  DOC_VIEWER_WIDTH_PX,
+  PDF_TOOLBAR_HEIGHT_PX,
+  docStackLayout,
+} from "@/lib/segments/doc-geometry";
+import {
+  buildPdfToolbarHtml,
+  getPdfViewerCss,
+} from "@/worker/lib/pdf-viewer-html";
 import { WebcamMonitor } from "./webcam-monitor";
 
 /**
@@ -59,6 +69,7 @@ type PreviewSource =
       pageUrls: string[];
       docWidth: number;
       docHeight: number;
+      fileName?: string;
     };
 
 /** Direkte Seiten-Quelle (PDF): umgeht den Screenshot-Job komplett. */
@@ -67,6 +78,8 @@ export interface ScrollRecorderPagesSource {
   /** Pixel-Maße EINER Seite (150 dpi) — für das Seiten-Seitenverhältnis. */
   docWidth: number;
   docHeight: number;
+  /** Dateiname für die Viewer-Toolbar. */
+  fileName?: string;
 }
 
 type Phase =
@@ -308,6 +321,7 @@ export function ScrollRecorderModal({
         pageUrls: pages.pageUrls,
         docWidth: pages.docWidth,
         docHeight: pages.docHeight,
+        fileName: pages.fileName,
       });
       setPhase({ kind: "ready" });
       return;
@@ -824,6 +838,7 @@ function ViewportArea({
           pageUrls={source.pageUrls}
           docWidth={source.docWidth}
           docHeight={source.docHeight}
+          fileName={source.fileName}
           viewportRef={imageViewportRef}
           lockScroll={phase.kind === "countdown"}
         />
@@ -887,40 +902,95 @@ function ImageViewport({
 }
 
 /**
- * Scrollbarer Seiten-Stapel für die `pages`-Quelle (PDF): weiße Seiten mit
- * Gap auf grauem Grund — gleiche Optik wie `DocStackPreview`, aber mit
- * echtem overflow-auto-Scrolling (der Recorder sampelt scrollTop des Divs,
- * identisch zum image-Flow).
+ * Scrollbarer Seiten-Stapel für die `pages`-Quelle (PDF): exakt die
+ * Worker-Geometrie (doc-geometry.ts) — Seitenbreite 826/1280, skalierter
+ * 24px-Gap, sticky Drive-Toolbar (56px skaliert), KEIN Außen-Padding.
+ * Dadurch entspricht `scrollTop/(scrollHeight−clientHeight)` 1:1 der
+ * Worker-scrollRatio. Echtes overflow-auto-Scrolling (der Recorder
+ * sampelt scrollTop des Divs, identisch zum image-Flow).
  */
 function PagesViewport({
   pageUrls,
   docWidth,
   docHeight,
+  fileName,
   viewportRef,
   lockScroll,
 }: {
   pageUrls: string[];
   docWidth: number;
   docHeight: number;
+  fileName?: string;
   viewportRef: React.MutableRefObject<HTMLDivElement | null>;
   lockScroll: boolean;
 }) {
+  const [stage, setStage] = React.useState({ width: 0, height: 0 });
+  React.useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const update = () =>
+      setStage({ width: el.clientWidth, height: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [viewportRef]);
+
   const pageAspect =
     docWidth > 0 && docHeight > 0 ? docWidth / docHeight : 1 / Math.SQRT2;
+  const layout = docStackLayout({
+    stageWidth: stage.width,
+    stageHeight: stage.height,
+    pageAspect,
+    pageCount: pageUrls.length,
+    variant: "pdf",
+  });
+
+  const toolbarCss = React.useMemo(() => getPdfViewerCss(), []);
+  const toolbarHtml = React.useMemo(
+    () =>
+      buildPdfToolbarHtml({
+        fileName: fileName || "Dokument.pdf",
+        pageCount: Math.max(1, pageUrls.length),
+      }),
+    [fileName, pageUrls.length],
+  );
+
   return (
     <div
       ref={viewportRef}
       className={cn(
-        "aspect-video w-full overflow-auto rounded-squircle-md bg-[#F1F3F4] shadow-card",
+        "aspect-video w-full overflow-auto rounded-squircle-md bg-[#525659] shadow-card",
         lockScroll && "overflow-hidden",
       )}
     >
-      <div className="flex flex-col items-center gap-6 py-6">
+      <style dangerouslySetInnerHTML={{ __html: toolbarCss }} />
+      {/* Sticky Toolbar: Layout-Höhe = skalierte 56px, Inhalt ist das echte
+          Worker-HTML in 1280px Breite, per transform skaliert
+          (position:fixed wird vom transform eingefangen). */}
+      <div className="sticky top-0 z-10" style={{ height: layout.toolbarPx }}>
+        <div
+          style={{
+            width: `${DOC_VIEWER_WIDTH_PX}px`,
+            height: `${PDF_TOOLBAR_HEIGHT_PX}px`,
+            transform: `scale(${layout.scale})`,
+            transformOrigin: "top left",
+          }}
+          dangerouslySetInnerHTML={{ __html: toolbarHtml }}
+        />
+      </div>
+      <div
+        className="flex flex-col items-center"
+        style={{ gap: `${layout.gapPx}px` }}
+      >
         {pageUrls.map((url, i) => (
           <div
             key={`${url}-${i}`}
-            className="w-[56%] shrink-0 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-            style={{ aspectRatio: `${pageAspect}` }}
+            className="shrink-0 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
+            style={{
+              width: `${layout.pageWidthPx}px`,
+              height: `${layout.pageHeightPx}px`,
+            }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -936,6 +1006,12 @@ function PagesViewport({
   );
 }
 
+/**
+ * GDocs-Vorschau: iframe fest im Worker-Referenz-Viewport 1280×720 und per
+ * CSS-transform auf die Modalbreite skaliert. Nur so stimmen die
+ * Proportionen (850px-Stapel, 160px-Toolbar) mit dem Worker-Render überein
+ * — bei variabler iframe-Breite wäre die scrollRatio nicht 1:1 übertragbar.
+ */
 function IframeViewport({
   previewUrl,
   iframeRef,
@@ -947,15 +1023,40 @@ function IframeViewport({
   onLoad: () => void;
   onError: () => void;
 }) {
+  const wrapRef = React.useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = React.useState(0);
+  React.useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const update = () => setWidth(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const scale = width > 0 ? width / DOC_VIEWER_WIDTH_PX : 0;
+
   return (
-    <iframe
-      ref={iframeRef}
-      src={previewUrl}
-      onLoad={onLoad}
-      onError={onError}
-      title="Google-Docs-Vorschau"
-      className="block aspect-video w-full bg-white rounded-squircle-md shadow-card"
-    />
+    <div
+      ref={wrapRef}
+      className="relative aspect-video w-full overflow-hidden rounded-squircle-md bg-white shadow-card"
+    >
+      <iframe
+        ref={iframeRef}
+        src={previewUrl}
+        onLoad={onLoad}
+        onError={onError}
+        title="Google-Docs-Vorschau"
+        className="block bg-white"
+        style={{
+          width: `${DOC_VIEWER_WIDTH_PX}px`,
+          height: `${DOC_VIEWER_HEIGHT_PX}px`,
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+        }}
+      />
+    </div>
   );
 }
 

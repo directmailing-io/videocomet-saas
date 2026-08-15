@@ -40,13 +40,18 @@ import {
   getGDocsToolbarHtml,
 } from "./gdocs-toolbar-html";
 import { uploadFile } from "@/lib/bunny/storage";
+import {
+  DOC_STACK_MAX_WIDTH_PX,
+  DOC_STACK_HPAD_PX,
+  DOC_PAGE_GAP_PX,
+  GDOCS_TOOLBAR_HEIGHT_PX,
+} from "@/lib/segments/doc-geometry";
 
-/** Doc-stack max width in CSS pixels. Must match the value used in the HTML. */
-export const GDOCS_DOC_WIDTH_PX = 850;
-/** Gap between stacked pages, in CSS pixels. Must match the HTML. */
-export const GDOCS_PAGE_GAP_PX = 24;
-/** Total fixed toolbar height (title 44 + menu 32 + format 40 + ruler 24 + ~20 padding). */
-export const GDOCS_TOOLBAR_HEIGHT_PX = 160;
+/** Doc-stack max width in CSS pixels (aus doc-geometry, single source of truth). */
+export const GDOCS_DOC_WIDTH_PX = DOC_STACK_MAX_WIDTH_PX;
+/** Gap between stacked pages, in CSS pixels. */
+export const GDOCS_PAGE_GAP_PX = DOC_PAGE_GAP_PX;
+export { GDOCS_TOOLBAR_HEIGHT_PX };
 
 export interface RenderedGDocs {
   /** Absolute path to the HTML page that wraps the rendered PNGs. */
@@ -361,8 +366,10 @@ export function buildGDocsHtml(
   /* Doc-Fläche: zentriert, breite ~ A4. */
   .gd-doc-stack {
     max-width: ${GDOCS_DOC_WIDTH_PX}px;
-    margin: 24px auto;
-    padding: 0 12px;
+    /* Kein Außenrand: Doc sitzt bündig unter der Toolbar — identisch zum
+       Screenshot-Crop im Worker und zur Client-Vorschau (doc-geometry). */
+    margin: 0 auto;
+    padding: 0 ${DOC_STACK_HPAD_PX}px;
     display: flex;
     flex-direction: column;
     gap: ${GDOCS_PAGE_GAP_PX}px;
