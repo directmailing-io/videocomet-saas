@@ -44,8 +44,9 @@ const DEVICE_WIDTHS: Record<BuilderDevice, number | null> = {
 };
 
 /**
- * Beispieldaten für die Vorschau — identisch zur alten lp-preview, damit
- * gerenderte Platzhalter überall gleich aussehen.
+ * Beispieldaten für die Vorschau. Deutsche Synonym-Keys sind nötig, weil
+ * bestehende Vorlagen Platzhalter wie {{vorname}} oder {{firma}} nutzen
+ * (CSV-Spaltennamen) — ohne sie zeigt der Beispiel-Lead nur Fallbacks.
  */
 const SAMPLE_LEAD: Record<string, string> = {
   firstName: "Max",
@@ -53,6 +54,11 @@ const SAMPLE_LEAD: Record<string, string> = {
   company: "Mustermann GmbH",
   email: "max@mustermann.de",
   jobTitle: "Geschäftsführer",
+  vorname: "Max",
+  nachname: "Mustermann",
+  firma: "Mustermann GmbH",
+  unternehmen: "Mustermann GmbH",
+  position: "Geschäftsführer",
 };
 
 /**
