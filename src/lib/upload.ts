@@ -25,8 +25,8 @@ export type ValidateUploadResult =
 
 const ALLOWED_MIMES: Record<UploadKind, ReadonlyArray<string>> = {
   webcam: ["video/mp4", "video/webm", "video/quicktime"],
-  image: ["image/jpeg", "image/png", "image/svg+xml"],
-  logo: ["image/png", "image/svg+xml", "image/jpeg"],
+  image: ["image/jpeg", "image/png", "image/webp", "image/svg+xml"],
+  logo: ["image/png", "image/svg+xml", "image/jpeg", "image/webp"],
   docx: [
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ],
@@ -89,6 +89,7 @@ const MIME_BY_EXT: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   png: "image/png",
+  webp: "image/webp",
   svg: "image/svg+xml",
   pdf: "application/pdf",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

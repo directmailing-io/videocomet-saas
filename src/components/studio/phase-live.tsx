@@ -363,10 +363,10 @@ export function PhaseLive({
         />
       )}
 
-      {/* Bühne als Browser-Fenster */}
-      <div className="flex min-h-0 flex-1 items-center justify-center px-5 py-2">
+      {/* Bühne als Browser-Fenster, im Standby mit Kamera-Sidebar rechts */}
+      <div className="flex min-h-0 flex-1 items-center justify-center gap-4 px-5 py-2">
         <div
-          className="flex flex-col overflow-hidden rounded-squircle-xl bg-surface shadow-lift"
+          className="flex min-w-0 flex-col overflow-hidden rounded-squircle-xl bg-surface shadow-lift"
           style={{
             width: `min(100%, calc((100vh - ${stageChrome}px) * 16 / 9))`,
           }}
@@ -508,47 +508,6 @@ export function PhaseLive({
               />
             </div>
 
-            {/* PiP-Wahl im Standby: Position + Form, Wirkung sofort live
-             * am echten Kamerabild sichtbar. */}
-            {stage === "standby" && (
-              <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-line-soft bg-white/90 px-1.5 py-1 shadow-card backdrop-blur">
-                <span className="px-1.5 text-[10px] font-semibold text-ink-muted">
-                  Dein Kamerabild:
-                </span>
-                {(["bottom-left", "bottom-right"] as const).map((pos) => (
-                  <button
-                    key={pos}
-                    type="button"
-                    onClick={() => onPipPositionChange(pos)}
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors",
-                      pipPosition === pos
-                        ? "bg-ink text-white"
-                        : "text-ink-muted hover:bg-canvas-deep hover:text-ink",
-                    )}
-                  >
-                    {pos === "bottom-left" ? "Links" : "Rechts"}
-                  </button>
-                ))}
-                <span className="mx-1 h-3 w-px bg-line" />
-                {PIP_SHAPE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => onPipShapeChange(opt.value)}
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors",
-                      pipShape === opt.value
-                        ? "bg-ink text-white"
-                        : "text-ink-muted hover:bg-canvas-deep hover:text-ink",
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
             {/* Standby-Hinweiskarte: So läuft die Aufnahme + KI-Tipp.
              * Liegt über der Bühne (z-40, über PiP), die Bedienleiste unten
              * bleibt frei sichtbar und klickbar. */}
@@ -605,6 +564,62 @@ export function PhaseLive({
             )}
           </div>
         </div>
+
+        {/* Kamera-Sidebar (nur Standby): Position + Form des Webcam-PiP,
+         * rechts neben dem Video statt als Overlay darin — Wirkung sofort
+         * live am echten Kamerabild sichtbar. */}
+        {stage === "standby" && (
+          <aside className="hidden w-48 shrink-0 flex-col gap-5 self-center rounded-squircle-lg border border-line-soft bg-white/80 p-4 shadow-card backdrop-blur md:flex">
+            <div>
+              <p className="text-sm font-bold text-ink">Dein Kamerabild</p>
+              <p className="mt-1 text-[11px] leading-snug text-ink-muted">
+                Änderungen siehst du sofort in der Vorschau.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+                Position
+              </span>
+              {(["bottom-left", "bottom-right"] as const).map((pos) => (
+                <button
+                  key={pos}
+                  type="button"
+                  onClick={() => onPipPositionChange(pos)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-squircle-sm border px-3 py-2 text-xs font-semibold transition-colors",
+                    pipPosition === pos
+                      ? "border-ink bg-ink text-white"
+                      : "border-line-soft bg-surface text-ink-muted hover:bg-canvas-deep hover:text-ink",
+                  )}
+                >
+                  {pos === "bottom-left" ? "Unten links" : "Unten rechts"}
+                  {pipPosition === pos && <Check className="size-3.5" />}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+                Form
+              </span>
+              {PIP_SHAPE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => onPipShapeChange(opt.value)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-squircle-sm border px-3 py-2 text-xs font-semibold transition-colors",
+                    pipShape === opt.value
+                      ? "border-ink bg-ink text-white"
+                      : "border-line-soft bg-surface text-ink-muted hover:bg-canvas-deep hover:text-ink",
+                  )}
+                >
+                  {opt.label}
+                  {pipShape === opt.value && <Check className="size-3.5" />}
+                </button>
+              ))}
+            </div>
+          </aside>
+        )}
       </div>
 
       {/* Hauptaktion: Standby-Leiste bzw. Beenden per direktem Klick */}

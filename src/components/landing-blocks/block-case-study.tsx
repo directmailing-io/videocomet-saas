@@ -5,7 +5,9 @@ import { resolveVariant } from "@/lib/landing-blocks/types";
 import type { BlockRenderProps } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
 import { EditableText, EditSwitch, MaybeEmptyField } from "./editable-text";
+import { parseVideoEmbed } from "@/lib/landing-blocks/video-embed";
 import { ImagePlaceholder } from "./image-placeholder";
+import { VideoEmbedFrame } from "./video-embed-frame";
 
 /* ------------------------------------------------------------------ */
 /* Defensive narrowing of the persisted data shape                     */
@@ -105,6 +107,11 @@ function MediumNode({ medium }: { medium: CaseStudyMedium }) {
     return <ImagePlaceholder />;
   }
   if (medium.kind === "video") {
+    const embed = parseVideoEmbed(medium.url);
+    if (embed) {
+      return <VideoEmbedFrame embed={embed} title={medium.alt} />;
+    }
+    // Legacy: direkte Videodatei-URLs von Bestandsseiten weiter abspielen.
     return (
       <video
         controls

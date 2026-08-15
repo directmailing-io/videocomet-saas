@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { uploadVideo, getVideo } from "@/lib/bunny/stream";
 import { uploadFile } from "@/lib/bunny/storage";
+import { extFromMime } from "@/lib/upload-sniff";
 import { slugify } from "@/lib/utils";
 import {
   probeVideoBufferDuration,
@@ -298,13 +299,14 @@ export async function uploadMediaFile(
 
   // webcam / image / logo -> Bunny Edge Storage (direct mp4/png GET works).
   // WICHTIG: Bunny Storage liefert den content-type basierend auf der
-  // Datei-Endung. Daher muss die Extension (.webm / .mp4 / .png / ...) im
-  // remotePath erhalten bleiben — slugify würde den Punkt durch "-" ersetzen.
+  // Datei-Endung. Die Endung kommt deshalb aus dem (allowlisted bzw. per
+  // Magic Bytes verifizierten) MIME-Typ — NIE aus dem Dateinamen. Sonst
+  // würde "bild.html" mit Fake-MIME vom CDN als text/html ausgeliefert
+  // (Stored XSS, Security-Review 2026-08-15).
   const dotIdx = filename.lastIndexOf(".");
   const rawBase = dotIdx > 0 ? filename.slice(0, dotIdx) : filename;
-  const rawExt = dotIdx > 0 ? filename.slice(dotIdx + 1) : "";
   const safeBase = slugify(rawBase, false) || "file";
-  const safeExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const safeExt = extFromMime(mime) ?? "";
   const safeName = safeExt ? `${safeBase}.${safeExt}` : safeBase;
   const folder = kind === "webcam" ? "webcam" : "media";
   const remotePath = `users/${userId}/${folder}/${randomUUID()}-${safeName}`;

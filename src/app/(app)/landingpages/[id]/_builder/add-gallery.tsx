@@ -93,13 +93,6 @@ const PREVIEW_DATA: Partial<Record<BlockType, Record<string, unknown>>> = {
       },
     ],
   },
-  stats: {
-    items: [
-      { value: "120+", label: "Kunden" },
-      { value: "98 %", label: "Zufriedenheit" },
-      { value: "24 h", label: "Antwortzeit" },
-    ],
-  },
   content: {
     headline: "So läuft die Zusammenarbeit",
     body:
@@ -124,15 +117,6 @@ const PREVIEW_DATA: Partial<Record<BlockType, Record<string, unknown>>> = {
       kpi: "+42 % Antwortquote",
     },
   },
-  "logos-cloud": {
-    title: "Vertraut von",
-    logos: [
-      { url: svgDataUri(180, 60, "ACME"), alt: "ACME" },
-      { url: svgDataUri(180, 60, "Nord AG"), alt: "Nord AG" },
-      { url: svgDataUri(180, 60, "Beispiel"), alt: "Beispiel" },
-      { url: svgDataUri(180, 60, "Muster & Co"), alt: "Muster und Co" },
-    ],
-  },
   "rich-text": {
     markdown:
       "Hier kannst du frei formulieren: Erkläre dein Angebot, " +
@@ -145,39 +129,49 @@ const PREVIEW_DATA: Partial<Record<BlockType, Record<string, unknown>>> = {
     caption: "Eine Bildunterschrift (optional)",
     fullWidth: false,
   },
-  "about-me": {
-    name: "Alex Beispiel",
-    role: "Gründerin, Beispiel GmbH",
-    bio: "Ich helfe Teams dabei, aus Interessenten echte Kunden zu machen. Persönlich, direkt und ohne Umwege.",
-    portraitUrl: svgDataUri(96, 96, ""),
-  },
 };
 
 /* ------------------------------------------------------------------ */
 /* Gruppen                                                             */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Angebotene Sektionstypen (kuratiert 2026-08-15): Kunden-Logos, Stats,
+ * Über mich und Abstand sind bewusst NICHT mehr wählbar — bestehende
+ * Seiten mit diesen Blöcken rendern weiter (Renderer bleiben registriert).
+ */
 const GROUPS: { title: string; types: BlockType[] }[] = [
   {
     title: "Überzeugen",
-    types: ["case-study", "testimonials", "logos-cloud", "stats"],
+    types: ["case-study", "testimonials"],
   },
   {
     title: "Erklären",
-    types: ["content", "faq", "rich-text", "image", "about-me"],
+    types: ["content", "image", "rich-text", "faq"],
   },
   {
     title: "Abschluss",
-    types: ["cta-banner", "spacer"],
+    types: ["cta-banner"],
   },
 ];
 
+/** Kurzbeschreibung pro Sektionstyp für die Listen-Ansicht. */
+const TYPE_DESCRIPTIONS: Partial<Record<BlockType, string>> = {
+  "case-study": "Ein Kundenprojekt mit Ausgangslage, Lösung und messbarem Ergebnis.",
+  testimonials: "Zitate zufriedener Kunden als Vertrauensbeweis.",
+  content: "Text plus Bild oder Video nebeneinander — erklär dein Angebot im Detail.",
+  image: "Ein großes Bild oder ein eingebettetes Video (YouTube, Vimeo, Wistia …).",
+  "rich-text": "Frei formulierter Text, wahlweise mit Headline, zentriert oder linksbündig.",
+  faq: "Beantworte die häufigsten Rückfragen direkt auf der Seite.",
+  "cta-banner": "Der nächste Schritt: Button, Terminkalender oder Kontaktformular.",
+};
+
 /** Breite des unskalierten Vorschau-Containers. */
 const PREVIEW_WIDTH = 880;
-/** Skalierungsfaktor auf Kartengröße (~264px breit). */
-const PREVIEW_SCALE = 0.3;
+/** Skalierungsfaktor auf Thumbnail-Größe (~290px breit). */
+const PREVIEW_SCALE = 0.33;
 /** Sichtbare Höhe der Miniatur. */
-const PREVIEW_HEIGHT = 150;
+const PREVIEW_HEIGHT = 128;
 
 /* ------------------------------------------------------------------ */
 /* Galerie                                                             */
@@ -247,11 +241,11 @@ export function AddGallery({
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {GROUPS.map((group) => (
-            <div key={group.title} className="mb-6 last:mb-0">
+            <div key={group.title} className="mb-7 last:mb-0">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted mb-3">
                 {group.title}
               </h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="flex flex-col gap-3">
                 {group.types.map((type) => (
                   <button
                     key={type}
@@ -261,18 +255,44 @@ export function AddGallery({
                       onClose();
                     }}
                     className={cn(
-                      "group flex flex-col overflow-hidden rounded-squircle-sm border border-line bg-surface text-left",
-                      "shadow-card transition-all hover:border-brand hover:ring-2 hover:ring-brand",
+                      "group flex items-stretch gap-0 overflow-hidden rounded-squircle-md border border-line bg-surface text-left",
+                      "shadow-card transition-all hover:border-brand hover:shadow-card-hover",
                     )}
                   >
-                    <BlockPreview
-                      type={type}
-                      theme={theme}
-                      brand={previewBrand}
-                    />
-                    <span className="border-t border-line px-3 py-2 text-xs font-semibold text-ink group-hover:text-brand-deep transition-colors">
-                      {BLOCK_LABELS[type]}
-                    </span>
+                    <div className="w-[290px] shrink-0 border-r border-line">
+                      <BlockPreview
+                        type={type}
+                        theme={theme}
+                        brand={previewBrand}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-1 items-center gap-4 px-5 py-4">
+                      <div className="min-w-0 flex-1">
+                        <span className="block text-sm font-bold text-ink group-hover:text-brand-deep transition-colors">
+                          {BLOCK_LABELS[type]}
+                        </span>
+                        <span className="mt-1 block text-xs leading-relaxed text-ink-muted">
+                          {TYPE_DESCRIPTIONS[type]}
+                        </span>
+                      </div>
+                      <span
+                        className={cn(
+                          "flex size-8 shrink-0 items-center justify-center rounded-full",
+                          "bg-surface-soft text-ink-muted transition-colors",
+                          "group-hover:bg-brand-soft group-hover:text-brand-deep",
+                        )}
+                        aria-hidden
+                      >
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                          <path
+                            d="M7 2v10M2 7h10"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      </span>
+                    </div>
                   </button>
                 ))}
               </div>

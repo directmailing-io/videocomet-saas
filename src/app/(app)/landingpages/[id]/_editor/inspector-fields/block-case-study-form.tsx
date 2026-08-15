@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 import type { InspectorFormProps } from "./index";
-import { asObject, asString, MediaUrlField } from "./shared";
+import { asObject, asString, MediaUrlField, VideoUrlField } from "./shared";
 
 /**
  * Inspector-Formular für den Fallstudien-Block.
@@ -117,12 +117,20 @@ export function BlockCaseStudyForm({ block, onChange }: InspectorFormProps) {
             ))}
           </div>
         </div>
-        <MediaUrlField
-          label={mediumKind === "video" ? "Video" : "Bild"}
-          value={asString(medium.url)}
-          onChange={(url) => onChange({ medium: { ...medium, url } })}
-          type={mediumKind === "video" ? "video" : "image"}
-        />
+        {mediumKind === "video" ? (
+          <VideoUrlField
+            label="Video-Link"
+            value={asString(medium.url)}
+            onChange={(url) => onChange({ medium: { ...medium, url } })}
+          />
+        ) : (
+          <MediaUrlField
+            label="Bild"
+            value={asString(medium.url)}
+            onChange={(url) => onChange({ medium: { ...medium, url } })}
+            type="image"
+          />
+        )}
         <div>
           <Label htmlFor="case-medium-alt">Alt-Text</Label>
           <Input

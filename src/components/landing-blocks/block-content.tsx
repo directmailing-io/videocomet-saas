@@ -7,8 +7,10 @@ import {
 } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
 import { EditableText, EditSwitch, MaybeEmptyField } from "./editable-text";
+import { parseVideoEmbed } from "@/lib/landing-blocks/video-embed";
 import { ImagePlaceholder } from "./image-placeholder";
 import { parseMiniMarkdown } from "./mini-markdown";
+import { VideoEmbedFrame } from "./video-embed-frame";
 
 /**
  * Content-Sektion (Text + Grafik, v3).
@@ -48,6 +50,10 @@ export function BlockContent({
       : {};
   const imageUrl = typeof imageRaw.url === "string" ? imageRaw.url : "";
   const imageAlt = typeof imageRaw.alt === "string" ? imageRaw.alt : "";
+  // Video per URL (YouTube/Vimeo/Wistia/Loom) gewinnt gegen das Bild.
+  const videoEmbed = parseVideoEmbed(
+    typeof data.videoUrl === "string" ? data.videoUrl : "",
+  );
 
   const wantsMedia = layout !== "text-only";
   const rawHeadline = typeof data.headline === "string" ? data.headline : "";
@@ -111,7 +117,9 @@ export function BlockContent({
           {textNode}
         </div>
         <div className={mediaRight ? "md:order-2" : "md:order-1"}>
-          {imageUrl ? (
+          {videoEmbed ? (
+            <VideoEmbedFrame embed={videoEmbed} title={imageAlt} />
+          ) : imageUrl ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={imageUrl}
@@ -131,7 +139,7 @@ export function BlockContent({
     </BlockFrame>
   );
 
-  if (!headline && !body.trim() && !imageUrl) {
+  if (!headline && !body.trim() && !imageUrl && !videoEmbed) {
     // Public: unveraendert null. Im Builder: leere Felder mit Hint
     // rendern, damit ein leer getippter Block anklickbar bleibt.
     return (
@@ -145,7 +153,7 @@ export function BlockContent({
     return textOnlyFrame;
   }
 
-  if (!imageUrl) {
+  if (!imageUrl && !videoEmbed) {
     // Public faellt (wie bisher) auf die text-only-Darstellung zurueck,
     // der Builder zeigt das zweispaltige Grid mit Bild-Platzhalter.
     return <EditSwitch editing={mediaFrame} fallback={textOnlyFrame} />;

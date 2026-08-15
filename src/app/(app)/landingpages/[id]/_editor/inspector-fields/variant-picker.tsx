@@ -375,6 +375,15 @@ function VariantSketch({
  * Visuelle Layout-Auswahl. Rendert nichts, wenn der Blocktyp keine
  * Varianten kennt.
  */
+/**
+ * Varianten, die im Picker nicht mehr angeboten werden. Sie bleiben in
+ * BLOCK_VARIANTS registriert, damit Bestandsseiten unverändert rendern —
+ * eine aktuell aktive Legacy-Variante wird weiterhin angezeigt.
+ */
+const HIDDEN_VARIANTS: Partial<Record<string, readonly string[]>> = {
+  content: ["text-only"],
+};
+
 export function VariantPicker({
   block,
   onSelect,
@@ -384,8 +393,11 @@ export function VariantPicker({
 }) {
   if (!hasVariants(block.type)) return null;
   const type = block.type;
-  const variants = BLOCK_VARIANTS[type] as readonly string[];
   const active = resolveVariant(type, block.variant);
+  const hidden = HIDDEN_VARIANTS[type] ?? [];
+  const variants = (BLOCK_VARIANTS[type] as readonly string[]).filter(
+    (v) => v === active || !hidden.includes(v),
+  );
   const labels = VARIANT_LABELS[type];
   return (
     <div>

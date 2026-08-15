@@ -6,17 +6,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
+import { cn } from "@/lib/utils";
+
 import type { InspectorFormProps } from "./index";
-import { asObject, asString, MediaUrlField } from "./shared";
+import { asObject, asString, MediaUrlField, VideoUrlField } from "./shared";
 
 /**
  * Inspector-Formular für den Content-Block (Grafik + Text).
- * data: { headline, body, image: { url, alt } } — das Layout (Grafik
- * links/rechts, nur Text) steuert der zentrale Varianten-Umschalter.
+ * data: { headline, body, image: { url, alt }, videoUrl? } — das Layout
+ * (Grafik links/rechts) steuert der zentrale Varianten-Umschalter. Ein
+ * gültiger videoUrl gewinnt beim Rendern gegen das Bild.
  */
 export function BlockContentForm({ block, onChange }: InspectorFormProps) {
   const data = block.data;
   const image = asObject(data.image);
+  const [mode, setMode] = React.useState<"image" | "video">(
+    asString(data.videoUrl).trim() ? "video" : "image",
+  );
   return (
     <div className="space-y-4">
       <div>
@@ -41,12 +47,50 @@ export function BlockContentForm({ block, onChange }: InspectorFormProps) {
           Aufzählungen mit - bekommen Häkchen.
         </p>
       </div>
-      <MediaUrlField
-        label="Bild"
-        value={asString(image.url)}
-        onChange={(url) => onChange({ image: { ...image, url } })}
-        type="image"
-      />
+      <div>
+        <Label>Medium</Label>
+        <div className="flex gap-2 mt-1.5">
+          {(
+            [
+              { id: "image", label: "Bild" },
+              { id: "video", label: "Video" },
+            ] as const
+          ).map((k) => (
+            <button
+              key={k.id}
+              type="button"
+              onClick={() => {
+                setMode(k.id);
+                // Zurück zu "Bild" leert die Video-URL, sonst gewinnt das
+                // Video weiter gegen das Bild.
+                if (k.id === "image") onChange({ videoUrl: "" });
+              }}
+              className={cn(
+                "flex-1 px-3 py-1.5 text-xs font-semibold rounded-squircle-sm border transition-colors",
+                mode === k.id
+                  ? "border-brand bg-brand-soft text-brand-deep"
+                  : "border-line bg-surface text-ink-muted hover:text-ink",
+              )}
+            >
+              {k.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {mode === "video" ? (
+        <VideoUrlField
+          label="Video-Link"
+          value={asString(data.videoUrl)}
+          onChange={(videoUrl) => onChange({ videoUrl })}
+        />
+      ) : (
+        <MediaUrlField
+          label="Bild"
+          value={asString(image.url)}
+          onChange={(url) => onChange({ image: { ...image, url } })}
+          type="image"
+        />
+      )}
       <div>
         <Label htmlFor="content-alt">Alt-Text</Label>
         <Input

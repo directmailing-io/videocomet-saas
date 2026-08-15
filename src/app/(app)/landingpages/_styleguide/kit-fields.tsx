@@ -105,6 +105,7 @@ function LogoFields({
 }: Pick<BrandKitGroupsProps, "kit" | "onChange">) {
   const [uploading, setUploading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [dragOver, setDragOver] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement | null>(null);
 
   async function handleFile(file: File) {
@@ -124,7 +125,7 @@ function LogoFields({
         return;
       }
       onChange(
-        { ...kit, logo: { url: data.media.publicUrl } },
+        { ...kit, logo: { ...kit.logo, url: data.media.publicUrl } },
         { logoOrigin: "upload" },
       );
     } catch {
@@ -159,7 +160,23 @@ function LogoFields({
           </button>
         </div>
       ) : null}
-      <div className="flex items-center gap-2">
+      <div
+        className={
+          "flex items-center gap-2 rounded-squircle-sm transition-colors " +
+          (dragOver ? "outline outline-2 outline-brand bg-brand-soft/40" : "")
+        }
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) void handleFile(file);
+        }}
+      >
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
@@ -173,6 +190,9 @@ function LogoFields({
           )}
           {uploading ? "Lädt hoch…" : "Logo hochladen"}
         </button>
+        <span className="text-[11px] text-ink-muted">
+          oder Datei hierher ziehen
+        </span>
         <input
           ref={fileRef}
           type="file"
@@ -196,11 +216,50 @@ function LogoFields({
               onChange(next);
               return;
             }
-            onChange({ ...kit, logo: { url } }, { logoOrigin: "external" });
+            onChange(
+              { ...kit, logo: { ...kit.logo, url } },
+              { logoOrigin: "external" },
+            );
           }}
           placeholder="https://deine-website.de/logo.svg"
         />
       </div>
+      {kit.logo?.url ? (
+        <div>
+          <Label>Ausrichtung</Label>
+          <div className="flex gap-2 mt-1">
+            {(
+              [
+                { id: "left", label: "Linksbündig" },
+                { id: "center", label: "Zentriert" },
+              ] as const
+            ).map((a) => {
+              const active = (kit.logo?.align ?? "left") === a.id;
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() =>
+                    onChange({
+                      ...kit,
+                      logo: { ...kit.logo!, align: a.id },
+                    })
+                  }
+                  className={
+                    "flex-1 px-3 py-1.5 text-xs font-semibold rounded-squircle-sm border transition-colors " +
+                    (active
+                      ? "border-brand bg-brand-soft text-brand-deep"
+                      : "border-line bg-surface text-ink-muted hover:text-ink")
+                  }
+                >
+                  {a.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
       {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   );

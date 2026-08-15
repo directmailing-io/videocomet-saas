@@ -73,9 +73,13 @@ export function StyleguidePanel({
       // der Vorlage beibehalten statt auf "cozy" zurückzufallen.
       setTheme({ ...mapped.theme, spacing: theme.spacing });
       const nextLogoUrl = mapped.brand.logoUrl ?? null;
-      if (nextLogoUrl !== (brand.logoUrl ?? null)) {
+      const nextLogoAlign = mapped.brand.logoAlign ?? "left";
+      if (
+        nextLogoUrl !== (brand.logoUrl ?? null) ||
+        nextLogoAlign !== (brand.logoAlign ?? "left")
+      ) {
         if (nextLogoUrl) hiddenLogoRef.current = null;
-        setBrand({ ...brand, logoUrl: nextLogoUrl });
+        setBrand({ ...brand, logoUrl: nextLogoUrl, logoAlign: nextLogoAlign });
       }
     },
     [setTheme, setBrand, theme.spacing, brand],

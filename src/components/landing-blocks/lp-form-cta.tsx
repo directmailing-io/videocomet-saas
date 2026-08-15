@@ -69,6 +69,10 @@ export function LpFormCta({
     }
     return init;
   });
+  /** Mehrfachauswahl getrennt als Array, damit Optionen Kommas enthalten duerfen. */
+  const [multiValues, setMultiValues] = React.useState<
+    Record<string, string[]>
+  >({});
 
   const handleSubmit = React.useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
@@ -86,7 +90,10 @@ export function LpFormCta({
               extra: fields
                 .map((f) => ({
                   label: f.label.trim() || "Feld",
-                  value: (values[f.id] ?? "").trim(),
+                  value:
+                    f.type === "multiselect"
+                      ? (multiValues[f.id] ?? []).join(", ")
+                      : (values[f.id] ?? "").trim(),
                 }))
                 .filter((f) => f.value.length > 0),
             }
@@ -101,7 +108,18 @@ export function LpFormCta({
         setPhase("error");
       }
     },
-    [phase, leadId, name, email, phone, message, website, fields, values],
+    [
+      phase,
+      leadId,
+      name,
+      email,
+      phone,
+      message,
+      website,
+      fields,
+      values,
+      multiValues,
+    ],
   );
 
   if (phase === "success") {
@@ -176,7 +194,11 @@ export function LpFormCta({
               setValues((prev) => ({ ...prev, [f.id]: v }));
             return (
               <div key={f.id}>
-                <label htmlFor={fieldId} className={labelClass}>
+                <label
+                  htmlFor={fieldId}
+                  id={`${fieldId}-label`}
+                  className={labelClass}
+                >
                   {label}{" "}
                   {!f.required && (
                     <span style={{ color: "var(--lp-color-muted)" }}>
@@ -194,6 +216,58 @@ export function LpFormCta({
                     className={cn(inputClass, "resize-y")}
                     style={inputStyle}
                   />
+                ) : f.type === "select" ? (
+                  <select
+                    id={fieldId}
+                    required={f.required}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    className={inputClass}
+                    style={inputStyle}
+                  >
+                    <option value="">Bitte wählen …</option>
+                    {(f.options ?? []).map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                ) : f.type === "multiselect" ? (
+                  <div
+                    role="group"
+                    aria-labelledby={`${fieldId}-label`}
+                    className="space-y-2 text-left"
+                  >
+                    {(f.options ?? []).map((opt, i) => {
+                      const selected = multiValues[f.id] ?? [];
+                      const checked = selected.includes(opt);
+                      return (
+                        <label
+                          key={opt}
+                          className="flex cursor-pointer items-center gap-2.5 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            id={i === 0 ? fieldId : undefined}
+                            checked={checked}
+                            // required auf allen Checkboxen, solange keine
+                            // gewaehlt ist → erzwingt mindestens eine Auswahl.
+                            required={f.required && selected.length === 0}
+                            onChange={() =>
+                              setMultiValues((prev) => ({
+                                ...prev,
+                                [f.id]: checked
+                                  ? selected.filter((s) => s !== opt)
+                                  : [...selected, opt],
+                              }))
+                            }
+                            className="size-4 accent-[var(--lp-color-primary)]"
+                          />
+                          <span>{opt}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 ) : (
                   <input
                     id={fieldId}

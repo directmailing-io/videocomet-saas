@@ -1,16 +1,19 @@
 import * as React from "react";
 import { renderPlaceholders } from "@/lib/landing-blocks/placeholders";
 import type { BlockRenderProps } from "@/lib/landing-blocks/types";
+import { parseVideoEmbed } from "@/lib/landing-blocks/video-embed";
 import { BlockFrame } from "./block-frame";
 import { MaybeEmptyField } from "./editable-text";
 import { ImagePlaceholder } from "./image-placeholder";
+import { VideoEmbedFrame } from "./video-embed-frame";
 
 /**
- * Image block — single image with optional caption. `fullWidth` lifts
- * the image out of the normal max-width gutter so it can bleed edge-
- * to-edge (useful for screenshot showcases).
+ * Image block — single image OR embedded video with optional caption.
+ * `fullWidth` lifts the media out of the normal max-width gutter so it
+ * can bleed edge-to-edge (useful for screenshot showcases).
  *
- * data shape: { url; alt?; caption?; fullWidth? }
+ * data shape: { url; videoUrl?; alt?; caption?; fullWidth? }
+ * Ein gültiger videoUrl (YouTube/Vimeo/Wistia/Loom) gewinnt gegen url.
  */
 export function BlockImage({
   data,
@@ -24,6 +27,31 @@ export function BlockImage({
     leadData,
   );
   const fullWidth = data.fullWidth === true;
+  const videoEmbed = parseVideoEmbed(
+    typeof data.videoUrl === "string" ? data.videoUrl : "",
+  );
+
+  if (videoEmbed) {
+    return (
+      <BlockFrame
+        style={style}
+        defaults={{
+          paddingY: "md",
+          maxWidth: fullWidth ? "full" : "normal",
+          alignment: "center",
+        }}
+      >
+        <figure>
+          <VideoEmbedFrame embed={videoEmbed} title={alt} rounded={!fullWidth} />
+          {caption && (
+            <figcaption className="mt-2 text-xs sm:text-sm opacity-60">
+              {caption}
+            </figcaption>
+          )}
+        </figure>
+      </BlockFrame>
+    );
+  }
 
   if (!url) {
     // Public: unveraendert null. Im Builder: Platzhalter-Motiv, damit der

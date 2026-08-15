@@ -6,6 +6,10 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  parseVideoEmbed,
+  VIDEO_PROVIDER_NAMES,
+} from "@/lib/landing-blocks/video-embed";
 import { cn } from "@/lib/utils";
 
 /**
@@ -223,6 +227,7 @@ export function MediaUrlField({
   const [open, setOpen] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
+  const [dragOver, setDragOver] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement | null>(null);
 
   async function uploadFile(file: File) {
@@ -258,39 +263,60 @@ export function MediaUrlField({
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
-      <div className="flex items-center gap-2">
-        <Input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder ?? "https://..."}
-        />
-        <input
-          ref={fileRef}
-          type="file"
-          accept={type === "video" || type === "webcam" ? "video/*" : "image/*"}
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void uploadFile(file);
-          }}
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={uploading}
-          onClick={() => fileRef.current?.click()}
-        >
-          {uploading ? "Lädt…" : "Hochladen"}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setOpen(true)}
-        >
-          Mediathek
-        </Button>
+      <div
+        className={cn(
+          "rounded-squircle-sm transition-colors",
+          dragOver && "outline outline-2 outline-brand bg-brand-soft/40",
+        )}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) void uploadFile(file);
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <Input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder ?? "https://..."}
+          />
+          <input
+            ref={fileRef}
+            type="file"
+            accept={type === "video" || type === "webcam" ? "video/*" : "image/*"}
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void uploadFile(file);
+            }}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={uploading}
+            onClick={() => fileRef.current?.click()}
+          >
+            {uploading ? "Lädt…" : "Hochladen"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setOpen(true)}
+          >
+            Mediathek
+          </Button>
+        </div>
+        <p className="mt-1 text-[11px] text-ink-muted leading-relaxed">
+          Datei hierher ziehen oder „Hochladen" klicken.
+        </p>
       </div>
       {uploadError && (
         <p className="text-xs text-danger">Fehler: {uploadError}</p>
@@ -483,6 +509,49 @@ export function ColorField({
         placeholder={fallback}
         className="font-mono text-xs"
       />
+    </div>
+  );
+}
+
+/**
+ * Reines URL-Feld für eingebettete Videos (kein Upload — Videos werden
+ * ausschließlich fremdgehostet eingebunden). Zeigt live an, ob der Link
+ * als YouTube/Vimeo/Wistia/Loom erkannt wurde.
+ */
+export function VideoUrlField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (url: string) => void;
+}) {
+  const embed = parseVideoEmbed(value);
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="https://youtube.com/watch?v=…"
+      />
+      {value.trim() ? (
+        embed ? (
+          <p className="text-[11px] text-ok leading-relaxed">
+            Erkannt: {VIDEO_PROVIDER_NAMES[embed.provider]}
+          </p>
+        ) : (
+          <p className="text-[11px] text-warn leading-relaxed">
+            Kein bekannter Video-Link. Unterstützt: YouTube, Vimeo, Wistia,
+            Loom.
+          </p>
+        )
+      ) : (
+        <p className="text-[11px] text-ink-muted leading-relaxed">
+          Link zu YouTube, Vimeo, Wistia oder Loom einfügen.
+        </p>
+      )}
     </div>
   );
 }

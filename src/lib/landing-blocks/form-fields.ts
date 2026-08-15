@@ -10,7 +10,13 @@
  * Wert das Feld vorbefüllt.
  */
 
-export type LpFormFieldType = "text" | "email" | "tel" | "textarea";
+export type LpFormFieldType =
+  | "text"
+  | "email"
+  | "tel"
+  | "textarea"
+  | "select"
+  | "multiselect";
 
 export interface LpFormFieldDef {
   id: string;
@@ -18,9 +24,12 @@ export interface LpFormFieldDef {
   type: LpFormFieldType;
   required: boolean;
   prefillKey?: string;
+  /** Antwortoptionen für select/multiselect (max. MAX_FIELD_OPTIONS). */
+  options?: string[];
 }
 
 export const MAX_FORM_FIELDS = 12;
+export const MAX_FIELD_OPTIONS = 20;
 
 export const DEFAULT_FORM_FIELDS: LpFormFieldDef[] = [
   { id: "phone", label: "Telefon", type: "tel", required: false },
@@ -28,7 +37,23 @@ export const DEFAULT_FORM_FIELDS: LpFormFieldDef[] = [
 ];
 
 function asType(v: unknown): LpFormFieldType {
-  return v === "email" || v === "tel" || v === "textarea" ? v : "text";
+  return v === "email" ||
+    v === "tel" ||
+    v === "textarea" ||
+    v === "select" ||
+    v === "multiselect"
+    ? v
+    : "text";
+}
+
+function asOptions(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v
+    .filter((o): o is string => typeof o === "string")
+    .map((o) => o.trim())
+    .filter((o) => o.length > 0)
+    .slice(0, MAX_FIELD_OPTIONS);
+  return out.length > 0 ? out : undefined;
 }
 
 /** Defensive Narrowing von block.data.formFields; null = nicht gesetzt. */
@@ -39,14 +64,19 @@ export function asFormFields(value: unknown): LpFormFieldDef[] | null {
     if (!entry || typeof entry !== "object") continue;
     const r = entry as Record<string, unknown>;
     const id = typeof r.id === "string" && r.id ? r.id : String(out.length);
+    const type = asType(r.type);
     out.push({
       id,
       label: typeof r.label === "string" ? r.label : "",
-      type: asType(r.type),
+      type,
       required: r.required === true,
       prefillKey:
         typeof r.prefillKey === "string" && r.prefillKey.trim()
           ? r.prefillKey.trim()
+          : undefined,
+      options:
+        type === "select" || type === "multiselect"
+          ? asOptions(r.options)
           : undefined,
     });
   }

@@ -35,7 +35,7 @@ import {
 } from "./font-pairs";
 
 export interface BrandKit {
-  logo?: { url: string; height?: number };
+  logo?: { url: string; height?: number; align?: "left" | "center" };
   colors: { primary: string; accent?: string; bg: "light" | "dark" };
   fontPairId: string;
   radius: "none" | "subtle" | "soft" | "round";
@@ -56,6 +56,7 @@ export const brandKitSchema = z.object({
     .object({
       url: z.url("Bitte eine gültige Logo-URL angeben"),
       height: z.number().min(12).max(240).optional(),
+      align: z.enum(["left", "center"]).optional(),
     })
     .optional(),
   colors: z.object({
@@ -126,7 +127,10 @@ export function brandKitToTheme(kit: BrandKit): {
   };
 
   const brand: Partial<BrandConfig> = {};
-  if (kit.logo?.url) brand.logoUrl = kit.logo.url;
+  if (kit.logo?.url) {
+    brand.logoUrl = kit.logo.url;
+    if (kit.logo.align === "center") brand.logoAlign = "center";
+  }
 
   return { theme, brand };
 }
@@ -160,7 +164,11 @@ export function themeToBrandKit(
   if (theme.colors.accent && theme.colors.accent !== theme.colors.primary) {
     kit.colors.accent = theme.colors.accent;
   }
-  if (brand?.logoUrl) kit.logo = { url: brand.logoUrl };
+  if (brand?.logoUrl) {
+    kit.logo = { url: brand.logoUrl };
+    // Nur "center" mitnehmen — Default "left" bleibt roundtrip-stabil weg.
+    if (brand.logoAlign === "center") kit.logo.align = "center";
+  }
 
   return kit;
 }

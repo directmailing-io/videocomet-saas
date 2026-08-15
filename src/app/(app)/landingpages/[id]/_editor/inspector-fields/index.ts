@@ -44,7 +44,7 @@ export const FORM_REGISTRY: Record<BlockType, InspectorForm> = {
 export const BLOCK_LABELS: Record<BlockType, string> = {
   hero: "Hero (Video)",
   "about-me": "Über mich",
-  testimonials: "Testimonials",
+  testimonials: "Kundenrezensionen",
   "logos-cloud": "Kunden-Logos",
   stats: "Zahlen / Stats",
   faq: "FAQ",
@@ -52,6 +52,6 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   "cta-banner": "CTA-Banner",
   "case-study": "Fallstudie",
   content: "Content",
-  image: "Bild",
+  image: "Bild / Video",
   spacer: "Abstand",
 };

@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/queries/media";
 import { uploadMediaFile, type MediaKind } from "@/lib/media-upload-service";
 import { validateUpload, type UploadKind } from "@/lib/upload";
+import { sniffImage } from "@/lib/upload-sniff";
 import { addBunnyAssetRef } from "@/lib/db/queries/bunny-assets";
 
 const MEDIA_TYPES: ReadonlyArray<MediaType> = [
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
 
   const kind: MediaKind = kindRaw;
   const filename = file.name || "upload";
-  const mime = file.type || "application/octet-stream";
+  let mime = file.type || "application/octet-stream";
   const bytes = file.size;
 
   const validation = validateUpload({
@@ -124,6 +125,31 @@ export async function POST(req: NextRequest) {
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
+
+  // Bilder/Logos: Inhalt per Magic Bytes verifizieren — der Browser-MIME
+  // ist fälschbar. Ab hier gilt der VERIFIZIERTE Typ (bestimmt auch die
+  // Datei-Endung im Storage). Gefährliche SVGs werden abgelehnt.
+  if (kind === "image" || kind === "logo") {
+    const sniffed = sniffImage(buffer);
+    if (!sniffed) {
+      return NextResponse.json(
+        {
+          error:
+            "Dateiinhalt ist kein unterstütztes Bild (PNG, JPEG, WebP oder SVG ohne aktive Inhalte).",
+        },
+        { status: 400 },
+      );
+    }
+    const reValidation = validateUpload({
+      sizeBytes: bytes,
+      mime: sniffed.mime,
+      kind: toValidationKind(kind),
+    });
+    if (!reValidation.ok) {
+      return NextResponse.json({ error: reValidation.error }, { status: 400 });
+    }
+    mime = sniffed.mime;
+  }
 
   try {
     const uploaded = await uploadMediaFile({

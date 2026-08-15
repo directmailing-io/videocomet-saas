@@ -164,10 +164,42 @@ const FIELD_TYPE_LABELS: Record<LpFormFieldType, string> = {
   email: "E-Mail",
   tel: "Telefon",
   textarea: "Text (mehrzeilig)",
+  select: "Auswahl (eine Option)",
+  multiselect: "Auswahl (mehrere Optionen)",
 };
 
 function makeFieldId(): string {
   return "f" + Math.random().toString(36).slice(2, 10);
+}
+
+/**
+ * Textarea mit lokalem Roh-State: Leerzeilen/Leerzeichen bleiben beim
+ * Tippen erhalten, gespeichert werden nur getrimmte, nicht-leere Zeilen.
+ */
+function OptionsTextarea({
+  options,
+  onCommit,
+}: {
+  options: string[] | undefined;
+  onCommit: (options: string[]) => void;
+}) {
+  const [raw, setRaw] = React.useState((options ?? []).join("\n"));
+  return (
+    <Textarea
+      value={raw}
+      onChange={(e) => {
+        setRaw(e.target.value);
+        onCommit(
+          e.target.value
+            .split("\n")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0),
+        );
+      }}
+      rows={4}
+      placeholder={"z. B.\nBeratung\nDemo\nRückruf"}
+    />
+  );
 }
 
 function FormFieldsEditor({
@@ -217,6 +249,20 @@ function FormFieldsEditor({
               )}
             </select>
           </div>
+          {(f.type === "select" || f.type === "multiselect") && (
+            <div>
+              <Label>Optionen (eine pro Zeile)</Label>
+              <OptionsTextarea
+                options={f.options}
+                onCommit={(options) => update({ options })}
+              />
+              <p className="text-[11px] text-ink-muted mt-1 leading-relaxed">
+                {f.type === "multiselect"
+                  ? "Besucher können mehrere Optionen ankreuzen."
+                  : "Besucher wählen genau eine Option aus."}
+              </p>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <Label className="mb-0">Pflichtfeld</Label>
             <Switch

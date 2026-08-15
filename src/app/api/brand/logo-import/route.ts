@@ -20,6 +20,7 @@ import { z } from "zod";
 import { requireUserApi } from "@/lib/auth-guard";
 import { assertUrlIsSafe } from "@/lib/media-urls/ssrf-guard";
 import { uploadFile } from "@/lib/bunny/storage";
+import { sniffImage } from "@/lib/upload-sniff";
 
 const FETCH_TIMEOUT_MS = 5_000;
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -92,6 +93,33 @@ async function fetchWithSafeRedirects(rawUrl: string): Promise<Response> {
     return res;
   }
   throw new Error("Zu viele Weiterleitungen.");
+}
+
+/** Magic-Byte-Check für die Formate, die der zentrale Sniffer nicht kennt. */
+function matchesLegacyImageType(buffer: Buffer, contentType: string): boolean {
+  if (buffer.length < 12) return false;
+  if (contentType === "image/gif") {
+    const head = buffer.toString("ascii", 0, 6);
+    return head === "GIF87a" || head === "GIF89a";
+  }
+  if (
+    contentType === "image/x-icon" ||
+    contentType === "image/vnd.microsoft.icon"
+  ) {
+    return (
+      buffer[0] === 0x00 &&
+      buffer[1] === 0x00 &&
+      buffer[2] === 0x01 &&
+      buffer[3] === 0x00
+    );
+  }
+  if (contentType === "image/avif") {
+    return (
+      buffer.toString("ascii", 4, 8) === "ftyp" &&
+      buffer.toString("ascii", 8, 12).startsWith("avif")
+    );
+  }
+  return false;
 }
 
 export async function POST(req: NextRequest) {
@@ -177,11 +205,32 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Inhalt verifizieren — der Content-Type-Header der fremden Seite ist
+  // nicht vertrauenswürdig (als "image/svg+xml" deklariertes HTML würde
+  // sonst vom CDN ausführbar ausgeliefert). PNG/JPEG/WebP/SVG kommen aus
+  // dem zentralen Sniffer (inkl. SVG-Gefahren-Check), GIF/ICO/AVIF werden
+  // hier per Magic Bytes gegen den deklarierten Typ geprüft.
+  const sniffed = sniffImage(buffer);
+  let finalType = contentType;
+  let finalExt = ext;
+  if (sniffed) {
+    finalType = sniffed.mime;
+    finalExt = sniffed.ext;
+  } else if (!matchesLegacyImageType(buffer, contentType)) {
+    return NextResponse.json(
+      {
+        error:
+          "Die Adresse liefert kein unterstütztes Bildformat. Bitte lade dein Logo direkt hoch.",
+      },
+      { status: 415 },
+    );
+  }
+
   try {
     const upload = await uploadFile({
       buffer,
-      remotePath: `users/${auth.user.id}/brand/logo-${randomUUID()}.${ext}`,
-      contentType,
+      remotePath: `users/${auth.user.id}/brand/logo-${randomUUID()}.${finalExt}`,
+      contentType: finalType,
     });
     return NextResponse.json({ url: upload.url });
   } catch (err) {
