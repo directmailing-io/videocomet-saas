@@ -45,6 +45,15 @@ export function BlockHeroForm({
   return (
     <div className="space-y-4">
       <div>
+        <Label htmlFor="hero-badge">Begrüßungs-Badge (optional)</Label>
+        <Input
+          id="hero-badge"
+          value={asString(data.badge)}
+          onChange={(e) => onChange({ badge: e.target.value })}
+          placeholder="z. B. Persönlich für {{vorname}}"
+        />
+      </div>
+      <div>
         <Label htmlFor="hero-headline">Headline</Label>
         <Input
           id="hero-headline"
@@ -95,6 +104,38 @@ export function BlockHeroForm({
           onCheckedChange={(c) => onChange({ showVideo: c })}
         />
       </div>
+      <div className="flex items-center justify-between">
+        <Label htmlFor="hero-show-cta" className="mb-0">
+          CTA anzeigen
+        </Label>
+        <Switch
+          id="hero-show-cta"
+          checked={asBool(data.showCta, true)}
+          onCheckedChange={(c) => onChange({ showCta: c })}
+        />
+      </div>
+      {asBool(data.showCta, true) && (
+        <>
+          <div>
+            <Label htmlFor="hero-cta-label">CTA-Text</Label>
+            <Input
+              id="hero-cta-label"
+              value={asString(data.ctaLabel)}
+              onChange={(e) => onChange({ ctaLabel: e.target.value })}
+              placeholder="Termin buchen"
+            />
+          </div>
+          <div>
+            <Label htmlFor="hero-cta-url">CTA-Link</Label>
+            <Input
+              id="hero-cta-url"
+              value={asString(data.ctaUrl)}
+              onChange={(e) => onChange({ ctaUrl: e.target.value })}
+              placeholder="https://calendly.com/dein-name"
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

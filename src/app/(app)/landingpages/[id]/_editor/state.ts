@@ -123,6 +123,28 @@ export function makeDefaultBlock(type: BlockType): Block {
           secondaryButton: { label: "", url: "" },
         },
       };
+    case "case-study":
+      return {
+        id: genId("case"),
+        type,
+        variant: "media-left",
+        data: {
+          headline: "So haben wir Kunden geholfen",
+          client: { name: "Beispiel GmbH", logoUrl: "", photoUrl: "" },
+          medium: { kind: "image", url: "", alt: "" },
+          textMode: "structured",
+          quote: { text: "", author: "", role: "" },
+          freeText: "",
+          structured: { situation: "", action: "", result: "", kpi: "" },
+        },
+      };
+    case "content":
+      return {
+        id: genId("content"),
+        type,
+        variant: "media-left",
+        data: { headline: "", body: "", image: { url: "", alt: "" } },
+      };
     case "image":
       return {
         id: genId("img"),

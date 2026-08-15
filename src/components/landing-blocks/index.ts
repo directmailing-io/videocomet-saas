@@ -1,5 +1,7 @@
 import type { BlockRenderProps, BlockType } from "@/lib/landing-blocks/types";
 import { BlockAboutMe } from "./block-about-me";
+import { BlockCaseStudy } from "./block-case-study";
+import { BlockContent } from "./block-content";
 import { BlockCtaBanner } from "./block-cta-banner";
 import { BlockFaq } from "./block-faq";
 import { BlockHero } from "./block-hero";
@@ -34,12 +36,16 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockComponent> = {
   faq: BlockFaq,
   "rich-text": BlockRichText,
   "cta-banner": BlockCtaBanner,
+  "case-study": BlockCaseStudy,
+  content: BlockContent,
   image: BlockImage,
   spacer: BlockSpacer,
 };
 
 export {
   BlockAboutMe,
+  BlockCaseStudy,
+  BlockContent,
   BlockCtaBanner,
   BlockFaq,
   BlockHero,

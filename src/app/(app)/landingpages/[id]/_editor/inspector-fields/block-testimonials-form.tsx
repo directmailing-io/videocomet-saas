@@ -14,6 +14,8 @@ interface TestimonialItem {
   author?: string;
   role?: string;
   avatar?: string;
+  /** 0 oder leer = keine Sterne anzeigen. */
+  stars?: number;
 }
 
 export function BlockTestimonialsForm({
@@ -65,6 +67,34 @@ export function BlockTestimonialsForm({
             onChange={(url) => update({ avatar: url })}
             type="image"
           />
+          <div>
+            <Label>Sterne (0 bis 5, optional)</Label>
+            <Input
+              type="number"
+              min={0}
+              max={5}
+              step={1}
+              value={
+                typeof item.stars === "number" && item.stars > 0
+                  ? String(item.stars)
+                  : ""
+              }
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === "") {
+                  update({ stars: undefined });
+                  return;
+                }
+                const n = Math.round(Number(raw));
+                update({
+                  stars: Number.isFinite(n)
+                    ? Math.max(0, Math.min(5, n))
+                    : undefined,
+                });
+              }}
+              placeholder="Leer = keine Sterne"
+            />
+          </div>
         </div>
       )}
     />

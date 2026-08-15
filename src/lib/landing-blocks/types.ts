@@ -27,8 +27,49 @@ export type BlockType =
   | "faq"
   | "rich-text"
   | "cta-banner"
+  | "case-study"
+  | "content"
   | "image"
   | "spacer";
+
+/* ------------------------------------------------------------------ */
+/* Varianten (v3) — reine Layout-Entscheidungen pro Sektion            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Variant catalogue per block type. A variant only changes layout; the
+ * block `data` is shared across variants so switching never loses
+ * content. Renderers must fall back to the FIRST entry when
+ * `block.variant` is missing/unknown (old documents have no variant).
+ */
+export const BLOCK_VARIANTS = {
+  hero: ["centered", "split", "split-reverse"],
+  testimonials: ["grid", "spotlight", "list"],
+  faq: ["accordion", "two-column", "open-list"],
+  content: ["media-left", "media-right", "text-only"],
+  "cta-banner": ["button", "calendar-inline", "calendar-popup", "form"],
+  "case-study": ["media-left", "media-right", "media-top"],
+} as const;
+
+export type VariantOf<T extends keyof typeof BLOCK_VARIANTS> =
+  (typeof BLOCK_VARIANTS)[T][number];
+
+export function defaultVariant<T extends keyof typeof BLOCK_VARIANTS>(
+  type: T,
+): VariantOf<T> {
+  return BLOCK_VARIANTS[type][0];
+}
+
+/** Narrow a persisted variant string against the catalogue (fallback: first). */
+export function resolveVariant<T extends keyof typeof BLOCK_VARIANTS>(
+  type: T,
+  variant: string | undefined,
+): VariantOf<T> {
+  const list = BLOCK_VARIANTS[type] as readonly string[];
+  return (
+    variant && list.includes(variant) ? variant : list[0]
+  ) as VariantOf<T>;
+}
 
 /* ------------------------------------------------------------------ */
 /* Per-block style overrides                                           */
@@ -61,6 +102,8 @@ export interface Block {
   type: BlockType;
   data: Record<string, unknown>;
   style?: BlockStyle;
+  /** Layout variant (see BLOCK_VARIANTS); absent on pre-v3 documents. */
+  variant?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -132,6 +175,8 @@ export type LeadData = Record<string, string | undefined>;
 export interface BlockRenderProps {
   data: Record<string, unknown>;
   style?: BlockStyle;
+  /** Layout variant of the block (see BLOCK_VARIANTS). */
+  variant?: string;
   theme: LandingTheme;
   leadData: LeadData;
   leadId: string;

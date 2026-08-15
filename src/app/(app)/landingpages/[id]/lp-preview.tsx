@@ -117,6 +117,7 @@ function PreviewBlock({
       <Component
         data={block.data}
         style={block.style}
+        variant={block.variant}
         theme={theme as unknown as Record<string, unknown>}
         leadData={SAMPLE_LEAD}
         leadId="preview"

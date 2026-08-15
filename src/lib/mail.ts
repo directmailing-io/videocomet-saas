@@ -1063,3 +1063,133 @@ export async function sendRunFailedMail(
     text,
   });
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// ── Formular-CTA der Landingpage (Landingpage v3, Etappe 2) ────────────────
+// ───────────────────────────────────────────────────────────────────────────
+
+export interface SendLpFormSubmissionMailInput {
+  to: string;
+  firstName?: string | null;
+  /** Anzeigename des Leads (aus lead.data, defensiv ermittelt). */
+  leadName: string | null;
+  /** Formulardaten des Empfängers (bereits validiert, roh, un-escaped). */
+  form: {
+    name: string;
+    email: string;
+    phone: string | null;
+    message: string | null;
+  };
+  /** Link zur Kontakt-/Runden-Ansicht in der App. */
+  contactUrl: string;
+}
+
+/**
+ * Benachrichtigung an den Besitzer-User, wenn ein Empfänger das Formular
+ * auf seiner personalisierten Landingpage abschickt.
+ *
+ * Hinweis Texte: Du-Form, keine em-Dashes, Markenname immer VIDEOCOMET.
+ * SICHERHEIT: Alle Formularwerte werden im HTML escaped.
+ */
+export async function sendLpFormSubmissionMail(
+  input: SendLpFormSubmissionMailInput,
+): Promise<void> {
+  const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
+  const subject = input.leadName
+    ? `Neue Anfrage über deine Landingpage von ${input.leadName}`
+    : "Neue Anfrage über deine Landingpage";
+
+  const introHtml = input.leadName
+    ? `über deine Landingpage für <strong>${escapeHtml(input.leadName)}</strong> ist gerade eine neue Anfrage eingegangen:`
+    : "über deine Landingpage ist gerade eine neue Anfrage eingegangen:";
+
+  const fieldRow = (label: string, valueHtml: string) => `
+      <tr>
+        <td style="padding:12px 18px;font-size:13px;color:${BRAND_MUTED};border-bottom:1px solid ${BRAND_LINE};vertical-align:top;white-space:nowrap;">${escapeHtml(label)}</td>
+        <td style="padding:12px 18px;font-size:14px;color:${BRAND_INK};border-bottom:1px solid ${BRAND_LINE};word-break:break-word;">${valueHtml}</td>
+      </tr>`;
+
+  const messageHtml = input.form.message
+    ? escapeHtml(input.form.message).replace(/\r?\n/g, "<br />")
+    : null;
+
+  const rows = [
+    fieldRow("Name", `<strong>${escapeHtml(input.form.name)}</strong>`),
+    fieldRow(
+      "E-Mail",
+      `<a href="mailto:${escapeHtml(input.form.email)}" style="color:${BRAND_ACCENT};text-decoration:underline;">${escapeHtml(input.form.email)}</a>`,
+    ),
+    ...(input.form.phone ? [fieldRow("Telefon", escapeHtml(input.form.phone))] : []),
+    ...(messageHtml ? [fieldRow("Nachricht", messageHtml)] : []),
+  ].join("");
+
+  const body = `
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:${BRAND_INK};line-height:1.25;">
+      Neue Anfrage über deine Landingpage
+    </h1>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${escapeHtml(greeting)}
+    </p>
+    <p style="margin:0 0 18px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${introHtml}
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 24px 0;border:1px solid ${BRAND_LINE};border-radius:12px;border-collapse:separate;overflow:hidden;">
+      ${rows}
+    </table>
+    <p style="margin:0 0 28px 0;">
+      <a href="${input.contactUrl}" style="display:inline-block;background:${BRAND_ACCENT};color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;">
+        Kontakt in VIDEOCOMET ansehen
+      </a>
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Funktioniert der Button nicht? Öffne diesen Link in deinem Browser:<br />
+      <a href="${input.contactUrl}" style="color:${BRAND_ACCENT};text-decoration:underline;word-break:break-all;">${escapeHtml(input.contactUrl)}</a>
+    </p>
+  `;
+
+  const html = shellHtml({
+    headline: "Neue Anfrage über deine Landingpage",
+    preheader: input.leadName
+      ? `Neue Anfrage von deiner Landingpage für ${input.leadName}.`
+      : "Jemand hat das Formular auf deiner Landingpage abgeschickt.",
+    body,
+  });
+
+  const text = [
+    greeting,
+    "",
+    input.leadName
+      ? `über deine Landingpage für ${input.leadName} ist gerade eine neue Anfrage eingegangen:`
+      : "über deine Landingpage ist gerade eine neue Anfrage eingegangen:",
+    "",
+    `Name: ${input.form.name}`,
+    `E-Mail: ${input.form.email}`,
+    ...(input.form.phone ? [`Telefon: ${input.form.phone}`] : []),
+    ...(input.form.message ? ["", "Nachricht:", input.form.message] : []),
+    "",
+    "Kontakt ansehen:",
+    input.contactUrl,
+    "",
+    "VIDEOCOMET",
+  ].join("\n");
+
+  const resend = getResend();
+  if (!resend) {
+    // PII-Schutz: im Dev-Log nur den Empfänger der Mail, keine Formulardaten.
+    console.log("[mail:dev] sendLpFormSubmissionMail -> %s", input.to);
+    console.log("[mail:dev] subject: %s", subject);
+    return;
+  }
+
+  const sendResult = await resend.emails.send({
+    from: fromAddress(),
+    to: input.to,
+    subject,
+    html,
+    text,
+    // Antwort geht direkt an den Anfragenden. Header-Injection-Schutz:
+    // Winkelklammern/Anführungszeichen/Zeilenumbrüche aus dem Namen strippen.
+    replyTo: `${input.form.name.replace(/[<>"\r\n]/g, "").trim()} <${input.form.email}>`,
+  });
+  if (sendResult.error) throw new Error(`Resend: ${sendResult.error.message}`);
+}

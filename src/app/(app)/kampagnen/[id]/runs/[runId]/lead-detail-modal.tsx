@@ -1009,14 +1009,23 @@ function EventTimeline({ events }: { events: AnalyticsEvent[] }) {
                   {formatRel(ev.ts)}
                 </span>
               </div>
-              <div className="mt-0.5 flex items-baseline justify-between gap-3">
-                <span className="text-xs text-ink-muted truncate">
-                  {payloadPreview(ev) ?? "—"}
-                </span>
-                <span className="shrink-0 text-[10px] text-ink-muted tabular-nums">
-                  {formatAbsolute(ev.ts)}
-                </span>
-              </div>
+              {ev.kind === "form_submit" ? (
+                <div className="mt-0.5 flex items-baseline justify-between gap-3">
+                  <FormSubmitDetails payload={ev.payload} />
+                  <span className="shrink-0 text-[10px] text-ink-muted tabular-nums">
+                    {formatAbsolute(ev.ts)}
+                  </span>
+                </div>
+              ) : (
+                <div className="mt-0.5 flex items-baseline justify-between gap-3">
+                  <span className="text-xs text-ink-muted truncate">
+                    {payloadPreview(ev) ?? "—"}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-ink-muted tabular-nums">
+                    {formatAbsolute(ev.ts)}
+                  </span>
+                </div>
+              )}
             </div>
           </li>
         ))}
@@ -1030,7 +1039,47 @@ function EventIcon({ kind }: { kind: string }): React.JSX.Element {
   if (kind === "video_play" || kind === "video_progress" || kind === "video_ended")
     return <Play className="size-3.5" />;
   if (kind === "cta_click") return <MousePointerClick className="size-3.5" />;
+  if (kind === "form_submit") return <Mail className="size-3.5" />;
   return <span className="size-1.5 rounded-full bg-ink-muted" />;
+}
+
+/**
+ * Detail-Block für Formular-Anfragen (kind `form_submit`): zeigt Name,
+ * E-Mail, Telefon und Nachricht aus dem Payload gut lesbar untereinander.
+ */
+function FormSubmitDetails({ payload }: { payload: unknown }): React.JSX.Element {
+  const p =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : {};
+  const str = (v: unknown): string | null =>
+    typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
+  const name = str(p.name);
+  const email = str(p.email);
+  const phone = str(p.phone);
+  const message = str(p.message);
+  return (
+    <div className="min-w-0 space-y-0.5 text-xs text-ink-muted">
+      {name && (
+        <div className="truncate">
+          <span className="font-medium text-ink">{name}</span>
+        </div>
+      )}
+      {email && (
+        <div className="truncate">
+          E-Mail:{" "}
+          <a href={`mailto:${email}`} className="text-brand-deep hover:underline">
+            {email}
+          </a>
+        </div>
+      )}
+      {phone && <div className="truncate">Telefon: {phone}</div>}
+      {message && (
+        <div className="whitespace-pre-wrap break-words text-ink">{message}</div>
+      )}
+      {!name && !email && !phone && !message && <span>—</span>}
+    </div>
+  );
 }
 
 function eventLabel(kind: string): string {
@@ -1045,6 +1094,8 @@ function eventLabel(kind: string): string {
       return "Video beendet";
     case "cta_click":
       return "CTA geklickt";
+    case "form_submit":
+      return "Formular-Anfrage";
     default:
       return kind;
   }

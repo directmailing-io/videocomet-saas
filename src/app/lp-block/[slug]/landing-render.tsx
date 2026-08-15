@@ -1,6 +1,8 @@
 import * as React from "react";
 import { BLOCK_REGISTRY } from "@/components/landing-blocks";
+import { StickyCta } from "@/components/landing-blocks/sticky-cta";
 import { migrateLegacyContent } from "@/lib/landing-blocks/migrate";
+import { renderPlaceholders } from "@/lib/landing-blocks/placeholders";
 import type { Block, LeadData } from "@/lib/landing-blocks/types";
 
 /**
@@ -53,27 +55,74 @@ export function LandingRender({
 }: LandingRenderProps) {
   const content = migrateLegacyContent(templateContent);
 
+  // Sticky-Mobile-CTA (Konzept Abschnitt 4): nur wenn ein CTA-Block
+  // existiert und das Theme sie nicht abschaltet. Hero + erster CTA-Block
+  // bekommen data-Attribut-Marker, ueber die die Client-Leiste Sichtbarkeit
+  // (IntersectionObserver) und Scroll-Ziel findet.
+  const firstCta = content.blocks.find((b) => b.type === "cta-banner");
+  const firstHeroId = content.blocks.find((b) => b.type === "hero")?.id;
+  const stickyEnabled =
+    (content.theme as { stickyCta?: unknown }).stickyCta !== false;
+  const stickyLabel = resolveStickyLabel(firstCta, leadData);
+
   return (
     <main className="min-h-screen w-full bg-surface-soft text-ink">
       {/* `data-lp-theme` is the hook Agent B will use to inject the
           theme's CSS variables. Until that lands, the wrapper is a
           structural no-op. */}
       <div data-lp-theme>
-        {content.blocks.map((block) => (
-          <RenderBlock
-            key={block.id}
-            block={block}
-            theme={content.theme}
-            leadData={leadData}
-            leadId={leadId}
-            videoSlot={videoSlot}
-            videoOrientation={videoOrientation ?? null}
-            campaignMode={campaignMode ?? null}
-          />
-        ))}
+        {content.blocks.map((block) => {
+          const rendered = (
+            <RenderBlock
+              block={block}
+              theme={content.theme}
+              leadData={leadData}
+              leadId={leadId}
+              videoSlot={videoSlot}
+              videoOrientation={videoOrientation ?? null}
+              campaignMode={campaignMode ?? null}
+            />
+          );
+          // Marker-Wrapper nur fuer Hero + ersten CTA-Block — neutrale
+          // <div>s um Block-<section>s, keine Layout-Wirkung.
+          if (block.id === firstHeroId) {
+            return (
+              <div key={block.id} data-lp-hero>
+                {rendered}
+              </div>
+            );
+          }
+          if (block.id === firstCta?.id) {
+            return (
+              <div key={block.id} data-lp-cta>
+                {rendered}
+              </div>
+            );
+          }
+          return <React.Fragment key={block.id}>{rendered}</React.Fragment>;
+        })}
+        {firstCta && stickyEnabled && <StickyCta label={stickyLabel} />}
       </div>
     </main>
   );
+}
+
+/**
+ * Label der Sticky-Leiste: primaryButton.label des ersten CTA-Blocks
+ * (Platzhalter aufgeloest), sonst "Termin buchen".
+ */
+function resolveStickyLabel(
+  firstCta: Block | undefined,
+  leadData: LeadData,
+): string {
+  const button = firstCta?.data.primaryButton;
+  if (button && typeof button === "object") {
+    const label = (button as Record<string, unknown>).label;
+    if (typeof label === "string" && label.trim()) {
+      return renderPlaceholders(label, leadData) || label;
+    }
+  }
+  return "Termin buchen";
 }
 
 interface RenderBlockProps {
@@ -105,6 +154,7 @@ function RenderBlock({
     <Component
       data={block.data}
       style={block.style}
+      variant={block.variant}
       theme={theme}
       leadData={leadData}
       leadId={leadId}

@@ -21,7 +21,31 @@ export function BlockFaqForm({
 }) {
   const items = asArray<FaqItem>(block.data.items);
   return (
-    <Repeater<FaqItem>
+    <div className="space-y-4">
+      <div>
+        <Label htmlFor="faq-headline">Headline (optional)</Label>
+        <Input
+          id="faq-headline"
+          value={asString(block.data.headline)}
+          onChange={(e) => onChange({ headline: e.target.value })}
+          placeholder="Häufige Fragen"
+        />
+      </div>
+      <div>
+        <Label htmlFor="faq-intro">Intro (optional)</Label>
+        <Textarea
+          id="faq-intro"
+          value={asString(block.data.intro)}
+          onChange={(e) => onChange({ intro: e.target.value })}
+          rows={2}
+          placeholder="Kurzer Einstieg über den Fragen."
+        />
+        <p className="text-[11px] text-ink-muted mt-1 leading-relaxed">
+          In der zweispaltigen Variante stehen Headline und Intro links
+          neben den Fragen.
+        </p>
+      </div>
+      <Repeater<FaqItem>
       label="Fragen & Antworten"
       items={items}
       onChange={(next) => onChange({ items: next })}
@@ -47,6 +71,7 @@ export function BlockFaqForm({
           </div>
         </div>
       )}
-    />
+      />
+    </div>
   );
 }

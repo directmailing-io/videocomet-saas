@@ -103,6 +103,8 @@ export interface ThemeConfig {
   shadow?: ShadowScale;
   /** ID eines kuratierten Font-Paars (font-pairs.ts). Metadaten — gerendert wird immer `fonts`. */
   fontPairId?: string;
+  /** Sticky-CTA-Leiste unten auf Smartphones (nach dem Hero). Default true. */
+  stickyCta?: boolean;
 }
 
 /**

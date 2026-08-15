@@ -2,6 +2,8 @@
 
 import type { Block, BlockType } from "@/lib/landing-blocks/types";
 import { BlockAboutMeForm } from "./block-about-me-form";
+import { BlockCaseStudyForm } from "./block-case-study-form";
+import { BlockContentForm } from "./block-content-form";
 import { BlockCtaBannerForm } from "./block-cta-banner-form";
 import { BlockFaqForm } from "./block-faq-form";
 import { BlockHeroForm } from "./block-hero-form";
@@ -33,6 +35,8 @@ export const FORM_REGISTRY: Record<BlockType, InspectorForm> = {
   faq: BlockFaqForm,
   "rich-text": BlockRichTextForm,
   "cta-banner": BlockCtaBannerForm,
+  "case-study": BlockCaseStudyForm,
+  content: BlockContentForm,
   image: BlockImageForm,
   spacer: BlockSpacerForm,
 };
@@ -46,6 +50,8 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   faq: "FAQ",
   "rich-text": "Text",
   "cta-banner": "CTA-Banner",
+  "case-study": "Fallstudie",
+  content: "Content",
   image: "Bild",
   spacer: "Abstand",
 };

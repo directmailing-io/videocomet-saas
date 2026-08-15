@@ -7,6 +7,7 @@ import {
   Clock,
   Eye,
   Link as LinkIcon,
+  Mail,
   MousePointerClick,
   Play,
   Target,
@@ -58,6 +59,7 @@ const KIND_TO_ICON: Record<
   scroll_depth: { Icon: ChevronsDown, category: "neutral", label: "Tief gescrollt" },
   time_on_page: { Icon: Clock, category: "neutral", label: "Verweildauer" },
   link_click: { Icon: LinkIcon, category: "interact", label: "Link geklickt" },
+  form_submit: { Icon: Mail, category: "milestone", label: "Formular-Anfrage" },
 };
 
 const categoryStyles: Record<IconCategory, { bg: string; fg: string }> = {
@@ -171,6 +173,19 @@ export function describeKind(kind: ActivityKind, payload?: Record<string, unknow
       const href =
         payload && typeof payload.href === "string" ? (payload.href as string) : null;
       return href ? `Link geklickt: ${href}` : "Link geklickt";
+    }
+    case "form_submit": {
+      const name =
+        payload && typeof payload.name === "string" && payload.name.trim().length > 0
+          ? (payload.name as string).trim()
+          : null;
+      const email =
+        payload && typeof payload.email === "string" && payload.email.trim().length > 0
+          ? (payload.email as string).trim()
+          : null;
+      if (name && email) return `Formular-Anfrage von ${name} (${email})`;
+      if (name) return `Formular-Anfrage von ${name}`;
+      return "Formular-Anfrage";
     }
     default:
       return String(kind).replace(/_/g, " ");

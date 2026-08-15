@@ -24,6 +24,19 @@ import {
   type LeadEventKind,
 } from "@/lib/db/queries/lead-events";
 
+// Serverseitig erzeugte Kinds, die NICHT in der öffentlichen Track-Whitelist
+// (LEAD_EVENT_KINDS) stehen, aber im Aktivitäts-Center filterbar sein sollen.
+const SERVER_ONLY_FILTER_KINDS: readonly LeadEventKind[] = [
+  "form_submit",
+] as const;
+
+function isFilterableKind(value: string): value is LeadEventKind {
+  return (
+    isLeadEventKind(value) ||
+    (SERVER_ONLY_FILTER_KINDS as readonly string[]).includes(value)
+  );
+}
+
 const TEMPERATURES: readonly LeadTemperature[] = [
   "cold",
   "warm",
@@ -119,9 +132,9 @@ export function parseFilters(
     const parts = splitCsv(kindRaw);
     const out: LeadEventKind[] = [];
     for (const p of parts) {
-      if (!isLeadEventKind(p)) {
+      if (!isFilterableKind(p)) {
         return {
-          error: `Unbekannte Event-Art: ${p}. Erlaubt: ${LEAD_EVENT_KINDS.join(", ")}`,
+          error: `Unbekannte Event-Art: ${p}. Erlaubt: ${[...LEAD_EVENT_KINDS, ...SERVER_ONLY_FILTER_KINDS].join(", ")}`,
         };
       }
       if (!out.includes(p)) out.push(p);

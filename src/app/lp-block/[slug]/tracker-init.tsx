@@ -120,7 +120,7 @@ function PreviewBadge() {
     <div className="fixed left-1/2 top-3 z-[100] -translate-x-1/2 max-w-[92vw]">
       <div className="flex items-center gap-2 rounded-full bg-amber-100 border border-amber-300 px-3 py-1.5 text-xs sm:text-sm font-semibold text-amber-900 shadow-lg">
         <span className="inline-block size-2 rounded-full bg-amber-500 animate-pulse" aria-hidden="true" />
-        <span>Vorschau-Modus aktiv — Tracking ist deaktiviert</span>
+        <span>Vorschau-Modus aktiv, Tracking ist deaktiviert</span>
         <button
           type="button"
           onClick={exitPreview}

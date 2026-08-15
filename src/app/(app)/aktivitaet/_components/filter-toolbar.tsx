@@ -43,6 +43,7 @@ const KIND_CHIPS: Array<{ key: KindFilter; label: string }> = [
   { key: "video_play", label: "Video gestartet" },
   { key: "video_progress", label: "Video gesehen" },
   { key: "cta_click", label: "CTA-Klicks" },
+  { key: "form_submit", label: "Formular-Anfragen" },
 ];
 
 export interface FilterToolbarProps {

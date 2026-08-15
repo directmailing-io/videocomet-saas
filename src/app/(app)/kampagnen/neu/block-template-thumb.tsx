@@ -62,6 +62,7 @@ export function BlockTemplateThumb({
                 key={block.id}
                 data={block.data}
                 style={block.style}
+                variant={block.variant}
                 theme={v2.theme}
                 leadData={SAMPLE_LEAD}
                 leadId="preview"

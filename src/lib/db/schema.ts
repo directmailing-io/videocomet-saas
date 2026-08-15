@@ -861,7 +861,7 @@ export const pipelineEvents = pgTable("pipeline_events", {
 export const leadEvents = pgTable("lead_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   leadId: uuid("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
-  kind: text("kind").notNull(), // 'page_view' | 'video_play' | 'video_progress' | 'video_ended' | 'cta_click'
+  kind: text("kind").notNull(), // 'page_view' | 'video_play' | 'video_progress' | 'video_ended' | 'cta_click' | 'form_submit'
   ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
   payload: jsonb("payload").$type<Record<string, unknown>>(),
   sessionId: text("session_id"),

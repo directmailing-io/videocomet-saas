@@ -45,6 +45,7 @@ import {
   FORM_REGISTRY,
 } from "./_editor/inspector-fields";
 import { MediaUrlField } from "./_editor/inspector-fields/shared";
+import { VariantPicker } from "./_editor/inspector-fields/variant-picker";
 import {
   useLpEditorState,
   type LpEditorInitialTemplate,
@@ -170,6 +171,9 @@ export function LpEditor({ template }: { template: LpEditorTemplate }) {
                   block={activeBlock}
                   onChange={(patch) =>
                     s.updateBlockData(activeBlock.id, patch)
+                  }
+                  onVariantChange={(variant) =>
+                    s.updateBlock(activeBlock.id, { variant })
                   }
                 />
               )}
@@ -408,9 +412,11 @@ function AddBlockMenu({ onAdd }: { onAdd: (type: BlockType) => void }) {
 function Inspector({
   block,
   onChange,
+  onVariantChange,
 }: {
   block: Block;
   onChange: (patch: Record<string, unknown>) => void;
+  onVariantChange: (variant: string) => void;
 }) {
   const Form = FORM_REGISTRY[block.type];
   if (Form) {
@@ -419,6 +425,7 @@ function Inspector({
         <h3 className="text-sm font-bold text-ink mb-3">
           {BLOCK_LABELS[block.type]}
         </h3>
+        <VariantPicker block={block} onSelect={onVariantChange} />
         <Form block={block} onChange={onChange} />
       </div>
     );
@@ -428,6 +435,7 @@ function Inspector({
       <h3 className="text-sm font-bold text-ink mb-3">
         {BLOCK_LABELS[block.type] ?? block.type}
       </h3>
+      <VariantPicker block={block} onSelect={onVariantChange} />
       <Label>JSON</Label>
       <textarea
         value={JSON.stringify(block.data, null, 2)}

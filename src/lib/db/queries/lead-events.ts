@@ -38,7 +38,11 @@ export type LeadEventKind =
   //    öffentlichen LEAD_EVENT_KINDS-Whitelist des track-Endpoints). ──
   | "email_click"
   | "email_unsubscribe"
-  | "email_reply";
+  | "email_reply"
+  // ── Formular-CTA der Landingpage v3 (nur serverseitig über /api/lp/form
+  //    nach Validierung erzeugt — bewusst NICHT in der öffentlichen
+  //    LEAD_EVENT_KINDS-Whitelist des track-Endpoints). ──
+  | "form_submit";
 
 export const LEAD_EVENT_KINDS: readonly LeadEventKind[] = [
   "page_view",

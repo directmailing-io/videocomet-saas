@@ -180,6 +180,22 @@ export function StyleguidePanel({
               />
             }
           />
+
+          <div className="mt-6 pt-5 border-t border-line">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-ink">
+                Sticky-CTA auf dem Smartphone
+              </span>
+              <Switch
+                checked={theme.stickyCta !== false}
+                onCheckedChange={(c) => setTheme({ ...theme, stickyCta: c })}
+              />
+            </div>
+            <p className="text-[11px] text-ink-muted mt-1.5 leading-relaxed">
+              Zeigt unten eine Leiste mit deinem CTA-Button, sobald der
+              Besucher am Video vorbeigescrollt ist.
+            </p>
+          </div>
         </div>
 
         <div className="px-5 py-4 border-t border-line shrink-0">

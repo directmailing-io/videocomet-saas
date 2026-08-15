@@ -99,13 +99,113 @@ function parseInline(text: string, ctx: Ctx): React.ReactNode[] {
   return nodes;
 }
 
+export interface MiniMarkdownOptions {
+  /**
+   * Opt-in (Content-Block): Zeilen, die mit "- " beginnen, werden als
+   * Checkliste gerendert — <ul> mit Haekchen-Icons in der Primaerfarbe
+   * (--lp-color-primary) statt als Fliesstext-Zeilen. Default aus, damit
+   * sich bestehende Blöcke (Rich-Text) nicht verändern.
+   */
+  checklistBullets?: boolean;
+}
+
+const BULLET_RE = /^\s*-\s+(.*)$/;
+
+/** Haekchen-Icon fuer Checklisten-Aufzaehlungen (Token-Farbe). */
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden="true"
+      className="mt-1 size-4 shrink-0"
+      style={{ color: "var(--lp-color-primary)" }}
+    >
+      <path
+        d="M4 10.5l4 4 8-9"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Ein Absatz im Checklisten-Modus: aufeinanderfolgende "- "-Zeilen werden
+ * zu einer <ul> gruppiert, alle anderen Zeilen bleiben ein <p> mit <br/>
+ * wie im Default-Pfad.
+ */
+function renderParagraphWithBullets(
+  lines: string[],
+  pIdx: number,
+  ctx: Ctx,
+): React.ReactNode {
+  type Segment =
+    | { kind: "text"; lines: string[] }
+    | { kind: "list"; items: string[] };
+  const segments: Segment[] = [];
+  for (const line of lines) {
+    const m = BULLET_RE.exec(line);
+    const last = segments[segments.length - 1];
+    if (m) {
+      if (last && last.kind === "list") last.items.push(m[1]);
+      else segments.push({ kind: "list", items: [m[1]] });
+    } else {
+      if (last && last.kind === "text") last.lines.push(line);
+      else segments.push({ kind: "text", lines: [line] });
+    }
+  }
+  return (
+    <React.Fragment key={`p-${pIdx}`}>
+      {segments.map((seg, sIdx) =>
+        seg.kind === "list" ? (
+          <ul
+            key={`ul-${pIdx}-${sIdx}`}
+            className="space-y-2 text-left [&:not(:first-child)]:mt-4"
+          >
+            {seg.items.map((item, iIdx) => (
+              <li
+                key={`li-${pIdx}-${sIdx}-${iIdx}`}
+                className="flex items-start gap-2.5"
+              >
+                <CheckIcon />
+                <span className="leading-relaxed">{parseInline(item, ctx)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p
+            key={`tp-${pIdx}-${sIdx}`}
+            className="leading-relaxed [&:not(:first-child)]:mt-4"
+          >
+            {seg.lines.map((line, lIdx) => (
+              <React.Fragment key={`l-${pIdx}-${sIdx}-${lIdx}`}>
+                {parseInline(line, ctx)}
+                {lIdx < seg.lines.length - 1 && <br />}
+              </React.Fragment>
+            ))}
+          </p>
+        ),
+      )}
+    </React.Fragment>
+  );
+}
+
 /** Parse a multi-paragraph markdown string into React nodes. */
-export function parseMiniMarkdown(src: string): React.ReactNode {
+export function parseMiniMarkdown(
+  src: string,
+  opts?: MiniMarkdownOptions,
+): React.ReactNode {
   const paragraphs = src.replace(/\r\n/g, "\n").split(/\n{2,}/);
   let counter = 0;
   const ctx: Ctx = { nextKey: () => (counter += 1) };
   return paragraphs.map((para, pIdx) => {
     const lines = para.split("\n");
+    if (opts?.checklistBullets) {
+      return renderParagraphWithBullets(lines, pIdx, ctx);
+    }
     const children: React.ReactNode[] = [];
     lines.forEach((line, lIdx) => {
       children.push(

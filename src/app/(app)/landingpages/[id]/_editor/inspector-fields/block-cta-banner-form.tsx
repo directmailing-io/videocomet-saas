@@ -4,8 +4,21 @@ import * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { Block } from "@/lib/landing-blocks/types";
+import {
+  detectBookingLink,
+  type BookingProvider,
+} from "@/lib/booking-link";
+import { resolveVariant, type Block } from "@/lib/landing-blocks/types";
 import { asObject, asString } from "./shared";
+
+const PROVIDER_NAMES: Record<Exclude<BookingProvider, "unknown">, string> = {
+  calendly: "Calendly",
+  "cal-com": "Cal.com",
+  "ms-bookings": "Microsoft Bookings",
+  google: "Google Terminplan",
+  hubspot: "HubSpot",
+  tidycal: "TidyCal",
+};
 
 export function BlockCtaBannerForm({
   block,
@@ -17,6 +30,9 @@ export function BlockCtaBannerForm({
   const data = block.data;
   const primary = asObject(data.primaryButton);
   const secondary = asObject(data.secondaryButton);
+  const variant = resolveVariant("cta-banner", block.variant);
+  const isCalendar =
+    variant === "calendar-inline" || variant === "calendar-popup";
   return (
     <div className="space-y-4">
       <div>
@@ -38,6 +54,28 @@ export function BlockCtaBannerForm({
           placeholder="Eine kurze Einladung in 1 Satz."
         />
       </div>
+      {isCalendar && (
+        <div>
+          <Label htmlFor="cta-booking-url">Buchungslink</Label>
+          <Input
+            id="cta-booking-url"
+            value={asString(data.bookingUrl)}
+            onChange={(e) => onChange({ bookingUrl: e.target.value })}
+            placeholder="https://calendly.com/dein-name"
+          />
+          <p className="text-[11px] text-ink-muted mt-1 leading-relaxed">
+            Calendly, Cal.com, Microsoft Bookings, Google Terminplan,
+            HubSpot oder TidyCal. Wir betten automatisch richtig ein.
+          </p>
+          <BookingDetectHint url={asString(data.bookingUrl)} />
+        </div>
+      )}
+      {variant === "form" && (
+        <p className="text-[11px] text-ink-muted leading-relaxed rounded-squircle-sm bg-surface-soft border border-line px-3 py-2">
+          Anfragen landen in deinem CRM am Kontakt und du bekommst eine
+          E-Mail.
+        </p>
+      )}
       <ButtonFieldset
         title="Primärer Button"
         label={asString(primary.label)}
@@ -55,6 +93,25 @@ export function BlockCtaBannerForm({
         }
       />
     </div>
+  );
+}
+
+/** Live-Feedback unter dem Buchungslink: erkannter Anbieter oder Fallback-Hinweis. */
+function BookingDetectHint({ url }: { url: string }) {
+  const trimmed = url.trim();
+  if (!trimmed) return <></>;
+  const info = detectBookingLink(trimmed);
+  if (info.provider === "unknown") {
+    return (
+      <p className="text-[11px] text-warn mt-1 leading-relaxed">
+        Unbekannter Anbieter: Der Button öffnet den Link direkt.
+      </p>
+    );
+  }
+  return (
+    <p className="text-[11px] text-ok mt-1 leading-relaxed">
+      Erkannt: {PROVIDER_NAMES[info.provider]}
+    </p>
   );
 }
 
