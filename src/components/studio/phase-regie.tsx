@@ -562,14 +562,15 @@ export function PhaseRegie({
       : "Bitte warte, bis alle Szenen vorbereitet sind.";
 
   const showNewTabPage = adding || !selected;
-  const selectedIndex = selected
-    ? tabs.findIndex((t) => t.id === selected.id)
-    : -1;
   const selectedGroupIndex = selected
     ? groups.findIndex((g) => g.tabs.some((t) => t.id === selected.id))
     : -1;
   const selectedGroup =
     selectedGroupIndex >= 0 ? groups[selectedGroupIndex] : null;
+  const selectedSlideIndex =
+    selectedGroup && selected
+      ? selectedGroup.tabs.findIndex((t) => t.id === selected.id)
+      : -1;
   /** Kachel des offenen URL-Formulars — für die fokussierte Formular-Ansicht. */
   const activeTile = addForm
     ? [...PERSONALIZED_TILES, ...STATIC_TILES].find((t) => t.kind === addForm)
@@ -1186,34 +1187,72 @@ export function PhaseRegie({
                       Szene {selectedGroupIndex + 1} von {groups.length}:{" "}
                       {selectedGroup?.deckKey
                         ? `${deckLabel(selectedGroup)} – Folie ${
-                            selectedGroup.tabs.findIndex(
-                              (t) => t.id === selected.id,
-                            ) + 1
+                            selectedSlideIndex + 1
                           } von ${selectedGroup.tabs.length}`
                         : tabLabel(selected)}
                     </span>
                     <span className="flex shrink-0 items-center gap-0.5">
+                      {selectedGroup?.deckKey ? (
+                        <>
+                          <button
+                            type="button"
+                            aria-label="Vorherige Folie"
+                            disabled={selectedSlideIndex <= 0}
+                            onClick={() =>
+                              setSelectedId(
+                                selectedGroup.tabs[selectedSlideIndex - 1].id,
+                              )
+                            }
+                            className="rounded-full p-1 text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink disabled:opacity-30"
+                          >
+                            <ChevronLeft className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Nächste Folie"
+                            disabled={
+                              selectedSlideIndex >=
+                              selectedGroup.tabs.length - 1
+                            }
+                            onClick={() =>
+                              setSelectedId(
+                                selectedGroup.tabs[selectedSlideIndex + 1].id,
+                              )
+                            }
+                            className="rounded-full p-1 text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink disabled:opacity-30"
+                          >
+                            <ChevronRight className="size-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            aria-label="Nach vorn"
+                            disabled={selectedGroupIndex <= 0}
+                            onClick={() => onMoveTab(selected.id, -1)}
+                            className="rounded-full p-1 text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink disabled:opacity-30"
+                          >
+                            <ChevronLeft className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Nach hinten"
+                            disabled={selectedGroupIndex >= groups.length - 1}
+                            onClick={() => onMoveTab(selected.id, 1)}
+                            className="rounded-full p-1 text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink disabled:opacity-30"
+                          >
+                            <ChevronRight className="size-3.5" />
+                          </button>
+                        </>
+                      )}
                       <button
                         type="button"
-                        aria-label="Nach vorn"
-                        disabled={selectedIndex <= 0}
-                        onClick={() => onMoveTab(selected.id, -1)}
-                        className="rounded-full p-1 text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink disabled:opacity-30"
-                      >
-                        <ChevronLeft className="size-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Nach hinten"
-                        disabled={selectedIndex >= tabs.length - 1}
-                        onClick={() => onMoveTab(selected.id, 1)}
-                        className="rounded-full p-1 text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink disabled:opacity-30"
-                      >
-                        <ChevronRight className="size-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Szene löschen"
+                        aria-label={
+                          selectedGroup?.deckKey
+                            ? "Folie löschen"
+                            : "Szene löschen"
+                        }
                         onClick={() => onRemoveTab(selected.id)}
                         className="rounded-full p-1 text-ink-muted transition-colors hover:bg-danger-soft hover:text-danger"
                       >

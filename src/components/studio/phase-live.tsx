@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Minus,
+  MousePointer2,
   Pause,
   Pencil,
   PictureInPicture2,
@@ -172,6 +173,28 @@ export function PhaseLive({
   }, []);
   const stageChrome =
     184 + (prompterVisible && !prompterOverlay ? prompterHeight : 0);
+
+  // Mauszeiger-Aufnahme: standardmäßig aktiv, per Toggle abschaltbar
+  // (Wahl gemerkt über Studio-Sessions hinweg).
+  const [cursorRecording, setCursorRecording] = React.useState(true);
+  React.useEffect(() => {
+    try {
+      setCursorRecording(localStorage.getItem("vc-studio-cursor") !== "0");
+    } catch {
+      // localStorage gesperrt → Default (aktiv) behalten.
+    }
+  }, []);
+  const toggleCursorRecording = React.useCallback(() => {
+    setCursorRecording((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("vc-studio-cursor", next ? "1" : "0");
+      } catch {
+        // Ignorieren — dann gilt die Wahl nur für diese Session.
+      }
+      return next;
+    });
+  }, []);
 
   const activeTabIdRef = React.useRef(activeTabId);
   React.useEffect(() => {
@@ -378,19 +401,39 @@ export function PhaseLive({
             </button>
           </>
         )}
-        <button
-          type="button"
-          onClick={() => setPrompterVisible((v) => !v)}
-          className={cn(
-            "absolute right-5 top-1/2 flex -translate-y-1/2 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
-            prompterVisible
-              ? "bg-brand-soft text-brand-deep"
-              : "text-ink-muted hover:bg-canvas-deep hover:text-ink",
-          )}
-        >
-          <ScrollText className="size-3.5" />
-          Teleprompter
-        </button>
+        <div className="absolute right-5 top-1/2 flex -translate-y-1/2 items-center gap-1">
+          <button
+            type="button"
+            onClick={toggleCursorRecording}
+            title={
+              cursorRecording
+                ? "Mausbewegungen werden mit aufgezeichnet"
+                : "Mausbewegungen werden nicht aufgezeichnet"
+            }
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+              cursorRecording
+                ? "bg-brand-soft text-brand-deep"
+                : "text-ink-muted hover:bg-canvas-deep hover:text-ink",
+            )}
+          >
+            <MousePointer2 className="size-3.5" />
+            Mauszeiger
+          </button>
+          <button
+            type="button"
+            onClick={() => setPrompterVisible((v) => !v)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+              prompterVisible
+                ? "bg-brand-soft text-brand-deep"
+                : "text-ink-muted hover:bg-canvas-deep hover:text-ink",
+            )}
+          >
+            <ScrollText className="size-3.5" />
+            Teleprompter
+          </button>
+        </div>
       </div>
 
       {/* Teleprompter (opt-in, angedockt über der Bühne) */}
@@ -559,11 +602,13 @@ export function PhaseLive({
                 scrollRatio={activeRatio}
                 onScrollRatio={handleScrollRatio}
                 onCursorMove={
+                  cursorRecording &&
                   isScrollableStudioSegment(activeTab.segment)
                     ? (x, y) => recorder.noteCursor(activeTab.id, x, y)
                     : undefined
                 }
                 onCursorLeave={
+                  cursorRecording &&
                   isScrollableStudioSegment(activeTab.segment)
                     ? recorder.noteCursorLeave
                     : undefined

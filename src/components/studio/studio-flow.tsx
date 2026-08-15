@@ -24,6 +24,7 @@ import { PhaseReview } from "./phase-review";
 import { useStudioMedia } from "./use-studio-media";
 import { useSceneAssets } from "./use-scene-assets";
 import {
+  groupStudioTabs,
   STUDIO_PROMPTER_STORAGE_KEY,
   tabImageUrls,
   type StudioRecording,
@@ -98,12 +99,15 @@ export function StudioFlow({ onComplete, onCancel }: StudioFlowProps) {
 
   const moveTab = React.useCallback((tabId: string, direction: -1 | 1) => {
     setTabs((prev) => {
-      const i = prev.findIndex((t) => t.id === tabId);
+      // Gruppenweise verschieben: eine Szene wandert über ein ganzes
+      // Folien-Deck hinweg, statt in dessen Mitte zu landen und es zu teilen.
+      const groups = groupStudioTabs(prev);
+      const i = groups.findIndex((g) => g.tabs.some((t) => t.id === tabId));
       const j = i + direction;
-      if (i < 0 || j < 0 || j >= prev.length) return prev;
-      const next = [...prev];
+      if (i < 0 || j < 0 || j >= groups.length) return prev;
+      const next = [...groups];
       [next[i], next[j]] = [next[j], next[i]];
-      return next;
+      return next.flatMap((g) => g.tabs);
     });
   }, []);
 

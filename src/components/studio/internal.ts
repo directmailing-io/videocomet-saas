@@ -326,34 +326,108 @@ export function uploadStudioRecording(
   });
 }
 
+const CLOUD_FILE_HINT =
+  "Die Datei konnte nicht gelesen werden. Sie liegt vermutlich nur in der " +
+  "Cloud (Google Drive oder iCloud) und nicht wirklich auf deinem Rechner. " +
+  "Kopiere die Datei z. B. auf den Schreibtisch und wähle sie von dort aus.";
+
 /**
- * Upload einer PPTX-Datei zu POST /api/canva/upload — XHR statt fetch, damit
- * wir echten Fortschritt zeigen und Abbrüche (z. B. iCloud-/Drive-Platzhalter,
- * die Chrome nicht lesen kann) mit verständlichem Text melden können.
+ * Datei vollständig in den Speicher lesen, BEVOR der Upload startet.
+ * Cloud-Platzhalter (Google Drive Streaming, iCloud „Speicher optimieren")
+ * liefern dem Browser sonst keine Bytes — der Upload hängt still bei 0 %.
+ * Das Lesen zwingt den Download an und macht Lesefehler als Klartext
+ * sichtbar; ein Watchdog bricht ab, wenn 20 s lang keine Bytes ankommen.
  */
-export function uploadCanvaPptxFile(
+function readFileFully(
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    let lastActivity = Date.now();
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastActivity > 20_000) {
+        clearInterval(watchdog);
+        reader.abort();
+        reject(new Error(CLOUD_FILE_HINT));
+      }
+    }, 5_000);
+    reader.onprogress = (e) => {
+      lastActivity = Date.now();
+      if (e.lengthComputable && e.total > 0) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+    reader.onerror = () => {
+      clearInterval(watchdog);
+      reject(new Error(CLOUD_FILE_HINT));
+    };
+    reader.onload = () => {
+      clearInterval(watchdog);
+      if (reader.result instanceof ArrayBuffer) resolve(reader.result);
+      else reject(new Error(CLOUD_FILE_HINT));
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * Upload einer PPTX-Datei zu POST /api/canva/upload — Datei wird erst
+ * komplett gelesen (erzwingt Cloud-Download), dann per XHR mit
+ * Fortschritt hochgeladen; Hänger enden in verständlichen Fehlertexten.
+ */
+export async function uploadCanvaPptxFile(
   file: File,
   onProgress: (pct: number) => void,
 ): Promise<{ mediaId: string; publicUrl: string; fileName: string | null }> {
+  if (file.size === 0) throw new Error(CLOUD_FILE_HINT);
+  if (file.size > 50 * 1024 * 1024) {
+    throw new Error(
+      "Die Datei ist zu groß zum Hochladen (max. 50 MB). Exportiere die Präsentation ggf. neu.",
+    );
+  }
+
+  // Lesen = 0–30 %, Upload = 30–100 % der Fortschrittsanzeige.
+  const buf = await readFileFully(file, (p) => onProgress(Math.round(p * 0.3)));
+  const blob = new Blob([buf], {
+    type:
+      file.type ||
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  });
+
   return new Promise((resolve, reject) => {
     const form = new FormData();
-    form.append("file", file);
+    form.append("file", blob, file.name);
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/canva/upload");
     xhr.withCredentials = true;
+    const abortMsg =
+      "Der Upload wurde unterbrochen. Prüfe dein Internet und versuche es erneut.";
+    // Watchdog: 45 s ohne Upload-Fortschritt → abbrechen statt ewig warten.
+    let lastActivity = Date.now();
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastActivity > 45_000) {
+        clearInterval(watchdog);
+        xhr.abort();
+      }
+    }, 5_000);
     xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
+      lastActivity = Date.now();
+      if (e.lengthComputable && e.total > 0) {
+        onProgress(30 + Math.round((e.loaded / e.total) * 70));
       }
     };
-    const abortMsg =
-      "Der Upload wurde unterbrochen. Prüfe dein Internet und stelle sicher, " +
-      "dass die Datei lokal auf deinem Rechner liegt (nicht nur in iCloud " +
-      "oder Google Drive), und versuche es erneut.";
-    xhr.onerror = () => reject(new Error(abortMsg));
-    xhr.onabort = () => reject(new Error(abortMsg));
+    xhr.onerror = () => {
+      clearInterval(watchdog);
+      reject(new Error(abortMsg));
+    };
+    xhr.onabort = () => {
+      clearInterval(watchdog);
+      reject(new Error(abortMsg));
+    };
     xhr.onload = () => {
+      clearInterval(watchdog);
       if (xhr.status < 200 || xhr.status >= 300) {
         let msg =
           xhr.status === 413
