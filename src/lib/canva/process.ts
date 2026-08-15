@@ -100,14 +100,14 @@ export async function fetchPptxBuffer(publicUrl: string): Promise<Buffer> {
   if (arrayBuf.byteLength > MAX_PPTX_BYTES) {
     throw new CanvaProcessError(
       "too-large",
-      `PPTX zu groß (${arrayBuf.byteLength} Byte). Limit: ${MAX_PPTX_BYTES}.`,
+      `Die Datei ist zu groß (${Math.round(arrayBuf.byteLength / 1024 / 1024)} MB, erlaubt sind ${Math.round(MAX_PPTX_BYTES / 1024 / 1024)} MB). Exportiere die Präsentation ggf. mit kleineren Bildern.`,
     );
   }
   const buf = Buffer.from(arrayBuf);
   if (buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4b) {
     throw new CanvaProcessError(
       "not-pptx",
-      "Antwort ist kein PPTX-Archiv (Magic-Number-Check fehlgeschlagen).",
+      "Die Datei ist keine gültige PowerPoint-Datei (.pptx). Exportiere die Präsentation neu als .pptx und versuche es noch einmal.",
     );
   }
   return buf;
@@ -142,7 +142,7 @@ async function runProcess(
   if (slides.length === 0) {
     throw new CanvaProcessError(
       "not-pptx",
-      "Das PPTX enthält keine Folien.",
+      "Die Präsentation enthält keine Folien.",
     );
   }
 

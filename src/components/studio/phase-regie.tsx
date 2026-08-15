@@ -62,6 +62,7 @@ import {
   STUDIO_MEDIA_ACCEPT,
   tabLabel,
   tabThumbUrl,
+  uploadCanvaPptxFile,
   uploadStudioMediaFile,
   type StudioSceneKind,
   type UpdateSegmentFn,
@@ -251,32 +252,28 @@ export function PhaseRegie({
 
   /** Laufender PPTX-Upload + Folien-Scan (LibreOffice, 10-60 s). */
   const [canvaImporting, setCanvaImporting] = React.useState(false);
+  const [canvaProgress, setCanvaProgress] = React.useState(0);
   const [canvaError, setCanvaError] = React.useState<string | null>(null);
   const canvaInputRef = React.useRef<HTMLInputElement | null>(null);
+  const uploadErrorRef = React.useRef<HTMLParagraphElement | null>(null);
+
+  // Fehlermeldung in den sichtbaren Bereich holen, falls der Picker gescrollt ist.
+  React.useEffect(() => {
+    if (pdfError || mediaError || canvaError) {
+      uploadErrorRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+  }, [pdfError, mediaError, canvaError]);
 
   const onCanvaFile = async (file: File) => {
     setCanvaImporting(true);
     setCanvaError(null);
+    setCanvaProgress(0);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const uploadRes = await fetch("/api/canva/upload", {
-        method: "POST",
-        body: form,
-        credentials: "include",
-      });
-      const uploadData = (await uploadRes.json().catch(() => null)) as {
-        error?: string;
-        mediaId?: string;
-        publicUrl?: string;
-        fileName?: string;
-      } | null;
-      if (!uploadRes.ok || !uploadData?.mediaId || !uploadData.publicUrl) {
-        throw new Error(
-          uploadData?.error ||
-            "Die Datei konnte nicht hochgeladen werden. Bitte versuche es erneut.",
-        );
-      }
+      const uploadData = await uploadCanvaPptxFile(file, setCanvaProgress);
+      setCanvaProgress(100);
       const procRes = await fetch("/api/canva/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -298,10 +295,13 @@ export function PhaseRegie({
             "Die Präsentation konnte nicht verarbeitet werden. Bitte versuche es erneut.",
         );
       }
-      const slides = (procData?.slides ?? []).filter((s) => !!s.thumbnailUrl);
+      const allSlides = procData?.slides ?? [];
+      const slides = allSlides.filter((s) => !!s.thumbnailUrl);
       if (slides.length === 0) {
         throw new Error(
-          "In der Datei wurden keine Folien gefunden. Prüfe die PPTX-Datei und versuche es erneut.",
+          allSlides.length > 0
+            ? "Die Folien-Vorschau konnte nicht erzeugt werden. Bitte versuche es in einer Minute erneut."
+            : "In der Datei wurden keine Folien gefunden. Prüfe die PPTX-Datei und versuche es erneut.",
         );
       }
       const fileName = procData?.fileName ?? uploadData.fileName ?? null;
@@ -594,11 +594,15 @@ export function PhaseRegie({
         </span>
         <span className="text-[10px] leading-snug text-ink-muted">
           {busy
-            ? tile.kind === "gslide" || tile.kind === "canva"
+            ? tile.kind === "gslide"
               ? "Folien werden geladen…"
-              : tile.kind === mediaUploading && mediaProgress > 0
-                ? `Wird hochgeladen… ${mediaProgress} %`
-                : "Wird hochgeladen…"
+              : tile.kind === "canva"
+                ? canvaProgress < 100
+                  ? `Wird hochgeladen… ${canvaProgress} %`
+                  : "Folien werden vorbereitet…"
+                : tile.kind === mediaUploading && mediaProgress > 0
+                  ? `Wird hochgeladen… ${mediaProgress} %`
+                  : "Wird hochgeladen…"
             : tile.hint}
         </span>
       </button>
@@ -824,6 +828,18 @@ export function PhaseRegie({
                       </div>
                     )}
 
+                    {/* Fehler VOR den Kacheln: unterhalb wären sie außerhalb
+                        des sichtbaren Bereichs und der Nutzer sähe „nichts". */}
+                    {(pdfError || mediaError || canvaError) && (
+                      <p
+                        ref={uploadErrorRef}
+                        className="flex w-full items-start gap-1.5 rounded-squircle-sm bg-danger-soft px-3 py-2 text-[11px] text-danger"
+                      >
+                        <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                        {pdfError || mediaError || canvaError}
+                      </p>
+                    )}
+
                     <section className="w-full">
                       <div className="mb-1.5 flex items-center gap-1.5 px-1">
                         <Sparkles className="size-3.5 text-brand-deep" />
@@ -857,26 +873,6 @@ export function PhaseRegie({
                       </div>
                     </section>
 
-                    {pdfError && (
-                      <p className="flex w-full items-start gap-1.5 rounded-squircle-sm bg-danger-soft px-3 py-2 text-[11px] text-danger">
-                        <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-                        {pdfError}
-                      </p>
-                    )}
-
-                    {mediaError && (
-                      <p className="flex w-full items-start gap-1.5 rounded-squircle-sm bg-danger-soft px-3 py-2 text-[11px] text-danger">
-                        <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-                        {mediaError}
-                      </p>
-                    )}
-
-                    {canvaError && (
-                      <p className="flex w-full items-start gap-1.5 rounded-squircle-sm bg-danger-soft px-3 py-2 text-[11px] text-danger">
-                        <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-                        {canvaError}
-                      </p>
-                    )}
                       </>
                     )}
 

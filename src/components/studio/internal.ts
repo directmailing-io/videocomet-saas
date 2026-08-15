@@ -270,6 +270,77 @@ export function uploadStudioRecording(
   });
 }
 
+/**
+ * Upload einer PPTX-Datei zu POST /api/canva/upload — XHR statt fetch, damit
+ * wir echten Fortschritt zeigen und Abbrüche (z. B. iCloud-/Drive-Platzhalter,
+ * die Chrome nicht lesen kann) mit verständlichem Text melden können.
+ */
+export function uploadCanvaPptxFile(
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<{ mediaId: string; publicUrl: string; fileName: string | null }> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/canva/upload");
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+    const abortMsg =
+      "Der Upload wurde unterbrochen. Prüfe dein Internet und stelle sicher, " +
+      "dass die Datei lokal auf deinem Rechner liegt (nicht nur in iCloud " +
+      "oder Google Drive), und versuche es erneut.";
+    xhr.onerror = () => reject(new Error(abortMsg));
+    xhr.onabort = () => reject(new Error(abortMsg));
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        let msg =
+          xhr.status === 413
+            ? "Die Datei ist zu groß zum Hochladen (max. 50 MB). Exportiere die Präsentation ggf. neu."
+            : `Die Datei konnte nicht hochgeladen werden (Fehler ${xhr.status}). Bitte versuche es erneut.`;
+        try {
+          const j = JSON.parse(xhr.responseText) as { error?: string };
+          if (j.error) msg = j.error;
+        } catch {
+          /* ignore */
+        }
+        return reject(new Error(msg));
+      }
+      try {
+        const j = JSON.parse(xhr.responseText) as {
+          mediaId?: string;
+          publicUrl?: string;
+          fileName?: string;
+        };
+        if (!j.mediaId || !j.publicUrl) {
+          return reject(
+            new Error(
+              "Die Datei konnte nicht hochgeladen werden. Bitte versuche es erneut.",
+            ),
+          );
+        }
+        resolve({
+          mediaId: j.mediaId,
+          publicUrl: j.publicUrl,
+          fileName: j.fileName ?? null,
+        });
+      } catch (e) {
+        reject(
+          e instanceof Error
+            ? e
+            : new Error("Antwort konnte nicht gelesen werden."),
+        );
+      }
+    };
+    xhr.send(form);
+  });
+}
+
 /** Erlaubte Datei-Typen pro Medien-Szene (muss zu src/lib/upload.ts passen). */
 export const STUDIO_MEDIA_ACCEPT: Record<"image" | "video", string> = {
   image: "image/jpeg,image/png,image/svg+xml",
