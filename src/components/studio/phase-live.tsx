@@ -38,7 +38,10 @@ import { StudioStage } from "./studio-stage";
 import { SceneKindIcon } from "./scene-icon";
 import {
   clamp01,
+  deckKeyOf,
+  deckLabel,
   formatClock,
+  groupStudioTabs,
   sceneKindOf,
   tabLabel,
   tabThumbUrl,
@@ -102,6 +105,17 @@ export function PhaseLive({
 
   const [activeTabId, setActiveTabId] = React.useState(tabs[0]?.id ?? "");
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0] ?? null;
+
+  // Tab-Leiste: Folien desselben Decks als EIN Eintrag (reine Anzeige).
+  const groups = React.useMemo(() => groupStudioTabs(tabs), [tabs]);
+  /** Zuletzt aktive Folie pro Deck — Ziffern-Hotkey kehrt dorthin zurück. */
+  const deckPosRef = React.useRef<Map<string, string>>(new Map());
+  React.useEffect(() => {
+    const tab = tabs.find((t) => t.id === activeTabId);
+    if (!tab) return;
+    const key = deckKeyOf(tab);
+    if (key) deckPosRef.current.set(key, activeTabId);
+  }, [activeTabId, tabs]);
 
   /** Scroll-Position pro Szene (bleibt beim Wechsel erhalten). */
   const ratiosRef = React.useRef<Map<string, number>>(new Map());
@@ -300,9 +314,16 @@ export function PhaseLive({
       if (target && /^(input|textarea|select)$/i.test(target.tagName)) return;
       if (e.key >= "1" && e.key <= "9") {
         const idx = Number(e.key) - 1;
-        if (tabs[idx]) {
+        const group = groups[idx];
+        if (group) {
           e.preventDefault();
-          switchTab(tabs[idx].id);
+          // Deck: zur zuletzt gezeigten Folie zurückkehren, sonst Folie 1.
+          const rememberedId = group.deckKey
+            ? deckPosRef.current.get(group.deckKey)
+            : undefined;
+          const target =
+            group.tabs.find((t) => t.id === rememberedId) ?? group.tabs[0];
+          switchTab(target.id);
         }
         return;
       }
@@ -318,7 +339,7 @@ export function PhaseLive({
       window.removeEventListener("keydown", onKey);
       if (escapeTimerRef.current) clearTimeout(escapeTimerRef.current);
     };
-  }, [tabs, switchTab]);
+  }, [groups, switchTab]);
 
   // ── Webcam-PiP ───────────────────────────────────────────────────────
   const pipVideoRef = React.useRef<HTMLVideoElement | null>(null);
@@ -399,16 +420,29 @@ export function PhaseLive({
             </span>
 
             <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto pt-1.5">
-              {tabs.map((tab, i) => {
-                const active = tab.id === activeTabId;
+              {groups.map((group, gi) => {
+                const isDeck = !!group.deckKey;
+                const rememberedId = group.deckKey
+                  ? deckPosRef.current.get(group.deckKey)
+                  : undefined;
+                const tab =
+                  group.tabs.find((t) => t.id === activeTabId) ??
+                  group.tabs.find((t) => t.id === rememberedId) ??
+                  group.tabs[0];
+                const pos = group.tabs.indexOf(tab);
+                const active = group.tabs.some((t) => t.id === activeTabId);
                 const thumb = tabThumbUrl(tab);
                 return (
-                  <button
-                    key={tab.id}
-                    type="button"
+                  <div
+                    key={group.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => switchTab(tab.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") switchTab(tab.id);
+                    }}
                     className={cn(
-                      "flex h-full shrink-0 items-center gap-2 rounded-t-[10px] px-3 transition-colors",
+                      "flex h-full shrink-0 cursor-pointer items-center gap-2 rounded-t-[10px] px-3 transition-colors",
                       active
                         ? "-mb-px border border-b-0 border-line-soft bg-surface"
                         : "text-ink-muted hover:bg-canvas-deep/70",
@@ -420,7 +454,7 @@ export function PhaseLive({
                         active ? "text-brand-deep" : "text-ink-muted/70",
                       )}
                     >
-                      {i + 1}
+                      {gi + 1}
                     </span>
                     {thumb ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -448,12 +482,48 @@ export function PhaseLive({
                           : "font-medium text-ink-muted",
                       )}
                     >
-                      {tabLabel(tab)}
+                      {isDeck ? deckLabel(group) : tabLabel(tab)}
                     </span>
+                    {isDeck && (
+                      <span className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          aria-label="Vorherige Folie"
+                          disabled={pos <= 0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            switchTab(group.tabs[pos - 1].id);
+                          }}
+                          className="rounded-full p-0.5 text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink disabled:opacity-30"
+                        >
+                          <ChevronLeft className="size-3" />
+                        </button>
+                        <span
+                          className={cn(
+                            "text-[10px] font-semibold tabular-nums",
+                            active ? "text-ink" : "text-ink-muted",
+                          )}
+                        >
+                          {pos + 1}/{group.tabs.length}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Nächste Folie"
+                          disabled={pos >= group.tabs.length - 1}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            switchTab(group.tabs[pos + 1].id);
+                          }}
+                          className="rounded-full p-0.5 text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink disabled:opacity-30"
+                        >
+                          <ChevronRight className="size-3" />
+                        </button>
+                      </span>
+                    )}
                     {active && running && (
                       <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-danger" />
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>

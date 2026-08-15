@@ -143,6 +143,62 @@ export function tabLabel(tab: StudioTab): string {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Deck-Gruppierung (Google Slides / Canva)                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Deck-Zugehörigkeit eines Tabs: Folien desselben Slides-/Canva-Imports
+ * teilen sich einen Key. null = keine Folie / kein Deck.
+ */
+export function deckKeyOf(tab: StudioTab): string | null {
+  const seg = tab.segment;
+  if (seg.kind === "gslide" && seg.publishedUrl) {
+    return `gslide:${seg.publishedUrl}`;
+  }
+  if (seg.kind === "canva" && seg.pptxMediaId) {
+    return `canva:${seg.pptxMediaId}`;
+  }
+  return null;
+}
+
+/** Ein Eintrag der Tab-Leiste: Einzel-Szene oder ganzes Folien-Deck. */
+export interface StudioTabGroup {
+  /** Stabiler Render-Key (Tab-ID der ersten Folie). */
+  id: string;
+  /** null = Einzel-Szene. */
+  deckKey: string | null;
+  tabs: StudioTab[];
+}
+
+/**
+ * Aufeinanderfolgende Folien desselben Decks zu EINEM Leisten-Eintrag
+ * gruppieren. Reine Anzeige-Logik — das Szenen-Array selbst (Datenmodell,
+ * Aufnahme, Segment-Ableitung) bleibt unverändert eine flache Liste.
+ */
+export function groupStudioTabs(tabs: StudioTab[]): StudioTabGroup[] {
+  const groups: StudioTabGroup[] = [];
+  for (const tab of tabs) {
+    const key = deckKeyOf(tab);
+    const last = groups[groups.length - 1];
+    if (key && last && last.deckKey === key) {
+      last.tabs.push(tab);
+    } else {
+      groups.push({ id: tab.id, deckKey: key, tabs: [tab] });
+    }
+  }
+  return groups;
+}
+
+/** Anzeigename eines Decks (Canva: Dateiname, sonst „Präsentation"). */
+export function deckLabel(group: StudioTabGroup): string {
+  const seg = group.tabs[0]?.segment;
+  if (seg?.kind === "canva" && seg.fileName) {
+    return stripExtension(seg.fileName);
+  }
+  return "Präsentation";
+}
+
 /** mm:ss aus Millisekunden. */
 export function formatClock(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));

@@ -58,6 +58,9 @@ import {
   clamp01,
   createStudioImageSegment,
   createStudioVideoSegment,
+  deckKeyOf,
+  deckLabel,
+  groupStudioTabs,
   sceneKindOf,
   STUDIO_MEDIA_ACCEPT,
   tabLabel,
@@ -216,6 +219,18 @@ export function PhaseRegie({
 
   const selected = tabs.find((t) => t.id === selectedId) ?? null;
 
+  // Tab-Leiste: Folien desselben Decks als EIN Eintrag (reine Anzeige).
+  const groups = React.useMemo(() => groupStudioTabs(tabs), [tabs]);
+  /** Zuletzt aktive Folie pro Deck — Deck-Tab-Klick kehrt dorthin zurück. */
+  const deckPosRef = React.useRef<Map<string, string>>(new Map());
+  React.useEffect(() => {
+    if (!selectedId) return;
+    const tab = tabs.find((t) => t.id === selectedId);
+    if (!tab) return;
+    const key = deckKeyOf(tab);
+    if (key) deckPosRef.current.set(key, selectedId);
+  }, [selectedId, tabs]);
+
   const addScene = (segment: Segment) => {
     onAddTab(segment);
     // Die neue Szene bekommt eine neue Tab-ID im Flow — Auswahl folgt via
@@ -226,7 +241,10 @@ export function PhaseRegie({
   const prevCountRef = React.useRef(tabs.length);
   React.useEffect(() => {
     if (tabs.length > prevCountRef.current) {
-      setSelectedId(tabs[tabs.length - 1].id);
+      // Erste NEUE Szene wählen — bei Deck-Importen (mehrere Folien auf
+      // einmal) startet die Auswahl so auf Folie 1 statt der letzten.
+      const firstNew = tabs[prevCountRef.current] ?? tabs[tabs.length - 1];
+      setSelectedId(firstNew.id);
       setAdding(false);
     }
     prevCountRef.current = tabs.length;
@@ -547,6 +565,11 @@ export function PhaseRegie({
   const selectedIndex = selected
     ? tabs.findIndex((t) => t.id === selected.id)
     : -1;
+  const selectedGroupIndex = selected
+    ? groups.findIndex((g) => g.tabs.some((t) => t.id === selected.id))
+    : -1;
+  const selectedGroup =
+    selectedGroupIndex >= 0 ? groups[selectedGroupIndex] : null;
   /** Kachel des offenen URL-Formulars — für die fokussierte Formular-Ansicht. */
   const activeTile = addForm
     ? [...PERSONALIZED_TILES, ...STATIC_TILES].find((t) => t.kind === addForm)
@@ -658,24 +681,40 @@ export function PhaseRegie({
               </span>
 
               <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto pt-1.5">
-                {tabs.map((tab, i) => {
-                  const status = assets.statusById[tab.id] ?? "loading";
-                  const active = !showNewTabPage && tab.id === selectedId;
+                {groups.map((group, gi) => {
+                  const isDeck = !!group.deckKey;
+                  const rememberedId = group.deckKey
+                    ? deckPosRef.current.get(group.deckKey)
+                    : undefined;
+                  const tab =
+                    group.tabs.find((t) => t.id === selectedId) ??
+                    group.tabs.find((t) => t.id === rememberedId) ??
+                    group.tabs[0];
+                  const pos = group.tabs.indexOf(tab);
+                  const active =
+                    !showNewTabPage &&
+                    group.tabs.some((t) => t.id === selectedId);
+                  const statuses = group.tabs.map(
+                    (t) => assets.statusById[t.id] ?? "loading",
+                  );
+                  const status = statuses.includes("error")
+                    ? "error"
+                    : statuses.includes("loading")
+                      ? "loading"
+                      : "ready";
                   const thumb = tabThumbUrl(tab);
+                  const selectSlide = (id: string) => {
+                    setAdding(false);
+                    setSelectedId(id);
+                  };
                   return (
                     <div
-                      key={tab.id}
+                      key={group.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => {
-                        setAdding(false);
-                        setSelectedId(tab.id);
-                      }}
+                      onClick={() => selectSlide(tab.id)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          setAdding(false);
-                          setSelectedId(tab.id);
-                        }
+                        if (e.key === "Enter") selectSlide(tab.id);
                       }}
                       className={cn(
                         "group flex h-full shrink-0 cursor-pointer items-center gap-2 rounded-t-[10px] px-3 transition-colors",
@@ -690,7 +729,7 @@ export function PhaseRegie({
                           active ? "text-brand-deep" : "text-ink-muted/70",
                         )}
                       >
-                        {i + 1}
+                        {gi + 1}
                       </span>
                       {thumb ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -718,8 +757,44 @@ export function PhaseRegie({
                             : "font-medium text-ink-muted",
                         )}
                       >
-                        {tabLabel(tab)}
+                        {isDeck ? deckLabel(group) : tabLabel(tab)}
                       </span>
+                      {isDeck && (
+                        <span className="flex shrink-0 items-center gap-0.5">
+                          <button
+                            type="button"
+                            aria-label="Vorherige Folie"
+                            disabled={pos <= 0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              selectSlide(group.tabs[pos - 1].id);
+                            }}
+                            className="rounded-full p-0.5 text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink disabled:opacity-30"
+                          >
+                            <ChevronLeft className="size-3" />
+                          </button>
+                          <span
+                            className={cn(
+                              "text-[10px] font-semibold tabular-nums",
+                              active ? "text-ink" : "text-ink-muted",
+                            )}
+                          >
+                            {pos + 1}/{group.tabs.length}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label="Nächste Folie"
+                            disabled={pos >= group.tabs.length - 1}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              selectSlide(group.tabs[pos + 1].id);
+                            }}
+                            className="rounded-full p-0.5 text-ink-muted transition-colors hover:bg-canvas-deep hover:text-ink disabled:opacity-30"
+                          >
+                            <ChevronRight className="size-3" />
+                          </button>
+                        </span>
+                      )}
                       {status === "loading" && (
                         <Loader2 className="size-3 shrink-0 animate-spin text-ink-muted" />
                       )}
@@ -728,10 +803,21 @@ export function PhaseRegie({
                       )}
                       <button
                         type="button"
-                        aria-label="Szene löschen"
+                        aria-label={
+                          isDeck ? "Präsentation löschen" : "Szene löschen"
+                        }
                         onClick={(e) => {
                           e.stopPropagation();
-                          onRemoveTab(tab.id);
+                          if (
+                            isDeck &&
+                            group.tabs.length > 1 &&
+                            !window.confirm(
+                              `Die ganze Präsentation (${group.tabs.length} Folien) aus dem Video entfernen?`,
+                            )
+                          ) {
+                            return;
+                          }
+                          for (const t of group.tabs) onRemoveTab(t.id);
                         }}
                         className="shrink-0 rounded-full p-0.5 text-ink-muted/0 transition-colors hover:bg-canvas-deep hover:text-ink group-hover:text-ink-muted"
                       >
@@ -1097,8 +1183,14 @@ export function PhaseRegie({
                 <>
                   <div className="flex items-center gap-2 px-1">
                     <span className="min-w-0 truncate text-xs font-semibold text-ink">
-                      Szene {selectedIndex + 1} von {tabs.length}:{" "}
-                      {tabLabel(selected)}
+                      Szene {selectedGroupIndex + 1} von {groups.length}:{" "}
+                      {selectedGroup?.deckKey
+                        ? `${deckLabel(selectedGroup)} – Folie ${
+                            selectedGroup.tabs.findIndex(
+                              (t) => t.id === selected.id,
+                            ) + 1
+                          } von ${selectedGroup.tabs.length}`
+                        : tabLabel(selected)}
                     </span>
                     <span className="flex shrink-0 items-center gap-0.5">
                       <button
