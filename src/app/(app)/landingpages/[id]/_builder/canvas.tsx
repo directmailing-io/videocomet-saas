@@ -27,7 +27,28 @@ import type { BrandConfig, ThemeConfig } from "@/lib/landing-theme/types";
 import { cn } from "@/lib/utils";
 
 import { hasVariants } from "../_editor/inspector-fields/variant-picker";
+import { DeviceFrame } from "./device-frame";
 import { SectionToolbar } from "./section-toolbar";
+
+/**
+ * Desktop rendert direkt (voller Viewport = Breakpoints stimmen ohnehin),
+ * Geraete-Modi im iframe. `key` erzwingt einen frischen iframe pro Breite,
+ * damit Stylesheet-Kopie und Hoehenmessung sauber neu starten.
+ */
+function MaybeDeviceFrame({
+  width,
+  children,
+}: {
+  width: number | null;
+  children: React.ReactNode;
+}) {
+  if (width === null) return <>{children}</>;
+  return (
+    <DeviceFrame key={width} width={width}>
+      {children}
+    </DeviceFrame>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* Konstanten                                                          */
@@ -159,7 +180,8 @@ export function BuilderCanvas({
       onClick={() => onSelectBlock(null)}
     >
       <div className="min-h-full px-4 py-8 sm:px-8">
-        {/* Geräterahmen */}
+        {/* Geräterahmen: im Frame-Modus ein echter iframe, damit die
+            Tailwind-Breakpoints auf die Rahmenbreite reagieren. */}
         <div
           className={cn(
             "mx-auto transition-[width] duration-300 ease-out",
@@ -169,6 +191,7 @@ export function BuilderCanvas({
           )}
           style={framed ? { width } : undefined}
         >
+          <MaybeDeviceFrame width={width}>
           <LandingThemeProvider
             theme={theme}
             brand={brand}
@@ -236,6 +259,7 @@ export function BuilderCanvas({
               </div>
             )}
           </LandingThemeProvider>
+          </MaybeDeviceFrame>
         </div>
       </div>
     </div>

@@ -141,11 +141,12 @@ const CHIP_CLASS =
 
 /** Erzeugt das Chip-Markup — identisch zum React-Rendering in <ChipSpan>. */
 function buildChipElement(
+  doc: Document,
   key: string,
   fallback: string | undefined,
   placeholders: PlaceholderOption[],
 ): HTMLSpanElement {
-  const el = document.createElement("span");
+  const el = doc.createElement("span");
   el.setAttribute("contenteditable", "false");
   el.dataset.phKey = key;
   if (fallback) el.dataset.phFallback = fallback;
@@ -312,17 +313,20 @@ function EditableTextImpl({
   const insertPlainText = React.useCallback((text: string) => {
     const root = rootRef.current;
     if (!root) return;
+    // Immer das Dokument des Elements nutzen — im Geraete-iframe ist das
+    // NICHT das globale `document`.
+    const doc = root.ownerDocument;
     root.focus();
     try {
-      if (document.execCommand("insertText", false, text)) return;
+      if (doc.execCommand("insertText", false, text)) return;
     } catch {
       // execCommand nicht verfuegbar (z. B. jsdom) → manueller Fallback.
     }
-    const sel = window.getSelection();
+    const sel = doc.defaultView?.getSelection();
     if (!sel || sel.rangeCount === 0) return;
     const range = sel.getRangeAt(0);
     range.deleteContents();
-    const node = document.createTextNode(text);
+    const node = doc.createTextNode(text);
     range.insertNode(node);
     range.setStartAfter(node);
     range.collapse(true);
@@ -336,7 +340,7 @@ function EditableTextImpl({
   const caretHasTrigger = React.useCallback((): boolean => {
     const root = rootRef.current;
     if (!root) return false;
-    const sel = window.getSelection();
+    const sel = root.ownerDocument.defaultView?.getSelection();
     if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false;
     const node = sel.anchorNode;
     if (!node || node.nodeType !== Node.TEXT_NODE || !root.contains(node)) {
@@ -360,8 +364,9 @@ function EditableTextImpl({
   const insertPlaceholder = (key: string) => {
     const root = rootRef.current;
     if (!root) return;
+    const doc = root.ownerDocument;
     root.focus();
-    const sel = window.getSelection();
+    const sel = doc.defaultView?.getSelection();
     let range: Range;
     if (
       sel &&
@@ -371,7 +376,7 @@ function EditableTextImpl({
       range = sel.getRangeAt(0);
       range.deleteContents();
     } else {
-      range = document.createRange();
+      range = doc.createRange();
       range.selectNodeContents(root);
       range.collapse(false);
     }
@@ -387,12 +392,12 @@ function EditableTextImpl({
         range.collapse(true);
       }
     }
-    const chip = buildChipElement(key, undefined, ctx.placeholders);
+    const chip = buildChipElement(doc, key, undefined, ctx.placeholders);
     range.insertNode(chip);
     // Caret hinter den Chip setzen (leerer Textknoten als Anker).
-    const anchor = document.createTextNode("");
+    const anchor = doc.createTextNode("");
     chip.after(anchor);
-    const caret = document.createRange();
+    const caret = doc.createRange();
     caret.setStart(anchor, 0);
     caret.collapse(true);
     sel?.removeAllRanges();
@@ -406,7 +411,7 @@ function EditableTextImpl({
     const root = rootRef.current;
     if (!root) return;
     root.focus();
-    const sel = window.getSelection();
+    const sel = root.ownerDocument.defaultView?.getSelection();
     const selected = sel && !sel.isCollapsed ? sel.toString() : "";
     insertPlainText("**" + (selected || "Text") + "**");
   };
@@ -414,13 +419,14 @@ function EditableTextImpl({
   const applyBullet = () => {
     const root = rootRef.current;
     if (!root) return;
+    const doc = root.ownerDocument;
     root.focus();
-    const sel = window.getSelection();
+    const sel = doc.defaultView?.getSelection();
     if (!sel || sel.rangeCount === 0) return;
     // Steht der Cursor am Zeilenanfang? (Text davor endet mit \n oder leer)
     const probe = sel.getRangeAt(0).cloneRange();
     probe.collapse(true);
-    const before = document.createRange();
+    const before = doc.createRange();
     before.selectNodeContents(root);
     before.setEnd(probe.startContainer, probe.startOffset);
     const textBefore = before.toString();
