@@ -23,6 +23,7 @@
  */
 
 import type {
+  CursorFrame,
   ScrollFrame,
   Segment,
   VideoPlaybackWindow,
@@ -38,6 +39,15 @@ import {
 const DEFAULT_FLAG_THRESHOLD_MS = 1500;
 /** Ab dieser ffprobe-Abweichung wird proportional skaliert. */
 const PROPORTIONAL_DELTA_MS = 1000;
+/**
+ * Carry-Over-Fenster für den Cursor über Szenenwechsel hinweg: Ruht die
+ * Maus beim Wechsel auf der Bühne, force-flusht der Recorder ihre Position
+ * unmittelbar VOR dem tabSwitch — das Sample liegt dann wenige ms vor dem
+ * Segment-Start und wird als Seed {t:0} übernommen. Hat die Maus die Bühne
+ * verlassen (Klick auf die Tab-Leiste), ist das letzte Sample älter →
+ * kein Seed, der Cursor bleibt unsichtbar bis zur nächsten Bewegung.
+ */
+const CURSOR_CARRY_MS = 150;
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -137,6 +147,33 @@ export function deriveStudioSegments(
         segment.captureMode = "static-hero";
         delete segment.scrollFrames;
       }
+
+      // Cursor-Samples dieses Intervalls, renormiert auf den Segment-Start.
+      // KEIN automatisches t=0-Sample: vor der ersten Bewegung ist der
+      // Cursor unsichtbar (Semantik in `@/lib/segments/cursor-overlay`).
+      const cursorFrames: CursorFrame[] = [];
+      for (const e of sorted) {
+        if (e.type !== "cursor" || e.tabId !== tab.id) continue;
+        const t = Math.round(e.t * scale);
+        if (t < start || t >= rawEnd) continue;
+        cursorFrames.push({ t: t - start, x: clamp01(e.x), y: clamp01(e.y) });
+      }
+      // Carry-Over-Seed: Maus ruhte beim Szenenwechsel auf der Bühne
+      // (Sample-Zeit egal welcher Szene, s. CURSOR_CARRY_MS).
+      if (cursorFrames.length === 0 || cursorFrames[0].t > 0) {
+        let seed: CursorFrame | null = null;
+        for (const e of sorted) {
+          if (e.type !== "cursor") continue;
+          const t = Math.round(e.t * scale);
+          if (t > start) break;
+          if (start - t <= CURSOR_CARRY_MS) {
+            seed = { t: 0, x: clamp01(e.x), y: clamp01(e.y) };
+          }
+        }
+        if (seed) cursorFrames.unshift(seed);
+      }
+      if (cursorFrames.length > 0) segment.cursorFrames = cursorFrames;
+      else delete segment.cursorFrames;
     }
 
     if (segment.kind === "video") {
@@ -215,13 +252,17 @@ export function removeDerivedSegment(
   if (index === 0) {
     // Nachfolger übernimmt die Zeit vorn → Frames nach hinten schieben
     // (interpolateScrollRatio hält vor dem ersten Frame dessen y).
-    if (
-      isScrollableStudioSegment(receiver.segment) &&
-      receiver.segment.scrollFrames
-    ) {
-      receiver.segment.scrollFrames = receiver.segment.scrollFrames.map(
-        (f) => ({ t: f.t + removedMs, y: f.y }),
-      );
+    if (isScrollableStudioSegment(receiver.segment)) {
+      if (receiver.segment.scrollFrames) {
+        receiver.segment.scrollFrames = receiver.segment.scrollFrames.map(
+          (f) => ({ t: f.t + removedMs, y: f.y }),
+        );
+      }
+      if (receiver.segment.cursorFrames) {
+        receiver.segment.cursorFrames = receiver.segment.cursorFrames.map(
+          (f) => ({ t: f.t + removedMs, x: f.x, y: f.y }),
+        );
+      }
     }
     // Video-Wiedergabefenster bleiben synchron zur Webcam → ebenfalls
     // nach hinten schieben (vorn entsteht Standbild).

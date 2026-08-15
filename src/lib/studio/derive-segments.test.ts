@@ -350,6 +350,113 @@ describe("deriveStudioSegments", () => {
   });
 });
 
+describe("deriveStudioSegments — Cursor-Frames", () => {
+  it("renormiert Cursor-Events auf den Segment-Start ohne automatisches t=0-Sample", () => {
+    const tabs = [
+      tab("a", textSegment("seg-a")),
+      tab("b", websiteSegment("seg-b")),
+    ];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "a" },
+      { t: 4000, type: "tabSwitch", tabId: "b" },
+      { t: 5000, type: "cursor", tabId: "b", x: 0.3, y: 0.4 },
+      { t: 6000, type: "cursor", tabId: "b", x: 0.6, y: 0.8 },
+    ];
+    const out = deriveStudioSegments(tabs, events, 10_000);
+    const seg = out[1].segment as WebsiteSegment;
+    // Kein Sample bei t=0: Cursor bleibt unsichtbar bis zur ersten Bewegung.
+    expect(seg.cursorFrames).toEqual([
+      { t: 1000, x: 0.3, y: 0.4 },
+      { t: 2000, x: 0.6, y: 0.8 },
+    ]);
+  });
+
+  it("klemmt Cursor-Koordinaten auf 0..1", () => {
+    const tabs = [tab("a", websiteSegment("seg-a"))];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "a" },
+      { t: 1000, type: "cursor", tabId: "a", x: 1.2, y: -0.3 },
+    ];
+    const out = deriveStudioSegments(tabs, events, 5000);
+    const seg = out[0].segment as WebsiteSegment;
+    expect(seg.cursorFrames).toEqual([{ t: 1000, x: 1, y: 0 }]);
+  });
+
+  it("übernimmt ein Boundary-Sample kurz vor Segment-Start als Seed bei t=0", () => {
+    const tabs = [
+      tab("a", websiteSegment("seg-a")),
+      tab("b", websiteSegment("seg-b")),
+    ];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "a" },
+      // Force-Flush beim Tab-Wechsel legt das Sample direkt vor die Grenze.
+      { t: 3999, type: "cursor", tabId: "a", x: 0.5, y: 0.5 },
+      { t: 4000, type: "tabSwitch", tabId: "b" },
+      { t: 6000, type: "cursor", tabId: "b", x: 0.7, y: 0.2 },
+    ];
+    const out = deriveStudioSegments(tabs, events, 10_000);
+    const seg = out[1].segment as WebsiteSegment;
+    expect(seg.cursorFrames).toEqual([
+      { t: 0, x: 0.5, y: 0.5 },
+      { t: 2000, x: 0.7, y: 0.2 },
+    ]);
+  });
+
+  it("setzt keinen Seed, wenn das letzte Sample zu alt ist", () => {
+    const tabs = [
+      tab("a", websiteSegment("seg-a")),
+      tab("b", websiteSegment("seg-b")),
+    ];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "a" },
+      // 300 ms vor der Grenze: Maus hat die Bühne verlassen → kein Ghost-Cursor.
+      { t: 3700, type: "cursor", tabId: "a", x: 0.5, y: 0.5 },
+      { t: 4000, type: "tabSwitch", tabId: "b" },
+      { t: 6000, type: "cursor", tabId: "b", x: 0.7, y: 0.2 },
+    ];
+    const out = deriveStudioSegments(tabs, events, 10_000);
+    const seg = out[1].segment as WebsiteSegment;
+    expect(seg.cursorFrames).toEqual([{ t: 2000, x: 0.7, y: 0.2 }]);
+  });
+
+  it("skaliert die Cursor-Zeiten bei proportionaler Skalierung mit", () => {
+    const tabs = [tab("a", websiteSegment("seg-a"))];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "a" },
+      { t: 5000, type: "cursor", tabId: "a", x: 0.4, y: 0.6 },
+    ];
+    const out = deriveStudioSegments(tabs, events, 10_000, { totalMs: 20_000 });
+    const seg = out[0].segment as WebsiteSegment;
+    expect(seg.cursorFrames).toEqual([{ t: 10_000, x: 0.4, y: 0.6 }]);
+  });
+
+  it("hängt keine Cursor-Frames an nicht scrollbare Segmente", () => {
+    const tabs = [tab("a", textSegment("seg-a"))];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "a" },
+      { t: 1000, type: "cursor", tabId: "a", x: 0.5, y: 0.5 },
+    ];
+    const out = deriveStudioSegments(tabs, events, 5000);
+    expect("cursorFrames" in out[0].segment).toBe(false);
+  });
+
+  it("ignoriert Cursor-Events außerhalb des Segment-Fensters", () => {
+    const tabs = [
+      tab("a", websiteSegment("seg-a")),
+      tab("b", textSegment("seg-b")),
+    ];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "a" },
+      { t: 1000, type: "cursor", tabId: "a", x: 0.1, y: 0.1 },
+      { t: 4000, type: "tabSwitch", tabId: "b" },
+      { t: 5000, type: "cursor", tabId: "a", x: 0.9, y: 0.9 },
+    ];
+    const out = deriveStudioSegments(tabs, events, 10_000);
+    const seg = out[0].segment as WebsiteSegment;
+    expect(seg.cursorFrames).toEqual([{ t: 1000, x: 0.1, y: 0.1 }]);
+  });
+});
+
 describe("deriveStudioSegments — Video-Wiedergabefenster", () => {
   it("leitet Play/Pause-Paare als Fenster relativ zum Segment-Start ab", () => {
     const tabs = [
@@ -552,6 +659,24 @@ describe("removeDerivedSegment", () => {
     expect((out[0].segment as WebsiteSegment).scrollFrames).toEqual([
       { t: 2000, y: 0 },
       { t: 3000, y: 1 },
+    ]);
+  });
+
+  it("verschiebt beim ersten Segment auch Cursor-Frames nach hinten", () => {
+    const tabs = [
+      tab("a", textSegment("seg-a")),
+      tab("b", websiteSegment("seg-b")),
+    ];
+    const events: StudioEvent[] = [
+      { t: 0, type: "tabSwitch", tabId: "a" },
+      { t: 2000, type: "tabSwitch", tabId: "b" },
+      { t: 3000, type: "cursor", tabId: "b", x: 0.5, y: 0.5 },
+    ];
+    const list = deriveStudioSegments(tabs, events, 10_000);
+    const out = removeDerivedSegment(list, 0);
+    expect(out).toHaveLength(1);
+    expect((out[0].segment as WebsiteSegment).cursorFrames).toEqual([
+      { t: 3000, x: 0.5, y: 0.5 },
     ]);
   });
 

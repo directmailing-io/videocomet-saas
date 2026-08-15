@@ -755,6 +755,7 @@ async function renderSegmentsBase(opts: {
               durationMs,
               mode: seg.captureMode ?? "static-hero",
               scrollFrames: seg.scrollFrames,
+              cursorFrames: seg.cursorFrames,
             });
             await imageSeqToMp4({
               framesDir: fr.framesDir,
@@ -807,6 +808,7 @@ async function renderSegmentsBase(opts: {
               durationMs,
               mode: seg.captureMode ?? "static-hero",
               scrollFrames: seg.scrollFrames,
+              cursorFrames: seg.cursorFrames,
             });
             await imageSeqToMp4({
               framesDir: fr.framesDir,

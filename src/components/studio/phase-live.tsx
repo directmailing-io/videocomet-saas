@@ -32,7 +32,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import type { StudioTab } from "@/lib/studio/types";
+import {
+  isScrollableStudioSegment,
+  type StudioTab,
+} from "@/lib/studio/types";
 import type { StudioPipPosition, StudioPipShape } from "./studio-flow";
 import { StudioStage } from "./studio-stage";
 import { SceneKindIcon } from "./scene-icon";
@@ -555,6 +558,16 @@ export function PhaseLive({
                 segment={activeTab.segment}
                 scrollRatio={activeRatio}
                 onScrollRatio={handleScrollRatio}
+                onCursorMove={
+                  isScrollableStudioSegment(activeTab.segment)
+                    ? (x, y) => recorder.noteCursor(activeTab.id, x, y)
+                    : undefined
+                }
+                onCursorLeave={
+                  isScrollableStudioSegment(activeTab.segment)
+                    ? recorder.noteCursorLeave
+                    : undefined
+                }
                 showStaticBadge
                 mediaStartSec={mediaTimesRef.current.get(activeTab.id)}
                 mediaResetNonce={mediaResetNonce}

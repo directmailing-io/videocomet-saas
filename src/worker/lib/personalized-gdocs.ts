@@ -27,13 +27,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
 import type { Page } from "puppeteer-core";
-import type { ScrollFrame } from "@/lib/segments/types";
+import type { CursorFrame, ScrollFrame } from "@/lib/segments/types";
 import { getContext } from "./browser-pool";
 import {
   renderGDocsToHtml,
   cleanupRenderedGDocs,
   GDOCS_TOOLBAR_HEIGHT_PX,
 } from "./gdocs-render-pipeline";
+import { buildCursorPlan, getCursorPng } from "./cursor-overlay";
 
 export interface RenderGDocsOpts {
   docsUrl: string;
@@ -42,6 +43,8 @@ export interface RenderGDocsOpts {
   durationMs: number;
   mode: "static-hero" | "scroll-recorded";
   scrollFrames?: ScrollFrame[];
+  /** Mauszeiger-Samples aus der Studio-Aufnahme (optional). */
+  cursorFrames?: CursorFrame[];
   viewport?: { width: number; height: number };
   /** Frames per second. Default 30. */
   fps?: number;
@@ -357,6 +360,14 @@ export async function renderPersonalizedGDocs(
       Array.isArray(opts.scrollFrames) &&
       opts.scrollFrames.length > 0;
 
+    // Cursor-Overlay (Studio-Aufnahme): pro Frame Pixel-Position + PNG.
+    const hasCursor =
+      Array.isArray(opts.cursorFrames) && opts.cursorFrames.length > 0;
+    const cursorPng = hasCursor ? await getCursorPng(viewport.height) : null;
+    const cursorPlan = cursorPng
+      ? buildCursorPlan(opts.cursorFrames, totalFrames, viewport, fps, cursorPng)
+      : null;
+
     // Hilfs-Composer: nimmt einen Doc-Y-Offset und schreibt einen JPG-Frame.
     const writeFrame = async (i: number, scrollY: number) => {
       const clampedY = Math.max(0, Math.min(maxScroll, Math.round(scrollY)));
@@ -370,6 +381,18 @@ export async function renderPersonalizedGDocs(
           height: cropHeight,
         })
         .toBuffer();
+      const composites: sharp.OverlayOptions[] = [
+        { input: toolbarBuf, top: 0, left: 0 },
+        { input: docCrop, top: GDOCS_TOOLBAR_HEIGHT_PX, left: 0 },
+      ];
+      const place = cursorPlan?.[i];
+      if (cursorPng && place) {
+        composites.push({
+          input: cursorPng.buf,
+          top: place.top,
+          left: place.left,
+        });
+      }
       const frameBuf = await sharp({
         create: {
           width: viewport.width,
@@ -378,17 +401,17 @@ export async function renderPersonalizedGDocs(
           background: { r: 241, g: 243, b: 244 }, // gd-bg
         },
       })
-        .composite([
-          { input: toolbarBuf, top: 0, left: 0 },
-          { input: docCrop, top: GDOCS_TOOLBAR_HEIGHT_PX, left: 0 },
-        ])
+        .composite(composites)
         .jpeg({ quality: 80 })
         .toBuffer();
       const frameName = `frame-${String(i).padStart(4, "0")}.jpg`;
       await writeFile(join(framesDir, frameName), frameBuf);
     };
 
-    if (opts.mode === "static-hero" || maxScroll === 0 || !hasFrames) {
+    if (
+      (opts.mode === "static-hero" || maxScroll === 0 || !hasFrames) &&
+      !cursorPlan
+    ) {
       // Static-Variante: 1 Frame komponieren, N-mal speichern.
       await writeFrame(0, 0);
       const firstPath = join(framesDir, "frame-0000.jpg");
@@ -396,6 +419,25 @@ export async function renderPersonalizedGDocs(
       for (let i = 1; i < totalFrames; i++) {
         const frameName = `frame-${String(i).padStart(4, "0")}.jpg`;
         await writeFile(join(framesDir, frameName), firstBuf);
+      }
+      return {
+        durationSec: opts.durationMs / 1000,
+        framesDir,
+        frameCount: totalFrames,
+        fps,
+      };
+    }
+
+    if (opts.mode === "static-hero" || maxScroll === 0 || !hasFrames) {
+      // Kein Scroll, aber Cursor-Bewegung → jeden Frame einzeln komponieren
+      // (Scroll-Position konstant 0).
+      const BATCH = 4;
+      for (let start = 0; start < totalFrames; start += BATCH) {
+        const batch: Promise<void>[] = [];
+        for (let i = start; i < Math.min(totalFrames, start + BATCH); i++) {
+          batch.push(writeFrame(i, 0));
+        }
+        await Promise.all(batch);
       }
       return {
         durationSec: opts.durationMs / 1000,

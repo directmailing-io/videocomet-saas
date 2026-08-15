@@ -39,6 +39,14 @@ import {
   type WebCaptureMode,
 } from "@/lib/segments/types";
 import { interpolateScrollRatio } from "@/lib/segments/scroll-math";
+import {
+  CURSOR_HEIGHT_RATIO,
+  CURSOR_HOTSPOT_X,
+  CURSOR_HOTSPOT_Y,
+  CURSOR_SVG_DATA_URI,
+  interpolateCursorPos,
+} from "@/lib/segments/cursor-overlay";
+import type { CursorFrame } from "@/lib/segments/types";
 import { SlideRender } from "@/lib/slide/slide-render";
 import {
   DocStackPreview,
@@ -358,6 +366,39 @@ function ScrollingImagePreview({
   );
 }
 
+/**
+ * macOS-Cursor-Overlay der Studio-Aufnahme — dieselbe Interpolation wie
+ * der Worker (`interpolateCursorPos`), damit Vorschau und fertiges Video
+ * deckungsgleich sind. Hotspot (Pfeilspitze) sitzt exakt auf der
+ * aufgezeichneten Position.
+ */
+function CursorPreviewOverlay({
+  cursorFrames,
+  segmentTimeMs,
+}: {
+  cursorFrames?: CursorFrame[];
+  segmentTimeMs: number;
+}) {
+  const pos = interpolateCursorPos(cursorFrames, segmentTimeMs);
+  if (!pos) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={CURSOR_SVG_DATA_URI}
+      alt=""
+      draggable={false}
+      className="pointer-events-none absolute z-20 select-none"
+      style={{
+        left: `${pos.x * 100}%`,
+        top: `${pos.y * 100}%`,
+        height: `${CURSOR_HEIGHT_RATIO * 100}%`,
+        width: "auto",
+        transform: `translate(-${CURSOR_HOTSPOT_X * 100}%, -${CURSOR_HOTSPOT_Y * 100}%)`,
+      }}
+    />
+  );
+}
+
 /** Overlay-Badge: markiert, dass die Vorschau nur die Fallback-URL zeigt. */
 function FallbackUrlBadge() {
   return (
@@ -389,6 +430,10 @@ function RenderWebsite({
         <ScrollingImagePreview
           imageUrl={imageUrl}
           scrollRatio={segmentScrollRatio(segment, segmentTimeMs)}
+        />
+        <CursorPreviewOverlay
+          cursorFrames={segment.cursorFrames}
+          segmentTimeMs={segmentTimeMs}
         />
         {/* Personalisierte URLs gibt es erst pro Lead — Vorschau zeigt
             immer die Fallback-URL. */}
@@ -534,13 +579,19 @@ function RenderGDocs({
 
   if (pageUrls.length > 0) {
     return (
-      <DocStackPreview
-        pageUrls={pageUrls}
-        docWidth={docWidth}
-        docHeight={docHeight}
-        scrollRatio={segmentScrollRatio(segment, segmentTimeMs)}
-        variant="gdocs"
-      />
+      <div className="absolute inset-0">
+        <DocStackPreview
+          pageUrls={pageUrls}
+          docWidth={docWidth}
+          docHeight={docHeight}
+          scrollRatio={segmentScrollRatio(segment, segmentTimeMs)}
+          variant="gdocs"
+        />
+        <CursorPreviewOverlay
+          cursorFrames={segment.cursorFrames}
+          segmentTimeMs={segmentTimeMs}
+        />
+      </div>
     );
   }
 
@@ -578,14 +629,20 @@ function RenderPdf({
   // Die Seiten-PNGs entstehen synchron beim Upload — kein Hook nötig.
   if (segment.pageUrls.length > 0) {
     return (
-      <DocStackPreview
-        pageUrls={segment.pageUrls}
-        docWidth={segment.docWidth}
-        docHeight={segment.docHeight}
-        scrollRatio={segmentScrollRatio(segment, segmentTimeMs)}
-        fileName={segment.fileName}
-        variant="pdf"
-      />
+      <div className="absolute inset-0">
+        <DocStackPreview
+          pageUrls={segment.pageUrls}
+          docWidth={segment.docWidth}
+          docHeight={segment.docHeight}
+          scrollRatio={segmentScrollRatio(segment, segmentTimeMs)}
+          fileName={segment.fileName}
+          variant="pdf"
+        />
+        <CursorPreviewOverlay
+          cursorFrames={segment.cursorFrames}
+          segmentTimeMs={segmentTimeMs}
+        />
+      </div>
     );
   }
   return (

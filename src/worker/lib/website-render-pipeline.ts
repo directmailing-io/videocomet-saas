@@ -32,7 +32,12 @@ import { join } from "node:path";
 import { lookup as dnsLookup } from "node:dns/promises";
 import sharp from "sharp";
 import type { Page, CDPSession } from "puppeteer-core";
-import type { ScrollFrame } from "@/lib/segments/types";
+import type { CursorFrame, ScrollFrame } from "@/lib/segments/types";
+import {
+  CURSOR_HEIGHT_RATIO,
+  CURSOR_SVG_DATA_URI,
+} from "@/lib/segments/cursor-overlay";
+import { buildCursorPlan, getCursorPng } from "./cursor-overlay";
 import { getContext, type PooledContext } from "./browser-pool";
 import {
   prepareCleanPage,
@@ -71,6 +76,8 @@ export interface RenderWebsiteOpts {
   durationMs: number;
   mode: "static-hero" | "scroll-recorded";
   scrollFrames?: ScrollFrame[];
+  /** Mauszeiger-Samples aus der Studio-Aufnahme (optional). */
+  cursorFrames?: CursorFrame[];
   viewport?: { width: number; height: number };
   fps?: number;
 }
@@ -148,6 +155,42 @@ function buildScrollPlanFromFrames(
     plan[i] = Math.round(y * maxScroll);
   }
   return plan;
+}
+
+/**
+ * Schreibt `totalFrames` JPGs aus einem statischen Basisbild — ohne Cursor
+ * als reine Buffer-Replikation, mit Cursor pro Frame als sharp-Composite
+ * (das Basisbild bleibt cursor-frei und damit sauber cachebar).
+ */
+async function writeStaticFramesWithCursor(
+  baseJpg: Buffer,
+  framesDir: string,
+  totalFrames: number,
+  viewport: { width: number; height: number },
+  fps: number,
+  cursorFrames?: CursorFrame[],
+): Promise<void> {
+  const hasCursor = Array.isArray(cursorFrames) && cursorFrames.length > 0;
+  const cursorPng = hasCursor ? await getCursorPng(viewport.height) : null;
+  const plan = cursorPng
+    ? buildCursorPlan(cursorFrames, totalFrames, viewport, fps, cursorPng)
+    : null;
+  for (let i = 0; i < totalFrames; i++) {
+    const place = plan?.[i];
+    const buf =
+      cursorPng && place
+        ? await sharp(baseJpg)
+            .composite([
+              { input: cursorPng.buf, top: place.top, left: place.left },
+            ])
+            .jpeg({ quality: 82 })
+            .toBuffer()
+        : baseJpg;
+    await writeFile(
+      join(framesDir, `frame-${String(i).padStart(4, "0")}.jpg`),
+      buf,
+    );
+  }
 }
 
 async function withTimeout<T>(
@@ -308,12 +351,30 @@ async function fallbackScreenshotPath(
           )
         : new Array<number>(totalFrames).fill(0);
 
+    const hasCursor =
+      Array.isArray(opts.cursorFrames) && opts.cursorFrames.length > 0;
+    const cursorPng = hasCursor ? await getCursorPng(viewport.height) : null;
+    const cursorPlan = cursorPng
+      ? buildCursorPlan(opts.cursorFrames, totalFrames, viewport, fps, cursorPng)
+      : null;
+
     for (let i = 0; i < totalFrames; i++) {
       const y = Math.max(0, Math.min(maxScroll, plan[i] ?? 0));
       const cropH = Math.min(viewport.height, docH - y);
       const docCrop = await sharp(docPng)
         .extract({ left: 0, top: y, width: docW, height: cropH })
         .toBuffer();
+      const composites: sharp.OverlayOptions[] = [
+        { input: docCrop, top: 0, left: 0 },
+      ];
+      const place = cursorPlan?.[i];
+      if (cursorPng && place) {
+        composites.push({
+          input: cursorPng.buf,
+          top: place.top,
+          left: place.left,
+        });
+      }
       // Wenn Doc kürzer als viewport ist, füllen wir weiß auf.
       const composite = await sharp({
         create: {
@@ -323,7 +384,7 @@ async function fallbackScreenshotPath(
           background: { r: 255, g: 255, b: 255 },
         },
       })
-        .composite([{ input: docCrop, top: 0, left: 0 }])
+        .composite(composites)
         .jpeg({ quality: 82 })
         .toBuffer();
       await writeFile(
@@ -367,12 +428,14 @@ export async function renderWebsiteCapture(
       console.log(
         `[website-render] static-hero cache HIT key=${heroKey} → ${totalFrames} frames from buffer`,
       );
-      for (let i = 0; i < totalFrames; i++) {
-        await writeFile(
-          join(framesDir, `frame-${String(i).padStart(4, "0")}.jpg`),
-          cachedHero,
-        );
-      }
+      await writeStaticFramesWithCursor(
+        cachedHero,
+        framesDir,
+        totalFrames,
+        viewport,
+        fps,
+        opts.cursorFrames,
+      );
       return {
         durationSec: opts.durationMs / 1000,
         framesDir,
@@ -491,17 +554,20 @@ export async function renderWebsiteCapture(
       // Direkt als JPG schreiben — kein Composite mehr nötig.
       const staticJpg = await sharp(staticPng).jpeg({ quality: 82 }).toBuffer();
       // Populate the per-host static-hero cache so subsequent leads
-      // hitting the same domain skip Puppeteer entirely.
+      // hitting the same domain skip Puppeteer entirely. Das Basisbild
+      // ist cursor-frei — der Cursor wird pro Frame komponiert.
       if (opts.mode === "static-hero") {
         const heroKey = `${safeHostname(opts.url)}_${viewport.width}`;
         STATIC_HERO_CACHE.set(heroKey, staticJpg);
       }
-      for (let i = 0; i < totalFrames; i++) {
-        await writeFile(
-          join(framesDir, `frame-${String(i).padStart(4, "0")}.jpg`),
-          staticJpg,
-        );
-      }
+      await writeStaticFramesWithCursor(
+        staticJpg,
+        framesDir,
+        totalFrames,
+        viewport,
+        fps,
+        opts.cursorFrames,
+      );
       return {
         durationSec: opts.durationMs / 1000,
         framesDir,
@@ -573,6 +639,38 @@ export async function renderWebsiteCapture(
       fps,
     );
 
+    // Cursor als fixed-position DOM-<img> — wandert im Compositor mit
+    // in den Screencast, kein sharp-Composite nötig. Die Positionen
+    // (Hotspot-verrechnet, geclampt) kommen aus demselben Plan wie in
+    // den sharp-Pfaden.
+    const hasCursor =
+      Array.isArray(opts.cursorFrames) && opts.cursorFrames.length > 0;
+    const cursorHeightPx = Math.max(
+      8,
+      Math.round(viewport.height * CURSOR_HEIGHT_RATIO),
+    );
+    const cursorPlan = hasCursor
+      ? buildCursorPlan(opts.cursorFrames, totalFrames, viewport, fps, {
+          width: cursorHeightPx,
+          height: cursorHeightPx,
+        })
+      : null;
+    if (cursorPlan) {
+      await page
+        .evaluate(
+          (dataUri, h) => {
+            const img = document.createElement("img");
+            img.id = "__vc_cursor";
+            img.src = dataUri;
+            img.style.cssText = `position:fixed;left:0;top:0;width:${h}px;height:${h}px;z-index:2147483647;pointer-events:none;display:none;`;
+            document.documentElement.appendChild(img);
+          },
+          CURSOR_SVG_DATA_URI,
+          cursorHeightPx,
+        )
+        .catch(() => undefined);
+    }
+
     for (let i = 0; i < totalFrames; i++) {
       const targetT = i * frameIntervalMs;
       const currentT = Date.now() - screencastStart;
@@ -580,7 +678,22 @@ export async function renderWebsiteCapture(
         await new Promise((r) => setTimeout(r, targetT - currentT));
       }
       await page
-        .evaluate((y) => window.scrollTo(0, y), plan[i] ?? 0)
+        .evaluate(
+          (y, c) => {
+            window.scrollTo(0, y);
+            const img = document.getElementById("__vc_cursor");
+            if (img) {
+              if (c) {
+                img.style.transform = `translate(${c.left}px,${c.top}px)`;
+                img.style.display = "block";
+              } else {
+                img.style.display = "none";
+              }
+            }
+          },
+          plan[i] ?? 0,
+          cursorPlan ? cursorPlan[i] : null,
+        )
         .catch(() => undefined);
     }
 

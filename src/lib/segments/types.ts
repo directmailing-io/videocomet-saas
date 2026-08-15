@@ -47,6 +47,23 @@ export interface ScrollFrame {
   y: number;
 }
 
+/**
+ * Ein Mauszeiger-Sample aus der Studio-Live-Aufnahme.
+ *
+ * x/y sind normiert auf den 16:9-Bühnenausschnitt (0..1, viewport-
+ * verankert — NICHT dokument-relativ). Vor dem ersten Sample ist der
+ * Cursor unsichtbar, nach dem letzten bleibt er stehen
+ * (siehe `@/lib/segments/cursor-overlay`).
+ */
+export interface CursorFrame {
+  /** ms since segment start */
+  t: number;
+  /** horizontal ratio of the 16:9 stage, 0..1 */
+  x: number;
+  /** vertical ratio of the 16:9 stage, 0..1 */
+  y: number;
+}
+
 /** Basis-Felder, die jedes Segment besitzt. */
 interface SegmentBase {
   /** Stabile UUID (crypto.randomUUID()). */
@@ -160,6 +177,8 @@ export interface WebsiteSegment extends SegmentBase {
   captureMode: WebCaptureMode;
   /** Optional, nur relevant bei captureMode = "scroll-recorded". */
   scrollFrames?: ScrollFrame[];
+  /** Mauszeiger-Samples aus der Studio-Aufnahme (optional). */
+  cursorFrames?: CursorFrame[];
   /**
    * FullPage-Screenshot der fallbackUrl (Bunny-CDN) für die Editor-Vorschau.
    * Wird beim „Vorschau laden" / Scroll-Recorder als Nebeneffekt persistiert.
@@ -176,6 +195,8 @@ export interface GDocsSegment extends SegmentBase {
   captureMode: WebCaptureMode;
   /** Optional, nur relevant bei captureMode = "scroll-recorded". */
   scrollFrames?: ScrollFrame[];
+  /** Mauszeiger-Samples aus der Studio-Aufnahme (optional). */
+  cursorFrames?: CursorFrame[];
   /**
    * Seiten-PNGs auf Bunny (permanente URLs, NIE die 30min-TTL-previewUrl!)
    * für die Editor-Vorschau. Persistiert nach Screenshot-Job.
@@ -211,6 +232,8 @@ export interface PdfSegment extends SegmentBase {
   captureMode: WebCaptureMode;
   /** Optional, nur relevant bei captureMode = "scroll-recorded". */
   scrollFrames?: ScrollFrame[];
+  /** Mauszeiger-Samples aus der Studio-Aufnahme (optional). */
+  cursorFrames?: CursorFrame[];
 }
 
 /**

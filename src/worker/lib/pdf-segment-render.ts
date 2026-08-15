@@ -44,6 +44,7 @@ import type { PdfSegment, ScrollFrame } from "@/lib/segments/types";
 import { getContext } from "./browser-pool";
 import { pdfToPng } from "./pdf-to-image";
 import { imageSeqToMp4 } from "./ffmpeg";
+import { buildCursorPlan, getCursorPng } from "./cursor-overlay";
 import {
   buildPdfViewerHtml,
   PDF_TOOLBAR_HEIGHT_PX,
@@ -107,12 +108,13 @@ async function sweepPdfSegCache(): Promise<void> {
  */
 function buildCacheKey(opts: RenderPdfSegmentOpts, fps: number): string {
   const payload = JSON.stringify({
-    v: 1,
+    v: 2,
     pdfUrl: opts.segment.pdfUrl,
     durationMs: opts.durationMs,
     fps,
     captureMode: opts.segment.captureMode,
     scrollFrames: opts.segment.scrollFrames ?? [],
+    cursorFrames: opts.segment.cursorFrames ?? [],
   });
   return createHash("sha1").update(payload).digest("hex");
 }
@@ -416,8 +418,23 @@ async function renderPdfSegmentUncached(
       Array.isArray(opts.segment.scrollFrames) &&
       opts.segment.scrollFrames.length > 0;
 
+    // Cursor-Overlay (Studio-Aufnahme): pro Frame Pixel-Position + PNG.
+    const hasCursor =
+      Array.isArray(opts.segment.cursorFrames) &&
+      opts.segment.cursorFrames.length > 0;
+    const cursorPng = hasCursor ? await getCursorPng(viewport.height) : null;
+    const cursorPlan = cursorPng
+      ? buildCursorPlan(
+          opts.segment.cursorFrames,
+          totalFrames,
+          viewport,
+          fps,
+          cursorPng,
+        )
+      : null;
+
     // 5. sharp-Compose pro Frame: Toolbar oben + verschobener Doc-Crop auf
-    //    Drive-grauem Grund.
+    //    Drive-grauem Grund (+ optional Cursor obendrauf).
     const writeFrame = async (i: number, scrollY: number) => {
       const clampedY = Math.max(0, Math.min(maxScroll, Math.round(scrollY)));
       const cropHeight = Math.min(docVisibleH, docPixelHeight - clampedY);
@@ -429,6 +446,18 @@ async function renderPdfSegmentUncached(
           height: cropHeight,
         })
         .toBuffer();
+      const composites: sharp.OverlayOptions[] = [
+        { input: toolbarBuf, top: 0, left: 0 },
+        { input: docCrop, top: PDF_TOOLBAR_HEIGHT_PX, left: 0 },
+      ];
+      const place = cursorPlan?.[i];
+      if (cursorPng && place) {
+        composites.push({
+          input: cursorPng.buf,
+          top: place.top,
+          left: place.left,
+        });
+      }
       const frameBuf = await sharp({
         create: {
           width: viewport.width,
@@ -437,10 +466,7 @@ async function renderPdfSegmentUncached(
           background: PDF_VIEWER_BG, // Drive-Viewer-Grau (#525659)
         },
       })
-        .composite([
-          { input: toolbarBuf, top: 0, left: 0 },
-          { input: docCrop, top: PDF_TOOLBAR_HEIGHT_PX, left: 0 },
-        ])
+        .composite(composites)
         .jpeg({ quality: 80 })
         .toBuffer();
       const frameName = `frame-${String(i).padStart(4, "0")}.jpg`;
@@ -448,9 +474,10 @@ async function renderPdfSegmentUncached(
     };
 
     if (
-      opts.segment.captureMode === "static-hero" ||
-      maxScroll === 0 ||
-      !hasFrames
+      (opts.segment.captureMode === "static-hero" ||
+        maxScroll === 0 ||
+        !hasFrames) &&
+      !cursorPlan
     ) {
       // Static-Variante: 1 Frame komponieren, N-mal speichern.
       await writeFrame(0, 0);
@@ -460,6 +487,24 @@ async function renderPdfSegmentUncached(
       for (let i = 1; i < totalFrames; i++) {
         const frameName = `frame-${String(i).padStart(4, "0")}.jpg`;
         await writeFile(join(framesDir, frameName), firstBuf);
+      }
+    } else if (
+      opts.segment.captureMode === "static-hero" ||
+      maxScroll === 0 ||
+      !hasFrames
+    ) {
+      // Kein Scroll, aber Cursor-Bewegung → jeden Frame einzeln komponieren
+      // (Scroll-Position konstant 0).
+      for (let start = 0; start < totalFrames; start += CONCURRENCY) {
+        const batch: Promise<void>[] = [];
+        for (
+          let i = start;
+          i < Math.min(totalFrames, start + CONCURRENCY);
+          i++
+        ) {
+          batch.push(writeFrame(i, 0));
+        }
+        await Promise.all(batch);
       }
     } else {
       const captureStart = Date.now();

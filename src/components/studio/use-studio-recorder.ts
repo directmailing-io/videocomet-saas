@@ -29,6 +29,10 @@ export interface UseStudioRecorderResult {
   logTabSwitch: (tabId: string) => void;
   /** Aktuelle Scroll-Position melden (wird 50-ms-gesampelt). */
   noteScroll: (tabId: string, y: number) => void;
+  /** Aktuelle Cursor-Position melden (normiert 0..1, wird 50-ms-gesampelt). */
+  noteCursor: (tabId: string, x: number, y: number) => void;
+  /** Cursor hat die Bühne verlassen — Pending verwerfen (kein Stale-Sample). */
+  noteCursorLeave: () => void;
   /** Video-Szene: Play geloggt (nur während laufender Aufnahme wirksam). */
   logMediaPlay: (tabId: string) => void;
   /** Video-Szene: Pause geloggt (nur während laufender Aufnahme wirksam). */
@@ -58,6 +62,17 @@ export function useStudioRecorder(
   /** Zuletzt GELOGGTER y-Wert pro Tab (nur Änderungen loggen). */
   const lastLoggedYRef = React.useRef<Map<string, number>>(new Map());
 
+  /** Letzte gemeldete Cursor-Position (noch nicht geloggt). */
+  const pendingCursorRef = React.useRef<{
+    tabId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  /** Zuletzt GELOGGTE Cursor-Position pro Tab (nur Änderungen loggen). */
+  const lastLoggedCursorRef = React.useRef<
+    Map<string, { x: number; y: number }>
+  >(new Map());
+
   const onFinishedRef = React.useRef(onFinished);
   React.useEffect(() => {
     onFinishedRef.current = onFinished;
@@ -82,6 +97,27 @@ export function useStudioRecorder(
     lastLoggedYRef.current.set(p.tabId, p.y);
   }, []);
 
+  /**
+   * Pending-Cursor loggen. `force` überspringt die Dedupe-Schwelle (für
+   * tabSwitch/stop, damit die letzte Position sicher im Log landet).
+   */
+  const flushCursor = React.useCallback((atMs?: number, force = false) => {
+    const t0 = t0Ref.current;
+    const p = pendingCursorRef.current;
+    if (t0 === null || !p) return;
+    const last = lastLoggedCursorRef.current.get(p.tabId);
+    if (
+      !force &&
+      last &&
+      Math.abs(last.x - p.x) + Math.abs(last.y - p.y) < 0.002
+    ) {
+      return;
+    }
+    const t = atMs ?? performance.now() - t0;
+    eventsRef.current.push({ t, type: "cursor", tabId: p.tabId, x: p.x, y: p.y });
+    lastLoggedCursorRef.current.set(p.tabId, { x: p.x, y: p.y });
+  }, []);
+
   const start = React.useCallback(
     (stream: MediaStream, initialTabId: string): boolean => {
       setError(null);
@@ -89,6 +125,8 @@ export function useStudioRecorder(
       eventsRef.current = [];
       pendingScrollRef.current = null;
       lastLoggedYRef.current = new Map();
+      pendingCursorRef.current = null;
+      lastLoggedCursorRef.current = new Map();
       t0Ref.current = null;
       recordedMsRef.current = 0;
 
@@ -115,10 +153,10 @@ export function useStudioRecorder(
         // t=0 der gesamten Event-Zeitbasis.
         t0Ref.current = performance.now();
         eventsRef.current.push({ t: 0, type: "tabSwitch", tabId: initialTabId });
-        samplerRef.current = setInterval(
-          () => flushScroll(),
-          STUDIO_SCROLL_SAMPLE_MS,
-        );
+        samplerRef.current = setInterval(() => {
+          flushScroll();
+          flushCursor();
+        }, STUDIO_SCROLL_SAMPLE_MS);
         setRecording(true);
       };
       rec.onstop = () => {
@@ -150,7 +188,7 @@ export function useStudioRecorder(
       recorderRef.current = rec;
       return true;
     },
-    [clearSampler, flushScroll],
+    [clearSampler, flushScroll, flushCursor],
   );
 
   const stop = React.useCallback(() => {
@@ -159,9 +197,10 @@ export function useStudioRecorder(
     const t0 = t0Ref.current;
     if (t0 !== null) {
       const t = performance.now() - t0;
-      // Finalen Scroll-Wert knapp VOR dem Ende loggen, damit er beim
-      // Ableiten nicht aus dem letzten Segment-Fenster fällt.
+      // Finale Scroll-/Cursor-Werte knapp VOR dem Ende loggen, damit sie
+      // beim Ableiten nicht aus dem letzten Segment-Fenster fallen.
       flushScroll(Math.max(0, t - 1));
+      flushCursor(Math.max(0, t - 1), true);
       recordedMsRef.current = t;
     }
     clearSampler();
@@ -176,26 +215,39 @@ export function useStudioRecorder(
       console.error("[studio-recorder] stop failed:", err);
       setError("Beenden fehlgeschlagen.");
     }
-  }, [clearSampler, flushScroll]);
+  }, [clearSampler, flushScroll, flushCursor]);
 
   const logTabSwitch = React.useCallback(
     (tabId: string) => {
       const t0 = t0Ref.current;
       if (t0 === null) return;
-      // Erst den letzten Scroll-Stand der alten Szene sichern.
+      // Erst den letzten Scroll-/Cursor-Stand der alten Szene sichern.
       flushScroll();
+      flushCursor(undefined, true);
       eventsRef.current.push({
         t: performance.now() - t0,
         type: "tabSwitch",
         tabId,
       });
     },
-    [flushScroll],
+    [flushScroll, flushCursor],
   );
 
   const noteScroll = React.useCallback((tabId: string, y: number) => {
     if (t0Ref.current === null) return;
     pendingScrollRef.current = { tabId, y };
+  }, []);
+
+  const noteCursor = React.useCallback(
+    (tabId: string, x: number, y: number) => {
+      if (t0Ref.current === null) return;
+      pendingCursorRef.current = { tabId, x, y };
+    },
+    [],
+  );
+
+  const noteCursorLeave = React.useCallback(() => {
+    pendingCursorRef.current = null;
   }, []);
 
   const logMediaPlay = React.useCallback((tabId: string) => {
@@ -247,6 +299,8 @@ export function useStudioRecorder(
       stop,
       logTabSwitch,
       noteScroll,
+      noteCursor,
+      noteCursorLeave,
       logMediaPlay,
       logMediaPause,
     }),
@@ -257,6 +311,8 @@ export function useStudioRecorder(
       stop,
       logTabSwitch,
       noteScroll,
+      noteCursor,
+      noteCursorLeave,
       logMediaPlay,
       logMediaPause,
     ],

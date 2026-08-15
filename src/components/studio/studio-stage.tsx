@@ -36,6 +36,13 @@ export interface StudioStageProps {
   scrollRatio: number;
   /** Scroll-Eingabe erlauben; ohne Callback ist die Bühne rein passiv. */
   onScrollRatio?: (y: number) => void;
+  /**
+   * Mausposition über der Bühne melden (normiert 0..1 des 16:9-
+   * Ausschnitts). Nur gesetzt, wenn der Cursor aufgezeichnet werden soll.
+   */
+  onCursorMove?: (x: number, y: number) => void;
+  /** Maus hat die Bühne verlassen. */
+  onCursorLeave?: () => void;
   /** Badge „Standbild" auf Text-Folien anzeigen (Live-Phase). */
   showStaticBadge?: boolean;
   /**
@@ -98,6 +105,8 @@ export function StudioStage({
   segment,
   scrollRatio,
   onScrollRatio,
+  onCursorMove,
+  onCursorLeave,
   showStaticBadge = false,
   mediaStartSec,
   onMediaPlayback,
@@ -282,6 +291,19 @@ export function StudioStage({
     <div
       ref={containerRef}
       className={cn("absolute inset-0 overflow-hidden", className)}
+      onPointerMove={
+        onCursorMove
+          ? (e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              if (rect.width <= 0 || rect.height <= 0) return;
+              onCursorMove(
+                clamp01((e.clientX - rect.left) / rect.width),
+                clamp01((e.clientY - rect.top) / rect.height),
+              );
+            }
+          : undefined
+      }
+      onPointerLeave={onCursorLeave}
     >
       {content}
 
