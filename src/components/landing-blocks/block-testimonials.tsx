@@ -9,9 +9,13 @@ import {
   type LeadData,
 } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
+import { EditableText } from "./editable-text";
 
 interface TestimonialItem {
   quote: string;
+  /** Index im gespeicherten items-Array — Basis fuer die Edit-Pfade
+   *  ("items.<idx>.quote"), auch wenn leere Zitate gefiltert werden. */
+  idx: number;
   author?: string;
   role?: string;
   avatarUrl?: string;
@@ -21,7 +25,7 @@ interface TestimonialItem {
 
 function asItems(value: unknown): TestimonialItem[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((raw): TestimonialItem[] => {
+  return value.flatMap((raw, idx): TestimonialItem[] => {
     if (!raw || typeof raw !== "object") return [];
     const r = raw as Record<string, unknown>;
     const quote = typeof r.quote === "string" ? r.quote : "";
@@ -34,6 +38,7 @@ function asItems(value: unknown): TestimonialItem[] {
     return [
       {
         quote,
+        idx,
         author: typeof r.author === "string" ? r.author : undefined,
         role: typeof r.role === "string" ? r.role : undefined,
         avatarUrl: typeof r.avatarUrl === "string" ? r.avatarUrl : undefined,
@@ -71,9 +76,21 @@ function AuthorLine({ item }: { item: TestimonialItem }) {
   if (!item.author && !item.role) return null;
   return (
     <span className="text-sm">
-      {item.author && <span className="font-medium">{item.author}</span>}
+      {item.author && (
+        <span className="font-medium">
+          <EditableText path={`items.${item.idx}.author`} raw={item.author}>
+            {item.author}
+          </EditableText>
+        </span>
+      )}
       {item.author && item.role && <span className="opacity-60"> · </span>}
-      {item.role && <span className="opacity-60">{item.role}</span>}
+      {item.role && (
+        <span className="opacity-60">
+          <EditableText path={`items.${item.idx}.role`} raw={item.role}>
+            {item.role}
+          </EditableText>
+        </span>
+      )}
     </span>
   );
 }
@@ -115,7 +132,11 @@ function SpotlightPager({
           className="text-xl sm:text-2xl font-medium leading-snug text-balance"
           style={{ fontFamily: "var(--lp-font-heading)" }}
         >
-          &ldquo;{renderPlaceholders(item.quote, leadData)}&rdquo;
+          &ldquo;
+          <EditableText path={`items.${item.idx}.quote`} raw={item.quote}>
+            {renderPlaceholders(item.quote, leadData)}
+          </EditableText>
+          &rdquo;
         </blockquote>
         {(item.author || item.role || item.avatarUrl) && (
           <div className="mt-5 flex items-center justify-center gap-3">
@@ -246,7 +267,11 @@ export function BlockTestimonials({
               )}
               <div className="min-w-0">
                 <blockquote className="text-sm sm:text-base leading-relaxed">
-                  &ldquo;{renderPlaceholders(item.quote, leadData)}&rdquo;
+                  &ldquo;
+                  <EditableText path={`items.${item.idx}.quote`} raw={item.quote}>
+                    {renderPlaceholders(item.quote, leadData)}
+                  </EditableText>
+                  &rdquo;
                 </blockquote>
                 <div className="mt-1.5">
                   <AuthorLine item={item} />
@@ -284,7 +309,11 @@ export function BlockTestimonials({
               </div>
             )}
             <blockquote className="text-sm sm:text-base leading-relaxed">
-              &ldquo;{renderPlaceholders(item.quote, leadData)}&rdquo;
+              &ldquo;
+              <EditableText path={`items.${item.idx}.quote`} raw={item.quote}>
+                {renderPlaceholders(item.quote, leadData)}
+              </EditableText>
+              &rdquo;
             </blockquote>
             {(item.author || item.role || item.avatarUrl) && (
               <figcaption className="mt-4 flex items-center gap-3">

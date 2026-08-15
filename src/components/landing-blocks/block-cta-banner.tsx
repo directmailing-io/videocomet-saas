@@ -9,6 +9,7 @@ import {
 } from "@/lib/booking-link";
 import { BlockFrame } from "./block-frame";
 import { CtaButton } from "./cta-button";
+import { EditableText, MaybeEmptyField } from "./editable-text";
 import { BookingInline, BookingPopupButton } from "./booking-embed";
 import { LpFormCta } from "./lp-form-cta";
 
@@ -78,6 +79,54 @@ export function BlockCtaBanner({
   const primary = asCta(data.primaryButton);
   const secondary = asCta(data.secondaryButton);
 
+  // Unaufgeloeste Rohtexte fuer die Inline-Bearbeitung im Builder.
+  const rawHeadline = typeof data.headline === "string" ? data.headline : "";
+  const rawSubheadline =
+    typeof data.subheadline === "string" ? data.subheadline : "";
+
+  // Headline/Unterzeile sind in allen Varianten identisch aufgebaut —
+  // einmal zentral zusammensetzen (inkl. Leer-Zustand im Edit-Modus).
+  const headlineNode = (
+    <MaybeEmptyField present={!!headline}>
+      <h2
+        className="text-2xl sm:text-3xl font-bold tracking-tight text-balance"
+        style={{ fontFamily: "var(--lp-font-heading)" }}
+      >
+        <EditableText
+          path="headline"
+          raw={rawHeadline}
+          emptyHint="Überschrift eingeben"
+        >
+          {headline}
+        </EditableText>
+      </h2>
+    </MaybeEmptyField>
+  );
+  const subheadlineNode = (
+    <MaybeEmptyField present={!!subheadline}>
+      <p className="mt-3 text-base sm:text-lg opacity-80">
+        <EditableText
+          path="subheadline"
+          raw={rawSubheadline}
+          emptyHint="Unterzeile eingeben"
+        >
+          {subheadline}
+        </EditableText>
+      </p>
+    </MaybeEmptyField>
+  );
+
+  /** Editierbares Label eines Buttons (Punkt-Pfad in die Button-Config). */
+  const editableLabel = (
+    pathPrefix: string,
+    rawLabel: string,
+    resolvedLabel: React.ReactNode,
+  ) => (
+    <EditableText path={`${pathPrefix}.label`} raw={rawLabel}>
+      {resolvedLabel}
+    </EditableText>
+  );
+
   // Buttons konsumieren ausschliesslich Theme-Tokens: Radius/Schatten/
   // Textfarbe als Inline-Style, Hintergrund + Hover als Tailwind-
   // Arbitrary-Klassen (Hover geht nicht per Inline-Style, und ein
@@ -122,17 +171,8 @@ export function BlockCtaBanner({
         style={style}
         defaults={{ paddingY: "lg", maxWidth: "normal", alignment: "center" }}
       >
-        {headline && (
-          <h2
-            className="text-2xl sm:text-3xl font-bold tracking-tight text-balance"
-            style={{ fontFamily: "var(--lp-font-heading)" }}
-          >
-            {headline}
-          </h2>
-        )}
-        {subheadline && (
-          <p className="mt-3 text-base sm:text-lg opacity-80">{subheadline}</p>
-        )}
+        {headlineNode}
+        {subheadlineNode}
         <div className={headline || subheadline ? "mt-8" : undefined}>
           <LpFormCta
             leadId={leadId}
@@ -162,19 +202,8 @@ export function BlockCtaBanner({
           }}
         >
           <div>
-            {headline && (
-              <h2
-                className="text-2xl sm:text-3xl font-bold tracking-tight text-balance"
-                style={{ fontFamily: "var(--lp-font-heading)" }}
-              >
-                {headline}
-              </h2>
-            )}
-            {subheadline && (
-              <p className="mt-3 text-base sm:text-lg opacity-80">
-                {subheadline}
-              </p>
-            )}
+            {headlineNode}
+            {subheadlineNode}
           </div>
           <BookingInline
             embedUrl={booking.embedUrl}
@@ -198,17 +227,8 @@ export function BlockCtaBanner({
         style={style}
         defaults={{ paddingY: "lg", maxWidth: "normal", alignment: "center" }}
       >
-        {headline && (
-          <h2
-            className="text-2xl sm:text-3xl font-bold tracking-tight text-balance"
-            style={{ fontFamily: "var(--lp-font-heading)" }}
-          >
-            {headline}
-          </h2>
-        )}
-        {subheadline && (
-          <p className="mt-3 text-base sm:text-lg opacity-80">{subheadline}</p>
-        )}
+        {headlineNode}
+        {subheadlineNode}
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
           <BookingPopupButton
             embedUrl={booking.embedUrl}
@@ -229,7 +249,11 @@ export function BlockCtaBanner({
               )}
               style={secondaryStyle}
             >
-              {renderPlaceholders(secondary.label, leadData) || secondary.label}
+              {editableLabel(
+                "secondaryButton",
+                secondary.label,
+                renderPlaceholders(secondary.label, leadData) || secondary.label,
+              )}
             </CtaButton>
           )}
         </div>
@@ -256,17 +280,8 @@ export function BlockCtaBanner({
       style={style}
       defaults={{ paddingY: "lg", maxWidth: "normal", alignment: "center" }}
     >
-      {headline && (
-        <h2
-          className="text-2xl sm:text-3xl font-bold tracking-tight text-balance"
-          style={{ fontFamily: "var(--lp-font-heading)" }}
-        >
-          {headline}
-        </h2>
-      )}
-      {subheadline && (
-        <p className="mt-3 text-base sm:text-lg opacity-80">{subheadline}</p>
-      )}
+      {headlineNode}
+      {subheadlineNode}
       {(effectivePrimary || secondary) && (
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
           {effectivePrimary && effectivePrimary.label && effectivePrimary.url && (
@@ -284,8 +299,12 @@ export function BlockCtaBanner({
               className={primaryBtnClass}
               style={primaryStyle}
             >
-              {renderPlaceholders(effectivePrimary.label, leadData) ||
-                effectivePrimary.label}
+              {editableLabel(
+                "primaryButton",
+                primary?.label ?? "",
+                renderPlaceholders(effectivePrimary.label, leadData) ||
+                  effectivePrimary.label,
+              )}
             </CtaButton>
           )}
           {secondary && secondary.label && secondary.url && (
@@ -300,7 +319,11 @@ export function BlockCtaBanner({
               )}
               style={secondaryStyle}
             >
-              {renderPlaceholders(secondary.label, leadData) || secondary.label}
+              {editableLabel(
+                "secondaryButton",
+                secondary.label,
+                renderPlaceholders(secondary.label, leadData) || secondary.label,
+              )}
             </CtaButton>
           )}
         </div>

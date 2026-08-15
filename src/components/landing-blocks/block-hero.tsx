@@ -7,6 +7,7 @@ import {
 } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
 import { CtaButton } from "./cta-button";
+import { EditableText, MaybeEmptyField } from "./editable-text";
 
 /**
  * Hero block — page-top section with headline, sub-headline and
@@ -50,6 +51,11 @@ export function BlockHero({
     typeof data.badge === "string" ? data.badge : undefined,
     leadData,
   );
+  // Unaufgeloeste Rohtexte fuer die Inline-Bearbeitung im Builder.
+  const rawHeadline = typeof data.headline === "string" ? data.headline : "";
+  const rawSubheadline =
+    typeof data.subheadline === "string" ? data.subheadline : "";
+  const rawBadge = typeof data.badge === "string" ? data.badge : "";
   const alignment =
     data.alignment === "left" ? "left" : ("center" as const);
   const showVideo = data.showVideo !== false; // default true
@@ -83,7 +89,9 @@ export function BlockHero({
           borderRadius: "var(--lp-radius-button)",
         }}
       >
-        {badge}
+        <EditableText path="badge" raw={rawBadge}>
+          {badge}
+        </EditableText>
       </span>
     </div>
   ) : null;
@@ -107,7 +115,9 @@ export function BlockHero({
         boxShadow: "var(--lp-shadow-cta)",
       }}
     >
-      {ctaLabel}
+      <EditableText path="ctaLabel" raw={ctaLabelRaw}>
+        {ctaLabel}
+      </EditableText>
     </CtaButton>
   ) : null;
 
@@ -122,24 +132,36 @@ export function BlockHero({
         defaults={{ paddingY: "lg", maxWidth: "normal", alignment }}
       >
         {badgeNode}
-        {headline && (
+        <MaybeEmptyField present={!!headline}>
           <h1
             className="text-3xl sm:text-4xl font-bold tracking-tight text-balance"
             style={{ fontFamily: "var(--lp-font-heading)" }}
           >
-            {headline}
+            <EditableText
+              path="headline"
+              raw={rawHeadline}
+              emptyHint="Überschrift eingeben"
+            >
+              {headline}
+            </EditableText>
           </h1>
-        )}
-        {subheadline && (
+        </MaybeEmptyField>
+        <MaybeEmptyField present={!!subheadline}>
           <p
             className={cn(
               "mt-3 text-base sm:text-lg opacity-80",
               headline ? "" : "mt-0",
             )}
           >
-            {subheadline}
+            <EditableText
+              path="subheadline"
+              raw={rawSubheadline}
+              emptyHint="Unterzeile eingeben"
+            >
+              {subheadline}
+            </EditableText>
           </p>
-        )}
+        </MaybeEmptyField>
         {showVideo && slot && (
           isPortraitWebcamOnly ? (
             // Full-bleed-Wrapper: kein rounded/overflow/shadow — der Slot
@@ -206,24 +228,36 @@ export function BlockHero({
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-10 lg:gap-14 md:items-center">
         <div className={cn("md:row-start-1", textCol)}>
           {badgeNode}
-          {headline && (
+          <MaybeEmptyField present={!!headline}>
             <h1
               className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-balance"
               style={{ fontFamily: "var(--lp-font-heading)" }}
             >
-              {headline}
+              <EditableText
+                path="headline"
+                raw={rawHeadline}
+                emptyHint="Überschrift eingeben"
+              >
+                {headline}
+              </EditableText>
             </h1>
-          )}
-          {subheadline && (
+          </MaybeEmptyField>
+          <MaybeEmptyField present={!!subheadline}>
             <p
               className={cn(
                 "text-base sm:text-lg opacity-80",
                 headline ? "mt-3" : "mt-0",
               )}
             >
-              {subheadline}
+              <EditableText
+                path="subheadline"
+                raw={rawSubheadline}
+                emptyHint="Unterzeile eingeben"
+              >
+                {subheadline}
+              </EditableText>
             </p>
-          )}
+          </MaybeEmptyField>
         </div>
         {videoNode && (
           <div

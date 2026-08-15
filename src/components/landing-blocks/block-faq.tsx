@@ -6,21 +6,25 @@ import {
   type LeadData,
 } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
+import { EditableText, MaybeEmptyField } from "./editable-text";
 
 interface FaqItem {
   q: string;
   a: string;
+  /** Index im gespeicherten items-Array — Basis fuer die Edit-Pfade
+   *  ("items.<idx>.q"), auch wenn leere Fragen herausgefiltert werden. */
+  idx: number;
 }
 
 function asItems(value: unknown): FaqItem[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((raw): FaqItem[] => {
+  return value.flatMap((raw, idx): FaqItem[] => {
     if (!raw || typeof raw !== "object") return [];
     const r = raw as Record<string, unknown>;
     const q = typeof r.q === "string" ? r.q : "";
     const a = typeof r.a === "string" ? r.a : "";
     if (!q) return [];
-    return [{ q, a }];
+    return [{ q, a, idx }];
   });
 }
 
@@ -46,16 +50,27 @@ function FaqAccordion({
         <li key={idx}>
           <details className="group py-4">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-medium -mx-3 -my-2 px-3 py-2 transition-colors rounded-[var(--lp-radius-input)] hover:bg-[color:var(--lp-color-primary-soft)]">
-              <span>{renderPlaceholders(item.q, leadData)}</span>
+              <span>
+                <EditableText path={`items.${item.idx}.q`} raw={item.q}>
+                  {renderPlaceholders(item.q, leadData)}
+                </EditableText>
+              </span>
               <span className="text-xl leading-none opacity-50 transition group-open:rotate-45">
                 +
               </span>
             </summary>
-            {item.a && (
+            <MaybeEmptyField present={!!item.a}>
               <div className="mt-2 text-sm sm:text-base opacity-80 leading-relaxed whitespace-pre-line">
-                {renderPlaceholders(item.a, leadData)}
+                <EditableText
+                  path={`items.${item.idx}.a`}
+                  raw={item.a}
+                  multiline
+                  emptyHint="Antwort eingeben"
+                >
+                  {renderPlaceholders(item.a, leadData)}
+                </EditableText>
               </div>
-            )}
+            </MaybeEmptyField>
           </details>
         </li>
       ))}
@@ -104,19 +119,31 @@ export function BlockFaq({
       >
         <div className="grid grid-cols-1 gap-8 md:grid-cols-[2fr_3fr] md:gap-12">
           <div>
-            {headline && (
+            <MaybeEmptyField present={!!headline}>
               <h2
                 className="text-2xl sm:text-3xl font-bold tracking-tight text-balance"
                 style={{ fontFamily: "var(--lp-font-heading)" }}
               >
-                {headline}
+                <EditableText
+                  path="headline"
+                  raw={typeof data.headline === "string" ? data.headline : ""}
+                  emptyHint="Überschrift eingeben"
+                >
+                  {headline}
+                </EditableText>
               </h2>
-            )}
-            {intro && (
+            </MaybeEmptyField>
+            <MaybeEmptyField present={!!intro}>
               <p className={headline ? "mt-3 text-base opacity-80" : "text-base opacity-80"}>
-                {intro}
+                <EditableText
+                  path="intro"
+                  raw={typeof data.intro === "string" ? data.intro : ""}
+                  emptyHint="Einleitung eingeben"
+                >
+                  {intro}
+                </EditableText>
               </p>
-            )}
+            </MaybeEmptyField>
           </div>
           <div>
             <FaqAccordion items={items} leadData={leadData} />
@@ -136,13 +163,22 @@ export function BlockFaq({
           {items.map((item, idx) => (
             <li key={idx} className="py-3.5">
               <p className="text-base font-medium">
-                {renderPlaceholders(item.q, leadData)}
+                <EditableText path={`items.${item.idx}.q`} raw={item.q}>
+                  {renderPlaceholders(item.q, leadData)}
+                </EditableText>
               </p>
-              {item.a && (
+              <MaybeEmptyField present={!!item.a}>
                 <div className="mt-1.5 text-sm sm:text-base opacity-80 leading-relaxed whitespace-pre-line">
-                  {renderPlaceholders(item.a, leadData)}
+                  <EditableText
+                    path={`items.${item.idx}.a`}
+                    raw={item.a}
+                    multiline
+                    emptyHint="Antwort eingeben"
+                  >
+                    {renderPlaceholders(item.a, leadData)}
+                  </EditableText>
                 </div>
-              )}
+              </MaybeEmptyField>
             </li>
           ))}
         </ul>

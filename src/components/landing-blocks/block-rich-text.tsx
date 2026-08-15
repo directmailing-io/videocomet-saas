@@ -2,6 +2,7 @@ import * as React from "react";
 import { renderPlaceholders } from "@/lib/landing-blocks/placeholders";
 import type { BlockRenderProps } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
+import { EditableText, MaybeEmptyField } from "./editable-text";
 import { parseMiniMarkdown } from "./mini-markdown";
 
 /**
@@ -18,15 +19,28 @@ export function BlockRichText({
 }: BlockRenderProps): React.ReactElement | null {
   const raw = typeof data.markdown === "string" ? data.markdown : "";
   const filled = renderPlaceholders(raw, leadData);
-  if (!filled.trim()) return null;
 
-  return (
+  const frame = (
     <BlockFrame
       style={style}
       defaults={{ paddingY: "md", maxWidth: "normal", alignment: "left" }}
       innerClassName="text-base sm:text-lg"
     >
-      {parseMiniMarkdown(filled)}
+      <EditableText
+        path="markdown"
+        raw={raw}
+        multiline
+        markdown
+        emptyHint="Text eingeben"
+      >
+        {parseMiniMarkdown(filled)}
+      </EditableText>
     </BlockFrame>
   );
+
+  if (!filled.trim()) {
+    // Public: unveraendert null. Im Builder: leeres Feld mit Hint.
+    return <MaybeEmptyField present={false}>{frame}</MaybeEmptyField>;
+  }
+  return frame;
 }

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth-guard";
 import { getTpl } from "@/lib/db/queries/landingPageTemplates";
-import { LpEditor } from "./lp-editor";
+import { LpBuilder } from "./lp-builder";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,7 +22,7 @@ export default async function LandingpageBuilderPage({
   }
 
   return (
-    <LpEditor
+    <LpBuilder
       template={{
         id: tpl.id,
         name: tpl.name,

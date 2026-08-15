@@ -130,14 +130,14 @@ export function StyleguidePanel({
       {/* Klick-Fänger — bewusst transparent, damit die Live-Preview beim
           Einstellen sichtbar bleibt. */}
       <div
-        className="fixed inset-0 z-40"
+        className="fixed inset-0 z-[150]"
         onClick={onClose}
         aria-hidden
       />
       <aside
         role="dialog"
         aria-label="Styleguide"
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[400px] flex-col bg-surface shadow-lift animate-slide-in-right"
+        className="fixed inset-y-0 right-0 z-[155] flex w-full max-w-[400px] flex-col bg-surface shadow-lift animate-slide-in-right"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
           <div>

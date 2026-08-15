@@ -2,6 +2,7 @@ import * as React from "react";
 import { renderPlaceholders } from "@/lib/landing-blocks/placeholders";
 import type { BlockRenderProps } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
+import { EditableText, MaybeEmptyField } from "./editable-text";
 
 interface LogoItem {
   url: string;
@@ -50,11 +51,17 @@ export function BlockLogosCloud({
       style={style}
       defaults={{ paddingY: "md", maxWidth: "wide", alignment: "center" }}
     >
-      {title && (
+      <MaybeEmptyField present={!!title}>
         <p className="text-xs sm:text-sm uppercase tracking-wider opacity-60 mb-6">
-          {title}
+          <EditableText
+            path="title"
+            raw={typeof data.title === "string" ? data.title : ""}
+            emptyHint="Titel eingeben"
+          >
+            {title}
+          </EditableText>
         </p>
-      )}
+      </MaybeEmptyField>
       <ul className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
         {logos.map((logo, idx) => {
           /* eslint-disable-next-line @next/next/no-img-element */

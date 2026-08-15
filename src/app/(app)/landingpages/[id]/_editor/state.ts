@@ -259,7 +259,7 @@ export function useLpEditorState(
     initialNormalised.v2.blocks,
   );
   const [activeBlockId, setActiveBlockId] = React.useState<string | null>(
-    initialNormalised.v2.blocks[0]?.id ?? null,
+    null,
   );
   const [saveState, setSaveState] = React.useState<SaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = React.useState<number | null>(null);

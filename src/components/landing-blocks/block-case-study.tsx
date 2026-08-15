@@ -4,6 +4,7 @@ import { renderPlaceholders } from "@/lib/landing-blocks/placeholders";
 import { resolveVariant } from "@/lib/landing-blocks/types";
 import type { BlockRenderProps } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
+import { EditableText, MaybeEmptyField } from "./editable-text";
 
 /* ------------------------------------------------------------------ */
 /* Defensive narrowing of the persisted data shape                     */
@@ -176,91 +177,165 @@ export function BlockCaseStudy({
 
   /* ---------- Text-Spalte je Textstufe -------------------------------- */
 
+  // Editierbare Ueberschrift — in "free" und "structured" identisch.
+  const rawHeadline = str(data.headline);
+  const headlineNode = (
+    <MaybeEmptyField present={!!headline}>
+      <h2
+        className="text-2xl sm:text-3xl font-bold tracking-tight text-balance"
+        style={{ fontFamily: "var(--lp-font-heading)" }}
+      >
+        <EditableText
+          path="headline"
+          raw={rawHeadline}
+          emptyHint="Überschrift eingeben"
+        >
+          {headline}
+        </EditableText>
+      </h2>
+    </MaybeEmptyField>
+  );
+
   let textNode: React.ReactNode = null;
+  // Praesenz getrennt vom Node halten: im Edit-Modus rendern
+  // MaybeEmptyField-Felder auch leere Inhalte, der Public-Pfad braucht
+  // aber weiterhin die "gibt es Text?"-Entscheidung von frueher.
+  let textPresent = false;
 
   if (textMode === "quote") {
     const quoteText = renderPlaceholders(quote.text, leadData) ?? "";
-    textNode = quoteText ? (
-      <figure>
-        <blockquote
-          className="text-xl sm:text-2xl lg:text-3xl font-medium leading-snug text-balance"
-          style={{ fontFamily: "var(--lp-font-body)" }}
-        >
-          &bdquo;{quoteText}&ldquo;
-        </blockquote>
-        {(quote.author || quote.role || client.photoUrl) && (
-          <figcaption className="mt-6 flex items-center gap-3">
-            {client.photoUrl && (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={client.photoUrl}
-                alt={quote.author || client.name}
-                width={48}
-                height={48}
-                className="size-12 rounded-full object-cover"
-              />
-            )}
-            <span className="text-sm sm:text-base">
-              {quote.author && (
-                <span className="block font-semibold">{quote.author}</span>
-              )}
-              {quote.role && (
-                <span
-                  className="block"
-                  style={{ color: "var(--lp-color-muted)" }}
-                >
-                  {quote.role}
-                </span>
-              )}
-            </span>
-          </figcaption>
-        )}
-      </figure>
-    ) : null;
-  } else if (textMode === "free") {
-    textNode =
-      headline || freeText ? (
-        <div>
-          {headline && (
-            <h2
-              className="text-2xl sm:text-3xl font-bold tracking-tight text-balance"
-              style={{ fontFamily: "var(--lp-font-heading)" }}
+    textPresent = !!quoteText;
+    textNode = (
+      <MaybeEmptyField present={!!quoteText}>
+        <figure>
+          <blockquote
+            className="text-xl sm:text-2xl lg:text-3xl font-medium leading-snug text-balance"
+            style={{ fontFamily: "var(--lp-font-body)" }}
+          >
+            &bdquo;
+            <EditableText
+              path="quote.text"
+              raw={quote.text}
+              emptyHint="Zitat eingeben"
             >
-              {headline}
-            </h2>
-          )}
-          {freeText && (
+              {quoteText}
+            </EditableText>
+            &ldquo;
+          </blockquote>
+          <MaybeEmptyField
+            present={!!(quote.author || quote.role || client.photoUrl)}
+          >
+            <figcaption className="mt-6 flex items-center gap-3">
+              {client.photoUrl && (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={client.photoUrl}
+                  alt={quote.author || client.name}
+                  width={48}
+                  height={48}
+                  className="size-12 rounded-full object-cover"
+                />
+              )}
+              <span className="text-sm sm:text-base">
+                <MaybeEmptyField present={!!quote.author}>
+                  <span className="block font-semibold">
+                    <EditableText
+                      path="quote.author"
+                      raw={quote.author}
+                      emptyHint="Name eingeben"
+                    >
+                      {quote.author}
+                    </EditableText>
+                  </span>
+                </MaybeEmptyField>
+                <MaybeEmptyField present={!!quote.role}>
+                  <span
+                    className="block"
+                    style={{ color: "var(--lp-color-muted)" }}
+                  >
+                    <EditableText
+                      path="quote.role"
+                      raw={quote.role}
+                      emptyHint="Rolle eingeben"
+                    >
+                      {quote.role}
+                    </EditableText>
+                  </span>
+                </MaybeEmptyField>
+              </span>
+            </figcaption>
+          </MaybeEmptyField>
+        </figure>
+      </MaybeEmptyField>
+    );
+  } else if (textMode === "free") {
+    textPresent = !!(headline || freeText);
+    textNode = (
+      <MaybeEmptyField present={textPresent}>
+        <div>
+          {headlineNode}
+          <MaybeEmptyField present={!!freeText}>
             <p className="mt-4 text-base sm:text-lg leading-relaxed whitespace-pre-line">
-              {freeText}
+              <EditableText
+                path="freeText"
+                raw={str(data.freeText)}
+                multiline
+                emptyHint="Text eingeben"
+              >
+                {freeText}
+              </EditableText>
             </p>
-          )}
+          </MaybeEmptyField>
         </div>
-      ) : null;
+      </MaybeEmptyField>
+    );
   } else if (textMode === "structured") {
     const situation = renderPlaceholders(structured.situation, leadData) ?? "";
     const action = renderPlaceholders(structured.action, leadData) ?? "";
     const result = renderPlaceholders(structured.result, leadData) ?? "";
     const kpi = renderPlaceholders(structured.kpi, leadData) ?? "";
-    const sections: Array<{ label: string; body: React.ReactNode }> = [];
 
-    if (situation) {
-      sections.push({
+    const sections: Array<{
+      label: string;
+      present: boolean;
+      body: React.ReactNode;
+    }> = [
+      {
         label: "Ausgangslage",
-        body: <p className="text-base leading-relaxed">{situation}</p>,
-      });
-    }
-    if (action) {
-      sections.push({
+        present: !!situation,
+        body: (
+          <p className="text-base leading-relaxed">
+            <EditableText
+              path="structured.situation"
+              raw={structured.situation}
+              emptyHint="Ausgangslage beschreiben"
+            >
+              {situation}
+            </EditableText>
+          </p>
+        ),
+      },
+      {
         label: "Was wir gemacht haben",
-        body: <p className="text-base leading-relaxed">{action}</p>,
-      });
-    }
-    if (result || kpi) {
-      sections.push({
+        present: !!action,
+        body: (
+          <p className="text-base leading-relaxed">
+            <EditableText
+              path="structured.action"
+              raw={structured.action}
+              emptyHint="Vorgehen beschreiben"
+            >
+              {action}
+            </EditableText>
+          </p>
+        ),
+      },
+      {
         label: "Ergebnis",
+        present: !!(result || kpi),
         body: (
           <div>
-            {kpi && (
+            <MaybeEmptyField present={!!kpi}>
               <p
                 className="text-4xl sm:text-5xl font-bold tracking-tight"
                 style={{
@@ -268,59 +343,69 @@ export function BlockCaseStudy({
                   fontFamily: "var(--lp-font-heading)",
                 }}
               >
-                {kpi}
+                <EditableText
+                  path="structured.kpi"
+                  raw={structured.kpi}
+                  emptyHint="Kennzahl"
+                >
+                  {kpi}
+                </EditableText>
               </p>
-            )}
-            {result && (
+            </MaybeEmptyField>
+            <MaybeEmptyField present={!!result}>
               <p className={cn("text-base leading-relaxed", kpi && "mt-2")}>
-                {result}
+                <EditableText
+                  path="structured.result"
+                  raw={structured.result}
+                  emptyHint="Ergebnis beschreiben"
+                >
+                  {result}
+                </EditableText>
               </p>
-            )}
+            </MaybeEmptyField>
           </div>
         ),
-      });
-    }
+      },
+    ];
+    const anySection = sections.some((section) => section.present);
 
-    textNode =
-      headline || sections.length > 0 ? (
+    textPresent = !!headline || anySection;
+    textNode = (
+      <MaybeEmptyField present={textPresent}>
         <div>
-          {headline && (
-            <h2
-              className="text-2xl sm:text-3xl font-bold tracking-tight text-balance"
-              style={{ fontFamily: "var(--lp-font-heading)" }}
-            >
-              {headline}
-            </h2>
-          )}
-          {sections.length > 0 && (
+          {headlineNode}
+          <MaybeEmptyField present={anySection}>
             <dl className={cn("space-y-6", headline && "mt-8")}>
               {sections.map((section) => (
-                <div key={section.label}>
-                  <dt
-                    className="text-xs font-semibold uppercase tracking-widest"
-                    style={LABEL_STYLE}
-                  >
-                    {section.label}
-                  </dt>
-                  <dd className="mt-2">{section.body}</dd>
-                </div>
+                <MaybeEmptyField key={section.label} present={section.present}>
+                  <div>
+                    <dt
+                      className="text-xs font-semibold uppercase tracking-widest"
+                      style={LABEL_STYLE}
+                    >
+                      {section.label}
+                    </dt>
+                    <dd className="mt-2">{section.body}</dd>
+                  </div>
+                </MaybeEmptyField>
               ))}
             </dl>
-          )}
+          </MaybeEmptyField>
         </div>
-      ) : null;
+      </MaybeEmptyField>
+    );
   } else {
     // "none": nur Medium + Kundenname/Logo. Die Absender-Zeile uebernimmt
     // hier die Text-Spalte (bzw. steht unter dem Medium bei media-top).
     textNode = <ClientLine client={client} />;
+    textPresent = !!(client.logoUrl || client.name);
   }
 
   // Absender-Zeile zusaetzlich anzeigen, ausser bei "quote" (Autor steht
   // schon unter dem Zitat) und "none" (dort IST sie der Text-Inhalt).
   const showClientLine = textMode === "free" || textMode === "structured";
 
-  const hasText = textNode !== null && !(textMode === "none" && !client.logoUrl && !client.name);
-  if (!hasMedium && !hasText) return null;
+  const hasText = textPresent;
 
   /* ---------- Layout --------------------------------------------------- */
 
@@ -373,7 +458,7 @@ export function BlockCaseStudy({
     );
   }
 
-  return (
+  const frame = (
     <BlockFrame
       style={style}
       defaults={{ paddingY: "lg", maxWidth: "wide", alignment: "left" }}
@@ -381,4 +466,11 @@ export function BlockCaseStudy({
       {body}
     </BlockFrame>
   );
+
+  if (!hasMedium && !hasText) {
+    // Public: unveraendert null. Im Builder: leere Felder mit Hint
+    // rendern, damit der Block anklickbar bleibt.
+    return <MaybeEmptyField present={false}>{frame}</MaybeEmptyField>;
+  }
+  return frame;
 }

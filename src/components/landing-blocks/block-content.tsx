@@ -6,6 +6,7 @@ import {
   type BlockRenderProps,
 } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
+import { EditableText, MaybeEmptyField } from "./editable-text";
 import { parseMiniMarkdown } from "./mini-markdown";
 
 /**
@@ -48,39 +49,61 @@ export function BlockContent({
   const imageAlt = typeof imageRaw.alt === "string" ? imageRaw.alt : "";
 
   const hasMedia = layout !== "text-only" && !!imageUrl;
-  if (!headline && !body.trim() && !hasMedia) return null;
+  const rawHeadline = typeof data.headline === "string" ? data.headline : "";
 
   const textNode = (
     <>
-      {headline && (
+      <MaybeEmptyField present={!!headline}>
         <h2
           className="text-2xl sm:text-3xl font-bold tracking-tight text-balance"
           style={{ fontFamily: "var(--lp-font-heading)" }}
         >
-          {headline}
+          <EditableText
+            path="headline"
+            raw={rawHeadline}
+            emptyHint="Überschrift eingeben"
+          >
+            {headline}
+          </EditableText>
         </h2>
-      )}
-      {body.trim() && (
+      </MaybeEmptyField>
+      <MaybeEmptyField present={!!body.trim()}>
         <div className={cn("text-base opacity-90", headline && "mt-4")}>
-          {parseMiniMarkdown(body, { checklistBullets: true })}
+          <EditableText
+            path="body"
+            raw={bodyRaw}
+            multiline
+            markdown
+            emptyHint="Text eingeben"
+          >
+            {parseMiniMarkdown(body, { checklistBullets: true })}
+          </EditableText>
         </div>
-      )}
+      </MaybeEmptyField>
     </>
   );
 
+  // "text-only" (und Media-Varianten ohne Bild): mittig zentrierter
+  // Block mit schmaler Lesebreite (~65ch), Fliesstext linksbuendig.
+  const textOnlyFrame = (
+    <BlockFrame
+      style={style}
+      defaults={{ paddingY: "md", maxWidth: "normal", alignment: "center" }}
+    >
+      <div className="mx-auto max-w-[65ch] text-left [&>h2]:text-center">
+        {textNode}
+      </div>
+    </BlockFrame>
+  );
+
+  if (!headline && !body.trim() && !hasMedia) {
+    // Public: unveraendert null. Im Builder: leere Felder mit Hint
+    // rendern, damit ein leer getippter Block anklickbar bleibt.
+    return <MaybeEmptyField present={false}>{textOnlyFrame}</MaybeEmptyField>;
+  }
+
   if (!hasMedia) {
-    // "text-only" (und Media-Varianten ohne Bild): mittig zentrierter
-    // Block mit schmaler Lesebreite (~65ch), Fliesstext linksbuendig.
-    return (
-      <BlockFrame
-        style={style}
-        defaults={{ paddingY: "md", maxWidth: "normal", alignment: "center" }}
-      >
-        <div className="mx-auto max-w-[65ch] text-left [&>h2]:text-center">
-          {textNode}
-        </div>
-      </BlockFrame>
-    );
+    return textOnlyFrame;
   }
 
   const mediaRight = layout === "media-right";

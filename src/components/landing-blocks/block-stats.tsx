@@ -3,21 +3,24 @@ import { cn } from "@/lib/utils";
 import { renderPlaceholders } from "@/lib/landing-blocks/placeholders";
 import type { BlockRenderProps } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
+import { EditableText } from "./editable-text";
 
 interface StatItem {
   value: string;
   label: string;
+  /** Index im gespeicherten items-Array — Basis fuer die Edit-Pfade. */
+  idx: number;
 }
 
 function asStats(value: unknown): StatItem[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((raw): StatItem[] => {
+  return value.flatMap((raw, idx): StatItem[] => {
     if (!raw || typeof raw !== "object") return [];
     const r = raw as Record<string, unknown>;
     const v = typeof r.value === "string" ? r.value : "";
     const l = typeof r.label === "string" ? r.label : "";
     if (!v && !l) return [];
-    return [{ value: v, label: l }];
+    return [{ value: v, label: l, idx }];
   });
 }
 
@@ -55,10 +58,22 @@ export function BlockStats({
         {items.map((item, idx) => (
           <div key={idx}>
             <dt className="text-3xl sm:text-4xl font-bold tracking-tight">
-              {renderPlaceholders(item.value, leadData)}
+              <EditableText
+                path={`items.${item.idx}.value`}
+                raw={item.value}
+                emptyHint="Zahl"
+              >
+                {renderPlaceholders(item.value, leadData)}
+              </EditableText>
             </dt>
             <dd className="mt-1 text-sm opacity-70">
-              {renderPlaceholders(item.label, leadData)}
+              <EditableText
+                path={`items.${item.idx}.label`}
+                raw={item.label}
+                emptyHint="Beschriftung"
+              >
+                {renderPlaceholders(item.label, leadData)}
+              </EditableText>
             </dd>
           </div>
         ))}

@@ -2,6 +2,7 @@ import * as React from "react";
 import { renderPlaceholders } from "@/lib/landing-blocks/placeholders";
 import type { BlockRenderProps } from "@/lib/landing-blocks/types";
 import { BlockFrame } from "./block-frame";
+import { EditableText, MaybeEmptyField } from "./editable-text";
 
 /**
  * About-Me block — portrait + name + role + bio. Stacks vertically on
@@ -47,13 +48,40 @@ export function BlockAboutMe({
           />
         )}
         <div className="text-center sm:text-left">
-          {name && <p className="text-lg font-semibold">{name}</p>}
-          {role && <p className="text-sm opacity-70">{role}</p>}
-          {bio && (
-            <p className="mt-2 text-sm sm:text-base leading-relaxed whitespace-pre-line">
-              {bio}
+          <MaybeEmptyField present={!!name}>
+            <p className="text-lg font-semibold">
+              <EditableText
+                path="name"
+                raw={typeof data.name === "string" ? data.name : ""}
+                emptyHint="Name eingeben"
+              >
+                {name}
+              </EditableText>
             </p>
-          )}
+          </MaybeEmptyField>
+          <MaybeEmptyField present={!!role}>
+            <p className="text-sm opacity-70">
+              <EditableText
+                path="role"
+                raw={typeof data.role === "string" ? data.role : ""}
+                emptyHint="Rolle eingeben"
+              >
+                {role}
+              </EditableText>
+            </p>
+          </MaybeEmptyField>
+          <MaybeEmptyField present={!!bio}>
+            <p className="mt-2 text-sm sm:text-base leading-relaxed whitespace-pre-line">
+              <EditableText
+                path="bio"
+                raw={typeof data.bio === "string" ? data.bio : ""}
+                multiline
+                emptyHint="Kurzbio eingeben"
+              >
+                {bio}
+              </EditableText>
+            </p>
+          </MaybeEmptyField>
         </div>
       </div>
     </BlockFrame>
