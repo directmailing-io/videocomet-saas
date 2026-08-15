@@ -37,7 +37,7 @@ export const DOC_PAGE_WIDTH_PX = DOC_STACK_MAX_WIDTH_PX - 2 * DOC_STACK_HPAD_PX;
 /** Vertikaler Abstand zwischen zwei Seiten. */
 export const DOC_PAGE_GAP_PX = 24;
 
-/** Docs-Chrome: Titel 44 + Menü 32 + Format 40 + Lineal 24 + ~20 Padding. */
+/** Docs-Chrome: Titel 52 + Menü 30 + Formatleiste 48 + Lineal 30. */
 export const GDOCS_TOOLBAR_HEIGHT_PX = 160;
 /** Drive-PDF-Viewer: eine dunkle Leiste. */
 export const PDF_TOOLBAR_HEIGHT_PX = 56;
