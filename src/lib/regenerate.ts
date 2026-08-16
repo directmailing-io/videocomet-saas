@@ -16,6 +16,11 @@ async function deleteBunnyByUrl(url: string | null | undefined): Promise<void> {
   if (!url) return;
   const parsed = parseStorageUrl(url);
   if (!parsed) return;
+  // Bunny-Stream-Pullzonen (`vz-*.b-cdn.net`) matchen syntaktisch dasselbe
+  // Muster wie Storage-Zonen, gehören aber Bunny Stream. Ein DELETE mit
+  // dem Storage-Access-Key gibt dort 401. Bunny räumt Stream-Thumbnails
+  // ohnehin mit dem Video mit auf — hier überspringen.
+  if (parsed.zone.startsWith("vz-")) return;
   try {
     await deleteFile(parsed.zone, parsed.path);
   } catch (err) {
