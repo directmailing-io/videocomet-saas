@@ -405,10 +405,11 @@ export function PhaseLive({
           <button
             type="button"
             onClick={toggleCursorRecording}
+            aria-pressed={cursorRecording}
             title={
               cursorRecording
-                ? "Mausbewegungen werden mit aufgezeichnet"
-                : "Mausbewegungen werden nicht aufgezeichnet"
+                ? "Aktuell: Mauszeiger ist im Video sichtbar. Klicken, um ihn zu verstecken."
+                : "Aktuell: Mauszeiger ist im Video nicht sichtbar. Klicken, um ihn einzublenden."
             }
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
@@ -418,11 +419,17 @@ export function PhaseLive({
             )}
           >
             <MousePointer2 className="size-3.5" />
-            Mauszeiger
+            Mauszeiger im Video: {cursorRecording ? "an" : "aus"}
           </button>
           <button
             type="button"
             onClick={() => setPrompterVisible((v) => !v)}
+            aria-pressed={prompterVisible}
+            title={
+              prompterVisible
+                ? "Teleprompter ist eingeblendet — klicken, um ihn auszublenden."
+                : "Teleprompter mit deinem Skript einblenden."
+            }
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
               prompterVisible
@@ -431,7 +438,7 @@ export function PhaseLive({
             )}
           >
             <ScrollText className="size-3.5" />
-            Teleprompter
+            Teleprompter: {prompterVisible ? "an" : "aus"}
           </button>
         </div>
       </div>
