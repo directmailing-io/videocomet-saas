@@ -45,6 +45,19 @@ describe("analyzeQrPlaceholderArtwork", () => {
     expect(box!.height).toBeGreaterThan(0.6);
   });
 
+  it("heller Deko-Rahmen (Lavendel) zählt nicht als Content", async () => {
+    // Nachbau von Daniels Vorlage: Lavendel-Rahmen um die volle Box,
+    // QR mittig — der Weiß-Trim-Ansatz scheiterte an den nicht-weißen Ecken.
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="white"/><rect x="0" y="0" width="200" height="200" fill="none" stroke="#aa8cf5" stroke-width="4"/><rect x="50" y="50" width="100" height="100" fill="black"/></svg>`;
+    const artwork = await sharp(Buffer.from(svg)).png().toBuffer();
+    const box = await analyzeQrPlaceholderArtwork(artwork);
+    expect(box).not.toBeNull();
+    expect(box!.left).toBeCloseTo(0.25, 1);
+    expect(box!.top).toBeCloseTo(0.25, 1);
+    expect(box!.width).toBeCloseTo(0.5, 1);
+    expect(box!.height).toBeCloseTo(0.5, 1);
+  });
+
   it("liefert null für randlose Artworks (Full-Box-QR)", async () => {
     const artwork = await makeArtwork(200, 200, [{ x: 0, y: 0, w: 200, h: 200 }]);
     expect(await analyzeQrPlaceholderArtwork(artwork)).toBeNull();

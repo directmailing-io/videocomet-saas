@@ -11,7 +11,7 @@ import { stat } from "node:fs/promises";
 
 export type GsQuality = "ebook" | "screen" | "printer" | "prepress";
 
-export function gsPath(): string {
+function gsPath(): string {
   return process.env.GHOSTSCRIPT_PATH ?? "/usr/bin/gs";
 }
 

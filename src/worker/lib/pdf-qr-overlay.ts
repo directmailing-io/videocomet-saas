@@ -30,43 +30,8 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PDFDocument } from "pdf-lib";
-import { gsPath } from "./ghostscript";
 
 const execFileAsync = promisify(execFile);
-
-/**
- * Normalisiert das PDF via Ghostscript (pdfwrite, ohne Downsampling) für
- * die GEOMETRIE-Extraktion. Googles PDF-Export packt Bilder in Form-
- * XObjects, in die `pdftohtml -xml` nicht hineinschaut — die Marker-Box
- * des transparenten Platzhalters war dadurch praktisch nie auffindbar
- * (Logs: marker=false) und der QR landete nur näherungsweise über den
- * Anker-Fallback (~9pt daneben, Reklamation 2026-08-16). Ghostscript
- * flacht die Forms ab, die Seitengeometrie bleibt identisch. Fehler →
- * Extraktion läuft wie bisher auf dem Original (Best-Effort).
- * Gestempelt wird IMMER in den Original-Buffer, nie in die Normalisierung.
- */
-async function normalizeForGeometry(
-  pdfPath: string,
-  workDir: string,
-): Promise<string> {
-  const outPath = join(workDir, "norm.pdf");
-  try {
-    await execFileAsync(gsPath(), [
-      "-sDEVICE=pdfwrite",
-      "-dNOPAUSE",
-      "-dQUIET",
-      "-dBATCH",
-      `-sOutputFile=${outPath}`,
-      pdfPath,
-    ]);
-    return outPath;
-  } catch (err) {
-    console.warn(
-      `[qr-overlay] gs-normalize failed, extracting from raw export: ${err instanceof Error ? err.message : "?"}`,
-    );
-    return pdfPath;
-  }
-}
 
 /** Abstand zwischen Link-Unterkante und QR-Oberkante beim Verschieben (pt). */
 const DEFAULT_GAP_PT = 6;
@@ -166,10 +131,22 @@ async function extractWords(pdfPath: string, workDir: string): Promise<PageWords
   return pages;
 }
 
+/** Liest ein numerisches XML-Attribut, unabhängig von der Attribut-Reihenfolge. */
+function numAttr(tag: string, name: string): number {
+  const m = new RegExp(`\\b${name}="([\\d.-]+)"`).exec(tag);
+  return m ? Number(m[1]) : NaN;
+}
+
 /**
  * `pdftohtml -xml` → Bild-Boxen pro Seite. pdftohtml rechnet in Pixeln bei
  * eigenem Zoom — wir normalisieren über das Verhältnis der Seitenbreite in
  * pt (aus pdftotext) zur Seitenbreite in px (aus pdftohtml).
+ *
+ * WICHTIG: Attribute einzeln parsen, nie als Reihenfolge-Regex. pdftohtml
+ * schreibt im <page>-Tag `height` VOR `width` — eine Regex, die width→height
+ * erwartete, matchte NIE eine Seite, extractImages lieferte still [] und
+ * der Marker wurde nie gefunden (alle Logs marker=false, QR saß ~9pt neben
+ * der Vorlagenposition; gefunden bei der Reklamation 2026-08-16).
  */
 async function extractImages(
   pdfPath: string,
@@ -182,21 +159,20 @@ async function extractImages(
   await execFileAsync("pdftohtml", ["-q", "-xml", pdfPath, outBase]);
   const xml = await readFile(`${outBase}.xml`, "utf8");
   const boxes: Box[] = [];
-  const pageRe =
-    /<page number="(\d+)"[^>]*width="([\d.]+)"[^>]*height="([\d.]+)"[^>]*>([\s\S]*?)<\/page>/g;
-  const imgRe =
-    /<image[^>]*top="([\d.-]+)"[^>]*left="([\d.-]+)"[^>]*width="([\d.-]+)"[^>]*height="([\d.-]+)"[^>]*\/?>/g;
+  const pageRe = /<page\b([^>]*)>([\s\S]*?)<\/page>/g;
+  const imgRe = /<image\b[^>]*\/?>/g;
   for (let pm = pageRe.exec(xml); pm; pm = pageRe.exec(xml)) {
-    const pageIndex = Number(pm[1]) - 1;
-    const pagePxW = Number(pm[2]);
+    const pageIndex = numAttr(pm[1], "number") - 1;
+    const pagePxW = numAttr(pm[1], "width");
     const sizePt = pageSizes[pageIndex];
     if (!sizePt || !pagePxW) continue;
     const scale = sizePt.widthPt / pagePxW;
-    for (let im = imgRe.exec(pm[4]); im; im = imgRe.exec(pm[4])) {
-      const top = Number(im[1]) * scale;
-      const left = Number(im[2]) * scale;
-      const w = Number(im[3]) * scale;
-      const h = Number(im[4]) * scale;
+    for (let im = imgRe.exec(pm[2]); im; im = imgRe.exec(pm[2])) {
+      const top = numAttr(im[0], "top") * scale;
+      const left = numAttr(im[0], "left") * scale;
+      const w = numAttr(im[0], "width") * scale;
+      const h = numAttr(im[0], "height") * scale;
+      if ([top, left, w, h].some(Number.isNaN)) continue;
       boxes.push({ pageIndex, xMin: left, yMin: top, xMax: left + w, yMax: top + h });
     }
   }
@@ -346,14 +322,13 @@ export async function stampQrOverlay(input: QrOverlayInput): Promise<QrOverlayRe
   try {
     const pdfPath = join(workDir, "in.pdf");
     await writeFile(pdfPath, input.pdfBuffer);
-    const geomPath = await normalizeForGeometry(pdfPath, workDir);
 
-    const pages = await extractWords(geomPath, workDir);
+    const pages = await extractWords(pdfPath, workDir);
     if (pages.length === 0) {
       throw new Error("qr-overlay: pdftotext lieferte keine Seiten");
     }
     const images = await extractImages(
-      geomPath,
+      pdfPath,
       workDir,
       pages.map((p) => ({ widthPt: p.widthPt, heightPt: p.heightPt })),
     );

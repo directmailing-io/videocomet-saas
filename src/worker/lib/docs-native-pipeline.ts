@@ -414,10 +414,16 @@ export async function renderViaDocsApi(
           const res = await fetch(qrTarget.contentUri, {
             signal: AbortSignal.timeout(10_000),
           });
-          if (res.ok) {
+          if (!res.ok) {
+            console.warn(
+              `[docs-native] qr-artwork fetch ${res.status} (full-box fallback)`,
+            );
+          } else {
             const artwork = Buffer.from(await res.arrayBuffer());
             const ratios = await analyzeQrPlaceholderArtwork(artwork);
-            if (ratios) {
+            if (!ratios) {
+              console.log("[docs-native] qr-wysiwyg: artwork randlos → full-box");
+            } else {
               effectiveQrPng = await buildWysiwygQrPng({
                 qrPng: effectiveQrPng,
                 ratios,

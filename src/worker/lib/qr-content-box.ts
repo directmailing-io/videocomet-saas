@@ -8,8 +8,11 @@
  * der Vorlage ("Platzhalter muss exakt so sein, wie der QR-Code dann
  * auch").
  *
- * Lösung: Das Platzhalter-Bild wird per sharp-Trim analysiert — die
- * Bounding-Box der sichtbaren (nicht-weißen) Pixel ist die Content-Box.
+ * Lösung: Die Bounding-Box der DUNKLEN Pixel (Luminanz-Schwelle) ist die
+ * Content-Box — dunkle Pixel, weil ein scanbarer QR immer dunkel sein
+ * muss. Helle Deko zählt damit als Rand: weißer Hintergrund genauso wie
+ * z. B. der Lavendel-Rahmen in Daniels Vorlage (ein Weiß-Trim scheiterte
+ * genau daran, weil die Bildecken nicht weiß waren).
  * Der echte QR wird als größtes Quadrat oben links in dieser Content-Box
  * platziert (Label-Zeilen unterhalb des QR fallen so automatisch weg)
  * und der Rest der Box bleibt weiß — der Brief sieht exakt aus wie die
@@ -33,11 +36,14 @@ export interface ContentBoxRatios {
 const FULL_BOX_COVERAGE = 0.88;
 /** Unter dieser Abdeckung ist das Artwork vermutlich leer/kaputt → ignorieren. */
 const MIN_COVERAGE = 0.02;
-/** Weiß-Toleranz beim Trim (JPEG-Artefakte, Anti-Aliasing). */
-const TRIM_THRESHOLD = 25;
+/** Pixel unterhalb dieser Luminanz zählen als QR-/Label-Inhalt.
+ *  Schwarz ≈ 30, Lavendel-Rahmen ≈ 154, Weiß = 255. */
+const DARK_LUMA = 120;
+/** Analyse-Auflösung — Ratios sind auflösungsunabhängig. */
+const ANALYZE_MAX_PX = 512;
 
 /**
- * Ermittelt die Content-Box (sichtbarer Bildinhalt) des Platzhalter-
+ * Ermittelt die Content-Box (dunkler Bildinhalt) des Platzhalter-
  * Artworks. Liefert null, wenn das Artwork randlos ist oder die Analyse
  * kein brauchbares Ergebnis liefert — der Caller nutzt dann wie bisher
  * die volle Platzhalter-Box.
@@ -46,28 +52,47 @@ export async function analyzeQrPlaceholderArtwork(
   image: Buffer,
 ): Promise<ContentBoxRatios | null> {
   try {
-    const meta = await sharp(image).metadata();
-    const fullW = meta.width ?? 0;
-    const fullH = meta.height ?? 0;
+    const { data, info } = await sharp(image)
+      .flatten({ background: "#ffffff" })
+      .resize({
+        width: ANALYZE_MAX_PX,
+        height: ANALYZE_MAX_PX,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const fullW = info.width;
+    const fullH = info.height;
     if (fullW < 8 || fullH < 8) return null;
 
-    const { info } = await sharp(image)
-      .flatten({ background: "#ffffff" })
-      .trim({ background: "#ffffff", threshold: TRIM_THRESHOLD })
-      .toBuffer({ resolveWithObject: true });
+    let xMin = fullW;
+    let yMin = fullH;
+    let xMax = -1;
+    let yMax = -1;
+    for (let y = 0; y < fullH; y++) {
+      for (let x = 0; x < fullW; x++) {
+        const i = (y * fullW + x) * info.channels;
+        const luma =
+          0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+        if (luma < DARK_LUMA) {
+          if (x < xMin) xMin = x;
+          if (x > xMax) xMax = x;
+          if (y < yMin) yMin = y;
+          if (y > yMax) yMax = y;
+        }
+      }
+    }
+    if (xMax < 0 || yMax < 0) return null;
 
-    const left = Math.max(0, -(info.trimOffsetLeft ?? 0));
-    const top = Math.max(0, -(info.trimOffsetTop ?? 0));
-    const w = info.width;
-    const h = info.height;
-    if (!w || !h || w <= 0 || h <= 0) return null;
-
+    const w = xMax - xMin + 1;
+    const h = yMax - yMin + 1;
     const coverage = (w * h) / (fullW * fullH);
     if (coverage >= FULL_BOX_COVERAGE || coverage < MIN_COVERAGE) return null;
 
     return {
-      left: left / fullW,
-      top: top / fullH,
+      left: xMin / fullW,
+      top: yMin / fullH,
       width: w / fullW,
       height: h / fullH,
     };
