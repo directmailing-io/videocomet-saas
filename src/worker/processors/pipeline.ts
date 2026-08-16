@@ -260,7 +260,15 @@ async function downloadThumb(
   thumbnailUrl: string,
   outDir: string,
 ): Promise<string> {
-  const res = await fetch(thumbnailUrl);
+  // Die Bunny-Stream-Pullzone hat Hotlink-Schutz: Requests OHNE Referer
+  // bekommen 403 (Browser auf der Landingpage schicken immer einen). Ohne
+  // den Header lief jeder Brief-Regenerate still in den "ohne Thumbnail"-
+  // Fallback und der Brief zeigte das Platzhalter-Artwork (2026-08-16).
+  const res = await fetch(thumbnailUrl, {
+    headers: {
+      Referer: (process.env.APP_URL ?? "https://app.videocomet.de") + "/",
+    },
+  });
   if (!res.ok) {
     throw new Error(
       `thumbnail fetch HTTP ${res.status} ${res.statusText} url=${thumbnailUrl}`,
@@ -1070,16 +1078,16 @@ export async function pipelineProcessor(
     if (thumbAlreadyDone) {
       if (pdfThumbWanted && lead.thumbnailUrl) {
         await setCurrentStage(data.leadId, "thumbnailExtract");
-        thumbFilePath = await downloadThumb(
-          lead.thumbnailUrl,
-          workDir,
-        ).catch((err) => {
-          console.warn(
-            `[pipeline] could not fetch thumb for lead=${data.leadId}:`,
-            err instanceof Error ? err.message : err,
-          );
-          return null;
-        });
+        // Bewusst KEIN stiller Fallback: ohne Thumbnail bliebe das
+        // Platzhalter-Artwork im Brief — der würde so gedruckt. Lieber
+        // laut fehlschlagen, der User kann den Lead erneut generieren.
+        thumbFilePath = await downloadThumb(lead.thumbnailUrl, workDir).catch(
+          (err) => {
+            throw new Error(
+              `Video-Thumbnail konnte nicht geladen werden (${err instanceof Error ? err.message : "?"}) — bitte den Lead erneut generieren.`,
+            );
+          },
+        );
       }
       await insertPipelineEvent({
         runId: data.runId,
