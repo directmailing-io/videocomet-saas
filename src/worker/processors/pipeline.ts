@@ -1122,30 +1122,10 @@ export async function pipelineProcessor(
           durationMs: Date.now() - thumbStart,
         });
       }
-      // Frame @ frameMs persistieren, damit ein späterer PDF-only-Regen
-      // NICHT auf das Bunny-Stream-Auto-Thumbnail zurückfällt (das trifft
-      // meistens eine zufällige Szene und ignoriert den vom Kunden
-      // gewählten Zeitpunkt). Wir überschreiben `lead.thumbnailUrl` mit
-      // unserer eigenen Bunny-Storage-URL — Best-Effort, Fehler nur loggen.
-      if (thumbFilePath) {
-        try {
-          const { readFile } = await import("node:fs/promises");
-          const { uploadFile } = await import("@/lib/bunny/storage");
-          const thumbBuf = await readFile(thumbFilePath);
-          const uploaded = await uploadFile({
-            buffer: thumbBuf,
-            remotePath: `pdf-thumbnails/${data.leadId}-v${Date.now().toString(36)}.jpg`,
-            contentType: "image/jpeg",
-          });
-          await updateLeadStatus(data.leadId, {
-            thumbnailUrl: uploaded.url,
-          });
-        } catch (err) {
-          console.warn(
-            `[pipeline] frame-thumbnail persist failed for ${data.leadId}: ${(err as Error)?.message}`,
-          );
-        }
-      }
+      // Hinweis: Das Hochladen des Frames nach Bunny Storage (und Update
+      // von lead.thumbnailUrl) passiert NACH Stage 9b — der deferred
+      // videoUpload.finalize würde ihn sonst wieder mit dem Bunny-Stream-
+      // Auto-Thumbnail überschreiben.
     }
     // else: no local video AND no stored thumbnail → can't extract; if
     // pdfThumbWanted the docx stage will simply ship without the thumb.
@@ -1941,6 +1921,33 @@ export async function pipelineProcessor(
         message: `${leadLabel}: Bunny-Encoding fertig (${(extraWaitMs / 1000).toFixed(1)}s zusätzlich gewartet)${finalized.mp4Url ? " (mp4=ready)" : " (mp4=pending)"}`,
         durationMs: extraWaitMs,
       });
+    }
+
+    // ── Stage 9c: Frame-Thumbnail nach Bunny Storage persistieren ────
+    // MUSS nach dem finalize-Await laufen: finishUpload schreibt am Ende
+    // `thumbnailUrl = <bunny-stream-auto-thumb>` und würde unseren Frame
+    // sonst überschreiben. Der Bunny-Stream-Auto-Thumb ignoriert den vom
+    // Kunden gewählten frameMs — für die PDF-Regenerierung wollen wir den
+    // exakten Frame in einer eigenen Bunny-Storage-Datei behalten.
+    // Best-Effort: Fehler nur loggen, blockieren den Lead-Complete nicht.
+    if (thumbFilePath && campaign.pdfEnabled && campaign.pdfThumbnailEnabled) {
+      try {
+        const { readFile } = await import("node:fs/promises");
+        const { uploadFile } = await import("@/lib/bunny/storage");
+        const thumbBuf = await readFile(thumbFilePath);
+        const uploaded = await uploadFile({
+          buffer: thumbBuf,
+          remotePath: `pdf-thumbnails/${data.leadId}-v${Date.now().toString(36)}.jpg`,
+          contentType: "image/jpeg",
+        });
+        await updateLeadStatus(data.leadId, {
+          thumbnailUrl: uploaded.url,
+        });
+      } catch (err) {
+        console.warn(
+          `[pipeline] frame-thumbnail persist failed for ${data.leadId}: ${(err as Error)?.message}`,
+        );
+      }
     }
 
     // ── Stage 10: mark complete ──────────────────────────────────────
