@@ -777,6 +777,36 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
                   />
                 </div>
 
+                <div className="rounded-xl bg-canvas p-4">
+                  <p className="text-sm font-semibold text-ink">
+                    Platzhalter für deine Vorlage
+                  </p>
+                  <p className="text-xs text-ink-muted mt-1 leading-relaxed">
+                    Lade die offiziellen Platzhalter herunter und füge sie in
+                    deine Google-Docs-Vorlage ein — das geht auch nachträglich
+                    jederzeit. Der gedruckte QR-Code füllt den Platzhalter
+                    exakt 1:1 (randlos, ohne Rand oder Padding), das
+                    Video-Vorschaubild übernimmt exakt den Rahmen des
+                    Thumbnail-Platzhalters. Beim Skalieren in Google Docs das
+                    Seitenverhältnis beibehalten (Ecke ziehen, nicht Kante).
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button asChild variant="subtle" size="sm">
+                      <a href="/api/markers/qr" download="videocomet-marker-qr.png">
+                        QR-Code-Platzhalter (PNG)
+                      </a>
+                    </Button>
+                    <Button asChild variant="subtle" size="sm">
+                      <a
+                        href="/api/markers/thumb"
+                        download="videocomet-marker-thumb.png"
+                      >
+                        Thumbnail-Platzhalter (PNG)
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+
                 {/* Vorschaubild-Konfiguration ist in die untenstehende
                     Card „Vorschaubild im Brief" gewandert — dort kannst
                     du Modus (Frame / Folie / Landingpage-Screenshot) und

@@ -36,27 +36,23 @@ import { createHash } from "node:crypto";
 import PizZip from "pizzip";
 
 import { requireUserApi } from "@/lib/auth-guard";
-import {
-  generateMarkerPng,
-  getMarkerSha256,
-} from "@/lib/marker-placeholders";
+import { getMarkerShas } from "@/lib/marker-placeholders";
 import { fetchGoogleDocAsDocx } from "@/worker/lib/google-docs";
 
 // ── Marker SHA cache (module-level) ─────────────────────────────────────────
+// Pro Typ ALLE gültigen Hashes (aktuelles Design + Legacy), damit auch
+// Vorlagen mit dem alten Marker weiter als "vorhanden" erkannt werden.
 
-let markerShasPromise: Promise<{ qr: string; thumb: string }> | null = null;
+let markerShasPromise: Promise<{ qr: string[]; thumb: string[] }> | null = null;
 
-function loadMarkerShas(): Promise<{ qr: string; thumb: string }> {
+function loadMarkerShas(): Promise<{ qr: string[]; thumb: string[] }> {
   if (!markerShasPromise) {
     markerShasPromise = (async () => {
-      const [qrBuf, thumbBuf] = await Promise.all([
-        generateMarkerPng("qr"),
-        generateMarkerPng("thumb"),
+      const [qr, thumb] = await Promise.all([
+        getMarkerShas("qr"),
+        getMarkerShas("thumb"),
       ]);
-      return {
-        qr: getMarkerSha256(qrBuf),
-        thumb: getMarkerSha256(thumbBuf),
-      };
+      return { qr, thumb };
     })().catch((err) => {
       // Reset on failure so a transient error can be retried.
       markerShasPromise = null;
@@ -196,12 +192,12 @@ export async function POST(req: NextRequest) {
     const placeholders = extractPlaceholdersFromXml(xml);
     const { imageCount, shaSet } = scanMedia(zip);
 
-    const { qr: qrSha, thumb: thumbSha } = await loadMarkerShas();
+    const { qr: qrShas, thumb: thumbShas } = await loadMarkerShas();
 
     return NextResponse.json({
       placeholders,
-      hasQrMarker: shaSet.has(qrSha),
-      hasThumbMarker: shaSet.has(thumbSha),
+      hasQrMarker: qrShas.some((sha) => shaSet.has(sha)),
+      hasThumbMarker: thumbShas.some((sha) => shaSet.has(sha)),
       imageCount,
     });
   } catch (err) {

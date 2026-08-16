@@ -52,10 +52,6 @@ import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import { stampQrOverlay } from "./pdf-qr-overlay";
-import {
-  analyzeQrPlaceholderArtwork,
-  buildWysiwygQrPng,
-} from "./qr-content-box";
 import { getDriveClient, getDocsClient, extractDocId } from "@/lib/google-docs/sa-auth";
 import { uploadFile, deleteFile } from "@/lib/bunny/storage";
 import { acquireDocsWriteSlot, withGoogleRetry } from "./google-api-guard";
@@ -118,8 +114,6 @@ interface QrTarget {
   heightPt: number;
   /** Nur bei positioned: horizontaler Offset relativ zur Textspalte. */
   leftOffsetPt: number;
-  /** Download-URL des Platzhalter-Artworks (kurzlebig, ~30 min gültig). */
-  contentUri: string | null;
 }
 
 interface ImageCandidates {
@@ -139,7 +133,6 @@ function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
     w: number;
     h: number;
     leftOffsetPt: number;
-    contentUri: string | null;
   }> = [];
 
   for (const [id, obj] of Object.entries(doc.inlineObjects ?? {})) {
@@ -153,7 +146,6 @@ function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
       w,
       h,
       leftOffsetPt: 0,
-      contentUri: embedded?.imageProperties?.contentUri ?? null,
     });
   }
   for (const [id, obj] of Object.entries(doc.positionedObjects ?? {})) {
@@ -167,7 +159,6 @@ function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
       w,
       h,
       leftOffsetPt: obj.positionedObjectProperties?.positioning?.leftOffset?.magnitude ?? 0,
-      contentUri: embedded?.imageProperties?.contentUri ?? null,
     });
   }
 
@@ -197,7 +188,6 @@ function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
         widthPt: qrCand.w,
         heightPt: qrCand.h,
         leftOffsetPt: qrCand.leftOffsetPt,
-        contentUri: qrCand.contentUri,
       }
     : null;
   return { qr, thumbObjectId: thumbCand?.id ?? null };
@@ -401,47 +391,14 @@ export async function renderViaDocsApi(
       input.qrOverlay?.anchorText && input.qrPngPath && qrTarget?.kind === "positioned",
     );
 
-    // 2c. WYSIWYG-QR (2026-08-16): das Platzhalter-Artwork des Kunden
-    // enthält oft weißen Rand + Label um den eigentlichen QR — der echte
-    // QR wird dann so in eine weiße Box gepadded, dass er im Brief exakt
-    // an der Position und in der Größe des Vorlagen-QRs erscheint.
-    // Analyse-Fehler → Full-Box-QR wie bisher (Best-Effort).
+    // 2c. Der QR füllt IMMER exakt die Platzhalter-Box (randlos, kein
+    // Padding) — bewusste Produktentscheidung 2026-08-16: keine Analyse
+    // des Kunden-Artworks mehr (WYSIWYG-Experiment entfernt). Wer den QR
+    // kleiner will, verkleinert den Platzhalter in der Vorlage; offizielle
+    // Platzhalter gibt es im Bearbeiten-Tab zum Download.
     let effectiveQrPng: Buffer | null = null;
     if (input.qrPngPath && qrTarget) {
       effectiveQrPng = await readFile(input.qrPngPath);
-      if (qrTarget.contentUri) {
-        try {
-          const res = await fetch(qrTarget.contentUri, {
-            signal: AbortSignal.timeout(10_000),
-          });
-          if (!res.ok) {
-            console.warn(
-              `[docs-native] qr-artwork fetch ${res.status} (full-box fallback)`,
-            );
-          } else {
-            const artwork = Buffer.from(await res.arrayBuffer());
-            const ratios = await analyzeQrPlaceholderArtwork(artwork);
-            if (!ratios) {
-              console.log("[docs-native] qr-wysiwyg: artwork randlos → full-box");
-            } else {
-              effectiveQrPng = await buildWysiwygQrPng({
-                qrPng: effectiveQrPng,
-                ratios,
-                boxWidthPt: qrTarget.widthPt,
-                boxHeightPt: qrTarget.heightPt,
-              });
-              console.log(
-                `[docs-native] qr-wysiwyg: content-box l=${ratios.left.toFixed(2)} t=${ratios.top.toFixed(2)} ` +
-                  `w=${ratios.width.toFixed(2)} h=${ratios.height.toFixed(2)}`,
-              );
-            }
-          }
-        } catch (err) {
-          console.warn(
-            `[docs-native] qr-artwork analysis failed (full-box fallback): ${err instanceof Error ? err.message : "?"}`,
-          );
-        }
-      }
     }
 
     // 2b. Referenz-Seitenzahl des unveraenderten Templates (nur bei

@@ -19,10 +19,7 @@ import {
   saveDocx,
 } from "../lib/docx";
 import { fetchGoogleDocAsDocx } from "../lib/google-docs";
-import {
-  generateMarkerPng,
-  getMarkerSha256,
-} from "@/lib/marker-placeholders";
+import { getMarkerShas } from "@/lib/marker-placeholders";
 
 export interface DocxModifyInput {
   outDir: string;
@@ -77,27 +74,25 @@ export interface DocxModifyOutput {
  * so the hash is the same across every worker job and we only need to
  * generate the markers once per worker process.
  */
-let cachedQrSha: string | null = null;
-let cachedThumbSha: string | null = null;
+let cachedQrShas: string[] | null = null;
+let cachedThumbShas: string[] | null = null;
 
-async function getQrMarkerSha(): Promise<string> {
-  if (cachedQrSha) return cachedQrSha;
-  const buf = await generateMarkerPng("qr");
-  cachedQrSha = getMarkerSha256(buf);
-  return cachedQrSha;
+async function getQrMarkerShas(): Promise<string[]> {
+  if (cachedQrShas) return cachedQrShas;
+  cachedQrShas = await getMarkerShas("qr");
+  return cachedQrShas;
 }
 
-async function getThumbMarkerSha(): Promise<string> {
-  if (cachedThumbSha) return cachedThumbSha;
-  const buf = await generateMarkerPng("thumb");
-  cachedThumbSha = getMarkerSha256(buf);
-  return cachedThumbSha;
+async function getThumbMarkerShas(): Promise<string[]> {
+  if (cachedThumbShas) return cachedThumbShas;
+  cachedThumbShas = await getMarkerShas("thumb");
+  return cachedThumbShas;
 }
 
 /** Test-only helper: wipe memoised marker hashes. */
 export function _clearMarkerHashCache(): void {
-  cachedQrSha = null;
-  cachedThumbSha = null;
+  cachedQrShas = null;
+  cachedThumbShas = null;
 }
 
 /**
@@ -177,14 +172,17 @@ export async function runDocxModify(
   //    in denen Google Docs das PNG beim Einfügen re-encoded hat.
   let qrReplaced = false;
   if (input.qrPngPath) {
-    const targetSha = await getQrMarkerSha();
+    const targetShas = await getQrMarkerShas();
     const qrBytes = await readFile(input.qrPngPath);
-    qrReplaced = replaceImageByHash(zip, {
-      targetSha256: targetSha,
-      newImageBuffer: qrBytes,
-      contentType: "image/png",
-      matchDimensions: { width: 400, height: 400 },
-    });
+    for (const targetSha of targetShas) {
+      qrReplaced = replaceImageByHash(zip, {
+        targetSha256: targetSha,
+        newImageBuffer: qrBytes,
+        contentType: "image/png",
+        matchDimensions: { width: 400, height: 400 },
+      });
+      if (qrReplaced) break;
+    }
   }
 
   // 5. Thumb-Marker swap. Quelle nach Priorität wählen (Paket E):
@@ -195,13 +193,16 @@ export async function runDocxModify(
   let thumbSource: DocxModifyOutput["thumbSource"] = "none";
   const resolved = await resolveThumbBytes(input);
   if (resolved.source !== "none") {
-    const targetSha = await getThumbMarkerSha();
-    thumbReplaced = replaceImageByHash(zip, {
-      targetSha256: targetSha,
-      newImageBuffer: resolved.bytes,
-      contentType: resolved.contentType,
-      matchDimensions: { width: 640, height: 360 },
-    });
+    const targetShas = await getThumbMarkerShas();
+    for (const targetSha of targetShas) {
+      thumbReplaced = replaceImageByHash(zip, {
+        targetSha256: targetSha,
+        newImageBuffer: resolved.bytes,
+        contentType: resolved.contentType,
+        matchDimensions: { width: 640, height: 360 },
+      });
+      if (thumbReplaced) break;
+    }
     thumbSource = resolved.source;
   }
 
