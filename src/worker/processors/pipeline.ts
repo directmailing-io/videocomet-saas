@@ -1122,6 +1122,30 @@ export async function pipelineProcessor(
           durationMs: Date.now() - thumbStart,
         });
       }
+      // Frame @ frameMs persistieren, damit ein späterer PDF-only-Regen
+      // NICHT auf das Bunny-Stream-Auto-Thumbnail zurückfällt (das trifft
+      // meistens eine zufällige Szene und ignoriert den vom Kunden
+      // gewählten Zeitpunkt). Wir überschreiben `lead.thumbnailUrl` mit
+      // unserer eigenen Bunny-Storage-URL — Best-Effort, Fehler nur loggen.
+      if (thumbFilePath) {
+        try {
+          const { readFile } = await import("node:fs/promises");
+          const { uploadFile } = await import("@/lib/bunny/storage");
+          const thumbBuf = await readFile(thumbFilePath);
+          const uploaded = await uploadFile({
+            buffer: thumbBuf,
+            remotePath: `pdf-thumbnails/${data.leadId}-v${Date.now().toString(36)}.jpg`,
+            contentType: "image/jpeg",
+          });
+          await updateLeadStatus(data.leadId, {
+            thumbnailUrl: uploaded.url,
+          });
+        } catch (err) {
+          console.warn(
+            `[pipeline] frame-thumbnail persist failed for ${data.leadId}: ${(err as Error)?.message}`,
+          );
+        }
+      }
     }
     // else: no local video AND no stored thumbnail → can't extract; if
     // pdfThumbWanted the docx stage will simply ship without the thumb.

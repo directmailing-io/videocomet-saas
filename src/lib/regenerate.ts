@@ -5,6 +5,25 @@ import { removeStreamAssetRefsForGuids } from "@/lib/db/queries/bunny-assets";
 import { updateRun } from "@/lib/db/queries/runs";
 import { pipelineQueue } from "@/worker/queue";
 import { leadJobPriority } from "@/lib/queue-priority";
+import { deleteFile, parseStorageUrl } from "@/lib/bunny/storage";
+
+/**
+ * Löscht eine Datei aus Bunny Storage anhand ihrer CDN-URL. Best-Effort:
+ * schluckt Fehler, weil ein Regen NIE an einem Storage-Cleanup scheitern
+ * darf — das alte Objekt wäre höchstens verwaist, nicht kaputt.
+ */
+async function deleteBunnyByUrl(url: string | null | undefined): Promise<void> {
+  if (!url) return;
+  const parsed = parseStorageUrl(url);
+  if (!parsed) return;
+  try {
+    await deleteFile(parsed.zone, parsed.path);
+  } catch (err) {
+    console.warn(
+      `[regenerate] bunny cleanup failed for ${url}: ${(err as Error)?.message}`,
+    );
+  }
+}
 
 /**
  * Gemeinsamer Kern für Lead-/Run-Regenerierung. Wird von den User-Routen
@@ -61,6 +80,18 @@ export async function regenerateLeadCore(
     };
   }
 
+  // Alte URLs holen — vor dem Reset — damit wir die verwaisten
+  // Bunny-Storage-Dateien anschließend aufräumen können.
+  const [existing] = await db
+    .select({
+      pdfUrl: leads.pdfUrl,
+      envelopePdfUrl: leads.envelopePdfUrl,
+      thumbnailUrl: leads.thumbnailUrl,
+    })
+    .from(leads)
+    .where(eq(leads.id, input.leadId))
+    .limit(1);
+
   // Reset abhaengig vom Scope. slug NIE anfassen — Tracking-URLs muessen
   // stabil bleiben. status wird auf "pending" gesetzt damit die
   // Live-Tabelle den Fortschritt neu tracked.
@@ -88,6 +119,25 @@ export async function regenerateLeadCore(
   }
 
   await db.update(leads).set(patch).where(eq(leads.id, input.leadId));
+
+  // Alte Bunny-Storage-Objekte löschen (nach dem DB-Reset, damit ein
+  // Fehler hier die Regen-Runde nicht blockiert). Frame-Thumbnails (unser
+  // eigener pdf-thumbnails/-Pfad) räumen wir mit auf; Bunny-Stream-
+  // Thumbnails (vz-*.b-cdn.net) treffen parseStorageUrl gar nicht erst
+  // und werden von Bunny selbst mit dem Video entsorgt.
+  if (existing) {
+    const cleanups: Promise<void>[] = [];
+    if (scope === "all" || scope === "pdf") {
+      cleanups.push(deleteBunnyByUrl(existing.pdfUrl));
+    }
+    if (scope === "all" || scope === "envelope") {
+      cleanups.push(deleteBunnyByUrl(existing.envelopePdfUrl));
+    }
+    if (scope === "all" || scope === "video") {
+      cleanups.push(deleteBunnyByUrl(existing.thumbnailUrl));
+    }
+    await Promise.all(cleanups);
+  }
 
   // Re-enqueue diesen einen Lead. Skip-Flags steuern welche Stages
   // ausgefuehrt werden; die Stages selbst haben eigene Idempotenz-Guards
@@ -280,6 +330,24 @@ export async function regenerateRunCore(
     }
   }
 
+  // Alte URLs holen — vor dem Reset — damit wir die verwaisten
+  // Bunny-Storage-Dateien anschließend aufräumen können. Nur die IDs
+  // aus `leadRows`, damit wir bei mode="failed" nicht die anderen Leads
+  // anfassen.
+  const targetLeadIds = leadRows.map((l) => l.id);
+  const existingRows =
+    targetLeadIds.length > 0
+      ? await db
+          .select({
+            id: leads.id,
+            pdfUrl: leads.pdfUrl,
+            envelopePdfUrl: leads.envelopePdfUrl,
+            thumbnailUrl: leads.thumbnailUrl,
+          })
+          .from(leads)
+          .where(inArray(leads.id, targetLeadIds))
+      : [];
+
   if (mode === "failed") {
     const failedIds = leadRows.map((l) => l.id);
     await db
@@ -288,6 +356,26 @@ export async function regenerateRunCore(
       .where(and(eq(leads.runId, run.id), inArray(leads.id, failedIds)));
   } else {
     await db.update(leads).set(resetPatch).where(eq(leads.runId, run.id));
+  }
+
+  // Bunny-Storage-Cleanup NACH dem DB-Reset (Fehler dürfen den Regen
+  // nicht blockieren). Frame-Thumbnails aus unserem eigenen Pfad
+  // werden gelöscht; Bunny-Stream-Thumbnails treffen parseStorageUrl
+  // nicht und bleiben unangetastet.
+  if (existingRows.length > 0) {
+    const cleanups: Promise<void>[] = [];
+    for (const row of existingRows) {
+      if (mode === "all" || mode === "pdf") {
+        cleanups.push(deleteBunnyByUrl(row.pdfUrl));
+      }
+      if (mode === "all" || mode === "envelope") {
+        cleanups.push(deleteBunnyByUrl(row.envelopePdfUrl));
+      }
+      if (mode === "all" || mode === "video") {
+        cleanups.push(deleteBunnyByUrl(row.thumbnailUrl));
+      }
+    }
+    await Promise.all(cleanups);
   }
 
   // Re-snapshot der aktuell aktiven Custom-LP-Version: ein Regenerate soll
