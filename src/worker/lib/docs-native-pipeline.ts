@@ -52,6 +52,10 @@ import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import { stampQrOverlay } from "./pdf-qr-overlay";
+import {
+  analyzeQrPlaceholderArtwork,
+  buildWysiwygQrPng,
+} from "./qr-content-box";
 import { getDriveClient, getDocsClient, extractDocId } from "@/lib/google-docs/sa-auth";
 import { uploadFile, deleteFile } from "@/lib/bunny/storage";
 import { acquireDocsWriteSlot, withGoogleRetry } from "./google-api-guard";
@@ -114,6 +118,8 @@ interface QrTarget {
   heightPt: number;
   /** Nur bei positioned: horizontaler Offset relativ zur Textspalte. */
   leftOffsetPt: number;
+  /** Download-URL des Platzhalter-Artworks (kurzlebig, ~30 min gültig). */
+  contentUri: string | null;
 }
 
 interface ImageCandidates {
@@ -133,19 +139,27 @@ function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
     w: number;
     h: number;
     leftOffsetPt: number;
+    contentUri: string | null;
   }> = [];
 
   for (const [id, obj] of Object.entries(doc.inlineObjects ?? {})) {
-    const size = obj.inlineObjectProperties?.embeddedObject?.size;
-    const w = size?.width?.magnitude;
-    const h = size?.height?.magnitude;
+    const embedded = obj.inlineObjectProperties?.embeddedObject;
+    const w = embedded?.size?.width?.magnitude;
+    const h = embedded?.size?.height?.magnitude;
     if (!w || !h) continue;
-    candidates.push({ id, kind: "inline", w, h, leftOffsetPt: 0 });
+    candidates.push({
+      id,
+      kind: "inline",
+      w,
+      h,
+      leftOffsetPt: 0,
+      contentUri: embedded?.imageProperties?.contentUri ?? null,
+    });
   }
   for (const [id, obj] of Object.entries(doc.positionedObjects ?? {})) {
-    const size = obj.positionedObjectProperties?.embeddedObject?.size;
-    const w = size?.width?.magnitude;
-    const h = size?.height?.magnitude;
+    const embedded = obj.positionedObjectProperties?.embeddedObject;
+    const w = embedded?.size?.width?.magnitude;
+    const h = embedded?.size?.height?.magnitude;
     if (!w || !h) continue;
     candidates.push({
       id,
@@ -153,6 +167,7 @@ function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
       w,
       h,
       leftOffsetPt: obj.positionedObjectProperties?.positioning?.leftOffset?.magnitude ?? 0,
+      contentUri: embedded?.imageProperties?.contentUri ?? null,
     });
   }
 
@@ -182,6 +197,7 @@ function findImageCandidates(doc: docs_v1.Schema$Document): ImageCandidates {
         widthPt: qrCand.w,
         heightPt: qrCand.h,
         leftOffsetPt: qrCand.leftOffsetPt,
+        contentUri: qrCand.contentUri,
       }
     : null;
   return { qr, thumbObjectId: thumbCand?.id ?? null };
@@ -292,6 +308,40 @@ function computeQrAlignment(
   return qrCenter < columnW / 2 ? "START" : "END";
 }
 
+/**
+ * Baut die replaceAllText-Requests für alle Platzhalter.
+ *
+ * Leere Werte (z. B. Lead ohne Titel bei "Hallo {{titel}} {{anrede}}"):
+ * Ein nacktes `{{titel}}` → "" hinterlässt das Trenn-Leerzeichen aus dem
+ * Template → "Hallo  Herr" mit doppeltem Leerzeichen. Darum wird bei
+ * leeren Werten ZUERST `{{key}} ` (mit Folge-Leerzeichen), dann ` {{key}}`
+ * (Platzhalter am Zeilenende) und erst zuletzt das nackte `{{key}}`
+ * ersetzt — batchUpdate arbeitet die Requests in Reihenfolge ab, und die
+ * Verify-Stufe (Scan auf übrige `{{…}}`) fängt weiterhin alles, was
+ * keiner der drei Varianten getroffen hat.
+ */
+export function buildTextReplaceRequests(
+  textVars: Record<string, string>,
+): docs_v1.Schema$Request[] {
+  const requests: docs_v1.Schema$Request[] = [];
+  for (const [key, value] of Object.entries(textVars)) {
+    const effective = value ?? "";
+    const variants =
+      effective.trim() === ""
+        ? [`{{${key}}} `, ` {{${key}}}`, `{{${key}}}`]
+        : [`{{${key}}}`];
+    for (const containsText of variants) {
+      requests.push({
+        replaceAllText: {
+          containsText: { text: containsText, matchCase: true },
+          replaceText: effective.trim() === "" ? "" : effective,
+        },
+      });
+    }
+  }
+  return requests;
+}
+
 export async function renderViaDocsApi(
   input: DocsNativePipelineInput,
 ): Promise<DocsNativePipelineOutput> {
@@ -351,6 +401,43 @@ export async function renderViaDocsApi(
       input.qrOverlay?.anchorText && input.qrPngPath && qrTarget?.kind === "positioned",
     );
 
+    // 2c. WYSIWYG-QR (2026-08-16): das Platzhalter-Artwork des Kunden
+    // enthält oft weißen Rand + Label um den eigentlichen QR — der echte
+    // QR wird dann so in eine weiße Box gepadded, dass er im Brief exakt
+    // an der Position und in der Größe des Vorlagen-QRs erscheint.
+    // Analyse-Fehler → Full-Box-QR wie bisher (Best-Effort).
+    let effectiveQrPng: Buffer | null = null;
+    if (input.qrPngPath && qrTarget) {
+      effectiveQrPng = await readFile(input.qrPngPath);
+      if (qrTarget.contentUri) {
+        try {
+          const res = await fetch(qrTarget.contentUri, {
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (res.ok) {
+            const artwork = Buffer.from(await res.arrayBuffer());
+            const ratios = await analyzeQrPlaceholderArtwork(artwork);
+            if (ratios) {
+              effectiveQrPng = await buildWysiwygQrPng({
+                qrPng: effectiveQrPng,
+                ratios,
+                boxWidthPt: qrTarget.widthPt,
+                boxHeightPt: qrTarget.heightPt,
+              });
+              console.log(
+                `[docs-native] qr-wysiwyg: content-box l=${ratios.left.toFixed(2)} t=${ratios.top.toFixed(2)} ` +
+                  `w=${ratios.width.toFixed(2)} h=${ratios.height.toFixed(2)}`,
+              );
+            }
+          }
+        } catch (err) {
+          console.warn(
+            `[docs-native] qr-artwork analysis failed (full-box fallback): ${err instanceof Error ? err.message : "?"}`,
+          );
+        }
+      }
+    }
+
     // 2b. Referenz-Seitenzahl des unveraenderten Templates (nur bei
     // Inline-Konvertierung noetig, pro Template gecacht). Die Copy ist hier
     // noch unveraendert — ihr Export entspricht dem Template.
@@ -392,7 +479,7 @@ export async function renderViaDocsApi(
           })
             .png()
             .toBuffer()
-        : await readFile(input.qrPngPath);
+        : effectiveQrPng!;
       const remotePath = `docs-native-tmp/qr-${randomUUID()}.png`;
       const uploaded = await uploadFile({
         buffer: buf,
@@ -442,14 +529,7 @@ export async function renderViaDocsApi(
         },
       });
     }
-    for (const [key, value] of Object.entries(input.textVars)) {
-      requests.push({
-        replaceAllText: {
-          containsText: { text: `{{${key}}}`, matchCase: true },
-          replaceText: value ?? "",
-        },
-      });
-    }
+    requests.push(...buildTextReplaceRequests(input.textVars));
     if (thumbObjectId && thumbBunnyUrl) {
       requests.push({
         replaceImage: {
@@ -523,7 +603,7 @@ export async function renderViaDocsApi(
     if (qrOverlayActive && input.qrPngPath) {
       const overlayResult = await stampQrOverlay({
         pdfBuffer,
-        qrPng: await readFile(input.qrPngPath),
+        qrPng: effectiveQrPng!,
         qrWidthPt: qrTarget!.widthPt,
         qrHeightPt: qrTarget!.heightPt,
         anchorText: input.qrOverlay!.anchorText,

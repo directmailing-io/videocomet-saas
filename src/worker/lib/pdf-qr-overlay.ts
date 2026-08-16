@@ -30,8 +30,43 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PDFDocument } from "pdf-lib";
+import { gsPath } from "./ghostscript";
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Normalisiert das PDF via Ghostscript (pdfwrite, ohne Downsampling) für
+ * die GEOMETRIE-Extraktion. Googles PDF-Export packt Bilder in Form-
+ * XObjects, in die `pdftohtml -xml` nicht hineinschaut — die Marker-Box
+ * des transparenten Platzhalters war dadurch praktisch nie auffindbar
+ * (Logs: marker=false) und der QR landete nur näherungsweise über den
+ * Anker-Fallback (~9pt daneben, Reklamation 2026-08-16). Ghostscript
+ * flacht die Forms ab, die Seitengeometrie bleibt identisch. Fehler →
+ * Extraktion läuft wie bisher auf dem Original (Best-Effort).
+ * Gestempelt wird IMMER in den Original-Buffer, nie in die Normalisierung.
+ */
+async function normalizeForGeometry(
+  pdfPath: string,
+  workDir: string,
+): Promise<string> {
+  const outPath = join(workDir, "norm.pdf");
+  try {
+    await execFileAsync(gsPath(), [
+      "-sDEVICE=pdfwrite",
+      "-dNOPAUSE",
+      "-dQUIET",
+      "-dBATCH",
+      `-sOutputFile=${outPath}`,
+      pdfPath,
+    ]);
+    return outPath;
+  } catch (err) {
+    console.warn(
+      `[qr-overlay] gs-normalize failed, extracting from raw export: ${err instanceof Error ? err.message : "?"}`,
+    );
+    return pdfPath;
+  }
+}
 
 /** Abstand zwischen Link-Unterkante und QR-Oberkante beim Verschieben (pt). */
 const DEFAULT_GAP_PT = 6;
@@ -311,13 +346,14 @@ export async function stampQrOverlay(input: QrOverlayInput): Promise<QrOverlayRe
   try {
     const pdfPath = join(workDir, "in.pdf");
     await writeFile(pdfPath, input.pdfBuffer);
+    const geomPath = await normalizeForGeometry(pdfPath, workDir);
 
-    const pages = await extractWords(pdfPath, workDir);
+    const pages = await extractWords(geomPath, workDir);
     if (pages.length === 0) {
       throw new Error("qr-overlay: pdftotext lieferte keine Seiten");
     }
     const images = await extractImages(
-      pdfPath,
+      geomPath,
       workDir,
       pages.map((p) => ({ widthPt: p.widthPt, heightPt: p.heightPt })),
     );

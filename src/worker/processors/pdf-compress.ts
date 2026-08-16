@@ -1,8 +1,10 @@
 /**
  * Stage 8: PDF compression.
  *
- * Uses Ghostscript with `-dPDFSETTINGS=/ebook` (medium-quality, ~150 DPI)
- * which is the spec-recommended setting for letter-PDFs.
+ * Uses Ghostscript with `-dPDFSETTINGS=/printer` (~300 DPI images).
+ * Briefe werden physisch GEDRUCKT — das frühere `/ebook` (150 DPI) hat
+ * Video-Thumbnail und gestempelten QR sichtbar verpixelt (Reklamation
+ * 2026-08-16: 1280px-Frame wurde auf 455px runtergerechnet).
  *
  * If the compressed file ends up LARGER than the original (rare, but
  * happens for very small PDFs), we keep the original.
@@ -27,7 +29,7 @@ export interface PdfCompressOutput {
 export async function runPdfCompress(
   input: PdfCompressInput,
 ): Promise<PdfCompressOutput> {
-  const quality = input.quality ?? "ebook";
+  const quality = input.quality ?? "printer";
   const compressedPath = join(input.outDir, "letter-compressed.pdf");
 
   const result = await compressPdf({
