@@ -305,23 +305,62 @@ export function KontakteView(_props: KontakteViewProps) {
 
           <div className="mt-2 space-y-0.5">
             {lists.map((list) => (
-              <button
+              <div
                 key={list.id}
-                type="button"
-                onClick={() => setSelectedListId(list.id)}
                 className={cn(
-                  "w-full text-left px-2 py-1.5 rounded-lg text-sm flex items-center justify-between",
+                  "group relative rounded-lg flex items-center",
                   selectedListId === list.id
-                    ? "bg-canvas-deep font-semibold text-ink"
-                    : "text-ink-muted hover:bg-canvas",
+                    ? "bg-canvas-deep"
+                    : "hover:bg-canvas",
                 )}
                 title={list.description ?? undefined}
               >
-                <span className="truncate">{list.name}</span>
-                <span className="text-xs text-ink-muted ml-2 shrink-0">
-                  {list.contactCount}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedListId(list.id)}
+                  className={cn(
+                    "flex-1 text-left px-2 py-1.5 text-sm flex items-center justify-between min-w-0",
+                    selectedListId === list.id
+                      ? "font-semibold text-ink"
+                      : "text-ink-muted",
+                  )}
+                >
+                  <span className="truncate">{list.name}</span>
+                  <span className="text-xs text-ink-muted ml-2 shrink-0 group-hover:hidden">
+                    {list.contactCount}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (
+                      !confirm(
+                        `Liste "${list.name}" löschen? Die Kontakte selbst bleiben erhalten.`,
+                      )
+                    )
+                      return;
+                    try {
+                      const res = await fetch(`/api/contact-lists/${list.id}`, {
+                        method: "DELETE",
+                      });
+                      if (!res.ok) {
+                        const body = await res.json().catch(() => ({}));
+                        throw new Error(body?.error ?? "Fehler beim Löschen");
+                      }
+                      if (selectedListId === list.id) setSelectedListId(null);
+                      await loadLists();
+                      toast({ title: `Liste "${list.name}" gelöscht` });
+                    } catch (err) {
+                      toastError(toast, err);
+                    }
+                  }}
+                  className="hidden group-hover:block text-ink-muted hover:text-danger p-1 mr-1 rounded"
+                  title="Liste löschen"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
             ))}
             {lists.length === 0 && (
               <p className="text-xs text-ink-muted px-2 py-1.5">
