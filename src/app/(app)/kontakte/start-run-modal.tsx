@@ -67,7 +67,7 @@ export function StartRunModal({
     // Der Wizard springt dank ?listId= automatisch zu Step 3 (Optionen),
     // weil Import + Duplikat-Check nicht nötig sind.
     router.push(
-      `/kampagnen/${campaignId}/runs/neu-v4?listId=${encodeURIComponent(listId)}`,
+      `/kampagnen/${campaignId}/runs/neu?listId=${encodeURIComponent(listId)}`,
     );
   }
 
