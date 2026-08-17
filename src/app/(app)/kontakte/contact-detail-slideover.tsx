@@ -397,8 +397,10 @@ function OverviewTab({
             stehen dann auch bei anderen Kontakten und in Filtern zur Verfügung.
           </p>
         ) : (
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-            {Object.entries(data.contact.data).map(([k, v]) => (
+          <div className="divide-y divide-canvas-deep rounded-lg border border-line bg-surface">
+            {Object.entries(data.contact.data)
+              .sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()))
+              .map(([k, v]) => (
               <EditableCustomField
                 key={k}
                 contactId={data.contact.id}
@@ -562,9 +564,16 @@ function EditableCustomField({
     }
   }
 
+  const isUrl = value.startsWith("http://") || value.startsWith("https://");
+
   return (
-    <div className="text-xs flex justify-between border-b border-canvas-deep py-1 items-center gap-2">
-      <span className="text-ink-muted truncate">{fieldKey}</span>
+    <div className="grid grid-cols-[120px_1fr] gap-3 px-3 py-2 items-start hover:bg-canvas">
+      <span
+        className="text-[11px] text-ink-muted truncate pt-0.5"
+        title={fieldKey}
+      >
+        {fieldKey}
+      </span>
       {editing ? (
         <input
           type="text"
@@ -580,16 +589,31 @@ function EditableCustomField({
             }
           }}
           disabled={busy}
-          className="text-ink text-right px-1 py-0.5 border border-brand rounded outline-none w-32"
+          className="text-xs text-ink px-1.5 py-0.5 border border-brand rounded outline-none w-full min-w-0"
         />
       ) : (
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="text-ink font-medium truncate hover:bg-canvas rounded px-1 py-0.5"
-        >
-          {value || <span className="text-ink-muted italic">— leer —</span>}
-        </button>
+        <div className="min-w-0 flex items-start gap-2">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-xs text-ink font-medium text-left hover:underline break-all flex-1 min-w-0"
+            title="Klicken zum Bearbeiten"
+          >
+            {value || <span className="text-ink-muted italic">— leer —</span>}
+          </button>
+          {isUrl && (
+            <a
+              href={value}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 text-brand-deep hover:text-ink"
+              onClick={(e) => e.stopPropagation()}
+              title="Link öffnen"
+            >
+              <ExternalLink className="size-3" />
+            </a>
+          )}
+        </div>
       )}
     </div>
   );
