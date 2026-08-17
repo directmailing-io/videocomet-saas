@@ -87,6 +87,7 @@ function buildBaseFilters(
 ): SQL[] {
   const parts: SQL[] = [];
   parts.push(sql`${campaigns.userId} = ${userId}`);
+  parts.push(sql`${campaigns.deletedAt} IS NULL`);
   parts.push(sql`${leads.removedAt} IS NULL`);
 
   const scope = filters.scope;
@@ -417,6 +418,7 @@ interface FunnelSqlRow {
 function buildFunnelScopeFilters(userId: string, scope: ActivityScope): SQL[] {
   const parts: SQL[] = [];
   parts.push(sql`${campaigns.userId} = ${userId}`);
+  parts.push(sql`${campaigns.deletedAt} IS NULL`);
   parts.push(sql`${leads.removedAt} IS NULL`);
   switch (scope.kind) {
     case "campaign":
@@ -509,6 +511,7 @@ export async function getScopedLeadIds(
 ): Promise<string[]> {
   const whereParts: SQL[] = [];
   whereParts.push(sql`${campaigns.userId} = ${userId}`);
+  whereParts.push(sql`${campaigns.deletedAt} IS NULL`);
   whereParts.push(sql`${leads.removedAt} IS NULL`);
   const scope = filters.scope;
   switch (scope.kind) {

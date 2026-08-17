@@ -19,7 +19,7 @@
  *    renders. Returns `total` separately for pagination.
  */
 
-import { and, asc, desc, eq, gte, inArray, lte, sql, ilike, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, sql, ilike, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { campaigns, leadEvents, leads, runs } from "@/lib/db/schema";
 
@@ -208,7 +208,7 @@ export async function listCampaignAggregates(
       createdAt: campaigns.createdAt,
     })
     .from(campaigns)
-    .where(eq(campaigns.userId, userId))
+    .where(and(eq(campaigns.userId, userId), isNull(campaigns.deletedAt)))
     .orderBy(desc(campaigns.createdAt));
 
   if (camps.length === 0) return [];
@@ -319,7 +319,13 @@ export async function getCampaignDeepDive(
       createdAt: campaigns.createdAt,
     })
     .from(campaigns)
-    .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)))
+    .where(
+      and(
+        eq(campaigns.id, campaignId),
+        eq(campaigns.userId, userId),
+        isNull(campaigns.deletedAt),
+      ),
+    )
     .limit(1);
   if (!camp) throw new Error("Not found");
 
@@ -448,7 +454,7 @@ export async function getCampaignDeepDive(
 export async function listAnalyticsEvents(
   filters: EventListFilters,
 ): Promise<EventListResult> {
-  const conds = [eq(runs.userId, filters.userId)];
+  const conds = [eq(runs.userId, filters.userId), isNull(campaigns.deletedAt)];
   if (filters.kinds && filters.kinds.length > 0) {
     conds.push(inArray(leadEvents.kind, filters.kinds));
   }
@@ -590,7 +596,14 @@ export async function listAllCampaignLeads(
     })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
-    .where(and(eq(runs.campaignId, campaignId), eq(runs.userId, userId)))
+    .innerJoin(campaigns, eq(campaigns.id, runs.campaignId))
+    .where(
+      and(
+        eq(runs.campaignId, campaignId),
+        eq(runs.userId, userId),
+        isNull(campaigns.deletedAt),
+      ),
+    )
     .orderBy(desc(runs.createdAt), asc(leads.rowIndex));
   return rows.map((r) => ({
     ...r,
@@ -609,6 +622,6 @@ export async function listCampaignsForFilter(
   return db
     .select({ id: campaigns.id, name: campaigns.name })
     .from(campaigns)
-    .where(eq(campaigns.userId, userId))
+    .where(and(eq(campaigns.userId, userId), isNull(campaigns.deletedAt)))
     .orderBy(asc(campaigns.name));
 }

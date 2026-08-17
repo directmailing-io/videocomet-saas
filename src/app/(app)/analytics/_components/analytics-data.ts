@@ -162,6 +162,7 @@ async function readKindCounts(
 }> {
   const baseConds = [
     eq(campaigns.userId, userId),
+    isNull(campaigns.deletedAt),
     isNull(leads.removedAt),
     gte(leadEvents.ts, from),
     lt(leadEvents.ts, to),
@@ -279,6 +280,7 @@ export async function getTimeSeries(
 ): Promise<TimeBucket[]> {
   const baseConds = [
     eq(campaigns.userId, userId),
+    isNull(campaigns.deletedAt),
     isNull(leads.removedAt),
     gte(leadEvents.ts, range.from),
     lt(leadEvents.ts, range.to),
@@ -372,6 +374,7 @@ export async function getFunnelData(
 ): Promise<FunnelData> {
   const baseConds = [
     eq(campaigns.userId, userId),
+    isNull(campaigns.deletedAt),
     isNull(leads.removedAt),
     gte(leadEvents.ts, range.from),
     lt(leadEvents.ts, range.to),
@@ -494,7 +497,7 @@ export async function listCampaignPerformance(
       name: campaigns.name,
     })
     .from(campaigns)
-    .where(eq(campaigns.userId, userId))
+    .where(and(eq(campaigns.userId, userId), isNull(campaigns.deletedAt)))
     .orderBy(desc(campaigns.createdAt));
   if (camps.length === 0) return [];
   const campIds = camps.map((c) => c.id);
@@ -657,6 +660,7 @@ export async function getTopLeads(
 ): Promise<TopLead[]> {
   const baseConds = [
     eq(campaigns.userId, userId),
+    isNull(campaigns.deletedAt),
     isNull(leads.removedAt),
     gte(leadEvents.ts, range.from),
     lt(leadEvents.ts, range.to),
@@ -783,7 +787,13 @@ export async function listRunsForCampaign(
   const [c] = await db
     .select({ id: campaigns.id })
     .from(campaigns)
-    .where(and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)))
+    .where(
+      and(
+        eq(campaigns.id, campaignId),
+        eq(campaigns.userId, userId),
+        isNull(campaigns.deletedAt),
+      ),
+    )
     .limit(1);
   if (!c) return [];
 
