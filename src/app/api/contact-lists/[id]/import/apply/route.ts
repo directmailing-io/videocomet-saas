@@ -120,6 +120,36 @@ export async function POST(
         case "linkedinUrl":
           contact.linkedinUrl = raw;
           break;
+        case "salutation":
+          contact.salutation = raw;
+          break;
+        case "title":
+          contact.title = raw;
+          break;
+        case "externalId":
+          contact.externalId = raw;
+          break;
+        case "street":
+          contact.street = raw;
+          break;
+        case "postalCode":
+          contact.postalCode = raw;
+          break;
+        case "city":
+          contact.city = raw;
+          break;
+        case "country":
+          contact.country = raw;
+          break;
+        case "position":
+          contact.position = raw;
+          break;
+        case "website":
+          contact.website = raw;
+          break;
+        case "gender":
+          contact.gender = raw;
+          break;
         case "custom": {
           const key = m.customKey ?? slugifyFieldKey(header);
           if (key) (contact.data ??= {})[key] = raw;

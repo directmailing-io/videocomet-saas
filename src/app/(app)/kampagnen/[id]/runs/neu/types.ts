@@ -60,7 +60,26 @@ export interface WizardState {
   previewRows: string[][];
   totalRows: number;
   columnMapping: Record<string, {
-    slot: "email" | "firstName" | "lastName" | "fullName" | "company" | "phone" | "linkedinUrl" | "custom" | "ignore";
+    slot:
+      | "email"
+      | "firstName"
+      | "lastName"
+      | "fullName"
+      | "company"
+      | "phone"
+      | "linkedinUrl"
+      | "salutation"
+      | "title"
+      | "externalId"
+      | "street"
+      | "postalCode"
+      | "city"
+      | "country"
+      | "position"
+      | "website"
+      | "gender"
+      | "custom"
+      | "ignore";
     customKey?: string;
     customLabel?: string;
     customType?: string;

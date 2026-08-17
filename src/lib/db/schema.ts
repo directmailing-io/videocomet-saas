@@ -1973,6 +1973,18 @@ export const contacts = pgTable("contacts", {
   phone: text("phone"),
   linkedinUrl: text("linkedin_url"),
 
+  // ── Erweiterte Basis-Felder (Migration 0058) ──────────────────────
+  salutation: text("salutation"),       // Anrede (Herr/Frau/Dr./…)
+  title: text("title"),                 // Titel (Dr., Prof., …)
+  externalId: text("external_id"),      // Externe Import-ID (z. B. "L-220")
+  street: text("street"),               // Straße + Hausnummer
+  postalCode: text("postal_code"),      // PLZ
+  city: text("city"),                   // Ort
+  country: text("country"),             // Land (roh, wie importiert)
+  position: text("position"),           // Position/Rolle im Unternehmen
+  website: text("website"),             // Firmen-Website
+  gender: text("gender"),               // Geschlecht (m/w/d/…)
+
   // Alle weiteren Felder (Custom-Felder aus Import). Meta für UI-Anzeige
   // liegt in contactFields.
   data: jsonb("data").notNull().$type<Record<string, string>>().default({}),

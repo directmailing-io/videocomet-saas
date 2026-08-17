@@ -581,6 +581,17 @@ export async function updateContact(input: {
     companyDisplay: string | null;
     phone: string | null;
     linkedinUrl: string | null;
+    // Erweitert mit Migration 0058
+    salutation: string | null;
+    title: string | null;
+    externalId: string | null;
+    street: string | null;
+    postalCode: string | null;
+    city: string | null;
+    country: string | null;
+    position: string | null;
+    website: string | null;
+    gender: string | null;
     data: Record<string, string>;
   }>;
 }): Promise<ContactRow | null> {
@@ -593,6 +604,16 @@ export async function updateContact(input: {
   if (p.companyDisplay !== undefined) cleaned.companyDisplay = p.companyDisplay;
   if (p.phone !== undefined) cleaned.phone = p.phone;
   if (p.linkedinUrl !== undefined) cleaned.linkedinUrl = p.linkedinUrl;
+  if (p.salutation !== undefined) cleaned.salutation = p.salutation;
+  if (p.title !== undefined) cleaned.title = p.title;
+  if (p.externalId !== undefined) cleaned.externalId = p.externalId;
+  if (p.street !== undefined) cleaned.street = p.street;
+  if (p.postalCode !== undefined) cleaned.postalCode = p.postalCode;
+  if (p.city !== undefined) cleaned.city = p.city;
+  if (p.country !== undefined) cleaned.country = p.country;
+  if (p.position !== undefined) cleaned.position = p.position;
+  if (p.website !== undefined) cleaned.website = p.website;
+  if (p.gender !== undefined) cleaned.gender = p.gender;
   if (p.data !== undefined) cleaned.data = p.data;
 
   const [row] = await db
@@ -728,6 +749,17 @@ export async function bulkImportContacts(input: {
     company?: string | null;
     phone?: string | null;
     linkedinUrl?: string | null;
+    // Erweiterte Basis-Felder (Migration 0058)
+    salutation?: string | null;
+    title?: string | null;
+    externalId?: string | null;
+    street?: string | null;
+    postalCode?: string | null;
+    city?: string | null;
+    country?: string | null;
+    position?: string | null;
+    website?: string | null;
+    gender?: string | null;
     data?: Record<string, string>;
   }>;
   registerCustomFields?: Array<{ key: string; label: string; detectedType: string }>;
@@ -799,6 +831,16 @@ export async function bulkImportContacts(input: {
                  company_display  = COALESCE(NULLIF(company_display,''), ${row.company ?? null}),
                  phone            = COALESCE(NULLIF(phone,''),      ${row.phone ?? null}),
                  linkedin_url     = COALESCE(NULLIF(linkedin_url,''), ${row.linkedinUrl ?? null}),
+                 salutation       = COALESCE(NULLIF(salutation,''), ${row.salutation ?? null}),
+                 title            = COALESCE(NULLIF(title,''),      ${row.title ?? null}),
+                 external_id      = COALESCE(NULLIF(external_id,''), ${row.externalId ?? null}),
+                 street           = COALESCE(NULLIF(street,''),     ${row.street ?? null}),
+                 postal_code      = COALESCE(NULLIF(postal_code,''), ${row.postalCode ?? null}),
+                 city             = COALESCE(NULLIF(city,''),       ${row.city ?? null}),
+                 country          = COALESCE(NULLIF(country,''),    ${row.country ?? null}),
+                 position         = COALESCE(NULLIF(position,''),   ${row.position ?? null}),
+                 website          = COALESCE(NULLIF(website,''),    ${row.website ?? null}),
+                 gender           = COALESCE(NULLIF(gender,''),     ${row.gender ?? null}),
                  data             = COALESCE(data,'{}'::jsonb) || ${sql.raw(`'${JSON.stringify(row.data ?? {}).replace(/'/g, "''")}'::jsonb`)},
                  updated_at       = now()
            WHERE id = ${existingId}
@@ -817,6 +859,16 @@ export async function bulkImportContacts(input: {
             companyDisplay: row.company ?? null,
             phone: row.phone ?? null,
             linkedinUrl: row.linkedinUrl ?? null,
+            salutation: row.salutation ?? null,
+            title: row.title ?? null,
+            externalId: row.externalId ?? null,
+            street: row.street ?? null,
+            postalCode: row.postalCode ?? null,
+            city: row.city ?? null,
+            country: row.country ?? null,
+            position: row.position ?? null,
+            website: row.website ?? null,
+            gender: row.gender ?? null,
             data: row.data ?? {},
           })
           .returning({ id: contacts.id });

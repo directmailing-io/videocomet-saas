@@ -73,6 +73,17 @@ export const BASE_CONTACT_FIELDS = [
   "company",
   "phone",
   "linkedinUrl",
+  // Erweitert mit Migration 0058
+  "salutation",
+  "title",
+  "externalId",
+  "street",
+  "postalCode",
+  "city",
+  "country",
+  "position",
+  "website",
+  "gender",
 ] as const;
 export type BaseContactField = (typeof BASE_CONTACT_FIELDS)[number];
 
@@ -93,6 +104,17 @@ export interface ContactMappingContext {
     companyDisplay: string | null;
     phone: string | null;
     linkedinUrl: string | null;
+    // Erweitert mit Migration 0058
+    salutation?: string | null;
+    title?: string | null;
+    externalId?: string | null;
+    street?: string | null;
+    postalCode?: string | null;
+    city?: string | null;
+    country?: string | null;
+    position?: string | null;
+    website?: string | null;
+    gender?: string | null;
     data: Record<string, string>;
   };
   system: {
@@ -119,6 +141,16 @@ export function resolveContactMappingEntry(
         raw = ctx.contact.companyDisplay ?? ctx.contact.company;
       else if (entry.field === "phone") raw = ctx.contact.phone;
       else if (entry.field === "linkedinUrl") raw = ctx.contact.linkedinUrl;
+      else if (entry.field === "salutation") raw = ctx.contact.salutation;
+      else if (entry.field === "title") raw = ctx.contact.title;
+      else if (entry.field === "externalId") raw = ctx.contact.externalId;
+      else if (entry.field === "street") raw = ctx.contact.street;
+      else if (entry.field === "postalCode") raw = ctx.contact.postalCode;
+      else if (entry.field === "city") raw = ctx.contact.city;
+      else if (entry.field === "country") raw = ctx.contact.country;
+      else if (entry.field === "position") raw = ctx.contact.position;
+      else if (entry.field === "website") raw = ctx.contact.website;
+      else if (entry.field === "gender") raw = ctx.contact.gender;
       else raw = null;
       break;
     case "customField":
@@ -169,6 +201,17 @@ export function buildLeadDataFromContact(
   if (comp) data.company = comp;
   if (ctx.contact.phone) data.phone = ctx.contact.phone;
   if (ctx.contact.linkedinUrl) data.linkedin = ctx.contact.linkedinUrl;
+  // Erweiterte Basis-Felder (Migration 0058)
+  if (ctx.contact.salutation) data.salutation = ctx.contact.salutation;
+  if (ctx.contact.title) data.title = ctx.contact.title;
+  if (ctx.contact.externalId) data.externalId = ctx.contact.externalId;
+  if (ctx.contact.street) data.street = ctx.contact.street;
+  if (ctx.contact.postalCode) data.postalCode = ctx.contact.postalCode;
+  if (ctx.contact.city) data.city = ctx.contact.city;
+  if (ctx.contact.country) data.country = ctx.contact.country;
+  if (ctx.contact.position) data.position = ctx.contact.position;
+  if (ctx.contact.website) data.website = ctx.contact.website;
+  if (ctx.contact.gender) data.gender = ctx.contact.gender;
 
   // Alle Custom-Felder mitgeben (unter Original-Key)
   for (const [k, v] of Object.entries(ctx.contact.data ?? {})) {

@@ -17,6 +17,17 @@ export type ContactFieldSlot =
   | "phone"
   | "company"
   | "linkedinUrl"
+  // Erweiterte Basis-Felder (Migration 0058)
+  | "salutation"
+  | "title"
+  | "externalId"
+  | "street"
+  | "postalCode"
+  | "city"
+  | "country"
+  | "position"
+  | "website"
+  | "gender"
   | "custom";
 
 export type CustomFieldType = "email" | "phone" | "url" | "text" | "number" | "date";
@@ -34,8 +45,19 @@ const HEADER_HINTS: Array<{ slot: ContactFieldSlot; keys: string[] }> = [
   { slot: "lastName", keys: ["lastname", "last_name", "nachname", "lname", "surname"] },
   { slot: "fullName", keys: ["name", "vollständiger name", "full name", "fullname"] },
   { slot: "phone", keys: ["phone", "telefon", "handy", "mobil", "tel"] },
-  { slot: "company", keys: ["company", "firma", "unternehmen", "organisation", "companyname"] },
+  { slot: "company", keys: ["company", "firma", "unternehmen", "organisation", "companyname", "firmenname"] },
   { slot: "linkedinUrl", keys: ["linkedin", "linkedinurl", "linkedin url"] },
+  // Erweiterte Basis-Felder (Migration 0058)
+  { slot: "salutation", keys: ["anrede", "salutation"] },
+  { slot: "title", keys: ["titel", "title", "akadtitel"] },
+  { slot: "externalId", keys: ["id", "externalid", "external_id", "kunden_id", "kundennummer", "kdnr"] },
+  { slot: "street", keys: ["strasse", "straße", "street", "adresse", "address", "strassenr", "straßenr"] },
+  { slot: "postalCode", keys: ["plz", "postleitzahl", "zip", "zipcode", "postalcode", "postal_code"] },
+  { slot: "city", keys: ["ort", "stadt", "city", "town"] },
+  { slot: "country", keys: ["land", "country", "nation"] },
+  { slot: "position", keys: ["position", "rolle", "role", "jobtitel", "jobtitle", "beruf"] },
+  { slot: "website", keys: ["website", "webseite", "url", "web", "homepage", "websiteurl"] },
+  { slot: "gender", keys: ["geschlecht", "geschl", "gender", "sex"] },
 ];
 
 /**

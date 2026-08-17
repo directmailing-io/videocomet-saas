@@ -83,6 +83,27 @@ export async function PATCH(
   if (phone !== undefined) patch.phone = phone;
   const linkedin = asStrOrNull(b.linkedinUrl);
   if (linkedin !== undefined) patch.linkedinUrl = linkedin;
+  // Erweiterte Basis-Felder (Migration 0058)
+  const salutation = asStrOrNull(b.salutation);
+  if (salutation !== undefined) patch.salutation = salutation;
+  const title = asStrOrNull(b.title);
+  if (title !== undefined) patch.title = title;
+  const externalId = asStrOrNull(b.externalId);
+  if (externalId !== undefined) patch.externalId = externalId;
+  const street = asStrOrNull(b.street);
+  if (street !== undefined) patch.street = street;
+  const postalCode = asStrOrNull(b.postalCode);
+  if (postalCode !== undefined) patch.postalCode = postalCode;
+  const city = asStrOrNull(b.city);
+  if (city !== undefined) patch.city = city;
+  const country = asStrOrNull(b.country);
+  if (country !== undefined) patch.country = country;
+  const position = asStrOrNull(b.position);
+  if (position !== undefined) patch.position = position;
+  const website = asStrOrNull(b.website);
+  if (website !== undefined) patch.website = website;
+  const gender = asStrOrNull(b.gender);
+  if (gender !== undefined) patch.gender = gender;
   if (b.data && typeof b.data === "object" && !Array.isArray(b.data)) {
     const clean: Record<string, string> = {};
     for (const [k, v] of Object.entries(b.data)) {

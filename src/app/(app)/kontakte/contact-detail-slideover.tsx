@@ -75,6 +75,16 @@ interface ContactDetailData {
     companyDisplay: string | null;
     phone: string | null;
     linkedinUrl: string | null;
+    salutation: string | null;
+    title: string | null;
+    externalId: string | null;
+    street: string | null;
+    postalCode: string | null;
+    city: string | null;
+    country: string | null;
+    position: string | null;
+    website: string | null;
+    gender: string | null;
     data: Record<string, string>;
     createdAt: string;
     lastActivityAt: string | null;
@@ -306,75 +316,46 @@ function OverviewTab({
   onChanged?: () => void;
   reload: () => Promise<void>;
 }) {
+  const c = data.contact;
+  const onSaved = () => {
+    onChanged?.();
+    void reload();
+  };
   return (
-    <div className="p-5 space-y-5">
-      <section>
-        <h4 className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-2">
-          Kontakt-Daten
-        </h4>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-          <EditableField
-            contactId={data.contact.id}
-            field="firstName"
-            label="Vorname"
-            value={data.contact.firstName ?? ""}
-            onSaved={() => {
-              onChanged?.();
-              void reload();
-            }}
-          />
-          <EditableField
-            contactId={data.contact.id}
-            field="lastName"
-            label="Nachname"
-            value={data.contact.lastName ?? ""}
-            onSaved={() => {
-              onChanged?.();
-              void reload();
-            }}
-          />
-          <EditableField
-            contactId={data.contact.id}
-            field="email"
-            label="E-Mail"
-            value={data.contact.email ?? ""}
-            onSaved={() => {
-              onChanged?.();
-              void reload();
-            }}
-          />
-          <EditableField
-            contactId={data.contact.id}
-            field="phone"
-            label="Telefon"
-            value={data.contact.phone ?? ""}
-            onSaved={() => {
-              onChanged?.();
-              void reload();
-            }}
-          />
-          <EditableField
-            contactId={data.contact.id}
-            field="company"
-            label="Firma"
-            value={data.contact.companyDisplay ?? data.contact.company ?? ""}
-            onSaved={() => {
-              onChanged?.();
-              void reload();
-            }}
-          />
-          <EditableField
-            contactId={data.contact.id}
-            field="linkedinUrl"
-            label="LinkedIn"
-            value={data.contact.linkedinUrl ?? ""}
-            onSaved={() => {
-              onChanged?.();
-              void reload();
-            }}
-          />
-        </div>
-      </section>
+    <div className="p-5 space-y-6">
+      <FieldGroup title="Person">
+        <EditableField contactId={c.id} field="salutation" label="Anrede" value={c.salutation ?? ""} onSaved={onSaved} />
+        <EditableField contactId={c.id} field="title" label="Titel" value={c.title ?? ""} onSaved={onSaved} />
+        <EditableField contactId={c.id} field="firstName" label="Vorname" value={c.firstName ?? ""} onSaved={onSaved} />
+        <EditableField contactId={c.id} field="lastName" label="Nachname" value={c.lastName ?? ""} onSaved={onSaved} />
+        <EditableField contactId={c.id} field="gender" label="Geschlecht" value={c.gender ?? ""} onSaved={onSaved} />
+        <EditableField contactId={c.id} field="externalId" label="ID" value={c.externalId ?? ""} onSaved={onSaved} />
+      </FieldGroup>
+
+      <FieldGroup title="Kontakt">
+        <EditableField contactId={c.id} field="email" label="E-Mail" value={c.email ?? ""} onSaved={onSaved} />
+        <EditableField contactId={c.id} field="phone" label="Telefon" value={c.phone ?? ""} onSaved={onSaved} />
+        <EditableField contactId={c.id} field="website" label="Website" value={c.website ?? ""} onSaved={onSaved} />
+        <EditableField contactId={c.id} field="linkedinUrl" label="LinkedIn" value={c.linkedinUrl ?? ""} onSaved={onSaved} />
+      </FieldGroup>
+
+      <FieldGroup title="Firma">
+        <EditableField
+          contactId={c.id}
+          field="company"
+          label="Firma"
+          value={c.companyDisplay ?? c.company ?? ""}
+          onSaved={onSaved}
+        />
+        <EditableField contactId={c.id} field="position" label="Position" value={c.position ?? ""} onSaved={onSaved} />
+      </FieldGroup>
+
+      <FieldGroup title="Adresse">
+        <EditableField contactId={c.id} field="street" label="Straße" value={c.street ?? ""} onSaved={onSaved} full />
+        <EditableField contactId={c.id} field="postalCode" label="PLZ" value={c.postalCode ?? ""} onSaved={onSaved} />
+        <EditableField contactId={c.id} field="city" label="Ort" value={c.city ?? ""} onSaved={onSaved} />
+        <EditableField contactId={c.id} field="country" label="Land" value={c.country ?? ""} onSaved={onSaved} />
+      </FieldGroup>
 
       <section>
         <div className="flex items-center justify-between mb-2">
@@ -631,18 +612,33 @@ function slugifyLocal(label: string): string {
     .slice(0, 60);
 }
 
+function FieldGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h4 className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-2">
+        {title}
+      </h4>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-xl border border-line bg-surface px-3 py-1.5">
+        {children}
+      </div>
+    </section>
+  );
+}
+
 function EditableField({
   contactId,
   field,
   label,
   value,
   onSaved,
+  full,
 }: {
   contactId: string;
   field: string;
   label: string;
   value: string;
   onSaved?: () => void;
+  full?: boolean;
 }) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(value);
@@ -676,7 +672,12 @@ function EditableField({
   }
 
   return (
-    <div className="text-xs flex flex-col border-b border-canvas-deep py-1.5">
+    <div
+      className={cn(
+        "text-xs flex flex-col border-b border-canvas-deep last:border-b-0 py-1.5 min-w-0",
+        full && "col-span-2",
+      )}
+    >
       <span className="text-ink-muted mb-0.5">{label}</span>
       {editing ? (
         <input
@@ -699,10 +700,10 @@ function EditableField({
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="text-sm text-ink text-left hover:bg-canvas rounded px-1 py-0.5 truncate"
-          title="Klicken zum Bearbeiten"
+          className="text-sm text-ink text-left hover:bg-canvas rounded px-1 py-0.5 truncate min-w-0"
+          title={value || "Klicken zum Ausfüllen"}
         >
-          {value || <span className="text-ink-muted italic">— leer, klicken zum Ausfüllen —</span>}
+          {value || <span className="text-ink-muted italic">leer</span>}
         </button>
       )}
     </div>

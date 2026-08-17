@@ -96,6 +96,16 @@ export async function POST(
       companyDisplay: contacts.companyDisplay,
       phone: contacts.phone,
       linkedinUrl: contacts.linkedinUrl,
+      salutation: contacts.salutation,
+      title: contacts.title,
+      externalId: contacts.externalId,
+      street: contacts.street,
+      postalCode: contacts.postalCode,
+      city: contacts.city,
+      country: contacts.country,
+      position: contacts.position,
+      website: contacts.website,
+      gender: contacts.gender,
       data: contacts.data,
     })
     .from(listMemberships)
@@ -143,9 +153,19 @@ export async function POST(
           companyDisplay: c.companyDisplay,
           phone: c.phone,
           linkedinUrl: c.linkedinUrl,
+          salutation: c.salutation,
+          title: c.title,
+          externalId: c.externalId,
+          street: c.street,
+          postalCode: c.postalCode,
+          city: c.city,
+          country: c.country,
+          position: c.position,
+          website: c.website,
+          gender: c.gender,
           data: c.data ?? {},
         },
-        system: {}, // pageUrl wird von der Pipeline gefüllt, nicht hier
+        system: {},
       });
     } else {
       const first = c.firstName ?? c.data?.firstName ?? "";
