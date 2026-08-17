@@ -31,6 +31,7 @@ import { ContactDetailSlideOver } from "./contact-detail-slideover";
 import { FilterBar } from "./filter-bar";
 import { ImportModal } from "./import-modal";
 import { StartRunModal } from "./start-run-modal";
+import { FieldsModal } from "./fields-modal";
 import { EMPTY_FILTER, type FilterDefinition } from "@/lib/contacts/filter";
 
 interface ContactRow {
@@ -102,6 +103,7 @@ export function KontakteView(_props: KontakteViewProps) {
   const [filter, setFilter] = React.useState<FilterDefinition>(EMPTY_FILTER);
   const [showImportModal, setShowImportModal] = React.useState(false);
   const [showStartRunModal, setShowStartRunModal] = React.useState(false);
+  const [showFieldsModal, setShowFieldsModal] = React.useState(false);
 
   const detailIndex = React.useMemo(() => {
     if (!detailContactId) return -1;
@@ -355,6 +357,17 @@ export function KontakteView(_props: KontakteViewProps) {
             <Plus className="size-3.5" />
             Neue Liste
           </button>
+
+          <div className="mt-4 pt-3 border-t border-line">
+            <button
+              type="button"
+              onClick={() => setShowFieldsModal(true)}
+              className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-ink-muted hover:bg-canvas flex items-center gap-1.5"
+              title="Eigene Felder wie Priorität oder Praxis-Größe anlegen — gilt für alle Kontakte"
+            >
+              ⚙ Eigene Felder verwalten
+            </button>
+          </div>
         </aside>
 
         {/* Haupt-Bereich */}
@@ -674,6 +687,8 @@ export function KontakteView(_props: KontakteViewProps) {
           }}
         />
       )}
+
+      {showFieldsModal && <FieldsModal onClose={() => setShowFieldsModal(false)} />}
     </div>
   );
 }

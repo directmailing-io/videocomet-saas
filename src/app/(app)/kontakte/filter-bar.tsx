@@ -43,6 +43,14 @@ interface FieldMeta {
 
 const FIELDS: FieldMeta[] = [
   // Kampagne & Runde
+  { key: "campaign_id", category: "Kampagnen & Runden", label: "Kampagne", ops: [
+    { op: "in", label: "ist eine von", value: "text" },
+    { op: "not_in", label: "ist keine von", value: "text" },
+  ]},
+  { key: "run_id", category: "Kampagnen & Runden", label: "Runde", ops: [
+    { op: "in", label: "ist eine von", value: "text" },
+    { op: "not_in", label: "ist keine von", value: "text" },
+  ]},
   { key: "campaign_count", category: "Kampagnen & Runden", label: "Anzahl Kampagnen", ops: [
     { op: "gte", label: "≥", value: "number" },
     { op: "eq", label: "=", value: "number" },
@@ -119,6 +127,20 @@ interface ContactList {
   name: string;
 }
 
+interface FilterOption {
+  id: string;
+  name: string;
+}
+interface RunOption extends FilterOption {
+  campaignId: string;
+  campaignName: string;
+}
+interface CustomFieldOption {
+  key: string;
+  label: string;
+  type: string;
+}
+
 export function FilterBar({
   value,
   onChange,
@@ -130,11 +152,22 @@ export function FilterBar({
   const [presetsOpen, setPresetsOpen] = React.useState(false);
   const [saveModalOpen, setSaveModalOpen] = React.useState(false);
   const [availableLists, setAvailableLists] = React.useState<ContactList[]>([]);
+  const [availableCampaigns, setAvailableCampaigns] = React.useState<FilterOption[]>([]);
+  const [availableRuns, setAvailableRuns] = React.useState<RunOption[]>([]);
+  const [availableCustomFields, setAvailableCustomFields] = React.useState<CustomFieldOption[]>([]);
 
   React.useEffect(() => {
     void fetch("/api/contact-lists")
       .then((r) => r.json())
       .then((b) => setAvailableLists((b.lists ?? []).map((l: { id: string; name: string }) => ({ id: l.id, name: l.name }))))
+      .catch(() => {});
+    void fetch("/api/contacts/v2/filter-options")
+      .then((r) => r.json())
+      .then((b) => {
+        setAvailableCampaigns(b.campaigns ?? []);
+        setAvailableRuns(b.runs ?? []);
+        setAvailableCustomFields(b.customFields ?? []);
+      })
       .catch(() => {});
   }, []);
 
@@ -199,6 +232,8 @@ export function FilterBar({
               onChange={(patch) => updateCondition(i, patch)}
               onRemove={() => removeCondition(i)}
               availableLists={availableLists}
+              availableCampaigns={availableCampaigns}
+              availableRuns={availableRuns}
             />
           );
         })}
@@ -326,11 +361,15 @@ function ConditionChip({
   onChange,
   onRemove,
   availableLists,
+  availableCampaigns,
+  availableRuns,
 }: {
   condition: FilterCondition;
   onChange: (patch: Partial<FilterCondition>) => void;
   onRemove: () => void;
   availableLists: ContactList[];
+  availableCampaigns: FilterOption[];
+  availableRuns: RunOption[];
 }) {
   const meta = FIELDS.find((f) => f.key === condition.field);
   if (!meta) return null;
@@ -343,13 +382,28 @@ function ConditionChip({
   else if (op.value === "date-days") valueLabel = `${condition.value ?? ""} Tagen`;
 
   const isListPicker = condition.field === "in_list" || condition.field === "not_in_list";
-  if (isListPicker) {
-    const ids = Array.isArray(condition.value) ? condition.value : [];
+  const isCampaignPicker = condition.field === "campaign_id";
+  const isRunPicker = condition.field === "run_id";
+  const isMultiPicker = isListPicker || isCampaignPicker || isRunPicker;
+
+  const pickerOptions: Array<{ id: string; label: string }> = isListPicker
+    ? availableLists.map((l) => ({ id: l.id, label: l.name }))
+    : isCampaignPicker
+      ? availableCampaigns.map((c) => ({ id: c.id, label: c.name }))
+      : isRunPicker
+        ? availableRuns.map((r) => ({
+            id: r.id,
+            label: `${r.campaignName} · ${r.name}`,
+          }))
+        : [];
+
+  if (isMultiPicker) {
+    const ids = Array.isArray(condition.value) ? (condition.value as string[]) : [];
     const names = ids
-      .map((id) => availableLists.find((l) => l.id === id)?.name)
+      .map((id) => pickerOptions.find((o) => o.id === id)?.label)
       .filter(Boolean)
       .join(", ");
-    valueLabel = names || "Liste wählen…";
+    valueLabel = names || "wählen…";
   }
 
   return (
@@ -366,7 +420,7 @@ function ConditionChip({
           </option>
         ))}
       </select>
-      {op.value !== "none" && !isListPicker && (
+      {op.value !== "none" && !isMultiPicker && (
         <input
           type={op.value === "number" || op.value === "date-days" ? "number" : "text"}
           value={String(condition.value ?? "")}
@@ -382,25 +436,15 @@ function ConditionChip({
           placeholder={op.value === "text" ? "…" : ""}
         />
       )}
-      {isListPicker && (
-        <select
-          multiple
+      {isMultiPicker && (
+        <MultiSelectValue
           value={(Array.isArray(condition.value) ? condition.value : []) as string[]}
-          onChange={(e) => {
-            const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
-            onChange({ value: selected });
-          }}
-          className="text-xs bg-transparent border-b border-line outline-none min-w-[100px]"
-          size={1}
-        >
-          {availableLists.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
+          options={pickerOptions}
+          onChange={(v) => onChange({ value: v })}
+          label={valueLabel}
+        />
       )}
-      {valueLabel && !isListPicker && op.value !== "text" && op.value !== "number" && op.value !== "date-days" && (
+      {valueLabel && !isMultiPicker && op.value !== "text" && op.value !== "number" && op.value !== "date-days" && (
         <span className="text-ink font-semibold">{valueLabel}</span>
       )}
       <button
@@ -412,6 +456,100 @@ function ConditionChip({
         <X className="size-3" />
       </button>
     </span>
+  );
+}
+
+/** Kleines Popover mit Suchfeld + Checkbox-Liste zum Auswählen mehrerer
+ *  Optionen (Kampagnen, Runden, Listen im Filter-Chip). */
+function MultiSelectValue({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: string[];
+  options: Array<{ id: string; label: string }>;
+  onChange: (next: string[]) => void;
+  label: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  const filtered = search
+    ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
+    : options;
+
+  function toggle(id: string) {
+    onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs text-ink font-semibold bg-transparent border-b border-line hover:border-brand outline-none px-1 min-w-[80px] text-left truncate max-w-[200px]"
+      >
+        {label}
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-line z-30 min-w-[280px] max-h-64 overflow-hidden flex flex-col">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Suchen…"
+            autoFocus
+            className="text-xs px-3 py-2 border-b border-line outline-none"
+          />
+          <div className="flex-1 overflow-y-auto">
+            {filtered.length === 0 && (
+              <div className="text-xs text-ink-muted px-3 py-2 italic">
+                Keine Treffer.
+              </div>
+            )}
+            {filtered.map((o) => {
+              const checked = value.includes(o.id);
+              return (
+                <label
+                  key={o.id}
+                  className="flex items-center gap-2 px-3 py-1.5 hover:bg-canvas cursor-pointer text-xs"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggle(o.id)}
+                  />
+                  <span className="truncate">{o.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          <div className="px-3 py-1.5 border-t border-line text-[11px] text-ink-muted flex justify-between">
+            <span>{value.length} ausgewählt</span>
+            {value.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="text-brand-deep font-semibold"
+              >
+                Leeren
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

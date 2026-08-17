@@ -8,9 +8,7 @@ import { PasswordForm } from "./password-form";
 import { DomainsTab } from "./domains-tab";
 import { MailboxesTab } from "./mailboxes-tab";
 import { IntegrationsList } from "./integrationen/integrations-list";
-import { WebhooksList } from "./webhooks/webhooks-list";
-import { WebhooksDocsCallout } from "./webhooks/webhooks-docs-callout";
-import { ApiKeysPanel } from "./api-keys/api-keys-panel";
+import { VerbindungenTab } from "./verbindungen/verbindungen-tab";
 import { BillingTab } from "./billing-tab";
 import { KiStimmeTab } from "./ki-stimme-tab";
 import { SetupTab } from "./setup-tab";
@@ -27,8 +25,7 @@ const TAB_VALUES = new Set([
   "postfaecher",
   "ki-stimme",
   "crm",
-  "webhooks",
-  "automation",
+  "verbindungen",
 ]);
 
 export default async function EinstellungenPage({
@@ -66,8 +63,7 @@ export default async function EinstellungenPage({
           <TabsTrigger value="postfaecher">E-Mail-Postfächer</TabsTrigger>
           <TabsTrigger value="ki-stimme">KI-Stimme</TabsTrigger>
           <TabsTrigger value="crm">CRM-Integrationen</TabsTrigger>
-          <TabsTrigger value="webhooks">Webhooks (Ausgang)</TabsTrigger>
-          <TabsTrigger value="automation">Kontakte-Eingang (Zapier &amp; Co.)</TabsTrigger>
+          <TabsTrigger value="verbindungen">Zapier &amp; Webhooks</TabsTrigger>
         </TabsList>
 
         <TabsContent value="setup">
@@ -146,15 +142,8 @@ export default async function EinstellungenPage({
           <IntegrationsList />
         </TabsContent>
 
-        <TabsContent value="webhooks">
-          <div className="flex flex-col gap-6">
-            <WebhooksDocsCallout />
-            <WebhooksList />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="automation">
-          <ApiKeysPanel />
+        <TabsContent value="verbindungen">
+          <VerbindungenTab />
         </TabsContent>
       </Tabs>
     </>
