@@ -36,6 +36,7 @@ import {
 import { detectDuplicates } from "@/lib/dedupe/engine";
 import type { DedupeConfig } from "@/lib/dedupe/types";
 import { MultiTabPicker, type SelectedTab, type SheetTabInfo } from "./tab-picker";
+import { SourcePicker } from "./source-picker";
 import { Switch } from "@/components/ui/switch";
 import { AbSplitPicker, type AbSplitMode } from "@/components/ab/ab-split-picker";
 
@@ -115,6 +116,8 @@ export function RunWizard({
   const router = useRouter();
 
   const [step, setStep] = React.useState(resume?.preview ? 1 : 0);
+  // Beim ersten Öffnen (nicht bei resume) zeigen wir den Quelle-Wähler.
+  const [showSourcePicker, setShowSourcePicker] = React.useState<boolean>(!resume);
   const [runName, setRunName] = React.useState(
     resume?.runName ?? `Runde ${new Date().toLocaleDateString("de-DE")}`,
   );
@@ -556,6 +559,21 @@ export function RunWizard({
     setTabPickerVisible(false);
     const ok = await uploadAndPreview();
     if (ok) setStep(1);
+  }
+
+  if (showSourcePicker) {
+    return (
+      <>
+        <PageHeader
+          title="Neue Runde"
+          subtitle={`Kampagne ${campaignName} · Woher kommen die Kontakte?`}
+        />
+        <SourcePicker
+          campaignId={campaignId}
+          onUseUpload={() => setShowSourcePicker(false)}
+        />
+      </>
+    );
   }
 
   return (

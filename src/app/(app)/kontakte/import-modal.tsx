@@ -13,7 +13,7 @@
  */
 
 import * as React from "react";
-import { Loader2, Upload, X } from "lucide-react";
+import { CloudUpload, FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toaster";
 import type { ContactFieldSlot, CustomFieldType } from "@/lib/contacts/detect-field";
@@ -198,16 +198,17 @@ export function ImportModal({
 
         <div className="flex-1 overflow-y-auto p-5">
           {step === "upload" && (
-            <div className="space-y-4">
+            <div className="space-y-5">
+              {/* Ziel-Liste */}
               <div>
-                <label className="block text-xs font-semibold text-ink mb-1">
-                  Ziel-Liste
+                <label className="block text-sm font-semibold text-ink mb-2">
+                  In welche Liste sollen die Kontakte?
                 </label>
                 <div className="flex gap-2">
                   <select
                     value={listId ?? ""}
                     onChange={(e) => setListId(e.target.value || null)}
-                    className="flex-1 px-3 py-2 rounded-lg border border-line bg-canvas text-sm"
+                    className="flex-1 px-3 py-2.5 rounded-xl border border-line bg-surface text-sm focus:outline-none focus:border-brand"
                   >
                     <option value="">— Bitte wählen —</option>
                     {lists.map((l) => (
@@ -219,41 +220,44 @@ export function ImportModal({
                   <button
                     type="button"
                     onClick={onCreateList}
-                    className="px-3 py-2 rounded-lg text-xs font-semibold text-brand-deep border border-line hover:bg-brand-soft"
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-brand-deep border border-brand/30 bg-brand-soft hover:bg-brand-soft/70 whitespace-nowrap"
                   >
                     + Neue Liste
                   </button>
                 </div>
+                <p className="text-xs text-ink-muted mt-1.5">
+                  Kontakte werden in diese Liste importiert und stehen dann für
+                  neue Kampagnen-Runden zur Verfügung.
+                </p>
               </div>
 
+              {/* Drag & Drop Zone */}
               <div>
-                <label className="block text-xs font-semibold text-ink mb-1">
-                  Datei (CSV oder Excel)
+                <label className="block text-sm font-semibold text-ink mb-2">
+                  Datei
                 </label>
-                <input
-                  type="file"
-                  accept=".csv,.xlsx,.xls"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  className="w-full text-sm"
-                />
+                <DropZone file={file} onFile={setFile} />
               </div>
 
-              <div className="text-center text-xs text-ink-muted my-2">
-                — oder —
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1">
-                  Google-Sheets-URL (Freigabe „Jeder mit Link kann ansehen")
-                </label>
-                <input
-                  type="url"
-                  value={sheetUrl}
-                  onChange={(e) => setSheetUrl(e.target.value)}
-                  placeholder="https://docs.google.com/spreadsheets/d/…"
-                  className="w-full px-3 py-2 rounded-lg border border-line bg-canvas text-sm"
-                />
-              </div>
+              {/* Google-Sheets als Alternative */}
+              <details className="group">
+                <summary className="text-xs text-ink-muted cursor-pointer hover:text-ink flex items-center gap-1">
+                  <FileSpreadsheet className="size-3.5" />
+                  Alternativ: Google-Sheets-URL verwenden
+                </summary>
+                <div className="mt-3 pl-5">
+                  <input
+                    type="url"
+                    value={sheetUrl}
+                    onChange={(e) => setSheetUrl(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/…"
+                    className="w-full px-3 py-2.5 rounded-xl border border-line bg-canvas text-sm focus:outline-none focus:border-brand"
+                  />
+                  <p className="text-[11px] text-ink-muted mt-1">
+                    Das Sheet muss auf „Jeder mit dem Link kann ansehen" freigegeben sein.
+                  </p>
+                </div>
+              </details>
             </div>
           )}
 
@@ -399,5 +403,90 @@ export function ImportModal({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Drag-&-Drop-Zone für CSV/XLSX mit visueller Rückmeldung. */
+function DropZone({
+  file,
+  onFile,
+}: {
+  file: File | null;
+  onFile: (f: File | null) => void;
+}) {
+  const [dragOver, setDragOver] = React.useState(false);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) onFile(f);
+  }
+  function handleChoose() {
+    inputRef.current?.click();
+  }
+
+  if (file) {
+    const kb = Math.round(file.size / 1024);
+    return (
+      <div className="flex items-center gap-3 bg-brand-soft rounded-xl p-4 border border-brand/30">
+        <FileSpreadsheet className="size-10 text-brand-deep shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-ink truncate">{file.name}</div>
+          <div className="text-xs text-ink-muted">
+            {kb < 1024 ? `${kb} KB` : `${(kb / 1024).toFixed(1)} MB`}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => onFile(null)}
+          className="text-ink-muted hover:text-danger p-1"
+          title="Andere Datei wählen"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={handleChoose}
+        className={cn(
+          "border-2 border-dashed rounded-xl px-6 py-10 text-center cursor-pointer transition-colors",
+          dragOver
+            ? "border-brand bg-brand-soft"
+            : "border-line bg-canvas hover:border-brand/50 hover:bg-brand-soft/30",
+        )}
+      >
+        <CloudUpload
+          className={cn(
+            "size-10 mx-auto mb-2",
+            dragOver ? "text-brand-deep" : "text-ink-muted",
+          )}
+        />
+        <div className="text-sm font-semibold text-ink">
+          Datei hierher ziehen
+        </div>
+        <div className="text-xs text-ink-muted mt-1">
+          oder klicken, um sie auszuwählen · CSV oder Excel (.csv, .xlsx)
+        </div>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".csv,.xlsx,.xls"
+        onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+        className="hidden"
+      />
+    </>
   );
 }
