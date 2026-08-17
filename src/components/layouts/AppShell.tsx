@@ -84,7 +84,7 @@ const NAV_GROUPS: Array<{ label: string | null; items: NavItem[] }> = [
     items: [
       { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { key: "campaigns", label: "Kampagnen", href: "/kampagnen", icon: Megaphone },
-      { key: "contacts", label: "Alle Kontakte", href: "/kontakte", icon: Users2 },
+      { key: "contacts", label: "Kontakte & Listen", href: "/kontakte", icon: Users2 },
       {
         key: "analytics",
         label: "Analytics",
