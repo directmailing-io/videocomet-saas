@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[api/contacts/v2/filter] failed:", err);
     return NextResponse.json(
-      { error: "Filter konnte nicht ausgewertet werden.", details: err instanceof Error ? err.message : null },
+      { error: "Der Filter hat gerade nicht funktioniert. Bitte in einem Moment nochmal probieren.", details: err instanceof Error ? err.message : null },
       { status: 500 },
     );
   }

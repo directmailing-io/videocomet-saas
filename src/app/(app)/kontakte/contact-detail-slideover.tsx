@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toaster";
+import { toastError } from "@/lib/toast-error";
 
 interface ContactDetailEvent {
   id: string;
@@ -120,11 +121,7 @@ export function ContactDetailSlideOver({
       if (!res.ok) throw new Error(body?.error ?? "Fehler beim Laden");
       setData(body);
     } catch (err) {
-      toast({
-        title: "Kontakt konnte nicht geladen werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     } finally {
       setLoading(false);
     }
@@ -460,11 +457,7 @@ function AddFieldButton({
       setValue("");
       onSaved?.();
     } catch (err) {
-      toast({
-        title: "Feld konnte nicht angelegt werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     } finally {
       setBusy(false);
     }
@@ -562,11 +555,7 @@ function EditableCustomField({
       setEditing(false);
       onSaved?.();
     } catch (err) {
-      toast({
-        title: "Feld konnte nicht gespeichert werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
       setDraft(value);
     } finally {
       setBusy(false);
@@ -655,11 +644,7 @@ function EditableField({
       setEditing(false);
       onSaved?.();
     } catch (err) {
-      toast({
-        title: "Konnte nicht gespeichert werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
       setDraft(value);
     } finally {
       setBusy(false);
@@ -971,11 +956,7 @@ function ListsTab({
       toast({ title: "Aus der Liste entfernt" });
       onChanged();
     } catch (err) {
-      toast({
-        title: "Konnte nicht entfernt werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     }
   }
 

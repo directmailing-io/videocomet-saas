@@ -16,6 +16,6 @@ export async function DELETE(
   const auth = await requireUserApi();
   if (!auth.ok) return auth.response;
   const ok = await revokeApiKey({ userId: auth.user.id, id: params.id });
-  if (!ok) return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
+  if (!ok) return NextResponse.json({ error: "Diesen Zugang gibt es nicht mehr." }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

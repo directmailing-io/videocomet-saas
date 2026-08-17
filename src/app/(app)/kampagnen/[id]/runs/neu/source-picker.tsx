@@ -14,6 +14,7 @@ import { FileSpreadsheet, ListChecks, Loader2, Users2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
+import { toastError } from "@/lib/toast-error";
 
 interface ContactList {
   id: string;
@@ -70,11 +71,7 @@ export function SourcePicker({
       toast({ title: `Runde gestartet — ${body.leadCount} Kontakte in Arbeit` });
       router.push(`/kampagnen/${campaignId}/runs/${body.runId}`);
     } catch (err) {
-      toast({
-        title: "Runde konnte nicht gestartet werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
       setStarting(false);
     }
   }

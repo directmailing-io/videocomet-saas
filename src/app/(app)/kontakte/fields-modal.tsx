@@ -11,6 +11,7 @@
 import * as React from "react";
 import { Loader2, Plus, Trash2, X, Pencil } from "lucide-react";
 import { useToast } from "@/components/ui/toaster";
+import { toastError } from "@/lib/toast-error";
 
 interface Field {
   id: string;
@@ -46,11 +47,7 @@ export function FieldsModal({ onClose }: { onClose: () => void }) {
       const body = await res.json();
       setFields(body.fields ?? []);
     } catch (err) {
-      toast({
-        title: "Felder konnten nicht geladen werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     } finally {
       setLoading(false);
     }
@@ -77,11 +74,7 @@ export function FieldsModal({ onClose }: { onClose: () => void }) {
       await load();
       toast({ title: "Feld angelegt" });
     } catch (err) {
-      toast({
-        title: "Feld konnte nicht angelegt werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     } finally {
       setCreating(false);
     }
@@ -103,11 +96,7 @@ export function FieldsModal({ onClose }: { onClose: () => void }) {
       setEditingKey(null);
       await load();
     } catch (err) {
-      toast({
-        title: "Konnte nicht gespeichert werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     }
   }
 
@@ -124,11 +113,7 @@ export function FieldsModal({ onClose }: { onClose: () => void }) {
       await load();
       toast({ title: "Feld gelöscht" });
     } catch (err) {
-      toast({
-        title: "Konnte nicht gelöscht werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     }
   }
 

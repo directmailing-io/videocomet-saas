@@ -24,6 +24,7 @@ import {
   Users2,
 } from "lucide-react";
 import { useToast } from "@/components/ui/toaster";
+import { toastError } from "@/lib/toast-error";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { useRouter } from "next/navigation";
@@ -122,11 +123,7 @@ export function KontakteView(_props: KontakteViewProps) {
       if (!res.ok) throw new Error(body?.error ?? "Fehler beim Laden der Listen");
       setLists(body.lists ?? []);
     } catch (err) {
-      toast({
-        title: "Listen konnten nicht geladen werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     }
   }, [toast]);
 
@@ -166,11 +163,7 @@ export function KontakteView(_props: KontakteViewProps) {
         setTotalAll(body.totalAll ?? 0);
       }
     } catch (err) {
-      toast({
-        title: "Kontakte konnten nicht geladen werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     } finally {
       setLoading(false);
     }
@@ -226,11 +219,7 @@ export function KontakteView(_props: KontakteViewProps) {
       setSelectedContactIds(new Set());
       await loadLists();
     } catch (err) {
-      toast({
-        title: "Konnte Kontakte nicht zur Liste hinzufügen",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     }
   }
 
@@ -256,11 +245,7 @@ export function KontakteView(_props: KontakteViewProps) {
       setSelectedContactIds(new Set());
       await Promise.all([loadLists(), loadContacts()]);
     } catch (err) {
-      toast({
-        title: "Konnte Kontakte nicht entfernen",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     }
   }
 
@@ -284,11 +269,7 @@ export function KontakteView(_props: KontakteViewProps) {
       setSelectedContactIds(new Set());
       await Promise.all([loadLists(), loadContacts()]);
     } catch (err) {
-      toast({
-        title: "Löschen fehlgeschlagen",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     }
   }
 
@@ -720,12 +701,13 @@ function NewListModal({
         }),
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(body?.error ?? "Fehler beim Erstellen");
+      if (!res.ok) throw new Error(body?.error ?? "Das hat gerade nicht geklappt.");
       onCreated(body.list);
     } catch (err) {
+      // Server-Fehlermeldung DIREKT als Titel — sie ist schon deutsch und
+      // für den User geschrieben.
       toast({
-        title: "Liste konnte nicht erstellt werden",
-        description: err instanceof Error ? err.message : String(err),
+        title: err instanceof Error ? err.message : String(err),
         variant: "danger",
       });
     } finally {

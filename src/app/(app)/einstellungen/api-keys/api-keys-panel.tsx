@@ -7,6 +7,7 @@
 import * as React from "react";
 import { Copy, Loader2, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/toaster";
+import { toastError } from "@/lib/toast-error";
 
 interface ApiKeyRow {
   id: string;
@@ -33,11 +34,7 @@ export function ApiKeysPanel() {
       const body = await res.json();
       setKeys(body.keys ?? []);
     } catch (err) {
-      toast({
-        title: "Keys konnten nicht geladen werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     } finally {
       setLoading(false);
     }
@@ -62,11 +59,7 @@ export function ApiKeysPanel() {
       setNewName("");
       await load();
     } catch (err) {
-      toast({
-        title: "Key konnte nicht angelegt werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     } finally {
       setCreating(false);
     }
@@ -80,11 +73,7 @@ export function ApiKeysPanel() {
       toast({ title: "Key gesperrt" });
       await load();
     } catch (err) {
-      toast({
-        title: "Konnte nicht gesperrt werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     }
   }
 

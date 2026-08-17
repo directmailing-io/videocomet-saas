@@ -34,7 +34,7 @@ export async function PATCH(
   const b = (body ?? {}) as Record<string, unknown>;
   const label = typeof b.label === "string" ? b.label.trim() : "";
   if (!label) {
-    return NextResponse.json({ error: "Bitte einen Namen angeben." }, { status: 400 });
+    return NextResponse.json({ error: "Bitte gib dem Feld einen Namen." }, { status: 400 });
   }
 
   const [row] = await db
@@ -43,7 +43,7 @@ export async function PATCH(
     .where(and(eq(contactFields.userId, auth.user.id), eq(contactFields.key, params.key)))
     .returning();
   if (!row) {
-    return NextResponse.json({ error: "Feld nicht gefunden." }, { status: 404 });
+    return NextResponse.json({ error: "Dieses Feld gibt es nicht mehr." }, { status: 404 });
   }
   return NextResponse.json({ field: row });
 }
@@ -59,7 +59,7 @@ export async function DELETE(
     .where(and(eq(contactFields.userId, auth.user.id), eq(contactFields.key, params.key)))
     .returning({ id: contactFields.id });
   if (rows.length === 0) {
-    return NextResponse.json({ error: "Feld nicht gefunden." }, { status: 404 });
+    return NextResponse.json({ error: "Dieses Feld gibt es nicht mehr." }, { status: 404 });
   }
   return NextResponse.json({ ok: true });
 }

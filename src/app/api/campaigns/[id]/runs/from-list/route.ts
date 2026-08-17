@@ -45,7 +45,7 @@ export async function POST(
       : `Runde ${new Date().toLocaleDateString("de-DE")}`;
 
   if (!listId) {
-    return NextResponse.json({ error: "listId erwartet." }, { status: 400 });
+    return NextResponse.json({ error: "Bitte wähl eine Liste aus." }, { status: 400 });
   }
 
   // Ownership: Kampagne + Liste gehören dem User.
@@ -55,7 +55,7 @@ export async function POST(
     .where(and(eq(campaigns.id, params.id), eq(campaigns.userId, auth.user.id)))
     .limit(1);
   if (!campaign) {
-    return NextResponse.json({ error: "Kampagne nicht gefunden." }, { status: 404 });
+    return NextResponse.json({ error: "Diese Kampagne gibt es nicht mehr." }, { status: 404 });
   }
   const [list] = await db
     .select({ id: contactLists.id })
@@ -63,7 +63,7 @@ export async function POST(
     .where(and(eq(contactLists.id, listId), eq(contactLists.userId, auth.user.id)))
     .limit(1);
   if (!list) {
-    return NextResponse.json({ error: "Liste nicht gefunden." }, { status: 404 });
+    return NextResponse.json({ error: "Diese Liste gibt es nicht mehr." }, { status: 404 });
   }
 
   // Alle Kontakte der Liste holen — Smart-Listen werden hier NOCH nicht
@@ -89,7 +89,7 @@ export async function POST(
 
   if (memberContacts.length === 0) {
     return NextResponse.json(
-      { error: "Die Liste ist leer." },
+      { error: "Die Liste ist leer. Bitte erst Kontakte hinzufügen." },
       { status: 400 },
     );
   }

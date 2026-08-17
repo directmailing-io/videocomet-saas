@@ -11,6 +11,7 @@
 import * as React from "react";
 import { Loader2, X } from "lucide-react";
 import { useToast } from "@/components/ui/toaster";
+import { toastError } from "@/lib/toast-error";
 
 interface Campaign {
   id: string;
@@ -53,11 +54,7 @@ export function StartRunModal({
         setCampaigns(items);
         if (items[0]) setCampaignId(items[0].id);
       } catch (err) {
-        toast({
-          title: "Kampagnen konnten nicht geladen werden",
-          description: err instanceof Error ? err.message : String(err),
-          variant: "danger",
-        });
+        toastError(toast, err);
       } finally {
         setLoadingCampaigns(false);
       }
@@ -84,11 +81,7 @@ export function StartRunModal({
       });
       onStarted(body.runId, campaignId);
     } catch (err) {
-      toast({
-        title: "Runde konnte nicht gestartet werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     } finally {
       setBusy(false);
     }

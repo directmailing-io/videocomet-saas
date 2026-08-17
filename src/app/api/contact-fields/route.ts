@@ -53,16 +53,16 @@ export async function POST(req: NextRequest) {
   const detectedType = allowedTypes.includes(type) ? type : "text";
 
   if (!label) {
-    return NextResponse.json({ error: "Bitte einen Namen angeben." }, { status: 400 });
+    return NextResponse.json({ error: "Bitte gib dem Feld einen Namen." }, { status: 400 });
   }
   if (label.length > 60) {
-    return NextResponse.json({ error: "Name max. 60 Zeichen." }, { status: 400 });
+    return NextResponse.json({ error: "Der Name ist zu lang. Maximal 60 Zeichen." }, { status: 400 });
   }
 
   const key = slugifyFieldKey(label);
   if (!key) {
     return NextResponse.json(
-      { error: "Der Name enthält keine gültigen Zeichen." },
+      { error: "Der Name enthält keine Buchstaben oder Zahlen, mit denen wir arbeiten können." },
       { status: 400 },
     );
   }
@@ -83,10 +83,13 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("contact_fields_user_key_uq")) {
       return NextResponse.json(
-        { error: "Ein Feld mit diesem Namen existiert bereits." },
+        { error: `Du hast schon ein Feld mit dem Namen "${label}".` },
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json(
+      { error: "Speichern hat gerade nicht geklappt. Bitte in einem Moment nochmal probieren." },
+      { status: 500 },
+    );
   }
 }

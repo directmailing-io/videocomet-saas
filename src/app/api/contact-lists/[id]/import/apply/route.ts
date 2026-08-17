@@ -25,7 +25,7 @@ import type { ContactFieldSlot } from "@/lib/contacts/detect-field";
 import { slugifyFieldKey } from "@/lib/contacts/detect-field";
 
 interface FieldMap {
-  slot: ContactFieldSlot;
+  slot: ContactFieldSlot | "ignore";
   customKey?: string;
   customLabel?: string;
   customType?: string;
@@ -48,18 +48,18 @@ export async function POST(
   const parseId = typeof b.parseId === "string" ? b.parseId : "";
   const mapping = b.mapping as Record<string, FieldMap> | undefined;
   if (!parseId || !mapping) {
-    return NextResponse.json({ error: "parseId + mapping erwartet." }, { status: 400 });
+    return NextResponse.json({ error: "Import-Info fehlt. Bitte nochmal von vorn beginnen." }, { status: 400 });
   }
 
   const snap = getParseSnapshot(parseId);
   if (!snap) {
     return NextResponse.json(
-      { error: "Import-Vorschau ist abgelaufen. Bitte Datei erneut hochladen." },
+      { error: "Der Import war zu lange offen. Bitte die Datei nochmal hochladen." },
       { status: 410 },
     );
   }
   if (snap.userId !== auth.user.id || snap.listId !== params.id) {
-    return NextResponse.json({ error: "Zugriff verweigert." }, { status: 403 });
+    return NextResponse.json({ error: "Dieser Import gehört zu einer anderen Liste." }, { status: 403 });
   }
 
   // Mapping validieren + gesammelte Custom-Feld-Definitionen extrahieren
@@ -87,6 +87,7 @@ export async function POST(
       data: {},
     };
     for (const [header, m] of Object.entries(mapping)) {
+      if (m.slot === "ignore") continue;
       const raw = (row[header] ?? "").trim();
       if (!raw) continue;
       switch (m.slot) {
@@ -147,7 +148,7 @@ export async function POST(
     });
   } catch (err) {
     return NextResponse.json(
-      { error: "Import fehlgeschlagen.", details: err instanceof Error ? err.message : null },
+      { error: "Import hat gerade nicht geklappt. Bitte in einem Moment nochmal probieren.", details: err instanceof Error ? err.message : null },
       { status: 500 },
     );
   }

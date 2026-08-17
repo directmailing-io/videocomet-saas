@@ -36,7 +36,7 @@ export async function GET(
     contactId: params.id,
   });
   if (!detail) {
-    return NextResponse.json({ error: "Kontakt nicht gefunden." }, { status: 404 });
+    return NextResponse.json({ error: "Diesen Kontakt gibt es nicht mehr." }, { status: 404 });
   }
   return NextResponse.json(detail);
 }
@@ -118,7 +118,7 @@ export async function PATCH(
     patch,
   });
   if (!row) {
-    return NextResponse.json({ error: "Kontakt nicht gefunden." }, { status: 404 });
+    return NextResponse.json({ error: "Diesen Kontakt gibt es nicht mehr." }, { status: 404 });
   }
   return NextResponse.json({ contact: row });
 }
@@ -136,7 +136,7 @@ export async function DELETE(
     reason: "user_deleted",
   });
   if (!ok) {
-    return NextResponse.json({ error: "Kontakt nicht gefunden." }, { status: 404 });
+    return NextResponse.json({ error: "Diesen Kontakt gibt es nicht mehr." }, { status: 404 });
   }
   return NextResponse.json({ ok: true });
 }

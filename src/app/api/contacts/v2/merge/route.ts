@@ -29,13 +29,13 @@ export async function POST(req: NextRequest) {
   const loserId = typeof b.loserId === "string" ? b.loserId : null;
   if (!winnerId || !loserId) {
     return NextResponse.json(
-      { error: "winnerId und loserId erwartet." },
+      { error: "Bitte zwei Kontakte für die Zusammenführung wählen." },
       { status: 400 },
     );
   }
   if (winnerId === loserId) {
     return NextResponse.json(
-      { error: "winnerId und loserId dürfen nicht gleich sein." },
+      { error: "Das sind ja derselbe Kontakt." },
       { status: 400 },
     );
   }
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   });
   if (!ok) {
     return NextResponse.json(
-      { error: "Kontakte nicht gefunden oder gehören nicht dir." },
+      { error: "Einen der Kontakte konnten wir nicht finden." },
       { status: 404 },
     );
   }

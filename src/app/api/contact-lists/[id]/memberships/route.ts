@@ -31,11 +31,11 @@ export async function POST(
   const body = await req.json().catch(() => null);
   const contactIds = parseContactIds(body);
   if (contactIds.length === 0) {
-    return NextResponse.json({ error: "contactIds (Array) erwartet." }, { status: 400 });
+    return NextResponse.json({ error: "Kein Kontakt ausgewählt." }, { status: 400 });
   }
   if (contactIds.length > 500) {
     return NextResponse.json(
-      { error: "Maximal 500 Kontakte pro Request." },
+      { error: "Zu viele Kontakte auf einmal. Bitte in Häppchen zu 500 aufteilen." },
       { status: 400 },
     );
   }
@@ -58,7 +58,7 @@ export async function DELETE(
   const body = await req.json().catch(() => null);
   const contactIds = parseContactIds(body);
   if (contactIds.length === 0) {
-    return NextResponse.json({ error: "contactIds (Array) erwartet." }, { status: 400 });
+    return NextResponse.json({ error: "Kein Kontakt ausgewählt." }, { status: 400 });
   }
 
   const result = await removeContactsFromList({

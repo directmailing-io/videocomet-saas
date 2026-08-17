@@ -17,6 +17,7 @@ import * as React from "react";
 import { ChevronDown, Filter as FilterIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toaster";
+import { toastError } from "@/lib/toast-error";
 import type {
   FilterCondition,
   FilterDefinition,
@@ -575,11 +576,7 @@ function SaveAsListModal({
       await onSave(name.trim(), type);
       toast({ title: "Liste angelegt" });
     } catch (err) {
-      toast({
-        title: "Liste konnte nicht angelegt werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     } finally {
       setBusy(false);
     }

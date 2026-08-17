@@ -50,7 +50,7 @@ export async function POST(
     if (kind === "csv") {
       const file = form.get("file");
       if (!(file instanceof File)) {
-        return NextResponse.json({ error: "Datei fehlt." }, { status: 400 });
+        return NextResponse.json({ error: "Bitte eine Datei auswählen." }, { status: 400 });
       }
       const buf = Buffer.from(await file.arrayBuffer());
       const res = parseCSV(buf);
@@ -59,7 +59,7 @@ export async function POST(
     } else if (kind === "xlsx") {
       const file = form.get("file");
       if (!(file instanceof File)) {
-        return NextResponse.json({ error: "Datei fehlt." }, { status: 400 });
+        return NextResponse.json({ error: "Bitte eine Datei auswählen." }, { status: 400 });
       }
       const buf = Buffer.from(await file.arrayBuffer());
       const res = parseXLSX(buf);
@@ -67,26 +67,26 @@ export async function POST(
       rows = res.rows;
     } else if (kind === "google-sheets") {
       const url = String(form.get("url") ?? "");
-      if (!url) return NextResponse.json({ error: "URL fehlt." }, { status: 400 });
+      if (!url) return NextResponse.json({ error: "Bitte einen Google-Sheets-Link angeben." }, { status: 400 });
       const buf = await fetchGoogleSheetCsv(url);
       const res = parseCSV(buf);
       headers = res.headers;
       rows = res.rows;
     } else {
-      return NextResponse.json({ error: "Unbekannter kind." }, { status: 400 });
+      return NextResponse.json({ error: "Wähl eine Datei aus oder gib einen Google-Sheets-Link an." }, { status: 400 });
     }
   } catch (err) {
     return NextResponse.json(
-      { error: "Datei konnte nicht gelesen werden.", details: err instanceof Error ? err.message : null },
+      { error: "Die Datei konnten wir nicht lesen. Ist sie beschädigt oder im falschen Format?", details: err instanceof Error ? err.message : null },
       { status: 400 },
     );
   }
 
   if (headers.length === 0) {
-    return NextResponse.json({ error: "Keine Spalten erkannt." }, { status: 400 });
+    return NextResponse.json({ error: "In deiner Datei sind keine Spalten. Bitte prüfen, ob die erste Zeile Überschriften enthält." }, { status: 400 });
   }
   if (rows.length === 0) {
-    return NextResponse.json({ error: "Keine Zeilen erkannt." }, { status: 400 });
+    return NextResponse.json({ error: "Deine Datei enthält keine Zeilen zum Importieren." }, { status: 400 });
   }
 
   const suggested = headers.map((h) => {

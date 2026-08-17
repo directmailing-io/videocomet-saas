@@ -16,6 +16,7 @@ import * as React from "react";
 import { CloudUpload, FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toaster";
+import { toastError } from "@/lib/toast-error";
 import type { ContactFieldSlot, CustomFieldType } from "@/lib/contacts/detect-field";
 
 interface SuggestedColumn {
@@ -38,17 +39,24 @@ interface ImportModalProps {
   onCreateList: () => void;
 }
 
+interface CustomFieldDef {
+  key: string;
+  label: string;
+  detectedType: string;
+}
+
 type Step = "upload" | "mapping" | "done";
 
-const SLOT_OPTIONS: Array<{ value: ContactFieldSlot; label: string }> = [
-  { value: "email", label: "E-Mail" },
-  { value: "firstName", label: "Vorname" },
-  { value: "lastName", label: "Nachname" },
-  { value: "fullName", label: "Vollständiger Name" },
-  { value: "company", label: "Firma" },
-  { value: "phone", label: "Telefon" },
-  { value: "linkedinUrl", label: "LinkedIn" },
-  { value: "custom", label: "Eigenes Feld" },
+const SLOT_OPTIONS: Array<{ value: ContactFieldSlot | "ignore"; label: string; group?: string }> = [
+  { value: "email", label: "E-Mail", group: "Kontakt" },
+  { value: "firstName", label: "Vorname", group: "Kontakt" },
+  { value: "lastName", label: "Nachname", group: "Kontakt" },
+  { value: "fullName", label: "Vollständiger Name", group: "Kontakt" },
+  { value: "company", label: "Firma", group: "Kontakt" },
+  { value: "phone", label: "Telefon", group: "Kontakt" },
+  { value: "linkedinUrl", label: "LinkedIn", group: "Kontakt" },
+  { value: "custom", label: "Eigenes Feld", group: "Anderes" },
+  { value: "ignore", label: "Nicht importieren", group: "Anderes" },
 ];
 
 export function ImportModal({
@@ -75,9 +83,18 @@ export function ImportModal({
   const [mapping, setMapping] = React.useState<
     Record<
       string,
-      { slot: ContactFieldSlot; customLabel?: string; customType?: string }
+      { slot: ContactFieldSlot | "ignore"; customKey?: string; customLabel?: string; customType?: string }
     >
   >({});
+  // Bestehende globale Custom-Felder — beim Mapping als Ziele wählbar.
+  const [customFields, setCustomFields] = React.useState<CustomFieldDef[]>([]);
+
+  React.useEffect(() => {
+    void fetch("/api/contact-fields")
+      .then((r) => r.json())
+      .then((b) => setCustomFields(b.fields ?? []))
+      .catch(() => {});
+  }, []);
 
   // Done-State
   const [result, setResult] = React.useState<{
@@ -117,21 +134,33 @@ export function ImportModal({
       setPreview(body.previewRows);
       setTotalRows(body.totalRows);
       const initialMap: typeof mapping = {};
+      // Header -> lowercase Vergleich für existierende Custom-Fields
+      const normHeader = (s: string) =>
+        s.toLowerCase().replace(/[_\s-]+/g, "");
       for (const s of body.suggested as SuggestedColumn[]) {
-        initialMap[s.header] = {
-          slot: s.slot,
-          customLabel: s.slot === "custom" ? s.header : undefined,
-          customType: s.detectedType,
-        };
+        // Prio 1: existierendes Custom-Feld mit passendem Label
+        const existing = customFields.find(
+          (cf) => normHeader(cf.label) === normHeader(s.header),
+        );
+        if (existing && s.slot === "custom") {
+          initialMap[s.header] = {
+            slot: "custom",
+            customKey: existing.key,
+            customLabel: existing.label,
+            customType: existing.detectedType,
+          };
+        } else {
+          initialMap[s.header] = {
+            slot: s.slot,
+            customLabel: s.slot === "custom" ? s.header : undefined,
+            customType: s.detectedType,
+          };
+        }
       }
       setMapping(initialMap);
       setStep("mapping");
     } catch (err) {
-      toast({
-        title: "Datei konnte nicht gelesen werden",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     } finally {
       setBusy(false);
     }
@@ -156,11 +185,7 @@ export function ImportModal({
       });
       setStep("done");
     } catch (err) {
-      toast({
-        title: "Import fehlgeschlagen",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "danger",
-      });
+      toastError(toast, err);
     } finally {
       setBusy(false);
     }
@@ -262,60 +287,14 @@ export function ImportModal({
           )}
 
           {step === "mapping" && (
-            <div className="space-y-3">
-              <div className="text-xs text-ink-muted mb-2">
-                Die grüne Empfehlung stammt aus der Auto-Erkennung. Klick auf ein Feld,
-                um es zu ändern. Spalten mit „Eigenes Feld" werden als Custom-Feld
-                angelegt.
-              </div>
-              {headers.map((h, i) => (
-                <div
-                  key={h}
-                  className="grid grid-cols-[1fr_180px_1fr] gap-3 items-center border-b border-line pb-2"
-                >
-                  <div>
-                    <div className="text-sm font-semibold text-ink">{h}</div>
-                    <div className="text-[11px] text-ink-muted truncate">
-                      z. B.: {preview.slice(0, 3).map((r) => r[i]).filter(Boolean).join(" · ")}
-                    </div>
-                  </div>
-                  <select
-                    value={mapping[h]?.slot ?? "custom"}
-                    onChange={(e) =>
-                      setMapping((prev) => ({
-                        ...prev,
-                        [h]: { ...prev[h], slot: e.target.value as ContactFieldSlot },
-                      }))
-                    }
-                    className="px-2 py-1.5 rounded-lg border border-line bg-canvas text-sm"
-                  >
-                    {SLOT_OPTIONS.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                  {mapping[h]?.slot === "custom" ? (
-                    <input
-                      type="text"
-                      value={mapping[h]?.customLabel ?? h}
-                      onChange={(e) =>
-                        setMapping((prev) => ({
-                          ...prev,
-                          [h]: { ...prev[h], customLabel: e.target.value },
-                        }))
-                      }
-                      placeholder="Anzeige-Name"
-                      className="px-2 py-1.5 rounded-lg border border-line bg-canvas text-sm"
-                    />
-                  ) : (
-                    <span className="text-xs text-ink-muted italic">
-                      Basis-Feld
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
+            <MappingStep
+              headers={headers}
+              preview={preview}
+              mapping={mapping}
+              onChange={setMapping}
+              customFields={customFields}
+              onCustomFieldsChange={setCustomFields}
+            />
           )}
 
           {step === "done" && result && (
@@ -401,6 +380,260 @@ export function ImportModal({
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Mapping-Schritt mit klarer 2-Spalten-Struktur.
+ *
+ *  Links: die Spalte aus der Datei (Header + Beispiele).
+ *  Rechts: ein Dropdown mit ALLEN Optionen (Basis-Felder, existierende
+ *  Custom-Felder, „+ Neues Feld anlegen", „Nicht importieren").
+ *  Bei Auswahl „+ Neues Feld": öffnet Inline-Formular; das Feld wird
+ *  sofort global registriert und steht dann auch bei anderen Spalten und
+ *  in der Kontakt-Tabelle zur Verfügung. */
+function MappingStep({
+  headers,
+  preview,
+  mapping,
+  onChange,
+  customFields,
+  onCustomFieldsChange,
+}: {
+  headers: string[];
+  preview: string[][];
+  mapping: Record<
+    string,
+    { slot: ContactFieldSlot | "ignore"; customKey?: string; customLabel?: string; customType?: string }
+  >;
+  onChange: React.Dispatch<React.SetStateAction<Record<
+    string,
+    { slot: ContactFieldSlot | "ignore"; customKey?: string; customLabel?: string; customType?: string }
+  >>>;
+  customFields: CustomFieldDef[];
+  onCustomFieldsChange: React.Dispatch<React.SetStateAction<CustomFieldDef[]>>;
+}) {
+  const [autoSlots] = React.useState<Record<string, ContactFieldSlot | "ignore">>(() => {
+    const m: Record<string, ContactFieldSlot | "ignore"> = {};
+    for (const h of headers) m[h] = mapping[h]?.slot ?? "custom";
+    return m;
+  });
+
+  return (
+    <div>
+      <div className="rounded-lg bg-canvas-deep px-3 py-2 text-xs text-ink-muted mb-4">
+        Wir haben oben schon Vorschläge gemacht (grünes Häkchen). Für jede Spalte
+        wählst du rechts, wohin die Werte sollen. Willst du eine Spalte nicht
+        importieren, wähle „Nicht importieren".
+      </div>
+      <div className="rounded-xl border border-line overflow-hidden">
+        {headers.map((h, i) => {
+          const current = mapping[h] ?? { slot: "custom" as ContactFieldSlot };
+          const isAuto =
+            autoSlots[h] === current.slot && current.slot !== "custom" && current.slot !== "ignore";
+          const samples = preview
+            .slice(0, 3)
+            .map((r) => r[i])
+            .filter((v) => v && v.trim().length > 0)
+            .slice(0, 3);
+          // Wert für Select: entweder Basis-Slot oder "cf:<key>" für bestehendes
+          // Custom-Feld oder "new" für neues Feld oder "ignore".
+          const selectValue =
+            current.slot === "custom" && current.customKey
+              ? "cf:" + current.customKey
+              : current.slot === "custom"
+                ? "new"
+                : current.slot;
+
+          return (
+            <div
+              key={h}
+              className={
+                "grid grid-cols-[1fr_280px] gap-4 items-start px-4 py-3 border-b border-line last:border-b-0 " +
+                (current.slot === "ignore" ? "bg-canvas opacity-70" : "")
+              }
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-ink truncate">{h}</div>
+                <div className="text-[11px] text-ink-muted truncate">
+                  {samples.length > 0 ? samples.join(" · ") : "(leere Spalte)"}
+                </div>
+              </div>
+              <div>
+                <div className="relative">
+                  <select
+                    value={selectValue}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      onChange((prev) => {
+                        if (v === "new") {
+                          return {
+                            ...prev,
+                            [h]: {
+                              slot: "custom",
+                              customLabel: prev[h]?.customLabel ?? h,
+                              customType: prev[h]?.customType,
+                            },
+                          };
+                        }
+                        if (v.startsWith("cf:")) {
+                          const key = v.slice(3);
+                          const cf = customFields.find((c) => c.key === key);
+                          return {
+                            ...prev,
+                            [h]: {
+                              slot: "custom",
+                              customKey: key,
+                              customLabel: cf?.label ?? key,
+                              customType: cf?.detectedType,
+                            },
+                          };
+                        }
+                        return {
+                          ...prev,
+                          [h]: { slot: v as ContactFieldSlot | "ignore" },
+                        };
+                      });
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-line bg-surface text-sm focus:outline-none focus:border-brand appearance-none pr-8"
+                  >
+                    <optgroup label="Basis-Felder">
+                      {SLOT_OPTIONS.filter((s) => s.group === "Kontakt").map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                    {customFields.length > 0 && (
+                      <optgroup label="Deine eigenen Felder">
+                        {customFields.map((cf) => (
+                          <option key={cf.key} value={"cf:" + cf.key}>
+                            {cf.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <optgroup label="Anderes">
+                      <option value="new">+ Neues eigenes Feld anlegen</option>
+                      <option value="ignore">Nicht importieren</option>
+                    </optgroup>
+                  </select>
+                  {isAuto && (
+                    <span
+                      className="absolute right-8 top-1/2 -translate-y-1/2 text-ok text-xs font-bold"
+                      title="Automatisch erkannt"
+                    >
+                      ✓
+                    </span>
+                  )}
+                </div>
+                {current.slot === "custom" && !current.customKey && (
+                  <NewFieldInline
+                    initialLabel={current.customLabel ?? h}
+                    onCreate={(label, type, key) => {
+                      onCustomFieldsChange((prev) =>
+                        prev.some((c) => c.key === key)
+                          ? prev
+                          : [...prev, { key, label, detectedType: type }],
+                      );
+                      onChange((prev) => ({
+                        ...prev,
+                        [h]: {
+                          slot: "custom",
+                          customKey: key,
+                          customLabel: label,
+                          customType: type,
+                        },
+                      }));
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Inline-Anlage eines neuen Custom-Feldes im Mapping-Schritt. */
+function NewFieldInline({
+  initialLabel,
+  onCreate,
+}: {
+  initialLabel: string;
+  onCreate: (label: string, type: string, key: string) => void;
+}) {
+  const { toast } = useToast();
+  const [label, setLabel] = React.useState(initialLabel);
+  const [type, setType] = React.useState("text");
+  const [busy, setBusy] = React.useState(false);
+
+  async function save() {
+    if (!label.trim() || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/contact-fields", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: label.trim(), type }),
+      });
+      const body = await res.json();
+      if (res.status === 409 && body?.field) {
+        // Feld existiert bereits — trotzdem an das Mapping übergeben.
+        onCreate(body.field.label, body.field.detectedType, body.field.key);
+        return;
+      }
+      if (!res.ok) throw new Error(body?.error ?? "Fehler");
+      onCreate(body.field.label, body.field.detectedType, body.field.key);
+    } catch (err) {
+      toastError(toast, err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-2 rounded-lg bg-canvas-deep p-2">
+      <div className="text-[10px] font-semibold text-brand-deep uppercase mb-1">
+        Neues eigenes Feld
+      </div>
+      <div className="flex gap-1.5">
+        <input
+          type="text"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Name (z. B. Priorität)"
+          className="flex-1 px-2 py-1 text-xs rounded border border-line bg-surface"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void save();
+          }}
+        />
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          className="px-1 py-1 text-xs rounded border border-line bg-surface w-20"
+        >
+          <option value="text">Text</option>
+          <option value="email">E-Mail</option>
+          <option value="phone">Telefon</option>
+          <option value="url">Link</option>
+          <option value="number">Zahl</option>
+          <option value="date">Datum</option>
+        </select>
+        <button
+          type="button"
+          onClick={save}
+          disabled={!label.trim() || busy}
+          className="px-2 py-1 rounded bg-ink text-white text-xs font-semibold disabled:opacity-50"
+        >
+          {busy ? "…" : "Anlegen"}
+        </button>
+      </div>
+      <div className="text-[10px] text-ink-muted mt-1">
+        Wird für alle Kontakte verfügbar (auch außerhalb dieses Imports).
       </div>
     </div>
   );

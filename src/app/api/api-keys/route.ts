@@ -35,12 +35,12 @@ export async function POST(req: NextRequest) {
     : "";
   if (!name) {
     return NextResponse.json(
-      { error: "Bitte einen Namen für den Key vergeben (z.B. 'Zapier')." },
+      { error: 'Bitte gib dem Zugang einen Namen (z. B. "Zapier").' },
       { status: 400 },
     );
   }
   if (name.length > 60) {
-    return NextResponse.json({ error: "Name max. 60 Zeichen." }, { status: 400 });
+    return NextResponse.json({ error: "Der Name ist zu lang. Maximal 60 Zeichen." }, { status: 400 });
   }
 
   const key = await createApiKey({ userId: auth.user.id, name });

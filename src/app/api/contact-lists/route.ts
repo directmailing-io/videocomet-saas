@@ -36,11 +36,11 @@ export async function POST(req: NextRequest) {
   const b = (body ?? {}) as Record<string, unknown>;
   const name = typeof b.name === "string" ? b.name.trim() : "";
   if (!name) {
-    return NextResponse.json({ error: "Name erwartet." }, { status: 400 });
+    return NextResponse.json({ error: "Bitte gib der Liste einen Namen." }, { status: 400 });
   }
   if (name.length > 80) {
     return NextResponse.json(
-      { error: "Name darf max. 80 Zeichen haben." },
+      { error: "Der Name ist zu lang. Maximal 80 Zeichen." },
       { status: 400 },
     );
   }
@@ -55,16 +55,15 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ list }, { status: 201 });
   } catch (err) {
-    // Uniqueness-Konflikt sauber ummünzen.
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("contact_lists_user_name_uq")) {
       return NextResponse.json(
-        { error: "Eine Liste mit diesem Namen existiert bereits." },
+        { error: `Du hast schon eine Liste mit dem Namen "${name}". Wähl einen anderen Namen.` },
         { status: 409 },
       );
     }
     return NextResponse.json(
-      { error: "Liste konnte nicht angelegt werden.", details: msg },
+      { error: "Speichern hat gerade nicht geklappt. Bitte in einem Moment nochmal probieren.", details: msg },
       { status: 500 },
     );
   }

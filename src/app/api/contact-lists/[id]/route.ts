@@ -52,18 +52,21 @@ export async function PATCH(
       patch,
     });
     if (!list) {
-      return NextResponse.json({ error: "Liste nicht gefunden." }, { status: 404 });
+      return NextResponse.json({ error: "Diese Liste gibt es nicht mehr." }, { status: 404 });
     }
     return NextResponse.json({ list });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("contact_lists_user_name_uq")) {
       return NextResponse.json(
-        { error: "Eine Liste mit diesem Namen existiert bereits." },
+        { error: "Du hast schon eine Liste mit diesem Namen. Bitte einen anderen wählen." },
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json(
+      { error: "Speichern hat gerade nicht geklappt. Bitte in einem Moment nochmal probieren." },
+      { status: 500 },
+    );
   }
 }
 
@@ -79,7 +82,7 @@ export async function DELETE(
     listId: params.id,
   });
   if (!ok) {
-    return NextResponse.json({ error: "Liste nicht gefunden." }, { status: 404 });
+    return NextResponse.json({ error: "Diese Liste gibt es nicht mehr." }, { status: 404 });
   }
   return NextResponse.json({ ok: true });
 }
