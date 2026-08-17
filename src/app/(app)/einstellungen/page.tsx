@@ -66,8 +66,8 @@ export default async function EinstellungenPage({
           <TabsTrigger value="postfaecher">E-Mail-Postfächer</TabsTrigger>
           <TabsTrigger value="ki-stimme">KI-Stimme</TabsTrigger>
           <TabsTrigger value="crm">CRM-Integrationen</TabsTrigger>
-          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
-          <TabsTrigger value="automation">Automation-API</TabsTrigger>
+          <TabsTrigger value="webhooks">Webhooks (Ausgang)</TabsTrigger>
+          <TabsTrigger value="automation">Kontakte-Eingang (Zapier &amp; Co.)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="setup">

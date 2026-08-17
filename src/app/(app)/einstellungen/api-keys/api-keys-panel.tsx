@@ -92,9 +92,30 @@ export function ApiKeysPanel() {
 
   return (
     <div className="max-w-3xl space-y-6 mt-4">
+      {/* Erklärung: was ist das + Abgrenzung zu Webhooks */}
+      <section className="bg-brand-soft rounded-2xl p-5 border border-brand/20">
+        <h3 className="text-sm font-semibold text-brand-deep mb-2">
+          Was ist das? Kontakte automatisch reinbekommen.
+        </h3>
+        <p className="text-xs text-ink leading-relaxed">
+          Damit Zapier, Make oder n8n neue Kontakte direkt in eine deiner Listen
+          einfügen können, brauchen sie einen Zugang zu deinem Account. Diesen
+          Zugang erzeugst du hier als „Key" — ein langes Passwort, das du in
+          dein Zapier-Rezept einträgst. Jeder neue Kontakt, der so reinkommt,
+          landet automatisch in der Liste — und wenn du für die Liste eine
+          Auto-Kampagne hinterlegt hast, wird sofort ein Video generiert.
+        </p>
+        <div className="mt-3 pt-3 border-t border-brand/20 text-xs text-ink-muted">
+          <strong className="text-ink">Nicht verwechseln mit Webhooks:</strong> Webhooks
+          gehen in die andere Richtung — sie schicken deine <em>Ereignisse</em>
+          (z.B. „Lead hat Video geöffnet") zu einem anderen Tool. Beide Richtungen
+          zusammen sind der klassische Zwei-Wege-Ablauf.
+        </div>
+      </section>
+
       {/* Neuer Key */}
       <section className="bg-surface rounded-2xl p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-ink mb-2">Neuen Key anlegen</h3>
+        <h3 className="text-sm font-semibold text-ink mb-2">Neuen Zugang anlegen</h3>
         <p className="text-xs text-ink-muted mb-3">
           Ein sprechender Name hilft dir zu erkennen, welcher Automation dieser Key gehört
           (z.B. „Zapier · Kontaktformular Website").
@@ -122,7 +143,7 @@ export function ApiKeysPanel() {
 
       {/* Aktive Keys */}
       <section className="bg-surface rounded-2xl p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-ink mb-3">Deine Keys ({activeKeys.length})</h3>
+        <h3 className="text-sm font-semibold text-ink mb-3">Deine Zugänge ({activeKeys.length})</h3>
         {loading ? (
           <div className="text-xs text-ink-muted">
             <Loader2 className="inline size-3 animate-spin mr-1" />
@@ -206,10 +227,11 @@ Idempotency-Key: {UNIQUE_ID_PRO_LEAD}    // empfohlen, verhindert Doppel-Import
             onClick={(e) => e.stopPropagation()}
             className="bg-surface rounded-2xl p-6 w-full max-w-lg shadow-xl"
           >
-            <h3 className="text-lg font-semibold text-ink mb-2">Dein neuer Key</h3>
+            <h3 className="text-lg font-semibold text-ink mb-2">Dein neuer Zugang</h3>
             <p className="text-xs text-ink-muted mb-4">
-              Kopiere den Key jetzt — <strong>er wird nie wieder angezeigt</strong>. Wenn du ihn
-              verlierst, sperre ihn hier und leg einen neuen an.
+              Kopiere diesen Text jetzt in dein Zapier (oder Make/n8n) — <strong>er wird nie
+              wieder angezeigt</strong>. Wenn du ihn verlierst, sperre ihn hier und leg einen
+              neuen an.
             </p>
             <div className="bg-canvas-deep rounded-lg p-3 mb-4">
               <div className="text-[11px] text-ink-muted mb-1">Name: {freshKey.name}</div>

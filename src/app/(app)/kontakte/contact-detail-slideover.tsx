@@ -379,26 +379,243 @@ function OverviewTab({
         </div>
       </section>
 
-      {Object.keys(data.contact.data).length > 0 && (
-        <section>
-          <h4 className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-2">
-            Weitere Felder aus dem Import
+      <section>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide">
+            Weitere Felder
           </h4>
+          <AddFieldButton
+            contactId={data.contact.id}
+            existingData={data.contact.data}
+            onSaved={() => {
+              onChanged?.();
+              void reload();
+            }}
+          />
+        </div>
+        {Object.keys(data.contact.data).length === 0 ? (
+          <p className="text-xs text-ink-muted italic">
+            Noch keine eigenen Felder. Über „+ Feld hinzufügen" oben rechts kannst
+            du z. B. „Praxis-Größe" oder „Priorität" anlegen — dieselben Felder
+            stehen dann auch bei anderen Kontakten und in Filtern zur Verfügung.
+          </p>
+        ) : (
           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
             {Object.entries(data.contact.data).map(([k, v]) => (
-              <div
+              <EditableCustomField
                 key={k}
-                className="text-xs flex justify-between border-b border-canvas-deep py-1"
-              >
-                <span className="text-ink-muted truncate">{k}</span>
-                <span className="text-ink font-medium truncate ml-2">{v}</span>
-              </div>
+                contactId={data.contact.id}
+                allData={data.contact.data}
+                fieldKey={k}
+                value={v}
+                onSaved={() => {
+                  onChanged?.();
+                  void reload();
+                }}
+              />
             ))}
           </div>
-        </section>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function AddFieldButton({
+  contactId,
+  existingData,
+  onSaved,
+}: {
+  contactId: string;
+  existingData: Record<string, string>;
+  onSaved?: () => void;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = React.useState(false);
+  const [label, setLabel] = React.useState("");
+  const [value, setValue] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  async function save() {
+    if (!label.trim()) return;
+    const key = slugifyLocal(label);
+    if (!key) {
+      toast({ title: "Bitte einen gültigen Namen verwenden", variant: "danger" });
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/contacts/v2/${contactId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          data: { ...existingData, [key]: value },
+          registerCustomField: { key, label: label.trim() },
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "Fehler beim Speichern");
+      setOpen(false);
+      setLabel("");
+      setValue("");
+      onSaved?.();
+    } catch (err) {
+      toast({
+        title: "Feld konnte nicht angelegt werden",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "danger",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-[11px] font-semibold text-brand-deep hover:bg-brand-soft px-2 py-1 rounded-md"
+      >
+        + Feld hinzufügen
+      </button>
+    );
+  }
+  return (
+    <div className="flex gap-1.5 items-center bg-canvas rounded-lg p-1.5">
+      <input
+        type="text"
+        autoFocus
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        placeholder="Name des Feldes"
+        className="text-xs px-2 py-1 border border-line rounded w-28 bg-white"
+        maxLength={40}
+      />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") setOpen(false);
+        }}
+        placeholder="Wert"
+        className="text-xs px-2 py-1 border border-line rounded w-28 bg-white"
+      />
+      <button
+        type="button"
+        onClick={save}
+        disabled={busy || !label.trim()}
+        className="px-2 py-1 rounded bg-ink text-white text-xs font-semibold disabled:opacity-50"
+      >
+        {busy ? "…" : "OK"}
+      </button>
+      <button
+        type="button"
+        onClick={() => setOpen(false)}
+        className="text-ink-muted hover:text-ink"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+/** Existierendes Custom-Feld inline editierbar (nicht nur read-only). */
+function EditableCustomField({
+  contactId,
+  allData,
+  fieldKey,
+  value,
+  onSaved,
+}: {
+  contactId: string;
+  allData: Record<string, string>;
+  fieldKey: string;
+  value: string;
+  onSaved?: () => void;
+}) {
+  const { toast } = useToast();
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(value);
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => setDraft(value), [value]);
+
+  async function save() {
+    if (draft === value) {
+      setEditing(false);
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/contacts/v2/${contactId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          data: { ...allData, [fieldKey]: draft },
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "Fehler beim Speichern");
+      setEditing(false);
+      onSaved?.();
+    } catch (err) {
+      toast({
+        title: "Feld konnte nicht gespeichert werden",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "danger",
+      });
+      setDraft(value);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="text-xs flex justify-between border-b border-canvas-deep py-1 items-center gap-2">
+      <span className="text-ink-muted truncate">{fieldKey}</span>
+      {editing ? (
+        <input
+          type="text"
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") {
+              setDraft(value);
+              setEditing(false);
+            }
+          }}
+          disabled={busy}
+          className="text-ink text-right px-1 py-0.5 border border-brand rounded outline-none w-32"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-ink font-medium truncate hover:bg-canvas rounded px-1 py-0.5"
+        >
+          {value || <span className="text-ink-muted italic">— leer —</span>}
+        </button>
       )}
     </div>
   );
+}
+
+function slugifyLocal(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 60);
 }
 
 function EditableField({

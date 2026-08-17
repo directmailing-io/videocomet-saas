@@ -9,8 +9,8 @@ export default async function ApiKeysPage() {
   return (
     <>
       <PageHeader
-        title="Automation-API"
-        subtitle="Zapier, Make oder n8n verbinden — automatisch Kontakte in Listen füttern und Videos generieren."
+        title="Kontakte-Eingang (Zapier & Co.)"
+        subtitle="Lass Zapier, Make oder n8n neue Kontakte in deine Listen einfügen. Automatisch wird dann ein Video (oder PDF-Brief) erstellt."
       />
       <ApiKeysPanel />
     </>

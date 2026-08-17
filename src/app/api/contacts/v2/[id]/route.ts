@@ -13,12 +13,16 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
+import { db } from "@/lib/db";
+import { contactFields } from "@/lib/db/schema";
 import {
   getContactDetail,
   softDeleteContact,
   updateContact,
 } from "@/lib/db/queries/contacts";
+import { slugifyFieldKey } from "@/lib/contacts/detect-field";
 
 export async function GET(
   _req: NextRequest,
@@ -85,6 +89,27 @@ export async function PATCH(
       if (typeof v === "string") clean[k] = v;
     }
     patch.data = clean;
+  }
+
+  // Optional: gleichzeitig ein Custom-Feld beim User registrieren
+  // (wenn im Slide-Over „+ Feld hinzufügen" geklickt wurde).
+  if (b.registerCustomField && typeof b.registerCustomField === "object") {
+    const r = b.registerCustomField as Record<string, unknown>;
+    const rawKey = typeof r.key === "string" ? r.key : null;
+    const label = typeof r.label === "string" ? r.label.trim() : null;
+    if (rawKey && label) {
+      const key = slugifyFieldKey(rawKey) || slugifyFieldKey(label);
+      if (key) {
+        await db.execute(sql`
+          INSERT INTO contact_fields (user_id, key, label, detected_type, usage_count)
+          VALUES (${auth.user.id}, ${key}, ${label}, 'text', 1)
+          ON CONFLICT (user_id, key)
+          DO UPDATE SET usage_count = contact_fields.usage_count + 1,
+                        label = COALESCE(EXCLUDED.label, contact_fields.label),
+                        updated_at = now()
+        `);
+      }
+    }
   }
 
   const row = await updateContact({
