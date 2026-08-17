@@ -847,86 +847,144 @@ function CampaignsTab({ data }: { data: ContactDetailData }) {
       </p>
     );
   }
+  // Nach Kampagne gruppieren, in jeder Kampagne Runden nach Datum absteigend
+  const grouped = new Map<string, {
+    campaignName: string;
+    campaignId: string;
+    runs: ContactDetailOccurrence[];
+    totals: { views: number; plays: number; cta: number };
+  }>();
+  for (const occ of data.occurrences) {
+    const existing = grouped.get(occ.campaignId);
+    if (existing) {
+      existing.runs.push(occ);
+      existing.totals.views += occ.viewCount;
+      existing.totals.plays += occ.playCount;
+      existing.totals.cta += occ.ctaClickCount;
+    } else {
+      grouped.set(occ.campaignId, {
+        campaignId: occ.campaignId,
+        campaignName: occ.campaignName,
+        runs: [occ],
+        totals: { views: occ.viewCount, plays: occ.playCount, cta: occ.ctaClickCount },
+      });
+    }
+  }
+  const campaigns = Array.from(grouped.values()).map((c) => ({
+    ...c,
+    runs: c.runs.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    ),
+  }));
+
   return (
-    <div className="p-5 space-y-3">
-      {data.occurrences.map((occ) => (
-        <div
-          key={occ.leadId}
-          className="bg-canvas rounded-xl p-4 border border-line"
-        >
-          <div className="flex justify-between items-start gap-2 mb-1">
-            <div className="min-w-0">
-              <h4 className="text-sm font-semibold text-ink truncate">
-                {occ.campaignName}
-              </h4>
-              <p className="text-xs text-ink-muted">
-                Runde: {occ.runName} ·{" "}
-                {new Date(occ.createdAt).toLocaleDateString("de-DE")}
-              </p>
+    <div className="p-5 space-y-4">
+      {campaigns.map((c) => (
+        <div key={c.campaignId} className="bg-canvas rounded-xl border border-line overflow-hidden">
+          {/* Kampagnen-Header */}
+          <div className="px-4 py-3 border-b border-line bg-surface">
+            <div className="flex justify-between items-start gap-2">
+              <div className="min-w-0">
+                <h4 className="text-sm font-semibold text-ink truncate">{c.campaignName}</h4>
+                <p className="text-[11px] text-ink-muted mt-0.5">
+                  {c.runs.length} Runde{c.runs.length === 1 ? "" : "n"} · Insgesamt{" "}
+                  <strong className="text-ink">{c.totals.views}</strong> Öffnungen,{" "}
+                  <strong className="text-ink">{c.totals.cta}</strong> CTA
+                </p>
+              </div>
+              <a
+                href={`/kampagnen/${c.campaignId}`}
+                className="text-[11px] text-brand-deep hover:underline shrink-0 font-semibold"
+              >
+                Öffnen →
+              </a>
             </div>
-            <span
-              className={cn(
-                "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0",
-                occ.status === "completed"
-                  ? "bg-ok-soft text-ok"
-                  : occ.status === "failed"
-                    ? "bg-danger-soft text-danger"
-                    : "bg-canvas-deep text-ink-muted",
-              )}
-            >
-              {occ.status === "completed"
-                ? "Fertig"
-                : occ.status === "failed"
-                  ? "Fehler"
-                  : occ.status}
-            </span>
           </div>
-          <div className="flex flex-wrap gap-3 text-xs text-ink-muted mt-2">
-            <span>
-              <strong className="text-ink">{occ.viewCount}</strong> Öffnungen
-            </span>
-            <span>
-              <strong className="text-ink">{occ.playCount}</strong> Plays
-            </span>
-            <span>
-              <strong className="text-ink">{occ.ctaClickCount}</strong> CTA
-            </span>
-          </div>
-          <div className="flex gap-2 mt-2 text-xs">
-            {occ.slug && (
-              <a
-                href={`/v/${occ.slug}?preview=1`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-brand-deep hover:underline flex items-center gap-1"
-              >
-                <ExternalLink className="size-3" />
-                Landingpage
-              </a>
-            )}
-            {occ.videoUrl && (
-              <a
-                href={occ.videoUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-brand-deep hover:underline flex items-center gap-1"
-              >
-                <Play className="size-3" />
-                Video
-              </a>
-            )}
-            {occ.pdfUrl && (
-              <a
-                href={occ.pdfUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-brand-deep hover:underline flex items-center gap-1"
-              >
-                <FileText className="size-3" />
-                Brief
-              </a>
-            )}
-          </div>
+          {/* Runden als kompakte Tabelle */}
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] text-ink-muted uppercase tracking-wide">
+                <th className="text-left px-4 py-2 font-semibold">Runde</th>
+                <th className="text-right px-2 py-2 font-semibold">Öffn.</th>
+                <th className="text-right px-2 py-2 font-semibold">CTA</th>
+                <th className="text-left px-2 py-2 font-semibold">Status</th>
+                <th className="text-right px-4 py-2 font-semibold">Links</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c.runs.map((occ) => (
+                <tr key={occ.leadId} className="border-t border-line">
+                  <td className="px-4 py-2">
+                    <div className="text-ink font-medium">{occ.runName}</div>
+                    <div className="text-[10px] text-ink-muted">
+                      {new Date(occ.createdAt).toLocaleDateString("de-DE")}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums text-ink">
+                    {occ.viewCount}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums text-ink">
+                    {occ.ctaClickCount}
+                  </td>
+                  <td className="px-2 py-2">
+                    <span
+                      className={cn(
+                        "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase",
+                        occ.status === "completed"
+                          ? "bg-ok-soft text-ok"
+                          : occ.status === "failed"
+                            ? "bg-danger-soft text-danger"
+                            : "bg-canvas-deep text-ink-muted",
+                      )}
+                    >
+                      {occ.status === "completed"
+                        ? "Fertig"
+                        : occ.status === "failed"
+                          ? "Fehler"
+                          : occ.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-right whitespace-nowrap">
+                    <div className="inline-flex gap-2 items-center">
+                      {occ.slug && (
+                        <a
+                          href={`/v/${occ.slug}?preview=1`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-brand-deep hover:underline inline-flex items-center gap-0.5"
+                          title="Landingpage öffnen"
+                        >
+                          <ExternalLink className="size-3" />
+                        </a>
+                      )}
+                      {occ.videoUrl && (
+                        <a
+                          href={occ.videoUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-brand-deep hover:underline inline-flex items-center gap-0.5"
+                          title="Video öffnen"
+                        >
+                          <Play className="size-3" />
+                        </a>
+                      )}
+                      {occ.pdfUrl && (
+                        <a
+                          href={occ.pdfUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-brand-deep hover:underline inline-flex items-center gap-0.5"
+                          title="Brief öffnen"
+                        >
+                          <FileText className="size-3" />
+                        </a>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ))}
     </div>

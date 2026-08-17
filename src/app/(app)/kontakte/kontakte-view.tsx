@@ -494,6 +494,9 @@ export function KontakteView(_props: KontakteViewProps) {
             </div>
           )}
 
+          {/* Listen-Kontext-Banner: für welche Kampagne/Runde wurde die Liste verwendet */}
+          {selectedListId && <ListUsageBanner listId={selectedListId} />}
+
           {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -510,8 +513,7 @@ export function KontakteView(_props: KontakteViewProps) {
                   <th className="px-3 py-2 text-left">Firma</th>
                   <th className="px-3 py-2 text-left">E-Mail</th>
                   <th className="px-3 py-2 text-left">Telefon</th>
-                  <th className="px-3 py-2 text-left">Listen</th>
-                  <th className="px-3 py-2 text-right">Kampagnen</th>
+                  <th className="px-3 py-2 text-left">Status</th>
                   <th className="px-3 py-2 text-right">Öffnungen</th>
                   <th className="px-3 py-2 text-right">CTA</th>
                   <th className="px-3 py-2 text-left">Letzte Aktivität</th>
@@ -520,7 +522,7 @@ export function KontakteView(_props: KontakteViewProps) {
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={10} className="px-3 py-10 text-center text-ink-muted">
+                    <td colSpan={9} className="px-3 py-10 text-center text-ink-muted">
                       <Loader2 className="size-4 inline animate-spin mr-2" />
                       Lade Kontakte…
                     </td>
@@ -528,7 +530,7 @@ export function KontakteView(_props: KontakteViewProps) {
                 )}
                 {!loading && contacts.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-3 py-10 text-center text-ink-muted text-sm">
+                    <td colSpan={9} className="px-3 py-10 text-center text-ink-muted text-sm">
                       {selectedListId
                         ? 'Diese Liste ist noch leer. Wähle links "Alle Kontakte", markiere ein paar und stecke sie in diese Liste.'
                         : "Noch keine Kontakte. Erstelle eine Kampagne mit CSV-Upload — deine Kontakte landen dann automatisch hier."}
@@ -536,79 +538,62 @@ export function KontakteView(_props: KontakteViewProps) {
                   </tr>
                 )}
                 {!loading &&
-                  contacts.map((c) => (
-                    <tr
-                      key={c.id}
-                      className={cn(
-                        "border-t border-line hover:bg-canvas cursor-pointer",
-                        selectedContactIds.has(c.id) && "bg-brand-soft",
-                        detailContactId === c.id && "bg-brand-soft/60",
-                      )}
-                      onClick={(e) => {
-                        // Klick auf die Zeile öffnet den Detail-Slide-Over.
-                        // Selektion nur über die Checkbox (verhindert
-                        // versehentliches Anhaken beim Öffnen).
-                        if ((e.target as HTMLElement).tagName === "INPUT") return;
-                        setDetailContactId(c.id);
-                      }}
-                    >
-                      <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedContactIds.has(c.id)}
-                          onChange={() => toggleOne(c.id)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </td>
-                      <td className="px-3 py-2 font-medium text-ink whitespace-nowrap">
-                        {c.displayName}
-                      </td>
-                      <td className="px-3 py-2 text-ink-muted whitespace-nowrap max-w-[200px] truncate">
-                        {c.companyDisplay ?? c.company ?? ""}
-                      </td>
-                      <td className="px-3 py-2 text-ink-muted whitespace-nowrap max-w-[200px] truncate">
-                        {c.email ?? ""}
-                      </td>
-                      <td className="px-3 py-2 text-ink-muted whitespace-nowrap">
-                        {c.phone ?? ""}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex flex-wrap gap-1">
-                          {c.listNames.slice(0, 3).map((n) => (
-                            <span
-                              key={n}
-                              className="text-[10px] bg-canvas-deep text-ink px-1.5 py-0.5 rounded"
-                            >
-                              {n}
-                            </span>
-                          ))}
-                          {c.listNames.length > 3 && (
-                            <span className="text-[10px] text-ink-muted">
-                              +{c.listNames.length - 3}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-right text-ink-muted tabular-nums">
-                        {c.campaignCount}
-                      </td>
-                      <td className="px-3 py-2 text-right text-ink-muted tabular-nums">
-                        {c.totalOpens}
-                      </td>
-                      <td className="px-3 py-2 text-right text-ink-muted tabular-nums">
-                        {c.totalCta}
-                      </td>
-                      <td className="px-3 py-2 text-ink-muted text-xs whitespace-nowrap">
-                        {c.lastActivityAt
-                          ? new Date(c.lastActivityAt).toLocaleDateString("de-DE", {
-                              day: "2-digit",
-                              month: "2-digit",
-                              year: "2-digit",
-                            })
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))}
+                  contacts.map((c) => {
+                    const status = classifyContactStatus(c);
+                    return (
+                      <tr
+                        key={c.id}
+                        className={cn(
+                          "border-t border-line hover:bg-canvas cursor-pointer",
+                          selectedContactIds.has(c.id) && "bg-brand-soft",
+                          detailContactId === c.id && "bg-brand-soft/60",
+                        )}
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).tagName === "INPUT") return;
+                          setDetailContactId(c.id);
+                        }}
+                      >
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedContactIds.has(c.id)}
+                            onChange={() => toggleOne(c.id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </td>
+                        <td className="px-3 py-2 font-medium text-ink whitespace-nowrap">
+                          {c.displayName}
+                        </td>
+                        <td className="px-3 py-2 text-ink-muted whitespace-nowrap max-w-[200px] truncate">
+                          {c.companyDisplay ?? c.company ?? ""}
+                        </td>
+                        <td className="px-3 py-2 text-ink-muted whitespace-nowrap max-w-[200px] truncate">
+                          {c.email ?? ""}
+                        </td>
+                        <td className="px-3 py-2 text-ink-muted whitespace-nowrap">
+                          {c.phone ?? ""}
+                        </td>
+                        <td className="px-3 py-2">
+                          <StatusPill status={status} />
+                        </td>
+                        <td className="px-3 py-2 text-right text-ink-muted tabular-nums">
+                          {c.totalOpens}
+                        </td>
+                        <td className="px-3 py-2 text-right text-ink-muted tabular-nums">
+                          {c.totalCta}
+                        </td>
+                        <td className="px-3 py-2 text-ink-muted text-xs whitespace-nowrap">
+                          {c.lastActivityAt
+                            ? new Date(c.lastActivityAt).toLocaleDateString("de-DE", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "2-digit",
+                              })
+                            : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
@@ -766,6 +751,96 @@ function NewListModal({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/* ── Status: heiß / warm / kalt / neu — abgeleitet aus Aktivitäten ────── */
+
+type ContactStatus = "hot" | "warm" | "cold" | "new";
+
+function classifyContactStatus(c: ContactRow): ContactStatus {
+  if (c.campaignCount === 0) return "new";
+  if (c.totalCta > 0) return "hot";
+  if (c.totalPlays > 0 || c.totalOpens >= 3) return "warm";
+  return "cold";
+}
+
+function StatusPill({ status }: { status: ContactStatus }) {
+  const cfg: Record<ContactStatus, { label: string; bg: string; text: string }> = {
+    hot: { label: "Heiß", bg: "bg-danger-soft", text: "text-danger" },
+    warm: { label: "Warm", bg: "bg-warn-soft", text: "text-warn" },
+    cold: { label: "Kalt", bg: "bg-info-soft", text: "text-info" },
+    new: { label: "Neu", bg: "bg-canvas-deep", text: "text-ink-muted" },
+  };
+  const c = cfg[status];
+  return (
+    <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full", c.bg, c.text)}>
+      {c.label}
+    </span>
+  );
+}
+
+/* ── Listen-Kontext: für welche Kampagnen/Runden wurde die Liste verwendet ── */
+
+interface ListUsage {
+  runs: Array<{
+    runId: string;
+    runName: string;
+    campaignId: string;
+    campaignName: string;
+    startedAt: string | null;
+    leadCount: number;
+  }>;
+}
+
+function ListUsageBanner({ listId }: { listId: string }) {
+  const [usage, setUsage] = React.useState<ListUsage | null>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    setLoading(true);
+    fetch(`/api/contact-lists/${listId}/usage`)
+      .then((r) => r.ok ? r.json() : { runs: [] })
+      .then((b) => setUsage(b))
+      .catch(() => setUsage({ runs: [] }))
+      .finally(() => setLoading(false));
+  }, [listId]);
+
+  if (loading) return null;
+  if (!usage || usage.runs.length === 0) {
+    return (
+      <div className="px-3 py-2 bg-canvas-deep text-xs text-ink-muted border-b border-line">
+        Diese Liste wurde noch für keine Runde verwendet.
+      </div>
+    );
+  }
+
+  // Gruppieren nach Kampagne
+  const byCampaign = new Map<string, { campaignName: string; runs: ListUsage["runs"] }>();
+  for (const r of usage.runs) {
+    const ex = byCampaign.get(r.campaignId);
+    if (ex) ex.runs.push(r);
+    else byCampaign.set(r.campaignId, { campaignName: r.campaignName, runs: [r] });
+  }
+  const campaignsUsed = Array.from(byCampaign.entries());
+
+  return (
+    <div className="px-3 py-2 bg-brand-soft border-b border-line text-xs text-ink flex items-center gap-2 flex-wrap">
+      <span className="font-semibold text-brand-deep">Verwendet in:</span>
+      {campaignsUsed.map(([cid, { campaignName, runs }]) => (
+        <span key={cid} className="inline-flex items-center gap-1">
+          <a
+            href={`/kampagnen/${cid}`}
+            className="font-semibold text-ink hover:underline"
+          >
+            {campaignName}
+          </a>
+          <span className="text-ink-muted">
+            ({runs.length} Runde{runs.length === 1 ? "" : "n"})
+          </span>
+        </span>
+      ))}
     </div>
   );
 }
