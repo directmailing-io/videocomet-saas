@@ -722,11 +722,18 @@ export const leads = pgTable("leads", {
   normalizedEmail: text("normalized_email"),
   normalizedName: text("normalized_name"),
   normalizedCompany: text("normalized_company"),
+
+  // ── Mini-CRM (Migration 0054) ─────────────────────────────────────────
+  // Verweist auf den Master-Contact dieses Leads. Nullable: Bestandsleads
+  // ohne konsolidierbare Identität (weder Email noch Name+Firma) bleiben
+  // orphan; ab Etappe 5 werden neue Leads mit `contactId` gesetzt erzeugt.
+  contactId: uuid("contact_id").references((): AnyPgColumn => contacts.id, { onDelete: "set null" }),
 }, (t) => ({
   runIdx: index("leads_run_idx").on(t.runId),
   campaignIdx: index("leads_campaign_idx").on(t.campaignId),
   domainIdx: index("leads_domain_idx").on(t.domainId),
   statusIdx: index("leads_status_idx").on(t.status),
+  contactIdx: index("leads_contact_idx").on(t.contactId).where(sql`${t.contactId} IS NOT NULL`),
   // Campaign-scoped Slug-Eindeutigkeit (Migration 0014).
   // Default-LP: slug pro Kampagne eindeutig.
   campaignDefaultSlugUq: uniqueIndex("leads_campaign_default_slug_uq")
@@ -1927,3 +1934,141 @@ export const introCache = pgTable("intro_cache", {
 }));
 
 export type IntroCacheRow = typeof introCache.$inferSelect;
+
+// ── Mini-CRM (Migration 0054) ───────────────────────────────────────────
+// Kontakte, Listen und Custom-Feld-Definitionen als Basis für die
+// Rundenerstellung aus Listen (Etappen 5+6) und die Kontakt-Zentrale
+// (Etappen 2-4). Details: drizzle/0054_contacts_and_lists.sql
+
+export const contactListTypeEnum = pgEnum("contact_list_type", ["static", "smart"]);
+export const listMembershipViaEnum = pgEnum("list_membership_via", [
+  "manual",
+  "import",
+  "api",
+  "merge",
+  "filter",
+  "smart",
+]);
+export const contactFieldTypeEnum = pgEnum("contact_field_type", [
+  "email",
+  "phone",
+  "url",
+  "text",
+  "number",
+  "date",
+]);
+
+export const contacts = pgTable("contacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  // Normalisierte Basis-Felder — lowercase/trim, ohne Legal-Suffixe.
+  // Werden von der App gesetzt (nicht als generated columns, weil die
+  // Quelle contacts.data ist, nicht ein anderes JSONB).
+  email: text("email"),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  company: text("company"),
+  companyDisplay: text("company_display"),
+  phone: text("phone"),
+  linkedinUrl: text("linkedin_url"),
+
+  // Alle weiteren Felder (Custom-Felder aus Import). Meta für UI-Anzeige
+  // liegt in contactFields.
+  data: jsonb("data").notNull().$type<Record<string, string>>().default({}),
+
+  // DSGVO-Soft-Delete. Betroffenen-Löschung geht über bestehende
+  // leadDeletionAudit-Pfad, hier zusätzlich für Contact-Level.
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedReason: text("deleted_reason"),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  // Redundanter Zeitstempel für „letzte Aktivität"-Sortierung — wird per
+  // Trigger aus leads.last_viewed_at / last_cta_at / completed_at gehoben.
+  lastActivityAt: timestamp("last_activity_at", { withTimezone: true }),
+}, (t) => ({
+  userIdx: index("contacts_user_idx").on(t.userId).where(sql`${t.deletedAt} IS NULL`),
+  userEmailIdx: index("contacts_user_email_idx")
+    .on(t.userId, t.email)
+    .where(sql`${t.email} IS NOT NULL AND ${t.deletedAt} IS NULL`),
+  userNameCompanyIdx: index("contacts_user_name_company_idx")
+    .on(t.userId, t.lastName, t.firstName, t.company)
+    .where(sql`${t.deletedAt} IS NULL`),
+  userLastActivityIdx: index("contacts_user_last_activity_idx")
+    .on(t.userId, t.lastActivityAt)
+    .where(sql`${t.deletedAt} IS NULL`),
+  userEmailUq: uniqueIndex("contacts_user_email_uq")
+    .on(t.userId, t.email)
+    .where(sql`${t.email} IS NOT NULL AND ${t.deletedAt} IS NULL`),
+}));
+
+export const contactLists = pgTable("contact_lists", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  name: text("name").notNull(),
+  description: text("description"),
+
+  type: contactListTypeEnum("type").notNull().default("static"),
+  // Nur bei smart: gespeicherte Filter-Definition. Format wird in
+  // Etappe 4 (Filter) festgelegt.
+  smartFilter: jsonb("smart_filter").$type<Record<string, unknown> | null>(),
+
+  // Optional: Kampagne, die bei jedem Neuzugang automatisch angestoßen wird.
+  // Verdrahtet in Etappe 6 (Automation).
+  autoRunCampaignId: uuid("auto_run_campaign_id").references(() => campaigns.id, {
+    onDelete: "set null",
+  }),
+
+  // Denormalisierter Zähler, App-seitig gepflegt bei add/remove.
+  contactCount: integer("contact_count").notNull().default(0),
+
+  // UI-Kachel-Optionen (Etappe 2).
+  color: text("color"),
+  icon: text("icon"),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("contact_lists_user_idx").on(t.userId),
+  userNameUq: uniqueIndex("contact_lists_user_name_uq").on(t.userId, t.name),
+}));
+
+export const listMemberships = pgTable("list_memberships", {
+  listId: uuid("list_id").notNull().references(() => contactLists.id, { onDelete: "cascade" }),
+  contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+  addedVia: listMembershipViaEnum("added_via").notNull().default("manual"),
+  // Denormalisierte user_id für Query-Perf ohne JOIN.
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+}, (t) => ({
+  pk: unique("list_memberships_pk").on(t.listId, t.contactId),
+  contactIdx: index("list_memberships_contact_idx").on(t.contactId, t.listId),
+  userIdx: index("list_memberships_user_idx").on(t.userId),
+}));
+
+export const contactFields = pgTable("contact_fields", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  // Slug im data-jsonb (z.B. "praxis_groesse"). URL-safe, snake_case.
+  key: text("key").notNull(),
+  // Anzeige-Label ("Praxis-Größe").
+  label: text("label").notNull(),
+  // Beim Import erraten (Etappe 3). Nur für Icons + UI, KEINE Validierung.
+  detectedType: contactFieldTypeEnum("detected_type").notNull().default("text"),
+  // Für UI-Sortierung „Meine wichtigsten Felder oben".
+  usageCount: integer("usage_count").notNull().default(0),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("contact_fields_user_idx").on(t.userId),
+  userKeyUq: uniqueIndex("contact_fields_user_key_uq").on(t.userId, t.key),
+}));
+
+export type ContactRow = typeof contacts.$inferSelect;
+export type ContactListRow = typeof contactLists.$inferSelect;
+export type ListMembershipRow = typeof listMemberships.$inferSelect;
+export type ContactFieldRow = typeof contactFields.$inferSelect;
