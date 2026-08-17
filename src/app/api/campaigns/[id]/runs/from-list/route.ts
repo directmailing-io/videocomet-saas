@@ -23,6 +23,11 @@ import { campaigns, contactLists, contacts, leads, listMemberships, runs } from 
 import { createRun } from "@/lib/db/queries/runs";
 import { pipelineQueue } from "@/worker/queue";
 import { leadJobPriority } from "@/lib/queue-priority";
+import {
+  buildLeadDataFromContact,
+  normalizeContactMapping,
+  type ContactMapping,
+} from "@/lib/contacts/mapping";
 
 export async function POST(
   req: NextRequest,
@@ -43,6 +48,18 @@ export async function POST(
     typeof b.name === "string" && b.name.trim()
       ? b.name.trim()
       : `Runde ${new Date().toLocaleDateString("de-DE")}`;
+  // Optional: Placeholder-auf-Contact-Property-Mapping vom Wizard v4.
+  // Ohne Mapping fallen wir auf das bisherige Basis-Feld-Copy zurück.
+  const contactMapping: ContactMapping | null = b.contactMapping
+    ? normalizeContactMapping(b.contactMapping)
+    : null;
+  // Optional: welche Contacts sollen übersprungen werden (skip-Liste
+  // aus dem Duplikat-Detail-Screen). IDs beziehen sich auf contacts.id.
+  const skipContactIds = new Set(
+    Array.isArray(b.skipContactIds)
+      ? b.skipContactIds.filter((v): v is string => typeof v === "string")
+      : [],
+  );
 
   if (!listId) {
     return NextResponse.json({ error: "Bitte wähl eine Liste aus." }, { status: 400 });
@@ -75,7 +92,8 @@ export async function POST(
       email: contacts.email,
       firstName: contacts.firstName,
       lastName: contacts.lastName,
-      company: contacts.companyDisplay,
+      company: contacts.company,
+      companyDisplay: contacts.companyDisplay,
       phone: contacts.phone,
       linkedinUrl: contacts.linkedinUrl,
       data: contacts.data,
@@ -87,37 +105,62 @@ export async function POST(
     )
     .where(eq(listMemberships.listId, listId));
 
-  if (memberContacts.length === 0) {
+  // Skip-Liste aus dem Duplikat-Screen anwenden
+  const effectiveContacts = skipContactIds.size > 0
+    ? memberContacts.filter((c) => !skipContactIds.has(c.id))
+    : memberContacts;
+
+  if (effectiveContacts.length === 0) {
     return NextResponse.json(
-      { error: "Die Liste ist leer. Bitte erst Kontakte hinzufügen." },
+      { error: skipContactIds.size > 0
+          ? "Nach dem Überspringen bleibt kein Kontakt übrig."
+          : "Die Liste ist leer. Bitte erst Kontakte hinzufügen." },
       { status: 400 },
     );
   }
 
-  // Runde anlegen. sourceType existiert im Schema als "csv"|"xlsx"|
-  // "google-sheets"; für "aus Liste" gibt es (noch) keinen eigenen Typ,
-  // deshalb nur den Namen prägnant benennen und sourceType null lassen.
+  // Runde anlegen.
   const run = await createRun(auth.user.id, {
     campaignId: params.id,
     name: runName,
     status: "generating",
     startedAt: new Date(),
-    totalLeads: memberContacts.length,
+    totalLeads: effectiveContacts.length,
   });
 
-  // Für jeden Contact einen Lead-Row anlegen.
-  const leadRows = memberContacts.map((c, i) => {
-    const first = c.firstName ?? c.data?.firstName ?? "";
-    const last = c.lastName ?? c.data?.lastName ?? "";
-    const data: Record<string, string> = {
-      ...(c.data ?? {}),
-      ...(first ? { firstName: first } : {}),
-      ...(last ? { lastName: last } : {}),
-      ...(c.email ? { email: c.email } : {}),
-      ...(c.company ? { company: c.company } : {}),
-      ...(c.phone ? { phone: c.phone } : {}),
-      ...(c.linkedinUrl ? { linkedin: c.linkedinUrl } : {}),
-    };
+  // Für jeden Contact einen Lead-Row anlegen. Wenn ein Placeholder-Mapping
+  // mitgeliefert wurde (Wizard v4 Step 4), nutzen wir buildLeadDataFromContact
+  // — sonst der bisherige Basis-Feld-Copy-Weg für Rückwärts-Kompat.
+  const leadRows = effectiveContacts.map((c, i) => {
+    let data: Record<string, string>;
+    if (contactMapping && Object.keys(contactMapping).length > 0) {
+      data = buildLeadDataFromContact(contactMapping, {
+        contact: {
+          email: c.email,
+          firstName: c.firstName,
+          lastName: c.lastName,
+          company: c.company,
+          companyDisplay: c.companyDisplay,
+          phone: c.phone,
+          linkedinUrl: c.linkedinUrl,
+          data: c.data ?? {},
+        },
+        system: {}, // pageUrl wird von der Pipeline gefüllt, nicht hier
+      });
+    } else {
+      const first = c.firstName ?? c.data?.firstName ?? "";
+      const last = c.lastName ?? c.data?.lastName ?? "";
+      const comp = c.companyDisplay ?? c.company;
+      data = {
+        ...(c.data ?? {}),
+        ...(first ? { firstName: first } : {}),
+        ...(last ? { lastName: last } : {}),
+        ...(c.email ? { email: c.email } : {}),
+        ...(comp ? { company: comp } : {}),
+        ...(c.phone ? { phone: c.phone } : {}),
+        ...(c.linkedinUrl ? { linkedin: c.linkedinUrl } : {}),
+      };
+    }
     return {
       runId: run.id,
       campaignId: params.id,
