@@ -79,31 +79,37 @@ export function Step5Start({
         Prüfe kurz die Zusammenfassung. Nach dem Start läuft die Video-Produktion.
       </p>
 
-      <div className="grid grid-cols-2 gap-3 mb-5">
-        <Tile k="Kontakte" v={String(totalContacts)} big />
-        <Tile k="Übersprungen" v={String(skipContactIds.length)} big />
-        <Tile
-          k="Umschläge"
-          v={state.options.envelopeEnabled ? "Ja, mit Vorlage" : "Nein"}
-        />
-        <Tile
-          k="E-Mail-Versand"
-          v={state.options.emailEnabled ? "Ja" : "Nein"}
-        />
+      <div className="bg-surface rounded-2xl shadow-card p-6 mb-5">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Stat k="Kontakte" v={String(totalContacts)} tone="ok" />
+          <Stat k="Übersprungen" v={String(skipContactIds.length)} tone="muted" />
+          <Stat
+            k="Umschläge"
+            v={state.options.envelopeEnabled ? "Ja" : "Nein"}
+            tone={state.options.envelopeEnabled ? "brand" : "muted"}
+          />
+          <Stat
+            k="E-Mail-Versand"
+            v={state.options.emailEnabled ? "Ja" : "Nein"}
+            tone={state.options.emailEnabled ? "brand" : "muted"}
+          />
+        </div>
+
+        <div className="mt-6 pt-6 border-t border-line">
+          <label className="block text-xs font-semibold text-ink mb-1.5">
+            Name der Runde
+          </label>
+          <input
+            type="text"
+            value={state.runName}
+            onChange={(e) => patch({ runName: e.target.value })}
+            maxLength={120}
+            className="w-full px-3 py-2.5 rounded-xl border border-line bg-canvas text-sm focus:outline-none focus:border-brand"
+          />
+        </div>
       </div>
 
-      <div className="mb-4">
-        <label className="block text-xs font-semibold text-ink mb-1">Name der Runde</label>
-        <input
-          type="text"
-          value={state.runName}
-          onChange={(e) => patch({ runName: e.target.value })}
-          maxLength={120}
-          className="w-full px-3 py-2 rounded-lg border border-line bg-canvas text-sm"
-        />
-      </div>
-
-      <div className="rounded-xl bg-brand-soft p-4 text-sm text-ink mb-5">
+      <div className="rounded-2xl bg-brand-soft p-4 text-sm text-ink mb-5">
         <strong className="text-brand-deep">Was jetzt passiert:</strong>{" "}
         {state.options.preflightEnabled
           ? "Wir prüfen erst kurz die Erreichbarkeit der Landingpages. "
@@ -126,11 +132,17 @@ export function Step5Start({
   );
 }
 
-function Tile({ k, v, big }: { k: string; v: string; big?: boolean }) {
+function Stat({ k, v, tone }: { k: string; v: string; tone: "ok" | "brand" | "muted" }) {
+  const valueClass =
+    tone === "ok" ? "text-ok" :
+    tone === "brand" ? "text-brand-deep" :
+    "text-ink";
   return (
-    <div className="bg-canvas rounded-xl p-3">
-      <div className="text-[11px] text-ink-muted uppercase tracking-wide">{k}</div>
-      <div className={"font-bold text-ink " + (big ? "text-2xl mt-1" : "text-base mt-0.5")}>{v}</div>
+    <div>
+      <div className="text-[10px] font-semibold text-ink-muted uppercase tracking-wide">
+        {k}
+      </div>
+      <div className={"text-2xl font-bold mt-1 tabular-nums " + valueClass}>{v}</div>
     </div>
   );
 }
