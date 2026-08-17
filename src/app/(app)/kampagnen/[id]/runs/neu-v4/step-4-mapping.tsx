@@ -23,9 +23,11 @@ import { useToast } from "@/components/ui/toaster";
 import { toastError } from "@/lib/toast-error";
 import {
   BASE_CONTACT_FIELDS,
+  COUNTRY_HIDE_PRESETS,
   suggestContactMapping,
   type ContactMapping,
   type ContactMappingEntry,
+  type ContactMappingRule,
 } from "@/lib/contacts/mapping";
 import type { WizardState } from "./types";
 
@@ -216,15 +218,22 @@ export function Step4Mapping({
                       </optgroup>
                     </select>
                     {entry && (
-                      <input
-                        type="text"
-                        placeholder="Fallback wenn leer (optional)"
-                        value={entry.fallback ?? ""}
-                        onChange={(e) =>
-                          setEntry(p.key, { ...entry, fallback: e.target.value || undefined })
-                        }
-                        className="w-full mt-1 px-2 py-1 rounded border border-line bg-canvas text-xs"
-                      />
+                      <>
+                        <input
+                          type="text"
+                          placeholder="Fallback wenn leer (optional)"
+                          value={entry.fallback ?? ""}
+                          onChange={(e) =>
+                            setEntry(p.key, { ...entry, fallback: e.target.value || undefined })
+                          }
+                          className="w-full mt-1 px-2 py-1 rounded border border-line bg-canvas text-xs"
+                        />
+                        <RulesEditor
+                          entry={entry}
+                          onChange={(e) => setEntry(p.key, e)}
+                          placeholderKey={p.key}
+                        />
+                      </>
                     )}
                   </div>
                 </div>
@@ -277,6 +286,151 @@ function fieldLabel(field: string): string {
     linkedinUrl: "LinkedIn",
   };
   return map[field] ?? field;
+}
+
+/**
+ * Wenn-Dann-Regeln pro Placeholder: „Wenn Wert = X, Y, Z → leer".
+ * Häufigster Use-Case: eigenes Land ausblenden. Preset-Buttons für DE/AT/CH
+ * legen die passenden Werte in einem Klick an — für alle anderen Fälle
+ * kann der User frei tippen.
+ */
+function RulesEditor({
+  entry,
+  onChange,
+  placeholderKey,
+}: {
+  entry: ContactMappingEntry;
+  onChange: (e: ContactMappingEntry) => void;
+  placeholderKey: string;
+}) {
+  const [open, setOpen] = React.useState((entry.rules ?? []).length > 0);
+  const rules = entry.rules ?? [];
+
+  function updateRules(next: ContactMappingRule[]) {
+    onChange({ ...entry, rules: next.length > 0 ? next : undefined });
+  }
+  function addRule(rule: ContactMappingRule) {
+    updateRules([...rules, rule]);
+  }
+  function removeRule(idx: number) {
+    updateRules(rules.filter((_, i) => i !== idx));
+  }
+  function setRule(idx: number, patch: Partial<ContactMappingRule>) {
+    updateRules(rules.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  }
+
+  // Heuristik: sieht das Feld nach "Land" aus? Dann Preset-Buttons anbieten.
+  const looksLikeCountry = /land|country/i.test(placeholderKey) ||
+    (entry.source === "customField" && /land|country/i.test(entry.field));
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1 text-[10px] text-brand-deep font-semibold hover:underline"
+      >
+        + Wenn-Dann-Regel
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-lg bg-canvas-deep p-2 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold text-ink uppercase tracking-wide">
+          Wenn-Dann-Regeln
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            updateRules([]);
+            setOpen(false);
+          }}
+          className="text-[10px] text-ink-muted hover:text-danger"
+        >
+          entfernen
+        </button>
+      </div>
+
+      {looksLikeCountry && rules.length === 0 && (
+        <div className="text-[10px] text-ink-muted">
+          Häufig genutzt: Land ausblenden, wenn du im selben Land verschickst.
+          <div className="flex flex-wrap gap-1 mt-1">
+            {COUNTRY_HIDE_PRESETS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() =>
+                  addRule({ equalsAnyOf: p.values, then: "empty" })
+                }
+                className="px-2 py-1 rounded bg-white border border-line text-[10px] text-ink font-semibold hover:border-brand hover:text-brand-deep"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {rules.map((r, i) => (
+        <div key={i} className="bg-white rounded p-2 text-[11px]">
+          <div className="flex items-center gap-1 mb-1">
+            <span className="text-ink-muted">Wenn Wert einer von:</span>
+            <button
+              type="button"
+              onClick={() => removeRule(i)}
+              className="ml-auto text-ink-muted hover:text-danger"
+              title="Regel entfernen"
+            >
+              ×
+            </button>
+          </div>
+          <input
+            type="text"
+            value={r.equalsAnyOf.join(", ")}
+            onChange={(e) => {
+              const values = e.target.value
+                .split(",")
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0);
+              setRule(i, { equalsAnyOf: values });
+            }}
+            placeholder="z. B. Deutschland, DE, D"
+            className="w-full px-2 py-1 rounded border border-line bg-canvas text-[11px] mb-1"
+          />
+          <div className="flex items-center gap-1">
+            <span className="text-ink-muted">→</span>
+            <select
+              value={r.then}
+              onChange={(e) => setRule(i, { then: e.target.value as "empty" | "replace" })}
+              className="text-[11px] px-1 py-0.5 rounded border border-line bg-canvas"
+            >
+              <option value="empty">leer lassen</option>
+              <option value="replace">ersetzen durch</option>
+            </select>
+            {r.then === "replace" && (
+              <input
+                type="text"
+                value={r.replaceWith ?? ""}
+                onChange={(e) => setRule(i, { replaceWith: e.target.value })}
+                placeholder="Ersatzwert"
+                className="flex-1 px-2 py-0.5 rounded border border-line bg-canvas text-[11px]"
+              />
+            )}
+          </div>
+        </div>
+      ))}
+
+      <button
+        type="button"
+        onClick={() => addRule({ equalsAnyOf: [], then: "empty" })}
+        className="text-[10px] text-brand-deep font-semibold hover:underline"
+      >
+        + Regel
+      </button>
+    </div>
+  );
 }
 
 function previewValue(

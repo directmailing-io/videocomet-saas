@@ -10,12 +10,17 @@ import { WizardV4 } from "./wizard-v4";
  */
 export default async function NewRunV4Page({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { user } = await requireUser();
   const campaign = await getCampaign(params.id, user.id);
   if (!campaign) notFound();
+
+  const sp = await searchParams;
+  const preselectedListId = typeof sp.listId === "string" ? sp.listId : null;
 
   return (
     <WizardV4
@@ -23,6 +28,7 @@ export default async function NewRunV4Page({
       campaignName={campaign.name}
       campaignMode={campaign.mode as "webcam-only" | "with-presentation"}
       pdfEnabled={campaign.pdfEnabled}
+      preselectedListId={preselectedListId}
     />
   );
 }

@@ -1,14 +1,16 @@
 "use client";
 
 /**
- * "Runde aus Liste starten"-Modal (Mini-CRM Etappe 6a).
+ * "Runde aus Liste starten"-Modal.
  *
- * Wird von der Kontakte-Ansicht geöffnet wenn eine Liste ausgewählt ist.
- * User wählt Kampagne + optional Namen für die Runde, klickt "Starten" —
- * Server legt Run + Leads an und startet die Pipeline.
+ * User wählt eine Kampagne aus. Danach wird zum v4-Wizard weitergeleitet
+ * (mit vorausgewählter Liste + Kampagne). So kann der User Optionen,
+ * Mapping und Duplikat-Check pro Runde entscheiden — nicht mehr Ein-Klick-
+ * Direktstart ohne Bearbeitungsmöglichkeit. Wichtig für Follow-up-Runden.
  */
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, X } from "lucide-react";
 import { useToast } from "@/components/ui/toaster";
 import { toastError } from "@/lib/toast-error";
@@ -23,7 +25,8 @@ interface StartRunModalProps {
   listName: string;
   contactCount: number;
   onClose: () => void;
-  onStarted: (runId: string, campaignId: string) => void;
+  /** Behalten für API-Kompat, wird aber nicht mehr direkt aufgerufen. */
+  onStarted?: (runId: string, campaignId: string) => void;
 }
 
 export function StartRunModal({
@@ -31,15 +34,11 @@ export function StartRunModal({
   listName,
   contactCount,
   onClose,
-  onStarted,
 }: StartRunModalProps) {
   const { toast } = useToast();
+  const router = useRouter();
   const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
   const [campaignId, setCampaignId] = React.useState<string>("");
-  const [runName, setRunName] = React.useState(
-    `Aus "${listName}" · ${new Date().toLocaleDateString("de-DE")}`,
-  );
-  const [busy, setBusy] = React.useState(false);
   const [loadingCampaigns, setLoadingCampaigns] = React.useState(true);
 
   React.useEffect(() => {
@@ -61,30 +60,15 @@ export function StartRunModal({
     })();
   }, [toast]);
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!campaignId) return;
-    setBusy(true);
-    try {
-      const res = await fetch(
-        `/api/campaigns/${campaignId}/runs/from-list`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ listId, name: runName.trim() }),
-        },
-      );
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error ?? "Fehler beim Starten");
-      toast({
-        title: `Runde gestartet — ${body.leadCount} Videos werden erstellt`,
-      });
-      onStarted(body.runId, campaignId);
-    } catch (err) {
-      toastError(toast, err);
-    } finally {
-      setBusy(false);
-    }
+    // Weiter zum v4-Wizard mit vorausgewählter Liste.
+    // Der Wizard springt dank ?listId= automatisch zu Step 3 (Optionen),
+    // weil Import + Duplikat-Check nicht nötig sind.
+    router.push(
+      `/kampagnen/${campaignId}/runs/neu-v4?listId=${encodeURIComponent(listId)}`,
+    );
   }
 
   return (
@@ -99,7 +83,7 @@ export function StartRunModal({
       >
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold text-ink">Runde aus Liste starten</h3>
+            <h3 className="text-lg font-semibold text-ink">Neue Runde für diese Liste</h3>
             <p className="text-xs text-ink-muted mt-0.5">
               {contactCount} Kontakt{contactCount === 1 ? "" : "e"} aus <strong>{listName}</strong>
             </p>
@@ -115,7 +99,9 @@ export function StartRunModal({
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-ink mb-1">Kampagne</label>
+            <label className="block text-xs font-semibold text-ink mb-1">
+              Für welche Kampagne?
+            </label>
             {loadingCampaigns ? (
               <div className="text-xs text-ink-muted">Kampagnen werden geladen…</div>
             ) : campaigns.length === 0 ? (
@@ -137,23 +123,10 @@ export function StartRunModal({
             )}
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-ink mb-1">
-              Name der Runde
-            </label>
-            <input
-              type="text"
-              value={runName}
-              onChange={(e) => setRunName(e.target.value)}
-              maxLength={120}
-              className="w-full px-3 py-2 rounded-lg border border-line bg-canvas text-sm"
-            />
-          </div>
-
           <div className="rounded-lg bg-canvas-deep px-3 py-2 text-xs text-ink-muted">
-            <strong className="text-ink">Was jetzt passiert:</strong> Für jeden Kontakt der
-            Liste wird ein Video und (falls in der Kampagne aktiviert) ein PDF-Brief
-            erstellt. Du kannst den Fortschritt live in der Runde verfolgen.
+            <strong className="text-ink">Was jetzt passiert:</strong> Im nächsten Schritt
+            wählst du Umschlag / E-Mail, siehst die Platzhalter deiner Vorlagen und
+            startest dann. Deine Kontakte sind schon da, kein neuer Upload nötig.
           </div>
         </div>
 
@@ -167,11 +140,10 @@ export function StartRunModal({
           </button>
           <button
             type="submit"
-            disabled={busy || !campaignId || contactCount === 0}
-            className="px-4 py-2 rounded-lg bg-ink text-white text-sm font-semibold disabled:opacity-50 hover:bg-brand-deep flex items-center gap-2"
+            disabled={!campaignId || contactCount === 0}
+            className="px-4 py-2 rounded-lg bg-ink text-white text-sm font-semibold disabled:opacity-50 hover:bg-brand-deep"
           >
-            {busy && <Loader2 className="size-3.5 animate-spin" />}
-            Runde starten
+            Weiter zu den Optionen →
           </button>
         </div>
       </form>

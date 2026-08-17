@@ -15,6 +15,21 @@
 
 export type ContactMappingSource = "contactField" | "customField" | "systemUrl";
 
+/**
+ * Wenn-Dann-Regel für einen Placeholder. Klassischer Use-Case:
+ * „Wenn Land = Deutschland, DE, D → leer lassen" (Inlands-Absender
+ * schreibt kein Land auf den Umschlag). Für Österreich und Schweiz
+ * analog. Der User pflegt selbst welche Werte matchen sollen.
+ */
+export interface ContactMappingRule {
+  /** Match-Werte (Groß-/Kleinschreibung, Whitespace, Leerräume egal). */
+  equalsAnyOf: string[];
+  /** Was passiert wenn eine Bedingung matcht. */
+  then: "empty" | "replace";
+  /** Ersatzwert wenn `then=replace`. */
+  replaceWith?: string;
+}
+
 export interface ContactMappingEntry {
   source: ContactMappingSource;
   /**
@@ -25,7 +40,28 @@ export interface ContactMappingEntry {
   field: string;
   /** Fallback wenn das Feld leer ist. */
   fallback?: string;
+  /** Wenn-Dann-Regeln, werden VOR dem Fallback ausgewertet. */
+  rules?: ContactMappingRule[];
 }
+
+/** Presets für die häufigste Wenn-Dann-Regel: eigenes Land ausblenden. */
+export const COUNTRY_HIDE_PRESETS: Array<{ key: string; label: string; values: string[] }> = [
+  {
+    key: "de",
+    label: "Deutschland ausblenden",
+    values: ["Deutschland", "DE", "D", "Germany", "BRD"],
+  },
+  {
+    key: "at",
+    label: "Österreich ausblenden",
+    values: ["Österreich", "Oesterreich", "AT", "A", "Austria"],
+  },
+  {
+    key: "ch",
+    label: "Schweiz ausblenden",
+    values: ["Schweiz", "CH", "CHE", "Switzerland", "Suisse"],
+  },
+];
 
 export type ContactMapping = Record<string, ContactMappingEntry>;
 
@@ -95,6 +131,21 @@ export function resolveContactMappingEntry(
       break;
   }
   const clean = raw == null ? "" : String(raw).trim();
+
+  // Wenn-Dann-Regeln VOR dem Fallback auswerten.
+  if (clean.length > 0 && entry.rules && entry.rules.length > 0) {
+    const norm = clean.toLowerCase().replace(/\s+/g, "");
+    for (const rule of entry.rules) {
+      const matches = rule.equalsAnyOf.some(
+        (v) => v.toLowerCase().replace(/\s+/g, "") === norm,
+      );
+      if (matches) {
+        if (rule.then === "empty") return "";
+        if (rule.then === "replace") return rule.replaceWith ?? "";
+      }
+    }
+  }
+
   if (clean.length > 0) return clean;
   return entry.fallback ?? "";
 }
@@ -145,16 +196,33 @@ export function normalizeContactMapping(input: unknown): ContactMapping {
     const source = v.source;
     const field = typeof v.field === "string" ? v.field : "";
     const fallback = typeof v.fallback === "string" ? v.fallback : undefined;
+    const rules = Array.isArray(v.rules) ? normalizeRules(v.rules) : undefined;
     if (source === "contactField") {
       if (!BASE_CONTACT_FIELDS.includes(field as BaseContactField)) continue;
-      out[key] = { source: "contactField", field, fallback };
+      out[key] = { source: "contactField", field, fallback, rules };
     } else if (source === "customField") {
       if (!field || !/^[a-z0-9_]+$/i.test(field)) continue;
-      out[key] = { source: "customField", field, fallback };
+      out[key] = { source: "customField", field, fallback, rules };
     } else if (source === "systemUrl") {
       if (!SYSTEM_SOURCES.includes(field as SystemSource)) continue;
-      out[key] = { source: "systemUrl", field, fallback };
+      out[key] = { source: "systemUrl", field, fallback, rules };
     }
+  }
+  return out;
+}
+
+function normalizeRules(input: unknown[]): ContactMappingRule[] {
+  const out: ContactMappingRule[] = [];
+  for (const raw of input) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const equalsAnyOf = Array.isArray(r.equalsAnyOf)
+      ? r.equalsAnyOf.filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+      : [];
+    if (equalsAnyOf.length === 0) continue;
+    const then = r.then === "replace" ? "replace" : "empty";
+    const replaceWith = typeof r.replaceWith === "string" ? r.replaceWith : undefined;
+    out.push({ equalsAnyOf, then, replaceWith });
   }
   return out;
 }

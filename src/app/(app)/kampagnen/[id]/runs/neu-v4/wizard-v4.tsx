@@ -31,6 +31,8 @@ interface WizardV4Props {
   campaignName: string;
   campaignMode: "webcam-only" | "with-presentation";
   pdfEnabled: boolean;
+  /** Optional: Liste, die aus /kontakte vorausgewählt wurde. */
+  preselectedListId?: string | null;
 }
 
 export function WizardV4({
@@ -38,9 +40,21 @@ export function WizardV4({
   campaignName,
   campaignMode,
   pdfEnabled,
+  preselectedListId,
 }: WizardV4Props) {
   const router = useRouter();
-  const [state, setState] = React.useState<WizardState>(makeInitialState);
+  const [state, setState] = React.useState<WizardState>(() => {
+    const initial = makeInitialState();
+    // Wenn wir aus der Kontakte-Ansicht mit ?listId=... kommen: Liste
+    // vorbelegen und direkt zu Step 3 (Optionen) springen. Der User will
+    // hier eine Follow-up-Runde starten, nicht nochmal importieren.
+    if (preselectedListId) {
+      initial.source = "existing-list";
+      initial.selectedListId = preselectedListId;
+      initial.step = "options";
+    }
+    return initial;
+  });
 
   function go(step: Step) {
     setState((s) => ({ ...s, step }));
