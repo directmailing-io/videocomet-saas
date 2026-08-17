@@ -314,13 +314,17 @@ export function UserDetailClient({
       const res = await fetch(`/api/admin/users/${user.id}/set-password`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ password: newPassword }),
+        body: JSON.stringify({ newPassword }),
       });
-      if (!res.ok) throw new Error();
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? "Passwort konnte nicht gesetzt werden.");
       toast({ title: "Passwort gesetzt.", variant: "success" });
       setNewPassword("");
-    } catch {
-      toast({ title: "Passwort konnte nicht gesetzt werden.", variant: "danger" });
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Passwort konnte nicht gesetzt werden.",
+        variant: "danger",
+      });
     } finally {
       setPwSetting(false);
     }
