@@ -26,9 +26,11 @@ import {
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
+import { useRouter } from "next/navigation";
 import { ContactDetailSlideOver } from "./contact-detail-slideover";
 import { FilterBar } from "./filter-bar";
 import { ImportModal } from "./import-modal";
+import { StartRunModal } from "./start-run-modal";
 import { EMPTY_FILTER, type FilterDefinition } from "@/lib/contacts/filter";
 
 interface ContactRow {
@@ -79,6 +81,7 @@ const AKTIV_LABEL: Record<SortKey, string> = {
 
 export function KontakteView(_props: KontakteViewProps) {
   const { toast } = useToast();
+  const router = useRouter();
 
   const [lists, setLists] = React.useState<ContactList[]>([]);
   const [totalAll, setTotalAll] = React.useState(0);
@@ -98,6 +101,7 @@ export function KontakteView(_props: KontakteViewProps) {
   const [detailContactId, setDetailContactId] = React.useState<string | null>(null);
   const [filter, setFilter] = React.useState<FilterDefinition>(EMPTY_FILTER);
   const [showImportModal, setShowImportModal] = React.useState(false);
+  const [showStartRunModal, setShowStartRunModal] = React.useState(false);
 
   const detailIndex = React.useMemo(() => {
     if (!detailContactId) return -1;
@@ -365,6 +369,16 @@ export function KontakteView(_props: KontakteViewProps) {
             </div>
 
             <div className="ml-auto flex gap-2 items-center flex-wrap">
+              {selectedListId && contactsTotal > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowStartRunModal(true)}
+                  className="px-3 py-1.5 rounded-lg bg-brand-deep text-white text-xs font-semibold hover:bg-brand flex items-center gap-1.5"
+                  title="Aus dieser Liste eine Kampagne-Runde starten"
+                >
+                  Runde starten →
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowImportModal(true)}
@@ -644,6 +658,19 @@ export function KontakteView(_props: KontakteViewProps) {
             setShowImportModal(false);
             void loadLists();
             void loadContacts();
+          }}
+        />
+      )}
+
+      {showStartRunModal && selectedListId && (
+        <StartRunModal
+          listId={selectedListId}
+          listName={selectedListName}
+          contactCount={contactsTotal}
+          onClose={() => setShowStartRunModal(false)}
+          onStarted={(runId, campaignId) => {
+            setShowStartRunModal(false);
+            router.push(`/kampagnen/${campaignId}/runs/${runId}`);
           }}
         />
       )}

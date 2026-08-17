@@ -10,6 +10,7 @@ import { MailboxesTab } from "./mailboxes-tab";
 import { IntegrationsList } from "./integrationen/integrations-list";
 import { WebhooksList } from "./webhooks/webhooks-list";
 import { WebhooksDocsCallout } from "./webhooks/webhooks-docs-callout";
+import { ApiKeysPanel } from "./api-keys/api-keys-panel";
 import { BillingTab } from "./billing-tab";
 import { KiStimmeTab } from "./ki-stimme-tab";
 import { SetupTab } from "./setup-tab";
@@ -27,6 +28,7 @@ const TAB_VALUES = new Set([
   "ki-stimme",
   "crm",
   "webhooks",
+  "automation",
 ]);
 
 export default async function EinstellungenPage({
@@ -65,6 +67,7 @@ export default async function EinstellungenPage({
           <TabsTrigger value="ki-stimme">KI-Stimme</TabsTrigger>
           <TabsTrigger value="crm">CRM-Integrationen</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
+          <TabsTrigger value="automation">Automation-API</TabsTrigger>
         </TabsList>
 
         <TabsContent value="setup">
@@ -148,6 +151,10 @@ export default async function EinstellungenPage({
             <WebhooksDocsCallout />
             <WebhooksList />
           </div>
+        </TabsContent>
+
+        <TabsContent value="automation">
+          <ApiKeysPanel />
         </TabsContent>
       </Tabs>
     </>

@@ -2072,3 +2072,29 @@ export type ContactRow = typeof contacts.$inferSelect;
 export type ContactListRow = typeof contactLists.$inferSelect;
 export type ListMembershipRow = typeof listMemberships.$inferSelect;
 export type ContactFieldRow = typeof contactFields.$inferSelect;
+
+// ── API-Keys für Automation-Zugriff (Migration 0055) ────────────────────
+export const apiKeys = pgTable("api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  name: text("name").notNull(),
+  keyPrefix: text("key_prefix").notNull(),
+  keyHash: text("key_hash").notNull(),
+
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  usageCount: integer("usage_count").notNull().default(0),
+
+  recentIdempotency: jsonb("recent_idempotency")
+    .$type<Array<{ key: string; responseJson: string; at: string }>>()
+    .notNull()
+    .default([]),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (t) => ({
+  userIdx: index("api_keys_user_idx").on(t.userId).where(sql`${t.revokedAt} IS NULL`),
+  keyHashUq: uniqueIndex("api_keys_key_hash_uq").on(t.keyHash),
+}));
+
+export type ApiKeyRow = typeof apiKeys.$inferSelect;
