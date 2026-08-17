@@ -235,6 +235,14 @@ export default async function CampaignDetailPage({
         subtitle={`Modus: ${modeLabel(campaign.mode)} · Erstellt am ${formatDate(campaign.createdAt)}`}
         actions={
           <>
+            <Button asChild variant="ghost" size="sm">
+              <Link
+                href={`/kampagnen/${campaign.id}/runs/neu-v4`}
+                title="Neuer Wizard v4 — Beta"
+              >
+                Neu (Beta) →
+              </Link>
+            </Button>
             <Button asChild iconLeft={<Plus className="size-4" />}>
               <Link href={`/kampagnen/${campaign.id}/runs/neu`}>
                 Neue Runde
