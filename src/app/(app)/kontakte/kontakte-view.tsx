@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { ContactDetailSlideOver } from "./contact-detail-slideover";
 import { FilterBar } from "./filter-bar";
+import { ImportModal } from "./import-modal";
 import { EMPTY_FILTER, type FilterDefinition } from "@/lib/contacts/filter";
 
 interface ContactRow {
@@ -96,6 +97,7 @@ export function KontakteView(_props: KontakteViewProps) {
   // Detail-Slide-Over (Etappe 3): welchen Contact anzeigen?
   const [detailContactId, setDetailContactId] = React.useState<string | null>(null);
   const [filter, setFilter] = React.useState<FilterDefinition>(EMPTY_FILTER);
+  const [showImportModal, setShowImportModal] = React.useState(false);
 
   const detailIndex = React.useMemo(() => {
     if (!detailContactId) return -1;
@@ -363,6 +365,14 @@ export function KontakteView(_props: KontakteViewProps) {
             </div>
 
             <div className="ml-auto flex gap-2 items-center flex-wrap">
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                className="px-3 py-1.5 rounded-lg bg-ink text-white text-xs font-semibold hover:bg-brand-deep flex items-center gap-1.5"
+              >
+                <Plus className="size-3.5" />
+                Kontakte importieren
+              </button>
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-ink-muted" />
                 <input
@@ -617,6 +627,23 @@ export function KontakteView(_props: KontakteViewProps) {
           onChanged={() => {
             void loadContacts();
             void loadLists();
+          }}
+        />
+      )}
+
+      {showImportModal && (
+        <ImportModal
+          lists={lists.map((l) => ({ id: l.id, name: l.name }))}
+          initialListId={selectedListId}
+          onCreateList={() => {
+            setShowImportModal(false);
+            setShowNewListModal(true);
+          }}
+          onClose={() => setShowImportModal(false)}
+          onDone={() => {
+            setShowImportModal(false);
+            void loadLists();
+            void loadContacts();
           }}
         />
       )}

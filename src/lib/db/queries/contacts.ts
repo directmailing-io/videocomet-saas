@@ -705,6 +705,142 @@ export async function mergeContacts(input: {
   return true;
 }
 
+/**
+ * Bulk-Import: legt neue Contacts an oder aktualisiert bestehende
+ * (per Email-Match) und fügt sie optional zu einer Liste hinzu.
+ *
+ * `rows`: Array von bereits gemappten Contact-Objekten. E-Mails werden
+ * lowercase/trim genormt. Duplikate (gleiche E-Mail beim gleichen User)
+ * werden UPDATED (leere Felder mit Import-Werten befüllt), nicht doppelt
+ * eingefügt.
+ *
+ * Returns Zähler für die UI: created (neu), updated (bestehend), skipped
+ * (fehlerhafte Zeilen z.B. ohne minimale Identität), plus Liste der
+ * Contact-IDs, damit der Caller sie in die List-Membership schieben kann.
+ */
+export async function bulkImportContacts(input: {
+  userId: string;
+  listId?: string | null;
+  rows: Array<{
+    email?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    company?: string | null;
+    phone?: string | null;
+    linkedinUrl?: string | null;
+    data?: Record<string, string>;
+  }>;
+  registerCustomFields?: Array<{ key: string; label: string; detectedType: string }>;
+}): Promise<{
+  created: number;
+  updated: number;
+  skipped: number;
+  contactIds: string[];
+}> {
+  const { userId, listId = null, rows, registerCustomFields = [] } = input;
+
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  const touchedIds: string[] = [];
+
+  // Custom-Field-Definitionen upserten (usage_count += 1). Ignorierbar bei
+  // Konflikt (schon vorhanden).
+  if (registerCustomFields.length > 0) {
+    for (const f of registerCustomFields) {
+      await db.execute(sql`
+        INSERT INTO contact_fields (user_id, key, label, detected_type, usage_count)
+        VALUES (${userId}, ${f.key}, ${f.label}, ${f.detectedType}, 1)
+        ON CONFLICT (user_id, key)
+        DO UPDATE SET usage_count = contact_fields.usage_count + 1,
+                      label = COALESCE(EXCLUDED.label, contact_fields.label),
+                      updated_at = now()
+      `);
+    }
+  }
+
+  await db.transaction(async (tx) => {
+    for (const row of rows) {
+      const emailNorm = row.email ? row.email.trim().toLowerCase() : null;
+      const hasIdentity =
+        !!emailNorm ||
+        !!(row.firstName || row.lastName) ||
+        !!row.company;
+      if (!hasIdentity) {
+        skipped++;
+        continue;
+      }
+
+      // Vorhandenen Contact per Email finden (falls Email da).
+      let existingId: string | null = null;
+      if (emailNorm) {
+        const [existing] = await tx
+          .select({ id: contacts.id })
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.userId, userId),
+              eq(contacts.email, emailNorm),
+              isNull(contacts.deletedAt),
+            ),
+          )
+          .limit(1);
+        existingId = existing?.id ?? null;
+      }
+
+      if (existingId) {
+        // Bestehenden Contact anreichern: nur leere Felder überschreiben,
+        // data-jsonb mergen (Import-Werte gewinnen für Custom-Felder).
+        await tx.execute(sql`
+          UPDATE contacts
+             SET first_name       = COALESCE(NULLIF(first_name,''), ${row.firstName ?? null}),
+                 last_name        = COALESCE(NULLIF(last_name,''),  ${row.lastName ?? null}),
+                 company          = COALESCE(NULLIF(company,''),    ${row.company ? row.company.toLowerCase() : null}),
+                 company_display  = COALESCE(NULLIF(company_display,''), ${row.company ?? null}),
+                 phone            = COALESCE(NULLIF(phone,''),      ${row.phone ?? null}),
+                 linkedin_url     = COALESCE(NULLIF(linkedin_url,''), ${row.linkedinUrl ?? null}),
+                 data             = COALESCE(data,'{}'::jsonb) || ${sql.raw(`'${JSON.stringify(row.data ?? {}).replace(/'/g, "''")}'::jsonb`)},
+                 updated_at       = now()
+           WHERE id = ${existingId}
+        `);
+        touchedIds.push(existingId);
+        updated++;
+      } else {
+        const [ins] = await tx
+          .insert(contacts)
+          .values({
+            userId,
+            email: emailNorm,
+            firstName: row.firstName ?? null,
+            lastName: row.lastName ?? null,
+            company: row.company ? row.company.toLowerCase() : null,
+            companyDisplay: row.company ?? null,
+            phone: row.phone ?? null,
+            linkedinUrl: row.linkedinUrl ?? null,
+            data: row.data ?? {},
+          })
+          .returning({ id: contacts.id });
+        touchedIds.push(ins.id);
+        created++;
+      }
+    }
+
+    // Optional: alle Contacts zur Liste hinzufügen.
+    if (listId && touchedIds.length > 0) {
+      for (const cid of touchedIds) {
+        await tx
+          .insert(listMemberships)
+          .values({ listId, contactId: cid, userId, addedVia: "import" })
+          .onConflictDoNothing();
+      }
+    }
+  });
+
+  if (listId) await refreshContactCount(listId);
+
+  return { created, updated, skipped, contactIds: touchedIds };
+}
+
 /** Custom-Feld-Definitionen des Users. */
 export async function listContactFields(userId: string): Promise<
   Array<{
