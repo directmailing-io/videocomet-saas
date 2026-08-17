@@ -10,7 +10,7 @@
  * werden in Listen-Queries ausgeblendet.
  */
 
-import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   contacts,
@@ -24,6 +24,8 @@ import {
   type ContactRow,
   type ContactListRow,
 } from "@/lib/db/schema";
+import type { FilterDefinition } from "@/lib/contacts/filter";
+import { buildFilterSql } from "@/lib/contacts/filter-query";
 
 /** UI-fokussierte Kontakt-Zeile für die Tabelle. */
 export interface ContactRowUi {
@@ -75,6 +77,8 @@ export async function listContacts(input: {
   limit?: number;
   offset?: number;
   sort?: "recent" | "name" | "activity";
+  /** Ad-hoc-Filter aus Etappe 4 — wird direkt in die WHERE-Klausel gemischt. */
+  filter?: FilterDefinition | null;
 }): Promise<{ contacts: ContactRowUi[]; total: number }> {
   const {
     userId,
@@ -83,44 +87,47 @@ export async function listContacts(input: {
     limit = 100,
     offset = 0,
     sort = "activity",
+    filter,
   } = input;
 
-  const whereParts = [eq(contacts.userId, userId), isNull(contacts.deletedAt)];
+  // Alle WHERE-Bedingungen als raw SQL mit "c."-Alias, damit sie mit der
+  // Aggregat-Query unten kompatibel sind (FROM contacts c).
+  const whereFragments: SQL[] = [
+    sql`c.user_id = ${userId}`,
+    sql`c.deleted_at IS NULL`,
+  ];
 
   if (listId) {
-    // Membership-Filter über EXISTS (kein JOIN → sauberer count).
-    whereParts.push(
-      sql`EXISTS (
-        SELECT 1 FROM ${listMemberships} lm
-        WHERE lm.contact_id = ${contacts.id} AND lm.list_id = ${listId}
-      )`,
-    );
+    whereFragments.push(sql`EXISTS (
+      SELECT 1 FROM list_memberships lm
+      WHERE lm.contact_id = c.id AND lm.list_id = ${listId}
+    )`);
+  }
+  if (filter && filter.conditions.length > 0) {
+    whereFragments.push(sql`(${buildFilterSql(filter, userId)})`);
   }
   if (search && search.length >= 2) {
     const term = `%${search.toLowerCase()}%`;
-    whereParts.push(
-      or(
-        sql`LOWER(COALESCE(${contacts.email}, '')) LIKE ${term}`,
-        sql`LOWER(COALESCE(${contacts.firstName} || ' ' || ${contacts.lastName}, '')) LIKE ${term}`,
-        sql`LOWER(COALESCE(${contacts.companyDisplay}, ${contacts.company}, '')) LIKE ${term}`,
-      )!,
-    );
+    whereFragments.push(sql`(
+      LOWER(COALESCE(c.email, '')) LIKE ${term}
+      OR LOWER(COALESCE(c.first_name || ' ' || c.last_name, '')) LIKE ${term}
+      OR LOWER(COALESCE(c.company_display, c.company, '')) LIKE ${term}
+    )`);
   }
 
-  const whereExpr = and(...whereParts);
+  const whereExpr = whereFragments.reduce((acc, cur, i) => (i === 0 ? cur : sql`${acc} AND ${cur}`));
 
-  const totalRows = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(contacts)
-    .where(whereExpr);
-  const total = totalRows[0]?.n ?? 0;
+  const totalRes = await db.execute<{ n: number }>(sql`
+    SELECT COUNT(*)::int AS n FROM ${contacts} c WHERE ${whereExpr}
+  `);
+  const total = totalRes[0]?.n ?? 0;
 
   const orderBy =
     sort === "name"
-      ? sql`COALESCE(${contacts.lastName}, ${contacts.firstName}, ${contacts.email}) ASC`
+      ? sql`COALESCE(c.last_name, c.first_name, c.email) ASC`
       : sort === "recent"
-        ? sql`${contacts.createdAt} DESC`
-        : sql`${contacts.lastActivityAt} DESC NULLS LAST`;
+        ? sql`c.created_at DESC`
+        : sql`c.last_activity_at DESC NULLS LAST`;
 
   // Aggregate über raw SQL — Drizzle hat kein natives Sub-Select-Group-By.
   const rows = await db.execute<{

@@ -27,6 +27,8 @@ import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { ContactDetailSlideOver } from "./contact-detail-slideover";
+import { FilterBar } from "./filter-bar";
+import { EMPTY_FILTER, type FilterDefinition } from "@/lib/contacts/filter";
 
 interface ContactRow {
   id: string;
@@ -93,6 +95,7 @@ export function KontakteView(_props: KontakteViewProps) {
   const [showAddToListMenu, setShowAddToListMenu] = React.useState(false);
   // Detail-Slide-Over (Etappe 3): welchen Contact anzeigen?
   const [detailContactId, setDetailContactId] = React.useState<string | null>(null);
+  const [filter, setFilter] = React.useState<FilterDefinition>(EMPTY_FILTER);
 
   const detailIndex = React.useMemo(() => {
     if (!detailContactId) return -1;
@@ -122,17 +125,38 @@ export function KontakteView(_props: KontakteViewProps) {
   const loadContacts = React.useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (selectedListId) params.set("listId", selectedListId);
-      if (search.trim().length >= 2) params.set("search", search.trim());
-      params.set("sort", sort);
-      params.set("limit", "500");
-      const res = await fetch(`/api/contacts/v2?${params.toString()}`);
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error ?? "Fehler beim Laden");
-      setContacts(body.contacts ?? []);
-      setContactsTotal(body.total ?? 0);
-      setTotalAll(body.totalAll ?? 0);
+      const hasFilter = filter.conditions.length > 0;
+      if (hasFilter) {
+        // POST /filter mit Filter-Definition
+        const res = await fetch("/api/contacts/v2/filter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filter,
+            listId: selectedListId,
+            search: search.trim().length >= 2 ? search.trim() : undefined,
+            sort,
+            limit: 500,
+          }),
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body?.error ?? "Fehler beim Filtern");
+        setContacts(body.contacts ?? []);
+        setContactsTotal(body.total ?? 0);
+        setTotalAll(body.totalAll ?? 0);
+      } else {
+        const params = new URLSearchParams();
+        if (selectedListId) params.set("listId", selectedListId);
+        if (search.trim().length >= 2) params.set("search", search.trim());
+        params.set("sort", sort);
+        params.set("limit", "500");
+        const res = await fetch(`/api/contacts/v2?${params.toString()}`);
+        const body = await res.json();
+        if (!res.ok) throw new Error(body?.error ?? "Fehler beim Laden");
+        setContacts(body.contacts ?? []);
+        setContactsTotal(body.total ?? 0);
+        setTotalAll(body.totalAll ?? 0);
+      }
     } catch (err) {
       toast({
         title: "Kontakte konnten nicht geladen werden",
@@ -142,7 +166,7 @@ export function KontakteView(_props: KontakteViewProps) {
     } finally {
       setLoading(false);
     }
-  }, [selectedListId, search, sort, toast]);
+  }, [selectedListId, search, sort, filter, toast]);
 
   React.useEffect(() => {
     void loadLists();
@@ -362,6 +386,33 @@ export function KontakteView(_props: KontakteViewProps) {
               </select>
             </div>
           </div>
+
+          {/* Filter-Bar (Etappe 4) */}
+          <FilterBar
+            value={filter}
+            onChange={setFilter}
+            matched={contactsTotal}
+            onSaveAsList={async (name, type) => {
+              const res = await fetch("/api/contact-lists/from-filter", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name,
+                  type,
+                  filter,
+                  listId: selectedListId,
+                }),
+              });
+              const body = await res.json();
+              if (!res.ok) {
+                throw new Error(body?.error ?? "Fehler beim Anlegen der Liste");
+              }
+              // Nach dem Anlegen: Filter leeren + zur neuen Liste springen
+              setFilter(EMPTY_FILTER);
+              setSelectedListId(body.list?.id ?? null);
+              await Promise.all([loadLists(), loadContacts()]);
+            }}
+          />
 
           {/* Bulk-Aktion-Bar */}
           {selectedContactIds.size > 0 && (
