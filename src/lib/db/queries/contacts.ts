@@ -16,6 +16,7 @@ import {
   contacts,
   contactLists,
   contactFields,
+  leadEvents,
   leads,
   listMemberships,
   runs,
@@ -430,6 +431,15 @@ export async function getContactDetail(input: {
         videoUrl: string | null;
         slug: string | null;
       }>;
+      events: Array<{
+        id: string;
+        leadId: string;
+        campaignName: string;
+        runName: string;
+        kind: string;
+        ts: string;
+        payload: Record<string, unknown> | null;
+      }>;
     })
   | null
 > {
@@ -489,6 +499,27 @@ export async function getContactDetail(input: {
     ORDER BY l.created_at DESC
   `);
 
+  // Letzte 50 Events über alle Occurrences dieses Contacts.
+  const eventRows = await db.execute<{
+    id: string;
+    lead_id: string;
+    campaign_name: string;
+    run_name: string;
+    kind: string;
+    ts: string;
+    payload: Record<string, unknown> | null;
+  }>(sql`
+    SELECT le.id, le.lead_id, c.name AS campaign_name, r.name AS run_name,
+           le.kind, le.ts, le.payload
+    FROM ${leadEvents} le
+    JOIN ${leads} l ON l.id = le.lead_id
+    JOIN ${runs} r ON r.id = l.run_id
+    JOIN ${campaigns} c ON c.id = l.campaign_id
+    WHERE l.contact_id = ${input.contactId}
+    ORDER BY le.ts DESC
+    LIMIT 50
+  `);
+
   return {
     contact,
     lists: listRows.map((r) => ({
@@ -502,6 +533,15 @@ export async function getContactDetail(input: {
       autoRunCampaignId: r.auto_run_campaign_id,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
+    })),
+    events: eventRows.map((r) => ({
+      id: r.id,
+      leadId: r.lead_id,
+      campaignName: r.campaign_name,
+      runName: r.run_name,
+      kind: r.kind,
+      ts: r.ts,
+      payload: r.payload,
     })),
     occurrences: occRows.map((r) => ({
       leadId: r.lead_id,

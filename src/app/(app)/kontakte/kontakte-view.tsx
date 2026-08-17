@@ -26,6 +26,7 @@ import {
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
+import { ContactDetailSlideOver } from "./contact-detail-slideover";
 
 interface ContactRow {
   id: string;
@@ -90,6 +91,18 @@ export function KontakteView(_props: KontakteViewProps) {
   const [selectedContactIds, setSelectedContactIds] = React.useState<Set<string>>(new Set());
   const [showNewListModal, setShowNewListModal] = React.useState(false);
   const [showAddToListMenu, setShowAddToListMenu] = React.useState(false);
+  // Detail-Slide-Over (Etappe 3): welchen Contact anzeigen?
+  const [detailContactId, setDetailContactId] = React.useState<string | null>(null);
+
+  const detailIndex = React.useMemo(() => {
+    if (!detailContactId) return -1;
+    return contacts.findIndex((c) => c.id === detailContactId);
+  }, [detailContactId, contacts]);
+  const goPrev = detailIndex > 0 ? () => setDetailContactId(contacts[detailIndex - 1].id) : undefined;
+  const goNext =
+    detailIndex >= 0 && detailIndex < contacts.length - 1
+      ? () => setDetailContactId(contacts[detailIndex + 1].id)
+      : undefined;
 
   const loadLists = React.useCallback(async () => {
     try {
@@ -460,12 +473,14 @@ export function KontakteView(_props: KontakteViewProps) {
                       className={cn(
                         "border-t border-line hover:bg-canvas cursor-pointer",
                         selectedContactIds.has(c.id) && "bg-brand-soft",
+                        detailContactId === c.id && "bg-brand-soft/60",
                       )}
                       onClick={(e) => {
-                        // Klick auf die Zeile öffnet den Detail-Slide-Over
-                        // (kommt in Etappe 3). Aktuell: nur Selektion.
+                        // Klick auf die Zeile öffnet den Detail-Slide-Over.
+                        // Selektion nur über die Checkbox (verhindert
+                        // versehentliches Anhaken beim Öffnen).
                         if ((e.target as HTMLElement).tagName === "INPUT") return;
-                        toggleOne(c.id);
+                        setDetailContactId(c.id);
                       }}
                     >
                       <td className="px-3 py-2">
@@ -538,6 +553,19 @@ export function KontakteView(_props: KontakteViewProps) {
             setShowNewListModal(false);
             setLists((prev) => [...prev, list].sort((a, b) => a.name.localeCompare(b.name)));
             setSelectedListId(list.id);
+          }}
+        />
+      )}
+
+      {detailContactId && (
+        <ContactDetailSlideOver
+          contactId={detailContactId}
+          onClose={() => setDetailContactId(null)}
+          onPrev={goPrev}
+          onNext={goNext}
+          onChanged={() => {
+            void loadContacts();
+            void loadLists();
           }}
         />
       )}

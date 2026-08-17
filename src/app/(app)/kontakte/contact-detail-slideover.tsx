@@ -1,0 +1,790 @@
+"use client";
+
+/**
+ * Contact-Detail-Slide-Over (Mini-CRM Etappe 3).
+ *
+ * Öffnet sich rechts über die Kontakt-Tabelle. 4 Tabs:
+ *   - Übersicht (Basis-Felder + Custom-Felder, inline editierbar)
+ *   - Aktivität (Timeline aus lead_events + Statistik-Kacheln)
+ *   - Kampagnen  (alle Runs des Contacts mit Metriken)
+ *   - Listen     (Chips + „Aus dieser Liste entfernen"-Aktion)
+ *
+ * Pfeiltasten ↑↓ blättern durch die aktuell sichtbare Kontakt-Liste ohne
+ * den Slide-Over zu schließen.
+ */
+
+import * as React from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Mail,
+  Phone,
+  X,
+  ExternalLink,
+  Play,
+  MousePointerClick,
+  Eye,
+  FileText,
+  Clock,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/toaster";
+
+interface ContactDetailEvent {
+  id: string;
+  leadId: string;
+  campaignName: string;
+  runName: string;
+  kind: string;
+  ts: string;
+  payload: Record<string, unknown> | null;
+}
+
+interface ContactDetailOccurrence {
+  leadId: string;
+  campaignId: string;
+  campaignName: string;
+  runId: string;
+  runName: string;
+  status: string;
+  createdAt: string;
+  completedAt: string | null;
+  viewCount: number;
+  playCount: number;
+  ctaClickCount: number;
+  pdfUrl: string | null;
+  videoUrl: string | null;
+  slug: string | null;
+}
+
+interface ContactDetailList {
+  id: string;
+  name: string;
+  type: "static" | "smart";
+}
+
+interface ContactDetailData {
+  contact: {
+    id: string;
+    email: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    company: string | null;
+    companyDisplay: string | null;
+    phone: string | null;
+    linkedinUrl: string | null;
+    data: Record<string, string>;
+    createdAt: string;
+    lastActivityAt: string | null;
+  };
+  lists: ContactDetailList[];
+  events: ContactDetailEvent[];
+  occurrences: ContactDetailOccurrence[];
+}
+
+interface ContactDetailSlideOverProps {
+  contactId: string;
+  onClose: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  onChanged?: () => void;
+}
+
+type Tab = "overview" | "activity" | "campaigns" | "lists";
+
+const TABS: Array<{ key: Tab; label: string }> = [
+  { key: "overview", label: "Übersicht" },
+  { key: "activity", label: "Aktivität" },
+  { key: "campaigns", label: "Kampagnen" },
+  { key: "lists", label: "Listen" },
+];
+
+export function ContactDetailSlideOver({
+  contactId,
+  onClose,
+  onPrev,
+  onNext,
+  onChanged,
+}: ContactDetailSlideOverProps) {
+  const { toast } = useToast();
+  const [data, setData] = React.useState<ContactDetailData | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [tab, setTab] = React.useState<Tab>("overview");
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/contacts/v2/${contactId}`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "Fehler beim Laden");
+      setData(body);
+    } catch (err) {
+      toast({
+        title: "Kontakt konnte nicht geladen werden",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "danger",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [contactId, toast]);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+
+  // Keyboard: Esc = schließen, ↑/↓ = prev/next
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      } else if ((e.key === "ArrowDown" || e.key === "ArrowRight") && onNext) {
+        e.preventDefault();
+        onNext();
+      } else if ((e.key === "ArrowUp" || e.key === "ArrowLeft") && onPrev) {
+        e.preventDefault();
+        onPrev();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose, onNext, onPrev]);
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/30 animate-in fade-in duration-150"
+        onClick={onClose}
+      />
+      {/* Panel */}
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-[640px] bg-surface shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
+        {/* Header mit Prev/Next + Close */}
+        <div className="flex items-center gap-2 p-3 border-b border-line shrink-0">
+          <button
+            type="button"
+            onClick={onPrev}
+            disabled={!onPrev}
+            className="p-1.5 rounded-lg hover:bg-canvas disabled:opacity-30"
+            title="Vorheriger Kontakt (↑)"
+          >
+            <ChevronLeft className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={!onNext}
+            className="p-1.5 rounded-lg hover:bg-canvas disabled:opacity-30"
+            title="Nächster Kontakt (↓)"
+          >
+            <ChevronRight className="size-4" />
+          </button>
+          <div className="ml-auto text-xs text-ink-muted">Esc zum Schließen</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-canvas"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        {loading || !data ? (
+          <div className="flex-1 flex items-center justify-center text-ink-muted">
+            <Loader2 className="size-4 animate-spin mr-2" />
+            Lade Kontakt…
+          </div>
+        ) : (
+          <>
+            <ContactHeader data={data} />
+            <TabBar tab={tab} onChange={setTab} />
+            <div className="flex-1 overflow-y-auto">
+              {tab === "overview" && (
+                <OverviewTab data={data} onChanged={onChanged} reload={load} />
+              )}
+              {tab === "activity" && <ActivityTab data={data} />}
+              {tab === "campaigns" && <CampaignsTab data={data} />}
+              {tab === "lists" && (
+                <ListsTab
+                  data={data}
+                  onChanged={() => {
+                    onChanged?.();
+                    void load();
+                  }}
+                />
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+function initials(data: ContactDetailData): string {
+  const f = data.contact.firstName?.[0]?.toUpperCase() ?? "";
+  const l = data.contact.lastName?.[0]?.toUpperCase() ?? "";
+  const both = (f + l).trim();
+  if (both) return both;
+  if (data.contact.email) return data.contact.email[0]?.toUpperCase() ?? "?";
+  return "?";
+}
+
+function displayName(data: ContactDetailData): string {
+  const parts = [data.contact.firstName, data.contact.lastName].filter(Boolean);
+  return parts.join(" ") || data.contact.companyDisplay || data.contact.email || "Ohne Namen";
+}
+
+function ContactHeader({ data }: { data: ContactDetailData }) {
+  return (
+    <div className="p-5 flex items-center gap-4 border-b border-line shrink-0">
+      <div className="size-14 rounded-full bg-gradient-to-br from-brand to-brand-deep text-white font-bold text-lg flex items-center justify-center shrink-0">
+        {initials(data)}
+      </div>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-xl font-semibold text-ink truncate">{displayName(data)}</h2>
+        <p className="text-sm text-ink-muted truncate">
+          {data.contact.companyDisplay ?? data.contact.company ?? "—"}
+          {" · Kontakt seit "}
+          {new Date(data.contact.createdAt).toLocaleDateString("de-DE")}
+        </p>
+      </div>
+      <div className="flex gap-1 shrink-0">
+        {data.contact.email && (
+          <a
+            href={`mailto:${data.contact.email}`}
+            className="px-2.5 py-1.5 rounded-lg bg-canvas text-xs font-semibold text-ink hover:bg-canvas-deep flex items-center gap-1"
+            title="E-Mail schreiben"
+          >
+            <Mail className="size-3" />
+            Mail
+          </a>
+        )}
+        {data.contact.phone && (
+          <a
+            href={`tel:${data.contact.phone}`}
+            className="px-2.5 py-1.5 rounded-lg bg-canvas text-xs font-semibold text-ink hover:bg-canvas-deep flex items-center gap-1"
+            title="Anrufen"
+          >
+            <Phone className="size-3" />
+            Anrufen
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
+  return (
+    <div className="flex gap-1 px-4 pt-2 border-b border-line shrink-0 bg-canvas-deep">
+      {TABS.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => onChange(t.key)}
+          className={cn(
+            "px-3 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors",
+            tab === t.key
+              ? "text-brand-deep border-brand-deep bg-surface rounded-t-lg"
+              : "text-ink-muted border-transparent hover:text-ink",
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ── Tab 1: Übersicht (Basis + Custom-Felder, inline editierbar) ────── */
+function OverviewTab({
+  data,
+  onChanged,
+  reload,
+}: {
+  data: ContactDetailData;
+  onChanged?: () => void;
+  reload: () => Promise<void>;
+}) {
+  return (
+    <div className="p-5 space-y-5">
+      <section>
+        <h4 className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-2">
+          Kontakt-Daten
+        </h4>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+          <EditableField
+            contactId={data.contact.id}
+            field="firstName"
+            label="Vorname"
+            value={data.contact.firstName ?? ""}
+            onSaved={() => {
+              onChanged?.();
+              void reload();
+            }}
+          />
+          <EditableField
+            contactId={data.contact.id}
+            field="lastName"
+            label="Nachname"
+            value={data.contact.lastName ?? ""}
+            onSaved={() => {
+              onChanged?.();
+              void reload();
+            }}
+          />
+          <EditableField
+            contactId={data.contact.id}
+            field="email"
+            label="E-Mail"
+            value={data.contact.email ?? ""}
+            onSaved={() => {
+              onChanged?.();
+              void reload();
+            }}
+          />
+          <EditableField
+            contactId={data.contact.id}
+            field="phone"
+            label="Telefon"
+            value={data.contact.phone ?? ""}
+            onSaved={() => {
+              onChanged?.();
+              void reload();
+            }}
+          />
+          <EditableField
+            contactId={data.contact.id}
+            field="company"
+            label="Firma"
+            value={data.contact.companyDisplay ?? data.contact.company ?? ""}
+            onSaved={() => {
+              onChanged?.();
+              void reload();
+            }}
+          />
+          <EditableField
+            contactId={data.contact.id}
+            field="linkedinUrl"
+            label="LinkedIn"
+            value={data.contact.linkedinUrl ?? ""}
+            onSaved={() => {
+              onChanged?.();
+              void reload();
+            }}
+          />
+        </div>
+      </section>
+
+      {Object.keys(data.contact.data).length > 0 && (
+        <section>
+          <h4 className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-2">
+            Weitere Felder aus dem Import
+          </h4>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+            {Object.entries(data.contact.data).map(([k, v]) => (
+              <div
+                key={k}
+                className="text-xs flex justify-between border-b border-canvas-deep py-1"
+              >
+                <span className="text-ink-muted truncate">{k}</span>
+                <span className="text-ink font-medium truncate ml-2">{v}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function EditableField({
+  contactId,
+  field,
+  label,
+  value,
+  onSaved,
+}: {
+  contactId: string;
+  field: string;
+  label: string;
+  value: string;
+  onSaved?: () => void;
+}) {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(value);
+  const [busy, setBusy] = React.useState(false);
+  const { toast } = useToast();
+
+  React.useEffect(() => setDraft(value), [value]);
+
+  async function save() {
+    if (draft === value) {
+      setEditing(false);
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/contacts/v2/${contactId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: draft }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "Fehler beim Speichern");
+      setEditing(false);
+      onSaved?.();
+    } catch (err) {
+      toast({
+        title: "Konnte nicht gespeichert werden",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "danger",
+      });
+      setDraft(value);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="text-xs flex flex-col border-b border-canvas-deep py-1.5">
+      <span className="text-ink-muted mb-0.5">{label}</span>
+      {editing ? (
+        <input
+          type="text"
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") {
+              setDraft(value);
+              setEditing(false);
+            }
+          }}
+          disabled={busy}
+          className="text-sm text-ink px-1 py-0.5 border border-brand rounded outline-none"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-sm text-ink text-left hover:bg-canvas rounded px-1 py-0.5 truncate"
+          title="Klicken zum Bearbeiten"
+        >
+          {value || <span className="text-ink-muted italic">— leer, klicken zum Ausfüllen —</span>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── Tab 2: Aktivität — Timeline + Statistik-Kacheln ─────────────────── */
+function ActivityTab({ data }: { data: ContactDetailData }) {
+  const totals = data.occurrences.reduce(
+    (acc, o) => ({
+      opens: acc.opens + o.viewCount,
+      plays: acc.plays + o.playCount,
+      cta: acc.cta + o.ctaClickCount,
+    }),
+    { opens: 0, plays: 0, cta: 0 },
+  );
+  return (
+    <div className="p-5 space-y-5">
+      <div className="grid grid-cols-4 gap-2">
+        <StatTile
+          icon={<Eye className="size-3.5" />}
+          label="Öffnungen"
+          value={totals.opens}
+        />
+        <StatTile
+          icon={<Play className="size-3.5" />}
+          label="Video-Plays"
+          value={totals.plays}
+        />
+        <StatTile
+          icon={<MousePointerClick className="size-3.5" />}
+          label="CTA-Klicks"
+          value={totals.cta}
+        />
+        <StatTile
+          icon={<Clock className="size-3.5" />}
+          label="Letzte Aktion"
+          value={
+            data.contact.lastActivityAt
+              ? relativeTime(data.contact.lastActivityAt)
+              : "—"
+          }
+          small
+        />
+      </div>
+
+      <section>
+        <h4 className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-2">
+          Zeitleiste (letzte 50 Ereignisse)
+        </h4>
+        {data.events.length === 0 ? (
+          <p className="text-xs text-ink-muted italic py-4">
+            Noch keine Aktivität für diesen Kontakt.
+          </p>
+        ) : (
+          <ul className="relative pl-6 space-y-2">
+            <div className="absolute left-2 top-1 bottom-1 w-0.5 bg-canvas-deep" />
+            {data.events.map((e) => (
+              <li key={e.id} className="relative text-sm">
+                <div
+                  className={cn(
+                    "absolute -left-[18px] top-1.5 size-3 rounded-full border-2 border-surface",
+                    eventDotColor(e.kind),
+                  )}
+                />
+                <div className="text-ink">
+                  <strong className="font-semibold">{eventLabel(e.kind)}</strong>
+                  {" · "}
+                  <span className="text-ink-muted text-xs">
+                    {e.campaignName} · {e.runName}
+                  </span>
+                </div>
+                <div className="text-[11px] text-ink-muted">
+                  {new Date(e.ts).toLocaleString("de-DE", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function StatTile({
+  icon,
+  label,
+  value,
+  small,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  small?: boolean;
+}) {
+  return (
+    <div className="bg-canvas rounded-xl p-3 flex flex-col gap-1">
+      <div className="text-ink-muted flex items-center gap-1 text-[10px] uppercase tracking-wide">
+        {icon}
+        {label}
+      </div>
+      <div className={cn("font-bold text-ink tabular-nums", small ? "text-sm" : "text-lg")}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function eventLabel(kind: string): string {
+  switch (kind) {
+    case "page_view":
+      return "Landingpage geöffnet";
+    case "video_play":
+      return "Video gestartet";
+    case "video_progress":
+      return "Video-Fortschritt";
+    case "video_ended":
+      return "Video zu Ende gesehen";
+    case "cta_click":
+      return "CTA geklickt";
+    case "form_submit":
+      return "Formular gesendet";
+    default:
+      return kind;
+  }
+}
+function eventDotColor(kind: string): string {
+  switch (kind) {
+    case "page_view":
+      return "bg-info";
+    case "video_play":
+    case "video_progress":
+      return "bg-ok";
+    case "video_ended":
+      return "bg-ok";
+    case "cta_click":
+      return "bg-brand-deep";
+    case "form_submit":
+      return "bg-brand";
+    default:
+      return "bg-ink-muted";
+  }
+}
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  const now = Date.now();
+  const diff = Math.round((now - then) / 60000);
+  if (diff < 1) return "gerade eben";
+  if (diff < 60) return `vor ${diff} Min.`;
+  const hours = Math.round(diff / 60);
+  if (hours < 24) return `vor ${hours} Std.`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `vor ${days} Tag${days === 1 ? "" : "en"}`;
+  return new Date(iso).toLocaleDateString("de-DE");
+}
+
+/* ── Tab 3: Kampagnen ──────────────────────────────────────────────── */
+function CampaignsTab({ data }: { data: ContactDetailData }) {
+  if (data.occurrences.length === 0) {
+    return (
+      <p className="p-5 text-sm text-ink-muted italic">
+        Dieser Kontakt war noch in keiner Kampagne.
+      </p>
+    );
+  }
+  return (
+    <div className="p-5 space-y-3">
+      {data.occurrences.map((occ) => (
+        <div
+          key={occ.leadId}
+          className="bg-canvas rounded-xl p-4 border border-line"
+        >
+          <div className="flex justify-between items-start gap-2 mb-1">
+            <div className="min-w-0">
+              <h4 className="text-sm font-semibold text-ink truncate">
+                {occ.campaignName}
+              </h4>
+              <p className="text-xs text-ink-muted">
+                Runde: {occ.runName} ·{" "}
+                {new Date(occ.createdAt).toLocaleDateString("de-DE")}
+              </p>
+            </div>
+            <span
+              className={cn(
+                "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide shrink-0",
+                occ.status === "completed"
+                  ? "bg-ok-soft text-ok"
+                  : occ.status === "failed"
+                    ? "bg-danger-soft text-danger"
+                    : "bg-canvas-deep text-ink-muted",
+              )}
+            >
+              {occ.status === "completed"
+                ? "Fertig"
+                : occ.status === "failed"
+                  ? "Fehler"
+                  : occ.status}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs text-ink-muted mt-2">
+            <span>
+              <strong className="text-ink">{occ.viewCount}</strong> Öffnungen
+            </span>
+            <span>
+              <strong className="text-ink">{occ.playCount}</strong> Plays
+            </span>
+            <span>
+              <strong className="text-ink">{occ.ctaClickCount}</strong> CTA
+            </span>
+          </div>
+          <div className="flex gap-2 mt-2 text-xs">
+            {occ.slug && (
+              <a
+                href={`/v/${occ.slug}?preview=1`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand-deep hover:underline flex items-center gap-1"
+              >
+                <ExternalLink className="size-3" />
+                Landingpage
+              </a>
+            )}
+            {occ.videoUrl && (
+              <a
+                href={occ.videoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand-deep hover:underline flex items-center gap-1"
+              >
+                <Play className="size-3" />
+                Video
+              </a>
+            )}
+            {occ.pdfUrl && (
+              <a
+                href={occ.pdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand-deep hover:underline flex items-center gap-1"
+              >
+                <FileText className="size-3" />
+                Brief
+              </a>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Tab 4: Listen ─────────────────────────────────────────────────── */
+function ListsTab({
+  data,
+  onChanged,
+}: {
+  data: ContactDetailData;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+
+  async function removeFromList(listId: string) {
+    if (!confirm("Diesen Kontakt aus der Liste entfernen?")) return;
+    try {
+      const res = await fetch(`/api/contact-lists/${listId}/memberships`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactIds: [data.contact.id] }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "Fehler beim Entfernen");
+      toast({ title: "Aus der Liste entfernt" });
+      onChanged();
+    } catch (err) {
+      toast({
+        title: "Konnte nicht entfernt werden",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "danger",
+      });
+    }
+  }
+
+  return (
+    <div className="p-5">
+      {data.lists.length === 0 ? (
+        <p className="text-sm text-ink-muted italic">
+          Dieser Kontakt ist noch in keiner Liste. Wähle ihn in der Übersicht
+          aus und klicke „In Liste stecken".
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {data.lists.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => removeFromList(l.id)}
+              className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-canvas hover:bg-danger-soft text-ink hover:text-danger text-xs font-semibold transition-colors"
+              title="Klicken, um Kontakt aus dieser Liste zu entfernen"
+            >
+              {l.name}
+              <X className="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
