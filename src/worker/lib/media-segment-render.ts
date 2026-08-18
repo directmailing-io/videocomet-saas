@@ -76,7 +76,11 @@ const ANULLSRC = "anullsrc=channel_layout=stereo:sample_rate=44100";
 /* -------------------------------------------------------------------------- */
 
 const MEDIA_SEG_CACHE_DIR = "/tmp/videocomet-mediaseg-cache";
-const MEDIA_SEG_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+// 6h TTL: erlaubt Cache-Reuse über die typische Runden-Dauer hinweg
+// (Bulk-Runs à 100+ Leads laufen locker 1-2h). Der Cache-Ordner wird
+// regelmäßig gepflegt (siehe cleanupMediaSegCache unten), Disk-Overhead
+// bleibt gering (typisch <500 MB pro Prozess).
+const MEDIA_SEG_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MEDIA_SEG_CACHE = new Map<string, Promise<string>>();
 
 async function sweepMediaSegCache(): Promise<void> {

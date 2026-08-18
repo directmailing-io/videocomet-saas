@@ -34,15 +34,17 @@
 
 import { getVideo } from "@/lib/bunny/stream";
 
-// 2s Poll: Bunny meldet status-Änderungen schnell — kurze Intervalle
-// erwischen "ready" quasi sofort statt bis zu 5s zu verlieren.
-const POLL_INTERVAL_MS = 2_000;
-// 90s Timeout: die überwältigende Mehrheit der Bunny-Encodings ist in <60s
-// durch. Bei Timeout wirft der Helper NICHT mehr, sondern die Pipeline
-// completed den Lead mit availableResolutions=null (Public-LP zieht die
-// MP4-Auflösung lazy nach, HLS-Playback funktioniert eh sofort). Damit
-// blockiert eine Bunny-Encoding-Verzögerung nie mehr die ganze Runde.
-const POLL_TIMEOUT_MS = 90_000;
+// 1.5s Poll: Bunny meldet status-Änderungen schnell — kurze Intervalle
+// erwischen "ready" quasi sofort. Die Bunny-API verkraftet das easy
+// (~4 Calls/Lead im Median = harmlos gegen die Rate-Limits).
+const POLL_INTERVAL_MS = 1_500;
+// 60s Timeout: 95 % der Bunny-Encodings sind in unter 45s durch, 60s ist
+// die realistische Obergrenze. Bei Timeout wirft der Helper NICHT mehr,
+// sondern die Pipeline completed den Lead mit availableResolutions=null
+// (Public-LP zieht die MP4-Auflösung lazy nach; HLS-Playback funktioniert
+// eh sofort ab Bunny-Status 2). Damit blockiert eine Bunny-Encoding-
+// Verzögerung nie mehr die ganze Runde.
+const POLL_TIMEOUT_MS = 60_000;
 
 /**
  * Wird vom Worker geworfen wenn Bunnys Encoding nach Timeout immer noch nicht

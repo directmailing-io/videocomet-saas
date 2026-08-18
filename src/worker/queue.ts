@@ -123,7 +123,10 @@ export function pipelineQueue(): Queue<LeadJobData> {
 export function pipelineWorker(
   processor: Processor<LeadJobData>,
 ): Worker<LeadJobData> {
-  const concurrency = Number(process.env.WORKER_CONCURRENCY ?? "16");
+  // Default 24 (2026-08-18): der Bunny-Wait ist entblockiert, damit
+  // laufen Leads schneller durch → mehr Slots = mehr Durchsatz. Auf 8 GB
+  // RAM/12 GB Swap-Config passt das noch (Peak ~11 GB inkl. LibreOffice).
+  const concurrency = Number(process.env.WORKER_CONCURRENCY ?? "24");
   return new Worker<LeadJobData>(QUEUE_NAME, processor, {
     connection: getConnectionOpts(),
     concurrency,
