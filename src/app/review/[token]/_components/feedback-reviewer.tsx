@@ -446,7 +446,7 @@ export function FeedbackReviewer({
 
       {/* Player groß mittig */}
       <div className="mx-auto w-full">
-        <div className="relative overflow-hidden rounded-2xl bg-surface shadow-lg border border-line/70">
+        <div className="relative overflow-hidden rounded-2xl bg-surface shadow-[0_20px_60px_rgba(30,25,60,0.10),0_4px_16px_rgba(30,25,60,0.06)]">
           {usePresentation ? (
             <PreviewPlayer
               segments={segmentList}
@@ -483,7 +483,7 @@ export function FeedbackReviewer({
       <div className="mt-6 grid gap-4 grid-cols-1">
         {/* Eingabe (nur Guest) */}
         {mode === "guest" && token ? (
-          <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
+          <div className="rounded-2xl bg-surface p-4 shadow-[0_4px_20px_rgba(30,25,60,0.06),0_1px_3px_rgba(30,25,60,0.04)]">
             <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
               {attachTime ? (
                 <button
@@ -569,7 +569,7 @@ export function FeedbackReviewer({
               Noch keine Rückmeldungen. Klicke links ins Kommentar-Feld, um loszulegen.
             </div>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {comments
                 .slice()
                 .sort((a, b) => (a.atSec ?? 1e9) - (b.atSec ?? 1e9))
@@ -745,7 +745,8 @@ function CommentCard({
   return (
     <li
       className={cn(
-        "rounded-2xl border border-line bg-surface p-3 shadow-sm transition",
+        "rounded-2xl bg-surface p-4 transition",
+        "shadow-[0_2px_12px_rgba(30,25,60,0.05),0_1px_3px_rgba(30,25,60,0.03)]",
         resolved ? "opacity-40 saturate-50" : "",
       )}
     >
@@ -818,7 +819,7 @@ function CommentCard({
       )}
 
       {comment.ownerReply && (
-        <div className="mt-2 rounded-xl bg-canvas-deep px-3 py-2 text-xs text-ink">
+        <div className="mt-3 border-l-2 border-brand/40 pl-3 text-xs text-ink">
           <b className="text-ink-muted">{replyLabel}: </b>
           <span className="whitespace-pre-wrap break-words">{comment.ownerReply}</span>
         </div>
