@@ -188,7 +188,13 @@ type PatchBody = Partial<{
   thumbnailPlayIcon: boolean;
 }>;
 
-export function EditCampaignForm({ data }: { data: EditCampaignData }) {
+export function EditCampaignForm({
+  data,
+  ownerName,
+}: {
+  data: EditCampaignData;
+  ownerName?: string;
+}) {
   const router = useRouter();
   const { toast } = useToast();
 
@@ -1058,6 +1064,7 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
             <FeedbackPanel
               campaignId={data.campaign.id}
               hasVideo={!!state.webcamMediaId}
+              ownerName={ownerName}
             />
           </TabsContent>
         </Tabs>

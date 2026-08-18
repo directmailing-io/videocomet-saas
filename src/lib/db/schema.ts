@@ -1179,6 +1179,9 @@ export const videoFeedbackComments = pgTable("video_feedback_comments", {
   body: text("body").notNull(),
   ownerReply: text("owner_reply"),
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  /** Client-generierte UUID (Migration 0060). NULL für Alt-Bestand → Empfänger
+   *  kann diese nicht mehr bearbeiten, Owner immer schon. */
+  sessionId: text("session_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

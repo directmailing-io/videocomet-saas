@@ -5,8 +5,10 @@ import {
   Check,
   Clock,
   Loader2,
+  Mail,
   MessageSquare,
   MoreHorizontal,
+  Pencil,
   Send,
   Timer,
   Trash2,
@@ -14,6 +16,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Logo } from "@/components/ui/logo";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toaster";
 import { toastError } from "@/lib/toast-error";
@@ -54,17 +58,41 @@ interface ReviewerProps {
   token: string | null;
   video: ReviewerVideo;
   initialComments: ReviewerComment[];
-  /** Owner sieht Erledigen/Antworten/Löschen; Guest nicht. */
+  /** Owner sieht Erledigen/Antworten/Löschen; Guest nur seine eigenen. */
   mode: "guest" | "owner";
-  /** Owner-Callback für resolve/reply/delete. */
+  /** Owner-Name (für "Antwort von {name}") — nur im owner-Modus verwendet. */
+  ownerName?: string;
   onResolvedChange?: (commentId: string, resolved: boolean) => Promise<void>;
   onReplyChange?: (commentId: string, reply: string | null) => Promise<void>;
   onDelete?: (commentId: string) => Promise<void>;
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── LocalStorage-Keys ───────────────────────────────────────────────────────
 
-const GUEST_NAME_KEY = "vc_review_name";
+const KEY_NAME = "vc_review_name";
+const KEY_EMAIL = "vc_review_email";
+const keySession = (token: string) => `vc_review_session_${token}`;
+const keyOwn = (token: string) => `vc_review_own_${token}`;
+
+function readOwnIds(token: string): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(keyOwn(token));
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as unknown;
+    return new Set(Array.isArray(arr) ? (arr as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+function writeOwnIds(token: string, ids: Set<string>): void {
+  try {
+    window.localStorage.setItem(keyOwn(token), JSON.stringify(Array.from(ids)));
+  } catch {
+    /* ignore */
+  }
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function fmtTime(sec: number | null): string {
   if (sec == null || !Number.isFinite(sec) || sec < 0) return "Allgemein";
@@ -89,6 +117,16 @@ function fmtRelative(when: string | Date): string {
   return d.toLocaleDateString("de-DE");
 }
 
+function safeUuid(): string {
+  try {
+    const c = (globalThis as unknown as { crypto?: { randomUUID?: () => string } }).crypto;
+    if (c?.randomUUID) return c.randomUUID();
+  } catch {
+    /* ignore */
+  }
+  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
 // ── Component ───────────────────────────────────────────────────────────────
 
 export function FeedbackReviewer({
@@ -96,6 +134,7 @@ export function FeedbackReviewer({
   video,
   initialComments,
   mode,
+  ownerName,
   onResolvedChange,
   onReplyChange,
   onDelete,
@@ -106,41 +145,48 @@ export function FeedbackReviewer({
   const [duration, setDuration] = React.useState<number>(video.durationSec ?? 0);
   const [comments, setComments] = React.useState<ReviewerComment[]>(initialComments);
 
-  // Seek/Pause an den PreviewPlayer (nur bei with-presentation genutzt).
+  // Seek/Pause an den PreviewPlayer.
   const [seekRequest, setSeekRequest] = React.useState<{ ms: number; nonce: number } | null>(null);
   const [pauseRequest, setPauseRequest] = React.useState<{ nonce: number } | null>(null);
   const seekNonceRef = React.useRef(0);
   const pauseNonceRef = React.useRef(0);
 
-  // Entscheidung: PreviewPlayer (Präsentation) oder natives <video>?
   const usePresentation =
     video.mode === "with-presentation" &&
     Array.isArray(video.segments) &&
     (video.segments as unknown[]).length > 0;
   const segmentList = usePresentation ? ((video.segments as Segment[]) ?? []) : [];
 
-  // Kommentar-Eingabe
-  const [body, setBody] = React.useState("");
-  const [attachTime, setAttachTime] = React.useState(true);
-  const [rangeMode, setRangeMode] = React.useState<"off" | "picking-end">("off");
-  const [rangeStart, setRangeStart] = React.useState<number | null>(null);
-  const [rangeEnd, setRangeEnd] = React.useState<number | null>(null);
-  const [sending, setSending] = React.useState(false);
-
-  // Guest-Name (localStorage)
+  // Guest-Identität aus LocalStorage.
   const [guestName, setGuestName] = React.useState<string>("");
-  const [askingName, setAskingName] = React.useState(false);
+  const [guestEmail, setGuestEmail] = React.useState<string>("");
+  const [sessionId, setSessionId] = React.useState<string>("");
+  const [identityReady, setIdentityReady] = React.useState(mode === "owner");
+  const [ownIds, setOwnIds] = React.useState<Set<string>>(new Set());
   React.useEffect(() => {
     if (mode !== "guest") return;
     try {
-      const stored = window.localStorage.getItem(GUEST_NAME_KEY);
-      if (stored) setGuestName(stored);
+      const n = window.localStorage.getItem(KEY_NAME) ?? "";
+      const e = window.localStorage.getItem(KEY_EMAIL) ?? "";
+      setGuestName(n);
+      setGuestEmail(e);
+      if (n) setIdentityReady(true);
+      if (token) {
+        const sk = keySession(token);
+        let s = window.localStorage.getItem(sk);
+        if (!s) {
+          s = safeUuid();
+          window.localStorage.setItem(sk, s);
+        }
+        setSessionId(s);
+        setOwnIds(readOwnIds(token));
+      }
     } catch {
-      /* ignore private-mode */
+      /* private mode */
     }
-  }, [mode]);
+  }, [mode, token]);
 
-  // Player-Callbacks
+  // Player-Callbacks (nur für native-video-Modus).
   const onTimeUpdate = React.useCallback(() => {
     const el = videoRef.current;
     if (!el) return;
@@ -166,7 +212,6 @@ export function FeedbackReviewer({
     [usePresentation],
   );
 
-  // Fokus ins Kommentar-Feld → Video pausieren + Timestamp attachen
   const onFocusComment = React.useCallback(() => {
     if (usePresentation) {
       pauseNonceRef.current += 1;
@@ -177,38 +222,14 @@ export function FeedbackReviewer({
     if (el && !el.paused) el.pause();
   }, [usePresentation]);
 
-  // Bei Präsentation ergibt sich totalSec aus der Summe der Segment-Dauern
-  // (durationMs) — nicht aus der Webcam-Länge. Die Webcam läuft global mit,
-  // ist aber nicht die Länge der Timeline.
-  const presentationTotalSec = React.useMemo(() => {
-    if (!usePresentation) return 0;
-    let total = 0;
-    for (const s of segmentList) {
-      const ms = typeof (s as { durationMs?: number }).durationMs === "number" ? (s as { durationMs?: number }).durationMs! : 0;
-      total += ms;
-    }
-    return total / 1000;
-  }, [usePresentation, segmentList]);
-  const totalSec = usePresentation
-    ? presentationTotalSec
-    : duration || video.durationSec || 0;
+  // Kommentar-Formular
+  const [body, setBody] = React.useState("");
+  const [attachTime, setAttachTime] = React.useState(true);
+  const [rangeMode, setRangeMode] = React.useState<"off" | "picking-end">("off");
+  const [rangeStart, setRangeStart] = React.useState<number | null>(null);
+  const [rangeEnd, setRangeEnd] = React.useState<number | null>(null);
+  const [sending, setSending] = React.useState(false);
 
-  // Timeline-Marker-Positionen (%)
-  const positionedComments = React.useMemo(() => {
-    if (!totalSec || totalSec <= 0) return [];
-    return comments
-      .filter((c) => c.atSec != null)
-      .map((c) => ({
-        c,
-        startPct: Math.max(0, Math.min(100, ((c.atSec ?? 0) / totalSec) * 100)),
-        widthPct:
-          c.atEndSec != null
-            ? Math.max(0.6, Math.min(100, (((c.atEndSec ?? 0) - (c.atSec ?? 0)) / totalSec) * 100))
-            : null,
-      }));
-  }, [comments, totalSec]);
-
-  // ── Range-Modus-Aktionen ──────────────────────────────────────────────
   const startRange = React.useCallback(() => {
     setRangeMode("picking-end");
     setRangeStart(currentSec);
@@ -231,13 +252,9 @@ export function FeedbackReviewer({
     setRangeEnd(null);
   }, []);
 
-  // ── Absenden ─────────────────────────────────────────────────────────
   const submit = React.useCallback(async () => {
-    if (!token) return; // Owner-Modus
-    if (mode === "guest" && !guestName.trim()) {
-      setAskingName(true);
-      return;
-    }
+    if (!token) return;
+    const name = guestName.trim() || "Gast";
     const text = body.trim();
     if (!text) {
       toast({ title: "Kommentar leer", variant: "danger" });
@@ -251,16 +268,17 @@ export function FeedbackReviewer({
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          atSec,
-          atEndSec,
-          authorName: guestName.trim() || "Gast",
-          body: text,
-        }),
+        body: JSON.stringify({ atSec, atEndSec, authorName: name, body: text, sessionId }),
       });
       const payload = await res.json().catch(() => null);
       if (!res.ok) throw new Error(payload?.error ?? "Konnte nicht gesendet werden.");
       setComments((prev) => [payload.comment, ...prev]);
+      if (token && payload?.comment?.id) {
+        const next = new Set(ownIds);
+        next.add(payload.comment.id as string);
+        setOwnIds(next);
+        writeOwnIds(token, next);
+      }
       setBody("");
       setRangeMode("off");
       setRangeStart(null);
@@ -271,25 +289,9 @@ export function FeedbackReviewer({
     } finally {
       setSending(false);
     }
-  }, [attachTime, body, currentSec, guestName, mode, rangeEnd, rangeStart, toast, token]);
+  }, [attachTime, body, currentSec, guestName, rangeEnd, rangeStart, sessionId, toast, token]);
 
-  const saveGuestName = React.useCallback(
-    (name: string) => {
-      const trimmed = name.trim();
-      if (!trimmed) return;
-      setGuestName(trimmed);
-      try {
-        window.localStorage.setItem(GUEST_NAME_KEY, trimmed);
-      } catch {
-        /* ignore */
-      }
-      setAskingName(false);
-      // Sende gleich nach Namenseingabe.
-      setTimeout(() => void submit(), 0);
-    },
-    [submit],
-  );
-
+  // Owner-Actions weiterreichen
   const changeResolved = React.useCallback(
     async (commentId: string, resolved: boolean) => {
       if (!onResolvedChange) return;
@@ -321,7 +323,7 @@ export function FeedbackReviewer({
     },
     [onReplyChange, toast],
   );
-  const remove = React.useCallback(
+  const removeByOwner = React.useCallback(
     async (commentId: string) => {
       if (!onDelete) return;
       if (!window.confirm("Diesen Kommentar löschen?")) return;
@@ -335,203 +337,238 @@ export function FeedbackReviewer({
     [onDelete, toast],
   );
 
-  // ── Render ─────────────────────────────────────────────────────────────
+  // Guest-Actions: eigene Kommentare bearbeiten/löschen
+  const guestUpdate = React.useCallback(
+    async (commentId: string, newBody: string) => {
+      if (!token || !sessionId) return;
+      const clean = newBody.trim();
+      if (!clean) {
+        toast({ title: "Kommentar leer", variant: "danger" });
+        return;
+      }
+      const res = await fetch(
+        `/api/review/${encodeURIComponent(token)}/comments/${encodeURIComponent(commentId)}`,
+        {
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ body: clean, sessionId }),
+        },
+      );
+      const p = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(p?.error ?? "Konnte nicht speichern.");
+      setComments((prev) =>
+        prev.map((c) => (c.id === commentId ? { ...c, body: clean } : c)),
+      );
+    },
+    [sessionId, toast, token],
+  );
+  const guestDelete = React.useCallback(
+    async (commentId: string) => {
+      if (!token || !sessionId) return;
+      if (!window.confirm("Diesen Kommentar löschen?")) return;
+      const res = await fetch(
+        `/api/review/${encodeURIComponent(token)}/comments/${encodeURIComponent(commentId)}`,
+        {
+          method: "DELETE",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        },
+      );
+      if (!res.ok) {
+        const p = await res.json().catch(() => null);
+        toast({ title: p?.error ?? "Konnte nicht löschen.", variant: "danger" });
+        return;
+      }
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      if (token) {
+        const next = new Set(ownIds);
+        next.delete(commentId);
+        setOwnIds(next);
+        writeOwnIds(token, next);
+      }
+    },
+    [ownIds, sessionId, toast, token],
+  );
+
+  // ── Vollbild-Namens-Prompt (Guest, vor Betreten) ────────────────────────
+  if (mode === "guest" && !identityReady) {
+    return (
+      <IdentityScreen
+        campaignName={video.campaignName}
+        onSubmit={(name, email) => {
+          try {
+            window.localStorage.setItem(KEY_NAME, name);
+            if (email) window.localStorage.setItem(KEY_EMAIL, email);
+            else window.localStorage.removeItem(KEY_EMAIL);
+          } catch {
+            /* ignore */
+          }
+          setGuestName(name);
+          setGuestEmail(email);
+          setIdentityReady(true);
+        }}
+      />
+    );
+  }
+
+  // ── Haupt-Reviewer ──────────────────────────────────────────────────────
+  const isGuest = mode === "guest";
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-5 sm:py-6">
-      <div className="mb-3 sm:mb-4">
-        <h1 className="text-xl font-semibold text-ink truncate">{video.campaignName || "Video"}</h1>
-        <p className="text-xs text-ink-muted">
-          {comments.length} {comments.length === 1 ? "Rückmeldung" : "Rückmeldungen"} bisher.
-          {mode === "guest" ? " Klicke auf die Zeitleiste, um zu einer Stelle zu springen." : null}
-        </p>
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        {/* ── Player + Timeline + Kommentar-Feld ─────────────────────── */}
-        <div className="space-y-3">
-          <div className="relative overflow-hidden rounded-2xl bg-black shadow-sm">
-            {usePresentation ? (
-              <PreviewPlayer
-                segments={segmentList}
-                webcamUrl={video.videoUrl}
-                webcamDurationSec={video.durationSec}
-                pipPosition={video.pipPosition}
-                pipShape={video.pipShape}
-                onTimeChange={(ms) => setCurrentSec(ms / 1000)}
-                seekRequest={seekRequest}
-                pauseRequest={pauseRequest}
-              />
-            ) : video.videoUrl ? (
-              <video
-                ref={videoRef}
-                src={video.videoUrl}
-                poster={video.posterUrl ?? undefined}
-                controls
-                playsInline
-                onTimeUpdate={onTimeUpdate}
-                onLoadedMetadata={onLoadedMeta}
-                className="block h-full w-full max-h-[70vh] object-contain bg-black"
-              />
-            ) : (
-              <div className="aspect-video flex items-center justify-center text-white/60 text-sm">
-                Für diese Kampagne wurde noch kein Video hinterlegt.
-              </div>
-            )}
+    <div className={cn("mx-auto w-full max-w-5xl", isGuest ? "px-4 pt-6 pb-10 sm:px-6" : "px-0")}>
+      {/* Zentrierter Kopf — nur im Guest-Modus (Owner sieht den Reviewer im Tab). */}
+      {isGuest && (
+        <div className="mb-6 flex flex-col items-center text-center gap-1">
+          <div className="mb-1">
+            <Logo />
           </div>
-
-          {/* Timeline-Bar mit Marker */}
-          <div className="relative h-8 rounded-full bg-canvas-deep">
-            {totalSec > 0 && (
-              <div
-                className="absolute top-0 bottom-0 rounded-full bg-brand-soft"
-                style={{ width: `${Math.min(100, (currentSec / totalSec) * 100)}%` }}
-                aria-hidden
-              />
-            )}
-            {positionedComments.map(({ c, startPct, widthPct }) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => c.atSec != null && seekTo(c.atSec)}
-                title={`${fmtRange(c.atSec, c.atEndSec)} · ${c.authorName}`}
-                className={cn(
-                  "absolute top-1/2 -translate-y-1/2 rounded-full",
-                  widthPct != null
-                    ? "h-3 bg-brand/70 hover:bg-brand"
-                    : "size-4 bg-brand hover:scale-125 transition-transform",
-                  c.resolvedAt ? "opacity-40" : "opacity-100",
-                )}
-                style={{
-                  left: `calc(${startPct}% - ${widthPct != null ? "0" : "0.5rem"})`,
-                  width: widthPct != null ? `${widthPct}%` : undefined,
-                }}
-                aria-label={`Kommentar von ${c.authorName} bei ${fmtRange(c.atSec, c.atEndSec)}`}
-              />
-            ))}
-          </div>
-
-          {/* Kommentar-Eingabe (nur Guest-Mode) */}
-          {mode === "guest" && token && (
-            <div className="rounded-2xl border border-line bg-surface p-3 shadow-sm">
-              {askingName ? (
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                  <div className="flex-1">
-                    <label className="text-xs font-semibold text-ink-muted">
-                      Wie heißt du?
-                    </label>
-                    <Input
-                      autoFocus
-                      placeholder="Dein Name"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") saveGuestName((e.target as HTMLInputElement).value);
-                        if (e.key === "Escape") setAskingName(false);
-                      }}
-                    />
-                  </div>
-                  <Button
-                    variant="brand"
-                    onClick={(e) => {
-                      const inp = (e.currentTarget.parentElement?.parentElement?.querySelector("input") as HTMLInputElement | null);
-                      if (inp) saveGuestName(inp.value);
-                    }}
-                  >
-                    Speichern &amp; senden
-                  </Button>
-                </div>
-              ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-brand-deep">
+            Feedback-Session
+          </span>
+          <h1 className="mt-2 text-2xl sm:text-3xl font-semibold text-ink truncate max-w-full">
+            {video.campaignName || "Video"}
+          </h1>
+          {guestName && (
+            <p className="text-xs text-ink-muted">
+              <b className="text-ink">{guestEmail || guestName}</b>
+              {guestEmail && (
                 <>
-                  <div className="flex flex-wrap items-center gap-2 mb-2 text-xs">
-                    {attachTime ? (
-                      <button
-                        type="button"
-                        onClick={() => setAttachTime(false)}
-                        className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 font-semibold text-brand-deep"
-                        title="Klick entfernt den Zeitstempel (Kommentar wird allgemein)"
-                      >
-                        <Clock className="size-3.5" />
-                        {rangeMode === "picking-end"
-                          ? `⏳ Bereich ab ${fmtTime(rangeStart)} …`
-                          : rangeStart != null && rangeEnd != null
-                          ? `⏱ ${fmtTime(rangeStart)} – ${fmtTime(rangeEnd)}`
-                          : `⏱ Bei ${fmtTime(currentSec)}`}
-                        <X className="size-3" />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setAttachTime(true)}
-                        className="inline-flex items-center gap-1 rounded-full bg-canvas-deep px-2.5 py-1 font-semibold text-ink-muted hover:text-ink"
-                        title="Kommentar mit aktueller Zeit versehen"
-                      >
-                        <Clock className="size-3.5" />
-                        Allgemein
-                      </button>
-                    )}
-                    {attachTime && (rangeMode === "picking-end" ? (
-                      <>
-                        <Button variant="ghost" onClick={setRangeEndNow} className="h-7 text-xs">
-                          Endzeit ({fmtTime(currentSec)}) setzen
-                        </Button>
-                        <Button variant="ghost" onClick={cancelRange} className="h-7 text-xs">
-                          Abbrechen
-                        </Button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={rangeStart != null && rangeEnd != null ? cancelRange : startRange}
-                        className="inline-flex items-center gap-1 rounded-full bg-canvas-deep px-2.5 py-1 font-semibold text-ink-muted hover:text-ink"
-                        title="Feedback zu einem Zeitbereich hinterlassen"
-                      >
-                        <Timer className="size-3.5" />
-                        {rangeStart != null && rangeEnd != null ? "Bereich zurücksetzen" : "Bereich"}
-                      </button>
-                    ))}
-                    {guestName && (
-                      <span className="ml-auto text-ink-muted">
-                        Als <b className="text-ink">{guestName}</b>
-                      </span>
-                    )}
-                  </div>
-                  <Textarea
-                    value={body}
-                    onFocus={onFocusComment}
-                    onChange={(e) => setBody(e.target.value)}
-                    onKeyDown={(e) => {
-                      if ((e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
-                        void submit();
-                      }
-                    }}
-                    rows={3}
-                    placeholder="Was möchtest du dem Absender sagen?"
-                    className="resize-none"
-                  />
-                  <div className="mt-2 flex justify-end">
-                    <Button
-                      variant="brand"
-                      disabled={sending || !body.trim()}
-                      onClick={() => void submit()}
-                      iconLeft={sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                    >
-                      {sending ? "Wird gesendet…" : "Feedback senden"}
-                    </Button>
-                  </div>
+                  {" "}
+                  <span className="text-ink-muted">({guestName})</span>
                 </>
               )}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Player groß mittig */}
+      <div className="mx-auto w-full">
+        <div className="relative overflow-hidden rounded-2xl bg-black shadow-lg">
+          {usePresentation ? (
+            <PreviewPlayer
+              segments={segmentList}
+              webcamUrl={video.videoUrl}
+              webcamDurationSec={video.durationSec}
+              pipPosition={video.pipPosition}
+              pipShape={video.pipShape}
+              onTimeChange={(ms) => setCurrentSec(ms / 1000)}
+              seekRequest={seekRequest}
+              pauseRequest={pauseRequest}
+            />
+          ) : video.videoUrl ? (
+            <video
+              ref={videoRef}
+              src={video.videoUrl}
+              poster={video.posterUrl ?? undefined}
+              controls
+              playsInline
+              onTimeUpdate={onTimeUpdate}
+              onLoadedMetadata={onLoadedMeta}
+              className="block h-full w-full max-h-[68vh] object-contain bg-black"
+            />
+          ) : (
+            <div className="aspect-video flex items-center justify-center text-white/60 text-sm">
+              Für diese Kampagne wurde noch kein Video hinterlegt.
             </div>
           )}
         </div>
+      </div>
 
-        {/* ── Kommentar-Liste ─────────────────────────────────────────── */}
-        <aside className="space-y-2">
-          <div className="flex items-center gap-2">
+      {/* Guest: Feld links + Liste rechts. Owner: nur Liste volle Breite. */}
+      <div
+        className={cn(
+          "mt-6 grid gap-4",
+          isGuest ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-1",
+        )}
+      >
+        {/* Eingabe (nur Guest) */}
+        {mode === "guest" && token ? (
+          <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+              {attachTime ? (
+                <button
+                  type="button"
+                  onClick={() => setAttachTime(false)}
+                  className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 font-semibold text-brand-deep"
+                  title="Klick entfernt den Zeitstempel (Kommentar wird allgemein)"
+                >
+                  <Clock className="size-3.5" />
+                  {rangeMode === "picking-end"
+                    ? `Bereich ab ${fmtTime(rangeStart)} …`
+                    : rangeStart != null && rangeEnd != null
+                    ? `${fmtTime(rangeStart)} – ${fmtTime(rangeEnd)}`
+                    : `Bei ${fmtTime(currentSec)}`}
+                  <X className="size-3" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAttachTime(true)}
+                  className="inline-flex items-center gap-1 rounded-full bg-canvas-deep px-2.5 py-1 font-semibold text-ink-muted hover:text-ink"
+                  title="Kommentar mit aktueller Zeit versehen"
+                >
+                  <Clock className="size-3.5" />
+                  Allgemein
+                </button>
+              )}
+              {attachTime &&
+                (rangeMode === "picking-end" ? (
+                  <>
+                    <Button variant="ghost" onClick={setRangeEndNow} className="h-7 text-xs">
+                      Endzeit ({fmtTime(currentSec)}) setzen
+                    </Button>
+                    <Button variant="ghost" onClick={cancelRange} className="h-7 text-xs">
+                      Abbrechen
+                    </Button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={rangeStart != null && rangeEnd != null ? cancelRange : startRange}
+                    className="inline-flex items-center gap-1 rounded-full bg-canvas-deep px-2.5 py-1 font-semibold text-ink-muted hover:text-ink"
+                    title="Feedback zu einem Zeitbereich hinterlassen"
+                  >
+                    <Timer className="size-3.5" />
+                    {rangeStart != null && rangeEnd != null ? "Bereich zurücksetzen" : "Bereich"}
+                  </button>
+                ))}
+            </div>
+            <Textarea
+              value={body}
+              onFocus={onFocusComment}
+              onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submit();
+              }}
+              rows={4}
+              placeholder="Was möchtest du dem Absender sagen?"
+              className="resize-none"
+            />
+            <div className="mt-2 flex justify-end">
+              <Button
+                variant="brand"
+                disabled={sending || !body.trim()}
+                onClick={() => void submit()}
+                iconLeft={sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              >
+                {sending ? "Wird gesendet…" : "Feedback senden"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Kommentar-Liste */}
+        <div>
+          <div className="mb-2 flex items-center gap-2">
             <MessageSquare className="size-4 text-ink-muted" />
             <h2 className="text-sm font-semibold text-ink">Alle Rückmeldungen</h2>
             <span className="ml-auto text-[11px] text-ink-muted">{comments.length}</span>
           </div>
           {comments.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-line bg-surface p-4 text-xs text-ink-muted">
-              Noch keine Rückmeldungen. Klicke unten ins Kommentar-Feld, um loszulegen.
+              Noch keine Rückmeldungen. Klicke links ins Kommentar-Feld, um loszulegen.
             </div>
           ) : (
             <ul className="space-y-2">
@@ -539,127 +576,337 @@ export function FeedbackReviewer({
                 .slice()
                 .sort((a, b) => (a.atSec ?? 1e9) - (b.atSec ?? 1e9))
                 .map((c) => (
-                  <li
+                  <CommentCard
                     key={c.id}
-                    className={cn(
-                      "rounded-2xl border border-line bg-surface p-3 shadow-sm",
-                      c.resolvedAt ? "opacity-70" : "",
-                    )}
-                  >
-                    <div className="flex items-center gap-2 text-xs mb-1">
-                      {c.atSec != null ? (
-                        <button
-                          type="button"
-                          onClick={() => seekTo(c.atSec!)}
-                          className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 font-semibold text-brand-deep hover:bg-brand/20"
-                        >
-                          <Clock className="size-3" />
-                          {fmtRange(c.atSec, c.atEndSec)}
-                        </button>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-canvas-deep px-2 py-0.5 font-semibold text-ink-muted">
-                          Allgemein
-                        </span>
-                      )}
-                      <b className="text-ink">{c.authorName}</b>
-                      <span className="text-ink-muted">· {fmtRelative(c.createdAt)}</span>
-                      {c.resolvedAt && (
-                        <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                          <Check className="size-3" /> Erledigt
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-ink whitespace-pre-wrap break-words">{c.body}</p>
-                    {c.ownerReply && (
-                      <div className="mt-2 rounded-xl bg-canvas-deep px-3 py-2 text-xs text-ink">
-                        <b className="text-ink-muted">Antwort vom Absender: </b>
-                        <span className="whitespace-pre-wrap break-words">{c.ownerReply}</span>
-                      </div>
-                    )}
-                    {mode === "owner" && (
-                      <OwnerRow
-                        comment={c}
-                        onResolve={(res) => void changeResolved(c.id, res)}
-                        onReply={(r) => void changeReply(c.id, r)}
-                        onDelete={() => void remove(c.id)}
-                      />
-                    )}
-                  </li>
+                    comment={c}
+                    ownerName={ownerName}
+                    mode={mode}
+                    isOwnedByGuest={mode === "guest" && !!sessionId && ownIds.has(c.id)}
+                    onSeek={c.atSec != null ? () => seekTo(c.atSec!) : undefined}
+                    onOwnerResolve={
+                      mode === "owner"
+                        ? (r) => void changeResolved(c.id, r)
+                        : undefined
+                    }
+                    onOwnerReply={
+                      mode === "owner" ? (r) => void changeReply(c.id, r) : undefined
+                    }
+                    onOwnerDelete={
+                      mode === "owner" ? () => void removeByOwner(c.id) : undefined
+                    }
+                    onGuestEdit={
+                      mode === "guest"
+                        ? async (newBody) => {
+                            try {
+                              await guestUpdate(c.id, newBody);
+                            } catch (err) {
+                              toastError(toast, err);
+                              throw err;
+                            }
+                          }
+                        : undefined
+                    }
+                    onGuestDelete={
+                      mode === "guest" ? () => void guestDelete(c.id) : undefined
+                    }
+                  />
                 ))}
             </ul>
           )}
-        </aside>
+        </div>
       </div>
     </div>
   );
 }
 
-function OwnerRow({
+// ── Vollbild-Namens-Prompt ──────────────────────────────────────────────────
+
+function IdentityScreen({
+  campaignName,
+  onSubmit,
+}: {
+  campaignName: string;
+  onSubmit: (name: string, email: string) => void;
+}) {
+  const [name, setName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const submit = () => {
+    const n = name.trim();
+    if (!n) {
+      setError("Bitte einen Namen eingeben.");
+      return;
+    }
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+      setError("E-Mail sieht nicht gültig aus.");
+      return;
+    }
+    onSubmit(n, email.trim());
+  };
+  return (
+    <div className="min-h-[80vh] flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-3xl border border-line bg-surface p-6 shadow-lg">
+        <div className="flex flex-col items-center text-center gap-2 mb-4">
+          <Logo />
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-brand-deep">
+            Feedback-Session
+          </span>
+          <h1 className="mt-2 text-xl font-semibold text-ink">
+            {campaignName || "Video"}
+          </h1>
+          <p className="text-sm text-ink-muted">
+            Damit der Absender weiß, von wem das Feedback kommt.
+          </p>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <Label htmlFor="rev-name">Dein Name</Label>
+            <Input
+              id="rev-name"
+              autoFocus
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setError(null);
+              }}
+              placeholder="Vor- und Nachname"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
+            />
+          </div>
+          <div>
+            <Label htmlFor="rev-email">E-Mail (optional)</Label>
+            <Input
+              id="rev-email"
+              type="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError(null);
+              }}
+              placeholder="damit dich der Absender bei Rückfragen erreicht"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
+            />
+          </div>
+          {error && (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          )}
+          <Button variant="brand" onClick={submit} className="w-full">
+            Weiter zum Video
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Einzelne Kommentar-Karte (Guest + Owner) ────────────────────────────────
+
+function CommentCard({
   comment,
-  onResolve,
-  onReply,
-  onDelete,
+  ownerName,
+  mode,
+  isOwnedByGuest,
+  onSeek,
+  onOwnerResolve,
+  onOwnerReply,
+  onOwnerDelete,
+  onGuestEdit,
+  onGuestDelete,
 }: {
   comment: ReviewerComment;
-  onResolve: (resolved: boolean) => void;
-  onReply: (reply: string) => void;
-  onDelete: () => void;
+  ownerName?: string;
+  mode: "guest" | "owner";
+  isOwnedByGuest: boolean;
+  onSeek?: () => void;
+  onOwnerResolve?: (resolved: boolean) => void;
+  onOwnerReply?: (reply: string) => void;
+  onOwnerDelete?: () => void;
+  onGuestEdit?: (newBody: string) => Promise<void>;
+  onGuestDelete?: () => void;
 }) {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(comment.body);
+  const [saving, setSaving] = React.useState(false);
   const [showReply, setShowReply] = React.useState(false);
   const [reply, setReply] = React.useState(comment.ownerReply ?? "");
   const resolved = !!comment.resolvedAt;
+
+  React.useEffect(() => setDraft(comment.body), [comment.body]);
+
+  const replyLabel =
+    ownerName && ownerName.trim().length > 0
+      ? `Antwort von ${ownerName}`
+      : "Antwort";
+
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-      <Button
-        variant={resolved ? "ghost" : "subtle"}
-        onClick={() => onResolve(!resolved)}
-        iconLeft={<Check className="size-3.5" />}
-        className="h-7 text-xs"
-      >
-        {resolved ? "Wieder öffnen" : "Als erledigt markieren"}
-      </Button>
-      <Button
-        variant="ghost"
-        onClick={() => setShowReply((v) => !v)}
-        iconLeft={<MoreHorizontal className="size-3.5" />}
-        className="h-7 text-xs"
-      >
-        {comment.ownerReply ? "Antwort bearbeiten" : "Antworten"}
-      </Button>
-      <Button
-        variant="ghost"
-        onClick={onDelete}
-        iconLeft={<Trash2 className="size-3.5" />}
-        className="h-7 text-xs text-danger hover:text-danger"
-      >
-        Löschen
-      </Button>
-      {showReply && (
-        <div className="mt-2 w-full">
+    <li
+      className={cn(
+        "rounded-2xl border border-line bg-surface p-3 shadow-sm",
+        resolved ? "opacity-70" : "",
+      )}
+    >
+      <div className="flex items-center gap-2 text-xs mb-1 flex-wrap">
+        {comment.atSec != null ? (
+          <button
+            type="button"
+            onClick={onSeek}
+            className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 font-semibold text-brand-deep hover:bg-brand/20"
+          >
+            <Clock className="size-3" />
+            {fmtRange(comment.atSec, comment.atEndSec)}
+          </button>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-canvas-deep px-2 py-0.5 font-semibold text-ink-muted">
+            Allgemein
+          </span>
+        )}
+        <b className="text-ink">{comment.authorName}</b>
+        <span className="text-ink-muted">· {fmtRelative(comment.createdAt)}</span>
+        {resolved && (
+          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+            <Check className="size-3" /> Erledigt
+          </span>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="space-y-2">
           <Textarea
-            value={reply}
-            onChange={(e) => setReply(e.target.value)}
-            rows={2}
-            placeholder="Deine Antwort an den Empfänger…"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={3}
             className="resize-none text-sm"
           />
-          <div className="mt-1 flex justify-end gap-1">
-            <Button variant="ghost" onClick={() => setShowReply(false)} className="h-7 text-xs">
+          <div className="flex justify-end gap-1">
+            <Button
+              variant="ghost"
+              className="h-7 text-xs"
+              onClick={() => {
+                setDraft(comment.body);
+                setEditing(false);
+              }}
+            >
               Abbrechen
             </Button>
             <Button
               variant="brand"
-              onClick={() => {
-                onReply(reply);
-                setShowReply(false);
-              }}
               className="h-7 text-xs"
+              disabled={saving || !draft.trim()}
+              onClick={async () => {
+                if (!onGuestEdit) return;
+                setSaving(true);
+                try {
+                  await onGuestEdit(draft);
+                  setEditing(false);
+                } catch {
+                  /* toastError im Callback */
+                } finally {
+                  setSaving(false);
+                }
+              }}
             >
               Speichern
             </Button>
           </div>
         </div>
+      ) : (
+        <p className="text-sm text-ink whitespace-pre-wrap break-words">{comment.body}</p>
       )}
-    </div>
+
+      {comment.ownerReply && (
+        <div className="mt-2 rounded-xl bg-canvas-deep px-3 py-2 text-xs text-ink">
+          <b className="text-ink-muted">{replyLabel}: </b>
+          <span className="whitespace-pre-wrap break-words">{comment.ownerReply}</span>
+        </div>
+      )}
+
+      {/* Guest-Actions: nur eigene Kommentare */}
+      {mode === "guest" && isOwnedByGuest && !editing && (onGuestEdit || onGuestDelete) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
+          {onGuestEdit && (
+            <Button
+              variant="ghost"
+              className="h-7 text-xs"
+              onClick={() => setEditing(true)}
+              iconLeft={<Pencil className="size-3.5" />}
+            >
+              Bearbeiten
+            </Button>
+          )}
+          {onGuestDelete && (
+            <Button
+              variant="ghost"
+              className="h-7 text-xs text-danger hover:text-danger"
+              onClick={onGuestDelete}
+              iconLeft={<Trash2 className="size-3.5" />}
+            >
+              Löschen
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Owner-Actions */}
+      {mode === "owner" && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <Button
+            variant={resolved ? "ghost" : "subtle"}
+            onClick={() => onOwnerResolve?.(!resolved)}
+            iconLeft={<Check className="size-3.5" />}
+            className="h-7 text-xs"
+          >
+            {resolved ? "Wieder öffnen" : "Als erledigt markieren"}
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => setShowReply((v) => !v)}
+            iconLeft={<MoreHorizontal className="size-3.5" />}
+            className="h-7 text-xs"
+          >
+            {comment.ownerReply ? "Antwort bearbeiten" : "Antworten"}
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={onOwnerDelete}
+            iconLeft={<Trash2 className="size-3.5" />}
+            className="h-7 text-xs text-danger hover:text-danger"
+          >
+            Löschen
+          </Button>
+          {showReply && (
+            <div className="mt-2 w-full">
+              <Textarea
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                rows={2}
+                placeholder="Deine Antwort an den Empfänger…"
+                className="resize-none text-sm"
+              />
+              <div className="mt-1 flex justify-end gap-1">
+                <Button variant="ghost" onClick={() => setShowReply(false)} className="h-7 text-xs">
+                  Abbrechen
+                </Button>
+                <Button
+                  variant="brand"
+                  onClick={() => {
+                    onOwnerReply?.(reply);
+                    setShowReply(false);
+                  }}
+                  className="h-7 text-xs"
+                >
+                  Speichern
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </li>
   );
 }

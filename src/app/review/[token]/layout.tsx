@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Logo } from "@/components/ui/logo";
 import { Toaster } from "@/components/ui/toaster";
 import { fontClasses } from "@/lib/fonts";
 import "../../globals.css";
@@ -10,10 +9,11 @@ export const metadata: Metadata = {
 };
 
 /**
- * Minimales Standalone-Layout für die Public-Feedback-Ansicht. Bewusst ohne
- * App-Shell/Nav — der Empfänger soll den Player und das Kommentar-Panel
- * bildschirmfüllend sehen. Layout ist identisch aufgebaut wie /share/[token]
- * (gleiche visuelle Sprache), zeigt aber eine andere Badge.
+ * Minimales Standalone-Layout für die Public-Feedback-Ansicht.
+ *
+ * Der Kopf (Logo/Kampagne/Name) sitzt bewusst IN der Reviewer-Komponente,
+ * weil er den Kampagnen-Namen kennen muss (der beim Layout noch nicht
+ * geladen ist). Layout ist bewusst leer bis auf Gradient + Footer.
  */
 export default function ReviewLayout({
   children,
@@ -28,22 +28,21 @@ export default function ReviewLayout({
       </head>
       <body>
         <Toaster>
-        <div className="min-h-screen flex flex-col bg-surface-soft">
-          <header className="border-b border-line/60 bg-surface/80 backdrop-blur">
-            <div className="mx-auto w-full max-w-6xl flex items-center justify-between px-4 py-3 sm:px-5">
-              <Logo />
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-brand-deep">
-                Feedback zum Video
-              </span>
-            </div>
-          </header>
-          <main className="flex-1 w-full">{children}</main>
-          <footer className="border-t border-line/60 bg-surface/60">
-            <div className="mx-auto w-full max-w-6xl px-5 py-4 text-center text-[11px] text-ink-muted">
-              Powered by VIDEOCOMET
-            </div>
-          </footer>
-        </div>
+          <div
+            className="min-h-screen flex flex-col"
+            style={{
+              backgroundImage:
+                "linear-gradient(180deg, rgba(170,140,245,0.18) 0%, rgba(170,140,245,0.06) 30%, rgba(243,242,249,1) 100%)",
+              backgroundColor: "#f3f2f9",
+            }}
+          >
+            <main className="flex-1 w-full">{children}</main>
+            <footer className="mt-8">
+              <div className="mx-auto w-full max-w-6xl px-5 py-4 text-center text-[11px] text-ink-muted">
+                Powered by VIDEOCOMET
+              </div>
+            </footer>
+          </div>
         </Toaster>
       </body>
     </html>

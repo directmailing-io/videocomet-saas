@@ -517,6 +517,8 @@ export interface InsertCommentInput {
   atEndSec: number | null;
   authorName: string;
   body: string;
+  /** Guest-Session-ID (uuid), damit der Empfänger den Kommentar später editieren/löschen kann. */
+  sessionId: string | null;
 }
 
 /**
@@ -549,6 +551,7 @@ export async function insertComment(
       atEndSec: finalEnd,
       authorName,
       body,
+      sessionId: input.sessionId,
     })
     .returning({
       id: videoFeedbackComments.id,
@@ -619,6 +622,62 @@ export async function setOwnerReply(
       and(
         eq(videoFeedbackComments.id, commentId),
         sql`${linkIdSub} IS NOT NULL`,
+      ),
+    )
+    .returning({ id: videoFeedbackComments.id });
+  return result.length > 0;
+}
+
+/**
+ * Guest-Update: Der Empfänger bearbeitet seinen eigenen Kommentar.
+ * Auth via `sessionId` — der Kommentar muss zur selben Session gehören
+ * UND zum aktiven Link (Ownership-Guard auf Link-Ebene über Sub-Select).
+ */
+export async function guestUpdateComment(input: {
+  linkId: string;
+  commentId: string;
+  sessionId: string;
+  body: string;
+}): Promise<FeedbackCommentRow | null> {
+  const clean = input.body.trim().slice(0, COMMENT_BODY_MAX);
+  if (!clean) throw new Error("Kommentar darf nicht leer sein.");
+  const [row] = await db
+    .update(videoFeedbackComments)
+    .set({ body: clean, updatedAt: new Date() })
+    .where(
+      and(
+        eq(videoFeedbackComments.id, input.commentId),
+        eq(videoFeedbackComments.linkId, input.linkId),
+        eq(videoFeedbackComments.sessionId, input.sessionId),
+      ),
+    )
+    .returning({
+      id: videoFeedbackComments.id,
+      atSec: videoFeedbackComments.atSec,
+      atEndSec: videoFeedbackComments.atEndSec,
+      authorName: videoFeedbackComments.authorName,
+      body: videoFeedbackComments.body,
+      ownerReply: videoFeedbackComments.ownerReply,
+      resolvedAt: videoFeedbackComments.resolvedAt,
+      createdAt: videoFeedbackComments.createdAt,
+      updatedAt: videoFeedbackComments.updatedAt,
+    });
+  return row ?? null;
+}
+
+/** Guest-Delete: eigener Kommentar via sessionId. */
+export async function guestDeleteComment(input: {
+  linkId: string;
+  commentId: string;
+  sessionId: string;
+}): Promise<boolean> {
+  const result = await db
+    .delete(videoFeedbackComments)
+    .where(
+      and(
+        eq(videoFeedbackComments.id, input.commentId),
+        eq(videoFeedbackComments.linkId, input.linkId),
+        eq(videoFeedbackComments.sessionId, input.sessionId),
       ),
     )
     .returning({ id: videoFeedbackComments.id });

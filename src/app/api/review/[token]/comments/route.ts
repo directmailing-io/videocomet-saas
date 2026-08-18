@@ -33,6 +33,12 @@ const bodySchema = z.object({
   atEndSec: z.number().finite().min(0).max(7200).nullable().optional(),
   authorName: z.string().trim().min(1, "Bitte Namen angeben.").max(COMMENT_AUTHOR_MAX),
   body: z.string().trim().min(1, "Kommentar darf nicht leer sein.").max(COMMENT_BODY_MAX),
+  /** Client-Session-UUID (Guest-Owner-Nachweis). Wird bei Delete/Edit geprüft. */
+  sessionId: z
+    .string()
+    .regex(/^[a-f0-9-]{16,64}$/i, "Ungültige Session-ID.")
+    .optional()
+    .nullable(),
 });
 
 function hashIp(ip: string): string {
@@ -86,6 +92,7 @@ export async function POST(
       atEndSec: body.atEndSec ?? null,
       authorName: body.authorName,
       body: body.body,
+      sessionId: body.sessionId ?? null,
     });
     try {
       await recordAttempt(token, ipHash, "comment", true);

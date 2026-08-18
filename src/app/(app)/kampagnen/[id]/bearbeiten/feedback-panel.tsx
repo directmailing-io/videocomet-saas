@@ -39,6 +39,8 @@ interface OwnerLinkView {
 interface Props {
   campaignId: string;
   hasVideo: boolean;
+  /** Name des Kampagnen-Owners für die "Antwort von {name}"-Zeile im Reviewer. */
+  ownerName?: string;
 }
 
 function currentHost(): string {
@@ -57,7 +59,7 @@ function fmtDate(iso: string | null): string {
   });
 }
 
-export function FeedbackPanel({ campaignId, hasVideo }: Props) {
+export function FeedbackPanel({ campaignId, hasVideo, ownerName }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = React.useState(true);
   const [link, setLink] = React.useState<OwnerLinkView | null>(null);
@@ -235,30 +237,27 @@ export function FeedbackPanel({ campaignId, hasVideo }: Props) {
             onClearPassword={() => void patch({ password: null })}
             onExtend={(days) => void patch({ ttlDays: days })}
           />
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="size-4 text-brand-deep" />
-                Rückmeldungen &amp; Video-Vorschau
-                {link.unresolvedCount > 0 && (
-                  <span className="inline-flex items-center rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand-deep">
-                    {link.unresolvedCount} offen
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <FeedbackReviewer
-                token={null}
-                video={link.video}
-                initialComments={link.comments}
-                mode="owner"
-                onResolvedChange={(id, res) => commentPatch(id, { resolved: res })}
-                onReplyChange={(id, reply) => commentPatch(id, { ownerReply: reply })}
-                onDelete={commentDelete}
-              />
-            </CardContent>
-          </Card>
+          <div>
+            <div className="mb-3 flex items-center gap-2 text-sm">
+              <MessageSquare className="size-4 text-brand-deep" />
+              <b className="text-ink">Rückmeldungen</b>
+              {link.unresolvedCount > 0 && (
+                <span className="inline-flex items-center rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand-deep">
+                  {link.unresolvedCount} offen
+                </span>
+              )}
+            </div>
+            <FeedbackReviewer
+              token={null}
+              video={link.video}
+              initialComments={link.comments}
+              mode="owner"
+              ownerName={ownerName}
+              onResolvedChange={(id, res) => commentPatch(id, { resolved: res })}
+              onReplyChange={(id, reply) => commentPatch(id, { ownerReply: reply })}
+              onDelete={commentDelete}
+            />
+          </div>
         </>
       )}
     </div>

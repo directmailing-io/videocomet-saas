@@ -128,5 +128,9 @@ export default async function CampaignEditPage({
     })),
   };
 
-  return <EditCampaignForm data={data} />;
+  const ownerName =
+    [user.firstName, user.lastName].filter((s) => !!s && s.trim().length > 0).join(" ").trim()
+    || user.email
+    || "Absender";
+  return <EditCampaignForm data={data} ownerName={ownerName} />;
 }
