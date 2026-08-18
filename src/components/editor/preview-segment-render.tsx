@@ -48,6 +48,7 @@ import {
 } from "@/lib/segments/cursor-overlay";
 import type { CursorFrame } from "@/lib/segments/types";
 import { SlideRender } from "@/lib/slide/slide-render";
+import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
 import {
   DocStackPreview,
   perPageHeightFromStackHeight,
@@ -257,6 +258,13 @@ function RenderVideo({
     );
   }
 
+  // Bunny liefert Stream-Uploads als HLS-Playlist (`.m3u8`) aus. Native
+  // <video>-Elemente in Chrome/Firefox können HLS NICHT abspielen — es
+  // bleibt der Loader hängen (canplay feuert nie). Wir mappen deshalb auf
+  // die MP4-Fallback-URL, die Bunny parallel anbietet. Analog zur
+  // Webcam-Spur (webcam-monitor.tsx) und studio-stage.tsx.
+  const playbackUrl = pickBunnyMp4Fallback(segment.publicUrl);
+
   if (segment.showAsBrowserFrame) {
     return (
       <div className="absolute inset-0 flex flex-col bg-surface-soft p-4">
@@ -274,12 +282,13 @@ function RenderVideo({
           {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
           <video
             ref={videoRef}
-            src={segment.publicUrl}
+            src={playbackUrl}
             muted
             playsInline
             preload="auto"
             className="absolute inset-0 h-full w-full object-contain"
             onLoadedMetadata={onLoadedMetadata}
+            onLoadedData={onCanPlay}
             onCanPlay={onCanPlay}
           />
         </div>
@@ -292,12 +301,13 @@ function RenderVideo({
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <video
         ref={videoRef}
-        src={segment.publicUrl}
+        src={playbackUrl}
         muted
         playsInline
         preload="auto"
         className="h-full w-full object-contain"
         onLoadedMetadata={onLoadedMetadata}
+        onLoadedData={onCanPlay}
         onCanPlay={onCanPlay}
       />
     </div>
