@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Logo } from "@/components/ui/logo";
+import { Toaster } from "@/components/ui/toaster";
 import { fontClasses } from "@/lib/fonts";
 import "../../globals.css";
 
@@ -26,6 +27,7 @@ export default function ReviewLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </head>
       <body>
+        <Toaster>
         <div className="min-h-screen flex flex-col bg-surface-soft">
           <header className="border-b border-line/60 bg-surface/80 backdrop-blur">
             <div className="mx-auto w-full max-w-6xl flex items-center justify-between px-4 py-3 sm:px-5">
@@ -42,6 +44,7 @@ export default function ReviewLayout({
             </div>
           </footer>
         </div>
+        </Toaster>
       </body>
     </html>
   );
