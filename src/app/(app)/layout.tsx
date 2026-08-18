@@ -5,6 +5,8 @@ import { AppShell } from "@/components/layouts/AppShell";
 import { Toaster } from "@/components/ui/toaster";
 import { loadAccessDecision, isPathAllowedWhenBlocked } from "@/lib/billing/access-gate";
 import { PaywallScreen } from "@/components/billing/paywall-screen";
+import { CookieBanner } from "@/components/consent/CookieBanner";
+import { MetaPixelLoader } from "@/components/meta/meta-pixel-loader";
 
 export default async function AppLayout({
   children,
@@ -22,6 +24,7 @@ export default async function AppLayout({
   const showPaywall =
     access.access === "blocked" && !isPathAllowedWhenBlocked(pathname);
 
+  const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "";
   return (
     <Toaster>
       <AppShell
@@ -40,6 +43,8 @@ export default async function AppLayout({
           children
         )}
       </AppShell>
+      <CookieBanner />
+      {pixelId ? <MetaPixelLoader pixelId={pixelId} /> : null}
     </Toaster>
   );
 }

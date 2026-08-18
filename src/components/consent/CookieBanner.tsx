@@ -9,9 +9,12 @@ import {
   writeConsent,
 } from "./consent";
 
-const MARKETING_HOSTS = new Set([
+/** Wo der Banner sichtbar ist. Die Wahl wird per Domain-Cookie auf
+ *  .videocomet.de gespeichert und gilt auch auf app.videocomet.de. */
+const BANNER_HOSTS = new Set([
   "videocomet.de",
   "www.videocomet.de",
+  "app.videocomet.de",
   "localhost",
   "127.0.0.1",
 ]);
@@ -29,21 +32,26 @@ export function CookieBanner() {
   const [visible, setVisible] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [statistics, setStatistics] = React.useState(false);
-  const [isMarketingHost, setIsMarketingHost] = React.useState(false);
+  const [marketing, setMarketing] = React.useState(false);
+  const [isBannerHost, setIsBannerHost] = React.useState(false);
 
   React.useEffect(() => {
-    const onMarketing = MARKETING_HOSTS.has(window.location.hostname);
-    setIsMarketingHost(onMarketing);
-    if (!onMarketing) return;
+    const onHost = BANNER_HOSTS.has(window.location.hostname);
+    setIsBannerHost(onHost);
+    if (!onHost) return;
     const existing = readConsent();
     if (existing) {
       setStatistics(existing.categories.statistics);
+      setMarketing(existing.categories.marketing);
     } else {
       setVisible(true);
     }
     const openSettings = () => {
       const current = readConsent();
-      if (current) setStatistics(current.categories.statistics);
+      if (current) {
+        setStatistics(current.categories.statistics);
+        setMarketing(current.categories.marketing);
+      }
       setSettingsOpen(true);
       setVisible(false);
     };
@@ -51,20 +59,20 @@ export function CookieBanner() {
     return () => window.removeEventListener(OPEN_SETTINGS_EVENT, openSettings);
   }, []);
 
-  if (!isMarketingHost || (!visible && !settingsOpen)) return null;
+  if (!isBannerHost || (!visible && !settingsOpen)) return null;
 
   const acceptAll = () => {
-    writeConsent({ statistics: true });
+    writeConsent({ statistics: true, marketing: true });
     setVisible(false);
     setSettingsOpen(false);
   };
   const acceptNecessary = () => {
-    writeConsent({ statistics: false });
+    writeConsent({ statistics: false, marketing: false });
     setVisible(false);
     setSettingsOpen(false);
   };
   const saveSelection = () => {
-    writeConsent({ statistics });
+    writeConsent({ statistics, marketing });
     setVisible(false);
     setSettingsOpen(false);
   };
@@ -86,10 +94,10 @@ export function CookieBanner() {
               Cookies bei VIDEOCOMET
             </h2>
             <p className="text-[13px] text-ink-muted leading-relaxed mb-4">
-              Wir verwenden ausschließlich technisch notwendige Cookies, damit
-              Login und Sicherheit funktionieren. Statistik- oder
-              Marketing-Cookies setzen wir nur, wenn du zustimmst. Aktuell
-              nutzen wir keine. Details in unserer{" "}
+              Technisch notwendige Cookies sind für Login und Sicherheit immer
+              aktiv. Für Marketing-Cookies (Meta Pixel, damit wir dir passende
+              Anzeigen zeigen können) fragen wir dich um deine Zustimmung.
+              Details in unserer{" "}
               <Link href="/datenschutz" className="underline hover:text-ink">
                 Datenschutzerklärung
               </Link>
@@ -202,6 +210,36 @@ export function CookieBanner() {
                   Hilft uns zu verstehen, wie die Website genutzt wird.
                   Derzeit setzen wir keine Statistik-Dienste ein. Falls sich
                   das ändert, werden sie nur mit deiner Zustimmung geladen.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-line p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[14px] font-semibold text-ink">
+                    Marketing
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={marketing}
+                    onClick={() => setMarketing((v) => !v)}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${
+                      marketing ? "bg-ink" : "bg-line"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform ${
+                        marketing ? "translate-x-[22px]" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+                <p className="text-[12.5px] text-ink-muted leading-relaxed">
+                  Meta Pixel + Conversions API. Meta erfährt, welche Seiten du
+                  auf videocomet.de besuchst, ob du dich registrierst und ob
+                  du Credits kaufst — damit wir dir bei Facebook und Instagram
+                  passende Anzeigen zeigen können. Ohne deine Zustimmung wird
+                  weder etwas geladen noch etwas an Meta übertragen.
                 </p>
               </div>
             </div>

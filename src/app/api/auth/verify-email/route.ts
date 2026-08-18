@@ -7,6 +7,7 @@ import { eq, desc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users, emailVerifications } from "@/lib/db/schema";
 import { createSignupCheckout, marketingOrigin } from "@/lib/billing/signup-checkout";
+import { trackServerBrowserEvent } from "@/lib/meta/track-server";
 
 /**
  * GET /api/auth/verify-email?token=...
@@ -72,11 +73,25 @@ export async function GET(req: NextRequest) {
       .set({ usedAt: new Date() })
       .where(eq(emailVerifications.id, row.id));
   }
-  if (!user.emailVerifiedAt) {
+  const isFirstVerification = !user.emailVerifiedAt;
+  if (isFirstVerification) {
     await db
       .update(users)
       .set({ emailVerifiedAt: new Date(), updatedAt: new Date() })
       .where(eq(users.id, user.id));
+    // Meta CAPI: Konto verifiziert → CompleteRegistration.
+    void trackServerBrowserEvent({
+      req,
+      eventName: "CompleteRegistration",
+      userData: {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        externalId: user.id,
+        country: "de",
+      },
+      customData: { status: true },
+    });
   }
 
   // Abo laeuft schon (z. B. Link spaeter nochmal geklickt) → in die App.
@@ -98,6 +113,19 @@ export async function GET(req: NextRequest) {
         null,
       vatId: user.vatId ?? null,
       existingCustomerId: user.stripeCustomerId ?? null,
+    });
+    // Meta CAPI: gleich vor dem Stripe-Redirect InitiateCheckout feuern.
+    void trackServerBrowserEvent({
+      req,
+      eventName: "InitiateCheckout",
+      userData: {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        externalId: user.id,
+        country: "de",
+      },
+      customData: { content_name: "subscription_signup" },
     });
     return NextResponse.redirect(url);
   } catch (err) {

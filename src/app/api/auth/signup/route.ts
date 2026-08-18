@@ -12,6 +12,7 @@ import { createSignupCheckout, marketingOrigin } from "@/lib/billing/signup-chec
 import { sendEmailVerificationMail } from "@/lib/mail";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { trackServerBrowserEvent } from "@/lib/meta/track-server";
 
 /**
  * POST /api/auth/signup
@@ -153,6 +154,22 @@ export async function POST(req: NextRequest) {
     stripeCustomerId = null;
     emailVerified = false;
   }
+
+  // Meta CAPI: Lead-Event feuern (User hat Signup-Formular abgeschickt).
+  // Nur wenn Marketing-Consent — sonst wird der Call intern verworfen.
+  // Fire-and-forget: darf den Signup-Flow nie blockieren.
+  void trackServerBrowserEvent({
+    req,
+    eventName: "Lead",
+    userData: {
+      email,
+      firstName,
+      lastName,
+      externalId: userId,
+      country: "de",
+    },
+    customData: { content_name: "signup_form" },
+  });
 
   // 5) E-Mail noch nicht bestaetigt → Verifizierungsmail statt Checkout.
   //    Der Link im Postfach verifiziert und leitet direkt zu Stripe weiter.

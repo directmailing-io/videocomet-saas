@@ -16,6 +16,7 @@ import {
   sendSubscriptionStartedMail,
   sendTopupConfirmationMail,
 } from "@/lib/mail";
+import { trackSystemPurchaseEvent } from "@/lib/meta/track-server";
 
 /**
  * POST /api/stripe/webhook
@@ -172,6 +173,38 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
           newBalance: txRow.balanceAfter,
         }),
       );
+      // Meta CAPI: Purchase-Event mit dem realen €-Wert aus der Session.
+      // `event_id = stripeEventId` — global eindeutig, dedupliziert bei
+      // Stripe-Replays. amount_total ist in Cent → durch 100.
+      const [userRow] = await db
+        .select({
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      const valueEur = Number(((session.amount_total ?? 0) / 100).toFixed(2));
+      void trackSystemPurchaseEvent({
+        eventName: "Purchase",
+        eventId: `stripe_${event.id}`,
+        eventSourceUrl: "https://videocomet.de/signup/success",
+        userData: {
+          email: userRow?.email ?? null,
+          firstName: userRow?.firstName ?? null,
+          lastName: userRow?.lastName ?? null,
+          externalId: userId,
+          country: "de",
+        },
+        customData: {
+          value: valueEur,
+          currency: (session.currency ?? "eur").toUpperCase(),
+          content_name: meta.packageId ?? `${credits} Credits`,
+          content_ids: [meta.packageId ?? "unknown"],
+          credits_purchased: credits,
+        },
+      });
     }
     return;
   }
@@ -196,6 +229,39 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
           firstName: user.firstName,
         }),
       );
+      // Meta CAPI: Subscribe-Event mit erwartetem Jahres-LTV (Meta empfiehlt
+      // Jahres-Wert statt Monatspreis, sonst optimiert der Algorithmus auf
+      // Billigst-Käufer). Wir nutzen `amount_total` × 3 als Näherung für das
+      // 3-Monats-Startpaket → x4 pro Jahr = 12 Monate.
+      const [userRow] = await db
+        .select({
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      const monthlyEur = ((session.amount_total ?? 0) / 100) / 3;
+      const yearlyLtv = Number((monthlyEur * 12).toFixed(2));
+      void trackSystemPurchaseEvent({
+        eventName: "Subscribe",
+        eventId: `stripe_${event.id}`,
+        eventSourceUrl: "https://videocomet.de/signup/success",
+        userData: {
+          email: userRow?.email ?? null,
+          firstName: userRow?.firstName ?? null,
+          lastName: userRow?.lastName ?? null,
+          externalId: userId,
+          country: "de",
+        },
+        customData: {
+          value: yearlyLtv,
+          currency: (session.currency ?? "eur").toUpperCase(),
+          content_name: "subscription_retainer",
+          predicted_ltv: yearlyLtv,
+        },
+      });
     }
     return;
   }
