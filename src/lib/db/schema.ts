@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, smallint, real, jsonb, pgEnum, index, unique, uniqueIndex, bigserial, date, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, boolean, integer, smallint, real, doublePrecision, jsonb, pgEnum, index, unique, uniqueIndex, bigserial, date, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
 
@@ -1128,6 +1128,74 @@ export const campaignShareAttempts = pgTable("campaign_share_attempts", {
   // braucht die DESC-Reihenfolge nicht, da Index-Lookups auf BTREE in
   // beide Richtungen genauso schnell sind.
   tokenTsIdx: index("campaign_share_attempts_token_ts_idx").on(t.token, t.ts),
+}));
+
+// ── Video-Feedback (Frame.io-artig, Migration 0059) ─────────────────────────
+// Owner erzeugt pro Kampagne einen (optional passwortgeschützten) Feedback-
+// Link für das Master-Video, Empfänger geben unter /review/<token> Kommentare
+// (Einzeltimestamp oder Bereich) ab. Owner sieht dieselben Kommentare im
+// Kampagnen-Editor, kann sie als "erledigt" markieren und antworten.
+//
+// Sicherheits-Invarianten:
+//   - `token` global eindeutig (UNIQUE-Index), URL-safe (share-token.ts).
+//   - `password_hash` optional (Argon2id) — NULL = öffentlich.
+//   - Public-Lookups filtern `revoked_at IS NULL AND expires_at > now()`.
+//   - Pro Kampagne höchstens EIN aktiver Link (Partial-Unique-Index).
+//   - Body/Author/Reply-Länge in DB via CHECK-Constraint gedeckelt.
+//   - `video_feedback_link_attempts.ip_hash` = sha256(ip)[:16], kein raw-IP.
+export const videoFeedbackLinks = pgTable("video_feedback_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  campaignId: uuid("campaign_id")
+    .notNull()
+    .references(() => campaigns.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull(),
+  passwordHash: text("password_hash"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tokenUq: uniqueIndex("video_feedback_links_token_uq").on(t.token),
+  campaignActiveUq: uniqueIndex("video_feedback_links_campaign_active_uq")
+    .on(t.campaignId)
+    .where(sql`${t.revokedAt} IS NULL`),
+  userIdx: index("video_feedback_links_user_idx").on(t.userId),
+}));
+
+export const videoFeedbackComments = pgTable("video_feedback_comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  linkId: uuid("link_id")
+    .notNull()
+    .references(() => videoFeedbackLinks.id, { onDelete: "cascade" }),
+  /** Startsekunde (NULL → allgemeiner Kommentar ohne Zeitbezug). */
+  atSec: doublePrecision("at_sec"),
+  /** Endsekunde (NULL → Einzeltimestamp; sonst Bereich `at_sec..at_end_sec`). */
+  atEndSec: doublePrecision("at_end_sec"),
+  authorName: text("author_name").notNull(),
+  body: text("body").notNull(),
+  ownerReply: text("owner_reply"),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  linkCreatedIdx: index("video_feedback_comments_link_created_idx")
+    .on(t.linkId, t.createdAt),
+}));
+
+export const videoFeedbackLinkAttempts = pgTable("video_feedback_link_attempts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  token: text("token").notNull(),
+  ipHash: text("ip_hash").notNull(),
+  /** 'auth' | 'comment' — CHECK optional; wir kontrollieren Wert im Code. */
+  kind: text("kind").notNull(),
+  ok: boolean("ok").notNull(),
+  ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tokenTsIdx: index("video_feedback_link_attempts_token_ts_idx").on(t.token, t.ts),
 }));
 
 // ── CRM-Integrations (Phase 1 — Datenlayer, Migration 0024) ────────────────

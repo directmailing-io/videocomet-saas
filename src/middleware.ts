@@ -65,6 +65,7 @@ const PUBLIC_API_PREFIXES = [
   "/api/lp/",
   "/api/r/",
   "/api/share/",
+  "/api/review/",
   "/api/email/",
   "/api/health",
   "/api/healthz",
@@ -129,6 +130,11 @@ function isPassthroughPath(pathname: string): boolean {
     pathname.startsWith("/static/") ||
     pathname.startsWith("/share/") ||
     pathname.startsWith("/api/share/") ||
+    // Video-Feedback (Migration 0059): eigene Public-Route und API. Analog
+    // /share/ — Reviewer haben keine Lucia-Session, sondern ein eigenes
+    // signiertes Cookie (siehe `src/lib/feedback-cookie.ts`).
+    pathname.startsWith("/review/") ||
+    pathname.startsWith("/api/review/") ||
     // KRITISCH (CROSS-TENANT-LEAK-FIX): Interne Block-LP-Route. Wird
     // vom /v/[slug]-Dispatcher via Loopback-Fetch
     // (http://127.0.0.1:3000/lp-block/<slug>?_host=...) aufgerufen.

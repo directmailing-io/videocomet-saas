@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   Globe,
   LayoutTemplate,
+  MessageSquare,
   MonitorPlay,
   Play,
   Save,
@@ -56,6 +57,7 @@ import {
   renderSlugTemplate,
 } from "@/lib/slug";
 import { IntroSettingsCard } from "./intro-settings-card";
+import { FeedbackPanel } from "./feedback-panel";
 
 export interface EditCampaignWebcam {
   id: string;
@@ -322,6 +324,10 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
             <TabsTrigger value="brief">
               <FileText className="size-4" />
               PDF-Brief
+            </TabsTrigger>
+            <TabsTrigger value="feedback">
+              <MessageSquare className="size-4" />
+              Feedback-Link
             </TabsTrigger>
           </TabsList>
 
@@ -1046,6 +1052,13 @@ export function EditCampaignForm({ data }: { data: EditCampaignData }) {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="feedback" className="space-y-5">
+            <FeedbackPanel
+              campaignId={data.campaign.id}
+              hasVideo={!!state.webcamMediaId}
+            />
           </TabsContent>
         </Tabs>
       </div>
