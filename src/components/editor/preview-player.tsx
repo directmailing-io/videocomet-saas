@@ -420,6 +420,15 @@ export function PreviewPlayer({
     [computeStagePlayback],
   );
 
+  /** Ref-Spiegel für Callbacks/rAF-Loop, deren Effekte an konstanten
+   *  Dependencies hängen. Ohne diese Ref würde ein Segment-Wechsel
+   *  mitten in der Wiedergabe bis zum nächsten Play/Pause die alte
+   *  Windows-Semantik nutzen. */
+  const computeStagePlaybackRef = React.useRef(computeStagePlayback);
+  React.useEffect(() => {
+    computeStagePlaybackRef.current = computeStagePlayback;
+  }, [computeStagePlayback]);
+
   /**
    * Berechnet die Soll-`currentTime` der Webcam-Spur (immer am globalen
    * Playhead, geclamped auf die Webcam-Dauer falls bekannt).
@@ -482,7 +491,7 @@ export function PreviewPlayer({
         if (stEl && isVideoSegment) {
           stEl.muted = true;
           // Nur play, wenn wir gerade in einem Playback-Fenster sind.
-          const play = computeStagePlayback(playheadRef.current);
+          const play = computeStagePlaybackRef.current(playheadRef.current);
           if (play?.shouldPlay) {
             stEl.play().catch(() => {});
           } else if (!stEl.paused) {
@@ -579,7 +588,7 @@ export function PreviewPlayer({
           }
           const stEl = stageVideoRef.current;
           if (stEl && isVideoSegment) {
-            const stagePlay = computeStagePlayback(nextMs);
+            const stagePlay = computeStagePlaybackRef.current(nextMs);
             if (stagePlay) {
               // Play/Pause-Übergang: playbackWindows-Grenze überschritten?
               if (stagePlay.shouldPlay && stEl.paused) {
@@ -731,11 +740,26 @@ export function PreviewPlayer({
 
   function onStageVideoCanPlay() {
     setStageVideoReady(true);
-    if (playingRef.current) {
-      const el = stageVideoRef.current;
-      if (el) {
-        el.muted = true;
-        el.play().catch(() => {});
+    if (!playingRef.current) return;
+    const el = stageVideoRef.current;
+    if (!el) return;
+    // Nur play() rufen wenn wir laut playbackWindows GERADE spielen
+    // sollen (sonst startet das Video bei jedem Segment-Wechsel bereits
+    // vor dem ersten Window und wird erst 250 ms später vom Drift-Loop
+    // wieder pausiert — sichtbar als kurzer Blitz).
+    const stagePlay = computeStagePlaybackRef.current(playheadRef.current);
+    if (stagePlay?.shouldPlay) {
+      el.muted = true;
+      el.play().catch(() => {});
+    } else if (stagePlay) {
+      // Freeze-Frame auf die Soll-Position setzen, damit der User NICHT
+      // Frame 0 sondern die richtige Standbild-Position sieht.
+      try {
+        if (Math.abs(el.currentTime - stagePlay.sourceSec) > 0.05) {
+          el.currentTime = stagePlay.sourceSec;
+        }
+      } catch {
+        /* ignore */
       }
     }
   }
