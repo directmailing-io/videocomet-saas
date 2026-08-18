@@ -30,16 +30,31 @@ interface CustomFieldDef {
   detectedType: string;
 }
 
-const SLOT_OPTIONS: Array<{ value: ContactFieldSlot | "ignore"; label: string }> = [
-  { value: "email", label: "E-Mail" },
-  { value: "firstName", label: "Vorname" },
-  { value: "lastName", label: "Nachname" },
-  { value: "fullName", label: "Vollständiger Name" },
-  { value: "company", label: "Firma" },
-  { value: "phone", label: "Telefon" },
-  { value: "linkedinUrl", label: "LinkedIn" },
-  { value: "custom", label: "+ Neues eigenes Feld" },
-  { value: "ignore", label: "Nicht importieren" },
+const SLOT_OPTIONS: Array<{ value: ContactFieldSlot | "ignore"; label: string; group: "Person" | "Kontakt" | "Firma" | "Adresse" | "Anderes" }> = [
+  // Person
+  { value: "salutation", label: "Anrede", group: "Person" },
+  { value: "title", label: "Titel", group: "Person" },
+  { value: "firstName", label: "Vorname", group: "Person" },
+  { value: "lastName", label: "Nachname", group: "Person" },
+  { value: "fullName", label: "Vollständiger Name", group: "Person" },
+  { value: "gender", label: "Geschlecht", group: "Person" },
+  { value: "externalId", label: "ID (externe Kunden-Nr.)", group: "Person" },
+  // Kontakt
+  { value: "email", label: "E-Mail", group: "Kontakt" },
+  { value: "phone", label: "Telefon", group: "Kontakt" },
+  { value: "website", label: "Website", group: "Kontakt" },
+  { value: "linkedinUrl", label: "LinkedIn", group: "Kontakt" },
+  // Firma
+  { value: "company", label: "Firma", group: "Firma" },
+  { value: "position", label: "Position", group: "Firma" },
+  // Adresse
+  { value: "street", label: "Straße", group: "Adresse" },
+  { value: "postalCode", label: "PLZ", group: "Adresse" },
+  { value: "city", label: "Ort", group: "Adresse" },
+  { value: "country", label: "Land", group: "Adresse" },
+  // Anderes
+  { value: "custom", label: "+ Neues eigenes Feld", group: "Anderes" },
+  { value: "ignore", label: "Nicht importieren", group: "Anderes" },
 ];
 
 export function Step2Import({
@@ -373,13 +388,13 @@ export function Step2Import({
                       }}
                       className="w-full px-3 py-2 rounded-lg border border-line bg-surface text-sm"
                     >
-                      <optgroup label="Basis-Felder">
-                        {SLOT_OPTIONS.filter((s) =>
-                          ["email", "firstName", "lastName", "fullName", "company", "phone", "linkedinUrl"].includes(s.value),
-                        ).map((s) => (
-                          <option key={s.value} value={s.value}>{s.label}</option>
-                        ))}
-                      </optgroup>
+                      {(["Person", "Kontakt", "Firma", "Adresse"] as const).map((g) => (
+                        <optgroup key={g} label={g}>
+                          {SLOT_OPTIONS.filter((s) => s.group === g).map((s) => (
+                            <option key={s.value} value={s.value}>{s.label}</option>
+                          ))}
+                        </optgroup>
+                      ))}
                       {customFields.length > 0 && (
                         <optgroup label="Deine eigenen Felder">
                           {customFields.map((cf) => (
