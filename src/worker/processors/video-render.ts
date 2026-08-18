@@ -289,6 +289,11 @@ export async function fetchToFile(url: string, outPath: string): Promise<void> {
       const res = await fetch(c.url, { headers: baseHeaders });
       if (res.ok) {
         const buf = Buffer.from(await res.arrayBuffer());
+        const problem = describeInvalidMediaBuffer(buf);
+        if (problem) {
+          lastErr = `${problem} ${c.label}`;
+          continue;
+        }
         await writeFile(outPath, buf);
         return;
       }
@@ -307,7 +312,31 @@ export async function fetchToFile(url: string, outPath: string): Promise<void> {
     );
   }
   const buf = Buffer.from(await res.arrayBuffer());
+  const problem = describeInvalidMediaBuffer(buf);
+  if (problem) {
+    throw new Error(`[render] webcam fetch invalid body (${problem}) ${url}`);
+  }
   await writeFile(outPath, buf);
+}
+
+/**
+ * CDNs/Proxies liefern gelegentlich HTTP 200 mit einer HTML-Fehlerseite
+ * oder einem leeren Body (z. B. Bunny-Edge-Glitch, Hotlink-Block-Seite).
+ * Solche Bodies dürfen NIE als Mediendatei auf Disk landen — ffmpeg würde
+ * daraus stille Black-Frames machen (Bug-Familie 2026-08-18).
+ * Returns null wenn der Buffer plausibel Medien-Content ist.
+ */
+export function describeInvalidMediaBuffer(buf: Buffer): string | null {
+  if (buf.byteLength === 0) return "0 bytes";
+  const head = buf
+    .subarray(0, 256)
+    .toString("utf8")
+    .trimStart()
+    .toLowerCase();
+  if (head.startsWith("<!doctype") || head.startsWith("<html")) {
+    return "html error page";
+  }
+  return null;
 }
 
 /**

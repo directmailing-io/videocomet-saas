@@ -33,6 +33,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { requireUserApi } from "@/lib/auth-guard";
 import { createMediaItem } from "@/lib/db/queries/media";
+import {
+  addBunnyAssetRef,
+  trackBunnyAsset,
+} from "@/lib/db/queries/bunny-assets";
 import { uploadFile } from "@/lib/bunny/storage";
 
 const PPTX_MIME =
@@ -153,6 +157,25 @@ export async function POST(req: NextRequest) {
       width: null,
       height: null,
     });
+    // PPTX im Asset-Register verankern (Ref auf das media_item): beim
+    // Löschen des Mediathek-Eintrags purged der Worker die Storage-Datei.
+    // Vorher lag die PPTX untracked in Bunny und blieb für immer liegen.
+    try {
+      const tracked = await trackBunnyAsset({
+        userId: auth.user.id,
+        kind: "storage",
+        bunnyId: uploadResult.remotePath,
+        cdnUrl: uploadResult.url,
+        bytes,
+      });
+      await addBunnyAssetRef(tracked.assetId, "media_item", media.id);
+    } catch (trackErr) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[api/canva/upload] asset tracking failed:",
+        trackErr instanceof Error ? trackErr.message : trackErr,
+      );
+    }
     return NextResponse.json(
       {
         mediaId: media.id,

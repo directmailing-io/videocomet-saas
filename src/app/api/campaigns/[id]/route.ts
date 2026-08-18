@@ -16,6 +16,7 @@ import { removeBunnyAssetRefsForOwner } from "@/lib/db/queries/bunny-assets";
 import { triggerBunnyPurgeTick } from "@/lib/bunny/purge-trigger";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
 import { ensureIntroCalibration } from "@/lib/intro-calibration-enqueue";
+import { syncCampaignMediaRefs } from "@/lib/bunny/campaign-media-refs";
 
 const patchSchema = z.object({
   name: z.string().min(1).max(120).optional(),
@@ -129,6 +130,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   };
   try {
     const campaign = await updateCampaign(params.id, auth.user.id, patch);
+    // Storage-Dateien der Segmente (PDF/PPTX/Thumbnails) im Asset-Register
+    // nachziehen: neue Dateien bekommen Refs, ersetzte verlieren ihre —
+    // der Purge-Worker räumt sie dann aus Bunny. Fire-and-forget.
+    if (rest.segments !== undefined) {
+      void syncCampaignMediaRefs(
+        auth.user.id,
+        params.id,
+        rest.segments,
+      ).catch((err) =>
+        console.warn(
+          "[campaigns:patch] campaign_media sync failed:",
+          err instanceof Error ? err.message : err,
+        ),
+      );
+    }
     // Kalibrierung für die KI-Begrüßung anstoßen, sobald der Entwurf
     // fertiggestellt wird (Spiegel zur POST-Logik bei Direkt-Erstellung).
     if (activating && campaign.introEnabled && campaign.webcamMediaId) {
@@ -210,6 +226,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
       ...leadIds.map((id) => removeBunnyAssetRefsForOwner("lead", id)),
       ...runIds.map((id) => removeBunnyAssetRefsForOwner("run", id)),
       removeBunnyAssetRefsForOwner("campaign_webcam", params.id),
+      // Segment-Storage-Dateien (PDF/PPTX/Thumbnails, Migration 0062).
+      removeBunnyAssetRefsForOwner("campaign_media", params.id),
     ]);
   } catch (err) {
     // Soft-Delete ist bereits durch — UI sieht Cleanup, der Worker-Cron

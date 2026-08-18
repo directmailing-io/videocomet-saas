@@ -182,6 +182,19 @@ async function downloadPdf(url: string, outPath: string): Promise<void> {
         `[pdf-segment] PDF too large: ${buf.byteLength} bytes (max ${MAX_PDF_BYTES})`,
       );
     }
+    // Magic-Number `%PDF` — CDNs können HTTP 200 mit einer HTML-Fehlerseite
+    // liefern; pdftoppm würde daraus stumm kaputte/schwarze Frames machen.
+    if (
+      buf.byteLength < 4 ||
+      buf[0] !== 0x25 || // %
+      buf[1] !== 0x50 || // P
+      buf[2] !== 0x44 || // D
+      buf[3] !== 0x46 // F
+    ) {
+      throw new Error(
+        "[pdf-segment] downloaded file is not a PDF (magic number mismatch)",
+      );
+    }
     await writeFile(outPath, buf);
   } finally {
     clearTimeout(timer);

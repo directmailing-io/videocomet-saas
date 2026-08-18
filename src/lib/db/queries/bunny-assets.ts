@@ -26,7 +26,14 @@ import { db } from "@/lib/db";
 import { bunnyAssetRefs, bunnyAssets } from "@/lib/db/schema";
 
 export type BunnyAssetKind = "stream" | "storage";
-export type OwnerType = "lead" | "run" | "media_item" | "campaign_webcam";
+export type OwnerType =
+  | "lead"
+  | "run"
+  | "media_item"
+  | "campaign_webcam"
+  // Storage-Dateien, die in campaigns.segments referenziert sind (PDF-
+  // Segmente, Canva-PPTX, Folien-Thumbnails) — Migration 0062.
+  | "campaign_media";
 export type BunnyPurgeState = "live" | "purge_pending" | "purged";
 
 export interface TrackBunnyAssetInput {
@@ -181,6 +188,28 @@ export async function removeStreamAssetRefsForGuids(
         ),
       );
   }
+}
+
+/**
+ * Entfernt die Refs EINES Owners auf BESTIMMTE Assets (statt alle). Für den
+ * campaign_media-Sync: ersetzte Segment-Dateien verlieren nur ihre eigene
+ * Ref, die weiterhin referenzierten Dateien bleiben unangetastet.
+ */
+export async function removeBunnyAssetRefsByAssetIds(
+  assetIds: string[],
+  ownerType: OwnerType,
+  ownerId: string,
+): Promise<void> {
+  if (assetIds.length === 0) return;
+  await db
+    .delete(bunnyAssetRefs)
+    .where(
+      and(
+        inArray(bunnyAssetRefs.assetId, assetIds),
+        eq(bunnyAssetRefs.ownerType, ownerType),
+        eq(bunnyAssetRefs.ownerId, ownerId),
+      ),
+    );
 }
 
 /**

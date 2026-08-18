@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/queries/campaigns";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
 import { ensureIntroCalibration } from "@/lib/intro-calibration-enqueue";
+import { syncCampaignMediaRefs } from "@/lib/bunny/campaign-media-refs";
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -122,6 +123,18 @@ export async function POST(req: NextRequest) {
         ? undefined
         : (thumbnailImage as CampaignThumbnailImage | null),
   });
+
+  // Storage-Dateien der Segmente (PDF/PPTX/Thumbnails) im Asset-Register
+  // verankern — fire-and-forget, darf den Save nie blockieren.
+  if (body.segments !== undefined) {
+    void syncCampaignMediaRefs(auth.user.id, campaign.id, body.segments).catch(
+      (err) =>
+        console.warn(
+          "[campaigns:create] campaign_media sync failed:",
+          err instanceof Error ? err.message : err,
+        ),
+    );
+  }
 
   // Kalibrierung erst anstoßen, wenn die Kampagne wirklich fertig ist —
   // bei Entwürfen passiert das später im Aktivierungs-PATCH.
