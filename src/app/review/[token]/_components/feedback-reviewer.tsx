@@ -18,6 +18,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toaster";
 import { toastError } from "@/lib/toast-error";
 import { cn } from "@/lib/utils";
+import { PreviewPlayer } from "@/components/editor/preview-player";
+import type { Segment } from "@/lib/segments/types";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +43,10 @@ export interface ReviewerVideo {
   durationSec: number | null;
   width: number | null;
   height: number | null;
+  mode: "webcam-only" | "with-presentation";
+  segments: unknown | null;
+  pipPosition: "bottom-left" | "bottom-right";
+  pipShape: "square" | "rounded" | "circle";
 }
 
 interface ReviewerProps {
@@ -100,6 +106,19 @@ export function FeedbackReviewer({
   const [duration, setDuration] = React.useState<number>(video.durationSec ?? 0);
   const [comments, setComments] = React.useState<ReviewerComment[]>(initialComments);
 
+  // Seek/Pause an den PreviewPlayer (nur bei with-presentation genutzt).
+  const [seekRequest, setSeekRequest] = React.useState<{ ms: number; nonce: number } | null>(null);
+  const [pauseRequest, setPauseRequest] = React.useState<{ nonce: number } | null>(null);
+  const seekNonceRef = React.useRef(0);
+  const pauseNonceRef = React.useRef(0);
+
+  // Entscheidung: PreviewPlayer (Präsentation) oder natives <video>?
+  const usePresentation =
+    video.mode === "with-presentation" &&
+    Array.isArray(video.segments) &&
+    (video.segments as unknown[]).length > 0;
+  const segmentList = usePresentation ? ((video.segments as Segment[]) ?? []) : [];
+
   // Kommentar-Eingabe
   const [body, setBody] = React.useState("");
   const [attachTime, setAttachTime] = React.useState(true);
@@ -133,20 +152,46 @@ export function FeedbackReviewer({
     setDuration(el.duration || video.durationSec || 0);
   }, [video.durationSec]);
 
-  const seekTo = React.useCallback((sec: number) => {
-    const el = videoRef.current;
-    if (!el) return;
-    el.currentTime = Math.max(0, Math.min(sec, el.duration || sec));
-    // Play nicht auto-triggern — der Empfänger entscheidet selbst.
-  }, []);
+  const seekTo = React.useCallback(
+    (sec: number) => {
+      if (usePresentation) {
+        seekNonceRef.current += 1;
+        setSeekRequest({ ms: Math.max(0, sec) * 1000, nonce: seekNonceRef.current });
+        return;
+      }
+      const el = videoRef.current;
+      if (!el) return;
+      el.currentTime = Math.max(0, Math.min(sec, el.duration || sec));
+    },
+    [usePresentation],
+  );
 
   // Fokus ins Kommentar-Feld → Video pausieren + Timestamp attachen
   const onFocusComment = React.useCallback(() => {
+    if (usePresentation) {
+      pauseNonceRef.current += 1;
+      setPauseRequest({ nonce: pauseNonceRef.current });
+      return;
+    }
     const el = videoRef.current;
     if (el && !el.paused) el.pause();
-  }, []);
+  }, [usePresentation]);
 
-  const totalSec = duration || video.durationSec || 0;
+  // Bei Präsentation ergibt sich totalSec aus der Summe der Segment-Dauern
+  // (durationMs) — nicht aus der Webcam-Länge. Die Webcam läuft global mit,
+  // ist aber nicht die Länge der Timeline.
+  const presentationTotalSec = React.useMemo(() => {
+    if (!usePresentation) return 0;
+    let total = 0;
+    for (const s of segmentList) {
+      const ms = typeof (s as { durationMs?: number }).durationMs === "number" ? (s as { durationMs?: number }).durationMs! : 0;
+      total += ms;
+    }
+    return total / 1000;
+  }, [usePresentation, segmentList]);
+  const totalSec = usePresentation
+    ? presentationTotalSec
+    : duration || video.durationSec || 0;
 
   // Timeline-Marker-Positionen (%)
   const positionedComments = React.useMemo(() => {
@@ -305,7 +350,18 @@ export function FeedbackReviewer({
         {/* ── Player + Timeline + Kommentar-Feld ─────────────────────── */}
         <div className="space-y-3">
           <div className="relative overflow-hidden rounded-2xl bg-black shadow-sm">
-            {video.videoUrl ? (
+            {usePresentation ? (
+              <PreviewPlayer
+                segments={segmentList}
+                webcamUrl={video.videoUrl}
+                webcamDurationSec={video.durationSec}
+                pipPosition={video.pipPosition}
+                pipShape={video.pipShape}
+                onTimeChange={(ms) => setCurrentSec(ms / 1000)}
+                seekRequest={seekRequest}
+                pauseRequest={pauseRequest}
+              />
+            ) : video.videoUrl ? (
               <video
                 ref={videoRef}
                 src={video.videoUrl}

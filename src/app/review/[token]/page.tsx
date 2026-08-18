@@ -55,6 +55,10 @@ export default async function ReviewPage({
           durationSec: null,
           width: null,
           height: null,
+          mode: "webcam-only",
+          segments: null,
+          pipPosition: "bottom-left",
+          pipShape: "rounded",
         }
       }
       initialComments={comments.map((c) => ({

@@ -59,6 +59,12 @@ export interface PreviewPlayerProps {
   onPipClick?: () => void;
   /** Hebt die Webcam-Blase hervor (z. B. wenn im Inspector ausgewählt). */
   pipSelected?: boolean;
+  /**
+   * Externer Pause-Befehl (z. B. Reviewer: Klick ins Kommentar-Feld). Bei
+   * neuem `nonce` wird `playing` auf false gesetzt — analog zu `seekRequest`,
+   * kein Play-Befehl.
+   */
+  pauseRequest?: { nonce: number } | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -146,6 +152,7 @@ export function PreviewPlayer({
   onTimeChange,
   onPipClick,
   pipSelected,
+  pauseRequest,
 }: PreviewPlayerProps) {
   const totalDurationMs = React.useMemo(
     () => getTotalDurationMs(segments),
@@ -303,6 +310,14 @@ export function PreviewPlayer({
     // Nur bei Längenänderung neu auswerten.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalDurationMs]);
+
+  // Externer Pause (Reviewer: Klick ins Kommentar-Feld). Nur bei neuem nonce.
+  const pauseNonce = pauseRequest?.nonce ?? null;
+  React.useEffect(() => {
+    if (pauseNonce === null) return;
+    setPlaying(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pauseNonce]);
 
   // Externer Seek (Timeline-Klick, Segment-Auswahl): Playhead hart setzen.
   const seekNonce = seekRequest?.nonce ?? null;

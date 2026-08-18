@@ -48,6 +48,12 @@ export interface FeedbackVideoMeta {
   durationSec: number | null;
   width: number | null;
   height: number | null;
+  /** "webcam-only" → native Player. "with-presentation" → PreviewPlayer + Segmente. */
+  mode: "webcam-only" | "with-presentation";
+  /** JSON-Blob mit dem Segments-Array (siehe `Segment`-Type). Nur befüllt wenn `mode === "with-presentation"`. */
+  segments: unknown | null;
+  pipPosition: "bottom-left" | "bottom-right";
+  pipShape: "square" | "rounded" | "circle";
 }
 
 export interface FeedbackCommentRow {
@@ -142,6 +148,10 @@ export async function getFeedbackVideoMeta(
       campaignName: campaigns.name,
       deletedAt: campaigns.deletedAt,
       webcamMediaId: campaigns.webcamMediaId,
+      mode: campaigns.mode,
+      segments: campaigns.segments,
+      pipPosition: campaigns.pipPosition,
+      pipShape: campaigns.pipShape,
       videoUrl: mediaItems.publicUrl,
       durationSec: mediaItems.durationSec,
       width: mediaItems.width,
@@ -152,6 +162,10 @@ export async function getFeedbackVideoMeta(
     .where(eq(campaigns.id, campaignId))
     .limit(1);
   if (!row || row.deletedAt) return null;
+  const isPresentation = row.mode === "with-presentation";
+  const pipPos = row.pipPosition === "bottom-right" ? "bottom-right" : "bottom-left";
+  const pipShape =
+    row.pipShape === "square" ? "square" : row.pipShape === "circle" ? "circle" : "rounded";
   return {
     campaignId: row.campaignId,
     campaignName: row.campaignName,
@@ -160,6 +174,10 @@ export async function getFeedbackVideoMeta(
     durationSec: row.durationSec ?? null,
     width: row.width ?? null,
     height: row.height ?? null,
+    mode: isPresentation ? "with-presentation" : "webcam-only",
+    segments: isPresentation ? (row.segments ?? []) : null,
+    pipPosition: pipPos,
+    pipShape,
   };
 }
 
@@ -452,6 +470,10 @@ export async function getOwnerLinkForCampaign(
       durationSec: null,
       width: null,
       height: null,
+      mode: "webcam-only",
+      segments: null,
+      pipPosition: "bottom-left",
+      pipShape: "rounded",
     },
     comments,
     unresolvedCount: unresolved,
