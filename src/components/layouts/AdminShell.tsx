@@ -12,6 +12,7 @@ import {
   Menu,
   User as UserIcon,
   Globe,
+  Target,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,7 @@ export type AdminNavKey =
   | "users"
   | "domains"
   | "email"
+  | "meta-events"
   | "system"
   | "settings";
 
@@ -67,6 +69,7 @@ const NAV: NavItem[] = [
   { key: "users", label: "User-Verwaltung", href: "/admin/users", icon: Users },
   { key: "domains", label: "Domains", href: "/admin/domains", icon: Globe },
   { key: "email", label: "E-Mail-Outreach", href: "/admin/email-outreach", icon: Send },
+  { key: "meta-events", label: "Meta Pixel", href: "/admin/meta-events", icon: Target },
   { key: "system", label: "System", href: "/admin/system", icon: ServerCog },
   { key: "settings", label: "Einstellungen", href: "/admin/settings", icon: Settings },
 ];

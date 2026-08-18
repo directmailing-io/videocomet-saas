@@ -22,6 +22,8 @@
  */
 
 import { hashForCapi } from "./hash";
+import { db } from "@/lib/db";
+import { metaEventLog } from "@/lib/db/schema";
 
 const GRAPH_API_VERSION = "v21.0";
 
@@ -83,6 +85,10 @@ export interface SendCapiInput {
   eventTime?: number;
   /** actionSource-Semantik: 'website' für Browser-getriggerte, 'system_generated' für Cron/Webhook. */
   actionSource?: "website" | "system_generated" | "app";
+  /** Für Admin-Log: User-ID (wenn bekannt) — wird NICHT an Meta geschickt. */
+  logUserId?: string | null;
+  /** Für Admin-Log: E-Mail (Klartext, nur intern angezeigt). */
+  logUserEmail?: string | null;
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -124,28 +130,51 @@ export async function sendCapiEvent(input: SendCapiInput): Promise<boolean> {
 
   const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${pixelId}/events?access_token=${encodeURIComponent(token)}`;
 
+  let httpStatus: number | null = null;
+  let ok = false;
+  let errorText: string | null = null;
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-      // Fail fast wenn Meta hängt — kein AbortController nötig, fetch timeoutet auf ~30s
     });
+    httpStatus = res.status;
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      console.warn(
-        `[meta-capi] non-2xx (${res.status}) for ${input.eventName}: ${text.slice(0, 300)}`,
-      );
-      return false;
+      errorText = `${res.status} ${text.slice(0, 300)}`;
+      console.warn(`[meta-capi] non-2xx for ${input.eventName}: ${errorText}`);
+    } else {
+      ok = true;
     }
-    return true;
   } catch (err) {
-    console.warn(
-      `[meta-capi] fetch failed for ${input.eventName}:`,
-      err instanceof Error ? err.message : err,
-    );
-    return false;
+    errorText = err instanceof Error ? err.message : String(err);
+    console.warn(`[meta-capi] fetch failed for ${input.eventName}:`, errorText);
   }
+
+  // Audit-Log — Fehler beim Schreiben dürfen den Track-Flow nicht crashen.
+  try {
+    await db.insert(metaEventLog).values({
+      eventName: input.eventName,
+      eventId: input.eventId,
+      userId: input.logUserId ?? null,
+      userEmail: input.logUserEmail ?? null,
+      value:
+        input.customData?.value != null
+          ? String(Number(input.customData.value).toFixed(2))
+          : null,
+      currency: (input.customData?.currency as string | undefined) ?? null,
+      actionSource,
+      sourceUrl: input.eventSourceUrl,
+      httpStatus,
+      ok,
+      error: errorText,
+    });
+  } catch (logErr) {
+    console.warn("[meta-capi] failed to write event-log row:", logErr);
+  }
+
+  return ok;
 }
 
 // ── Internals ───────────────────────────────────────────────────────────────

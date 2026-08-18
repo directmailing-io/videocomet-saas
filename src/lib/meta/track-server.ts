@@ -58,6 +58,7 @@ export async function trackServerBrowserEvent(input: {
   eventId?: string;
   userData: Omit<CapiUserData, "clientIpAddress" | "clientUserAgent" | "fbp" | "fbc">;
   customData?: CapiCustomData;
+  logUserId?: string | null;
 }): Promise<void> {
   try {
     if (!hasMarketingConsent(input.req)) return;
@@ -76,6 +77,8 @@ export async function trackServerBrowserEvent(input: {
         fbc,
       },
       customData: input.customData,
+      logUserId: input.logUserId ?? (input.userData.externalId ?? null),
+      logUserEmail: input.userData.email ?? null,
     });
   } catch (err) {
     console.warn(`[meta:track-server] ${input.eventName} failed:`, err);
@@ -95,6 +98,7 @@ export async function trackSystemPurchaseEvent(input: {
   eventSourceUrl?: string;
   userData: Omit<CapiUserData, "clientIpAddress" | "clientUserAgent" | "fbp" | "fbc">;
   customData: CapiCustomData;
+  logUserId?: string | null;
 }): Promise<void> {
   try {
     await sendCapiEvent({
@@ -105,6 +109,8 @@ export async function trackSystemPurchaseEvent(input: {
       actionSource: "system_generated",
       userData: input.userData,
       customData: input.customData,
+      logUserId: input.logUserId ?? (input.userData.externalId ?? null),
+      logUserEmail: input.userData.email ?? null,
     });
   } catch (err) {
     console.warn(`[meta:track-system] ${input.eventName} failed:`, err);

@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, smallint, real, doublePrecision, jsonb, pgEnum, index, unique, uniqueIndex, bigserial, date, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, boolean, integer, smallint, real, doublePrecision, jsonb, numeric, pgEnum, index, unique, uniqueIndex, bigserial, date, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
 
@@ -1199,6 +1199,33 @@ export const videoFeedbackLinkAttempts = pgTable("video_feedback_link_attempts",
   ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tokenTsIdx: index("video_feedback_link_attempts_token_ts_idx").on(t.token, t.ts),
+}));
+
+// ── Meta CAPI Event-Log (Migration 0061) ───────────────────────────────────
+// Ein Append-Only-Log jedes an Meta gesendeten Events — Timeline im Admin
+// zeigt, was rausgegangen ist, wann, für welchen User, mit welchem Status.
+// PII-Felder werden bewusst NICHT gespiegelt (die User-Row hat sie schon
+// im Klartext, hash-Kopie brächte nichts).
+export const metaEventLog = pgTable("meta_event_log", {
+  id: bigserial("id", { mode: "bigint" }).primaryKey(),
+  eventName: text("event_name").notNull(),
+  eventId: text("event_id").notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  userEmail: text("user_email"),
+  value: numeric("value", { precision: 12, scale: 2 }),
+  currency: text("currency"),
+  actionSource: text("action_source").notNull(),
+  sourceUrl: text("source_url"),
+  httpStatus: smallint("http_status"),
+  ok: boolean("ok").notNull(),
+  error: text("error"),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  sentAtIdx: index("meta_event_log_sent_at_idx").on(t.sentAt),
+  userIdx: index("meta_event_log_user_idx")
+    .on(t.userId)
+    .where(sql`${t.userId} IS NOT NULL`),
+  eventNameIdx: index("meta_event_log_event_name_idx").on(t.eventName, t.sentAt),
 }));
 
 // ── CRM-Integrations (Phase 1 — Datenlayer, Migration 0024) ────────────────
