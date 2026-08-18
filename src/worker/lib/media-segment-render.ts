@@ -382,6 +382,17 @@ export function planVideoPieces(opts: {
     .filter((w) => w.stopMs > w.startMs)
     .sort((a, b) => a.startMs - b.startMs);
 
+  // KRITISCH: Ohne Playback-Fenster wird das Video normal von Anfang bis Ende
+  // (bzw. bis zum Segment-Ende) abgespielt. Ohne diesen Fallback rendert der
+  // Worker ein Standbild für die gesamte Segment-Dauer — das ist der einzige
+  // Grund, warum ein Video-Segment im finalen Lead-Video eingefroren wirken
+  // kann. Studio-Aufnahmen füllen `playbackWindows` selbst (aus Play/Pause-
+  // Events), aber Video-Segmente aus dem Editor haben das Feld nicht, weil
+  // dort keine expliziten Play-Events erzeugt werden.
+  if (sorted.length === 0) {
+    sorted.push({ startMs: 0, stopMs: total });
+  }
+
   const pieces: MediaPiece[] = [];
   let cursor = 0;
 
