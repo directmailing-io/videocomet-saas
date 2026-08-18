@@ -107,6 +107,18 @@ export interface VideoRenderInput {
    * so the upstream caller can pre-compute / re-order in a future change.
    */
   landingpageUrl?: string;
+  /**
+   * Wird gerufen, wenn ein Segment nicht gerendert werden konnte und durch
+   * einen schwarzen Ersatz-Clip ersetzt wurde (2026-08-18: solche Fallbacks
+   * liefen wochenlang still über console.warn — der ffmpeg-tmp-Extension-Bug
+   * machte ALLE Video-Szenen schwarz, ohne dass es im Run-Log auftauchte).
+   * Der Pipeline-Caller schreibt daraus ein error-Level pipeline_event.
+   */
+  onSegmentFallback?: (info: {
+    index: number;
+    kind: string;
+    reason: string;
+  }) => void;
 }
 
 /**
@@ -588,6 +600,7 @@ export async function runVideoRender(
       preflightFinalUrl: input.preflightFinalUrl ?? null,
       totalDurationSec: duration,
       introTrimMs: input.introTrimMs ?? 0,
+      onSegmentFallback: input.onSegmentFallback,
     });
   } else {
     await renderPresentationBase({
@@ -655,6 +668,11 @@ async function renderSegmentsBase(opts: {
   preflightFinalUrl?: string | null;
   totalDurationSec: number;
   introTrimMs?: number;
+  onSegmentFallback?: (info: {
+    index: number;
+    kind: string;
+    reason: string;
+  }) => void;
 }): Promise<void> {
   // Intro-Kompensation (vordere Segmente um introTrimMs kürzen, damit
   // Segmentwechsel synchron zur früher liegenden Sprache bleiben) +
@@ -691,6 +709,16 @@ async function renderSegmentsBase(opts: {
     const { seg, durationMs: clampedMs } = clampedSegments[i];
     const partPath = join(opts.outDir, `seg-${i}.mp4`);
     const durationMs = clampedMs;
+
+    // Schwarzer Ersatz-Clip + Meldung nach oben (pipeline_event level=error)
+    // — Black-Fallbacks dürfen NIE wieder still passieren (Bug 2026-08-18).
+    const blackFallback = async (reason: string) => {
+      opts.onSegmentFallback?.({ index: i, kind: seg.kind, reason });
+      await generateBlackClip({
+        outputPath: partPath,
+        durationSec: durationMs / 1000,
+      });
+    };
 
     try {
       if (seg.kind === "text") {
@@ -740,10 +768,7 @@ async function renderSegmentsBase(opts: {
             ? probed
             : leadUrl;
         if (!url) {
-          await generateBlackClip({
-            outputPath: partPath,
-            durationSec: durationMs / 1000,
-          });
+          await blackFallback("Keine Webseiten-URL für diesen Lead auflösbar");
         } else {
           // Sharp-basierte Pipeline mit Browser-Chrome-Overlay — sieht aus
           // wie eine echte Bildschirm-Aufnahme. Fallback auf
@@ -789,10 +814,7 @@ async function renderSegmentsBase(opts: {
         // als HTML exportieren, Placeholder substituieren, in Puppeteer per
         // `file://` rendern und capturen.
         if (!seg.docsUrl || !seg.docsUrl.trim()) {
-          await generateBlackClip({
-            outputPath: partPath,
-            durationSec: durationMs / 1000,
-          });
+          await blackFallback("Google-Docs-Segment ohne Dokument-URL");
         } else {
           const vars = buildGDocsVars(
             opts.leadData ?? {},
@@ -849,10 +871,7 @@ async function renderSegmentsBase(opts: {
         // User die Veröffentlichung zurückgezogen hat), fängt der catch
         // weiter unten und liefert einen Black-Clip.
         if (!seg.publishedUrl?.trim()) {
-          await generateBlackClip({
-            outputPath: partPath,
-            durationSec: durationMs / 1000,
-          });
+          await blackFallback("Google-Slides-Segment ohne veröffentlichte URL");
         } else {
           const { renderGSlideToMp4 } = await import("../lib/gslide-render");
           await renderGSlideToMp4({
@@ -871,10 +890,7 @@ async function renderSegmentsBase(opts: {
         // LibreOffice, fängt der catch weiter unten und liefert einen
         // Black-Clip.
         if (!seg.pptxPublicUrl?.trim()) {
-          await generateBlackClip({
-            outputPath: partPath,
-            durationSec: durationMs / 1000,
-          });
+          await blackFallback("Canva-Segment ohne hochgeladene PPTX-Datei");
         } else {
           const { renderCanvaSlideToMp4 } = await import("../lib/canva-render");
           await renderCanvaSlideToMp4({
@@ -894,10 +910,7 @@ async function renderSegmentsBase(opts: {
         // und cached das fertige MP4 prozessweit, weil das Ergebnis für
         // alle Leads einer Kampagne identisch ist.
         if (!seg.pdfUrl?.trim()) {
-          await generateBlackClip({
-            outputPath: partPath,
-            durationSec: durationMs / 1000,
-          });
+          await blackFallback("PDF-Segment ohne hochgeladene Datei");
         } else {
           console.log(
             `[render] pdf segment ${seg.id}: "${seg.fileName}" (${seg.pageCount} Seiten, mode=${seg.captureMode})`,
@@ -914,10 +927,7 @@ async function renderSegmentsBase(opts: {
         // Bild-Segment (Studio): statisches Bild, contain auf dunklem
         // Bühnen-Grund — für alle Leads identisch, prozessweit gecached.
         if (!seg.publicUrl?.trim()) {
-          await generateBlackClip({
-            outputPath: partPath,
-            durationSec: durationMs / 1000,
-          });
+          await blackFallback("Bild-Segment ohne hochgeladene Datei");
         } else {
           const { renderImageSegment } = await import(
             "../lib/media-segment-render"
@@ -934,10 +944,7 @@ async function renderSegmentsBase(opts: {
         // in den Wiedergabefenstern (playbackWindows) inkl. Original-Ton.
         // Ohne Fenster: Poster-Still über die gesamte Segmentdauer.
         if (!seg.publicUrl?.trim()) {
-          await generateBlackClip({
-            outputPath: partPath,
-            durationSec: durationMs / 1000,
-          });
+          await blackFallback("Video-Segment ohne hochgeladene Datei");
         } else {
           const { renderVideoSegment } = await import(
             "../lib/media-segment-render"
@@ -954,10 +961,9 @@ async function renderSegmentsBase(opts: {
         console.warn(
           `[render] segment kind=${(seg as Segment).kind} not supported — using placeholder`,
         );
-        await generateBlackClip({
-          outputPath: partPath,
-          durationSec: durationMs / 1000,
-        });
+        await blackFallback(
+          `Unbekannter Segment-Typ „${(seg as Segment).kind}"`,
+        );
       }
       parts.push(partPath);
     } catch (e) {
@@ -965,10 +971,7 @@ async function renderSegmentsBase(opts: {
         `[render] segment ${i} (${seg.kind}) failed; using black clip:`,
         e instanceof Error ? e.message : e,
       );
-      await generateBlackClip({
-        outputPath: partPath,
-        durationSec: durationMs / 1000,
-      });
+      await blackFallback(e instanceof Error ? e.message : String(e));
       parts.push(partPath);
     }
   }

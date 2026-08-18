@@ -108,7 +108,7 @@ async function sweepMediaSegCache(): Promise<void> {
  * Promise), kopiert danach nur noch aus dem Cache. `produce` schreibt das
  * fertige MP4 nach `tmpPath` (atomarer rename ins Cache-Target).
  */
-async function renderCached(
+export async function renderCached(
   key: string,
   outputPath: string,
   label: string,
@@ -168,6 +168,16 @@ async function renderCached(
     const tmp = `${target}.tmp.${process.pid}.${Date.now()}.mp4`;
     try {
       await withTimeout(produce(tmp), HARD_TIMEOUT_MS, label);
+      // Output validieren BEVOR es in den Cache wandert: ein kaputtes MP4
+      // (0 Bytes, Torso, falsches Format) würde sonst still gecached und
+      // an ALLE Leads der Runde ausgeliefert. Lieber laut failen — der
+      // Fallback im video-render meldet das dann als error-Event.
+      const producedSec = await probeVideoDuration(tmp).catch(() => null);
+      if (typeof producedSec !== "number" || producedSec <= 0) {
+        throw new Error(
+          `[media-segment] ${label} render produced invalid MP4 (duration=${producedSec ?? "unlesbar"})`,
+        );
+      }
       await rename(tmp, target); // atomar (gleiches FS)
       return target;
     } finally {

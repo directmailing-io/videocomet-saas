@@ -859,6 +859,17 @@ export async function pipelineProcessor(
                     : "rounded",
             },
             defaultDurationSec: webcam.durationSec ?? 30,
+            // Black-Clip-Fallbacks NIE wieder still (Bug 2026-08-18: alle
+            // Video-Szenen schwarz, im Run-Log nichts zu sehen).
+            onSegmentFallback: ({ index, kind, reason }) => {
+              void insertPipelineEvent({
+                runId: data.runId,
+                leadId: data.leadId,
+                level: "error",
+                stage: "render",
+                message: `${leadLabel}: Szene ${index + 1} (${kind}) konnte nicht gerendert werden — schwarzer Ersatz-Clip. Grund: ${reason}`,
+              });
+            },
           }),
         STAGE_TIMEOUTS_MS.videoRender,
         "videoRender",
