@@ -156,12 +156,14 @@ async function finishUpload(
   thumbnailUrl: string,
   onProgress?: (info: { elapsedMs: number; lastStatus: number }) => void,
 ): Promise<VideoUploadOutput> {
+  // Nur width/height/mp4Url — hlsUrl + thumbnailUrl + bunnyVideoId sind
+  // bereits in runVideoUpload persistiert (damit ein tolerant-Timeout im
+  // pipeline.ts NICHT dazu führt, dass der Lead mit videoUrl=NULL completed
+  // wird). Bug 2026-08-18: bis dahin blieb bei jedem Bunny-Timeout die
+  // videoUrl leer → Player-Blank-Screen.
   const meta = await resolvePostUploadMeta(videoId, hlsUrl, onProgress);
 
   await updateLeadStatus(leadId, {
-    bunnyVideoId: videoId,
-    videoUrl: hlsUrl,
-    thumbnailUrl,
     videoWidth: meta.width,
     videoHeight: meta.height,
     videoOrientation: meta.orientation,
@@ -187,12 +189,18 @@ export async function runVideoUpload(
     title: input.title,
   });
 
-  // GUID sofort persistieren (nur die GUID — videoUrl bleibt null, denn
-  // `lead.videoUrl != null` bedeutet "Video-Stages komplett fertig" und
-  // steuert die Skip-Logik in pipeline.ts). Damit kann ein Retry nach
-  // Encoding-Timeout via runVideoUploadResume hier weitermachen.
+  // Sofort persistieren: GUID + HLS-URL + Thumbnail. Bunnys HLS-Endpoint
+  // ist ab status=2 (processing) abspielbar — der Player braucht keine
+  // Encoding-Fertigstellung. Fehlende width/height/mp4Url werden von
+  // finishUpload nachgetragen sobald Bunny bereit ist.
+  //
+  // Historisch (bis 2026-08-18) wurde videoUrl erst in finishUpload
+  // geschrieben — wenn dessen Wait timeoutete, blieb videoUrl NULL trotz
+  // fertigem HLS-Stream → Player-Blank-Screen im Lead-Video.
   await updateLeadStatus(input.leadId, {
     bunnyVideoId: result.videoId,
+    videoUrl: result.hlsUrl,
+    thumbnailUrl: result.thumbnailUrl,
     videoContentHash: input.contentHash ?? null,
   });
 

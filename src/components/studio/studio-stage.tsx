@@ -360,8 +360,13 @@ function StageVideo({
   const [failed, setFailed] = React.useState(false);
   /** Erzwingt frisches Laden nach „Erneut versuchen". */
   const [loadNonce, setLoadNonce] = React.useState(0);
+  /** Wie viele Auto-Retries schon gelaufen sind (frisch geuploadete Videos
+   *  brauchen 15-60s bis Bunny die MP4 bereit hat). */
+  const autoRetryRef = React.useRef(0);
+  const [autoRetrying, setAutoRetrying] = React.useState(false);
 
-  // Bunny-Stream-HLS → progressive MP4 (480p existiert für jedes Video).
+  // Bunny-Stream-HLS → progressive MP4 (480p existiert für jedes Video —
+  // sobald Bunny fertig encodiert hat).
   const src = React.useMemo(() => pickBunnyMp4Fallback(url), [url]);
 
   const startSecRef = React.useRef(startSec);
@@ -440,9 +445,36 @@ function StageVideo({
 
   const retry = React.useCallback(() => {
     setFailed(false);
+    setAutoRetrying(false);
     setPlaying(false);
+    autoRetryRef.current = 0;
     setLoadNonce((n) => n + 1);
     videoRef.current?.load();
+  }, []);
+
+  // Auto-Retry bei Load-Fehler: Bunny braucht nach dem Upload 15-60s
+  // Encoding-Zeit für den 480p-MP4-Fallback. In dieser Zeit gibt Bunny
+  // 404 zurück — der User sah bisher „Video konnte nicht geladen werden"
+  // und musste manuell klicken. Wir versuchen leise 5× mit Backoff.
+  const handleError = React.useCallback(() => {
+    if (autoRetryRef.current < 5) {
+      autoRetryRef.current += 1;
+      setAutoRetrying(true);
+      const delayMs = Math.min(3000 + autoRetryRef.current * 2000, 15000);
+      window.setTimeout(() => {
+        setLoadNonce((n) => n + 1);
+        videoRef.current?.load();
+      }, delayMs);
+    } else {
+      setAutoRetrying(false);
+      setFailed(true);
+    }
+  }, []);
+  const handleLoadedData = React.useCallback(() => {
+    // Erfolgreich geladen → Auto-Retry-Counter zurücksetzen.
+    autoRetryRef.current = 0;
+    setAutoRetrying(false);
+    setFailed(false);
   }, []);
 
   const locked = !onPlayback;
@@ -459,10 +491,19 @@ function StageVideo({
         playsInline
         preload="metadata"
         onEnded={handleEnded}
-        onError={() => setFailed(true)}
+        onError={handleError}
+        onLoadedData={handleLoadedData}
         className="size-full object-contain"
       />
 
+      {autoRetrying && !failed && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-black/40 text-white">
+          <span className="inline-block size-5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+          <p className="max-w-xs text-center text-xs leading-relaxed">
+            Dein Video wird gerade fertig aufbereitet…
+          </p>
+        </div>
+      )}
       {failed ? (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/50 text-white">
           <AlertCircle className="size-6" />
