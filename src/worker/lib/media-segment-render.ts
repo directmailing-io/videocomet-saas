@@ -648,7 +648,10 @@ export async function renderVideoSegment(
   const key = createHash("sha1")
     .update(
       JSON.stringify({
-        v: 1,
+        // v2: default-playback bei leeren windows (2026-08-18). Bumpen
+        // invalidiert Alt-Cache-Einträge, die bei windows:[] als Standbild
+        // gerendert wurden — sonst blockiert der Cache die neue Semantik.
+        v: 2,
         kind: "video",
         url: opts.segment.publicUrl,
         durationMs: opts.durationMs,
