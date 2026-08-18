@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import type { CropRatio, VideoSegment } from "@/lib/segments/types";
 import { AdvancedSettings } from "./advanced-settings";
+import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
 
 interface MediaItem {
   id: string;
@@ -55,10 +56,17 @@ export function SegmentEditorVideo({
   );
 
   const selectMedia = (item: MediaItem) => {
+    // Beim Video-Wechsel Trim-Werte + Original-Dauer zurücksetzen — sonst
+    // klebt z.B. trimEndMs=30s vom alten Video am neuen (kürzeren) Video
+    // und der Segment-Player zeigt gar nichts mehr. onLoadedMetadata setzt
+    // gleich die neue Dauer.
     onChange({
       ...segment,
       mediaId: item.id,
       publicUrl: item.publicUrl,
+      trimStartMs: 0,
+      trimEndMs: null,
+      originalDurationSec: null,
     });
   };
 
@@ -164,7 +172,7 @@ export function SegmentEditorVideo({
           <Label>Vorschau</Label>
           <video
             key={segment.publicUrl}
-            src={segment.publicUrl}
+            src={pickBunnyMp4Fallback(segment.publicUrl)}
             controls
             preload="metadata"
             onLoadedMetadata={onLoadedMetadata}
