@@ -214,10 +214,21 @@ export function Step4Mapping({
                         </optgroup>
                       )}
                       <optgroup label="Automatisch">
-                        <option value="sys:pageUrl">🔗 Landingpage-URL</option>
+                        <option value="sys:pageUrl">🔗 Landingpage-URL (automatisch pro Empfänger)</option>
                       </optgroup>
                     </select>
-                    {entry && (
+                    {entry?.source === "systemUrl" && entry.field === "pageUrl" && (
+                      <div className="mt-2 rounded-lg bg-brand-soft/60 px-3 py-2 text-[11px] leading-relaxed text-ink">
+                        <b>Automatisch pro Empfänger.</b> Dieser Platzhalter wird
+                        beim Versand mit der personalisierten Landingpage-URL
+                        ersetzt — z.&nbsp;B.{" "}
+                        <code className="rounded bg-white/70 px-1 font-mono">
+                          https://video.deine-domain.de/vorname-nachname-abc
+                        </code>
+                        . Kein Fallback nötig, funktioniert immer.
+                      </div>
+                    )}
+                    {entry && !(entry.source === "systemUrl" && entry.field === "pageUrl") && (
                       <>
                         <input
                           type="text"
@@ -284,6 +295,16 @@ function fieldLabel(field: string): string {
     company: "Firma",
     phone: "Telefon",
     linkedinUrl: "LinkedIn",
+    salutation: "Anrede",
+    title: "Titel",
+    externalId: "ID (externe Kunden-Nr.)",
+    street: "Straße",
+    postalCode: "PLZ",
+    city: "Ort",
+    country: "Land",
+    position: "Position",
+    website: "Website des Kunden",
+    gender: "Geschlecht",
   };
   return map[field] ?? field;
 }

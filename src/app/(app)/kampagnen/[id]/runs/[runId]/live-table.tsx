@@ -603,7 +603,31 @@ export function LiveTable({
   const total =
     counts.pending + counts.rendering + counts.uploading + counts.completed + counts.failed;
   const done = counts.completed + counts.failed;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  // Stage-aware Progress: rendert = 40 %, uploaded = 80 %, fertig = 100 %.
+  // Sonst zeigt der Balken 0 % obwohl alle Leads schon in Arbeit sind — was
+  // sich für den User wie ein hängender Job anfühlt.
+  const weightedProgress =
+    counts.rendering * 0.4 +
+    counts.uploading * 0.8 +
+    counts.completed * 1.0 +
+    counts.failed * 1.0;
+  const pct = total > 0 ? Math.round((weightedProgress / total) * 100) : 0;
+
+  // Aktuelle Stage-Beschreibung — was passiert gerade im Hintergrund?
+  // Wählt die "lauteste" Stage anhand der Zählungen.
+  const activeStageLabel = React.useMemo<string | null>(() => {
+    if (isTerminal) return null;
+    if (counts.uploading > 0 && counts.uploading >= counts.rendering) {
+      return "Videos werden zu Bunny hochgeladen und dort für die Wiedergabe vorbereitet";
+    }
+    if (counts.rendering > 0) {
+      return "Videos werden zusammengesetzt (Webcam + Präsentation + Cursor)";
+    }
+    if (counts.pending > 0) {
+      return "Warten auf den nächsten Worker-Slot";
+    }
+    return null;
+  }, [isTerminal, counts.uploading, counts.rendering, counts.pending]);
 
   // 1s ticker so the "Läuft seit:" label updates live while the run is running.
   // Stopped once the run terminates so we don't keep React waking up needlessly.
@@ -985,6 +1009,12 @@ export function LiveTable({
                       ? `${etaLabel} — Deine persönlichen Videos und Briefe entstehen gerade.`
                       : "Deine persönlichen Videos und Briefe entstehen gerade."}
                 </p>
+                {activeStageLabel && !isTerminal && (
+                  <p className="mt-0.5 text-[11px] text-ink-muted flex items-center gap-1.5">
+                    <span className="inline-block size-1.5 rounded-full bg-brand animate-pulse" />
+                    {activeStageLabel}
+                  </p>
+                )}
                 {runStatus === "completed" &&
                   counts.failed === 0 &&
                   hasEmailLeads && (
