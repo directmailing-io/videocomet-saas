@@ -357,18 +357,67 @@ export function PreviewPlayer({
   );
 
   /**
-   * Berechnet die Soll-`currentTime` des Bühnen-Videos relativ zur Quelle.
-   * Nimmt den AKTUELLEN playMs entgegen (nicht aus dem closure), damit der
-   * Drift-Check während der rAF-Schleife mit dem aktuellen Cursor rechnet.
+   * Berechnet die Soll-`currentTime` UND ob das Bühnen-Video an diesem
+   * Zeitpunkt spielen oder als Standbild eingefroren sein soll.
+   *
+   * Respektiert `playbackWindows` (aus Studio-Aufnahme mit Play/Pause-
+   * Events) — sonst würde die Preview das Video komplett durchlaufen
+   * lassen, obwohl der Worker es beim finalen Rendering nur in den
+   * Windows abspielt (Rest = still). Damit war Editor-Preview ≠ finales
+   * Video (Bug 2026-08-18: User drückte in Studio bei 5s auf Play, das
+   * gerenderte Video zeigte 0-5s Standbild, der Preview spielte durch).
+   *
+   * Semantik pro Video-Segment:
+   *   - Kein Window definiert → Video spielt normal (Default-Play)
+   *   - segLocalMs vor allen Windows → still, currentTime = trim
+   *   - segLocalMs innerhalb eines Windows → play, currentTime =
+   *     trim + akkumulierte-Playzeit-Vorheriger-Windows +
+   *     (segLocalMs - windowStart)
+   *   - segLocalMs zwischen Windows → still, currentTime bleibt am
+   *     letzten Play-Ende (nicht am Anfang, sonst würde zurückgesprungen)
+   *   - segLocalMs nach allen Windows → still am letzten Play-Ende
    */
-  const computeStageTargetSec = React.useCallback(
-    (playMs: number): number | null => {
+  const computeStagePlayback = React.useCallback(
+    (playMs: number): { sourceSec: number; shouldPlay: boolean } | null => {
       if (!active || active.segment.kind !== "video") return null;
       const segLocalMs = Math.max(0, playMs - activeStartMs);
-      const trim = active.segment.trimStartMs ?? 0;
-      return (segLocalMs + trim) / 1000;
+      const trimMs = active.segment.trimStartMs ?? 0;
+      const windows = active.segment.playbackWindows ?? [];
+      if (windows.length === 0) {
+        // Kein spezifisches Playback-Fenster → Video spielt normal ab.
+        return { sourceSec: (trimMs + segLocalMs) / 1000, shouldPlay: true };
+      }
+      const sorted = [...windows].sort((a, b) => a.startMs - b.startMs);
+      let accumPlayedMs = 0;
+      for (const w of sorted) {
+        if (segLocalMs < w.startMs) {
+          // Vor diesem Window (oder in einer Pause davor) → still.
+          return { sourceSec: (trimMs + accumPlayedMs) / 1000, shouldPlay: false };
+        }
+        if (segLocalMs <= w.stopMs) {
+          // Innerhalb dieses Windows → play, mit akkumulierter Vorlauf-
+          // Playzeit + Position im aktuellen Window.
+          const inWin = segLocalMs - w.startMs;
+          return {
+            sourceSec: (trimMs + accumPlayedMs + inWin) / 1000,
+            shouldPlay: true,
+          };
+        }
+        accumPlayedMs += w.stopMs - w.startMs;
+      }
+      // Nach allen Windows → still am letzten Play-Ende.
+      return { sourceSec: (trimMs + accumPlayedMs) / 1000, shouldPlay: false };
     },
     [active, activeStartMs],
+  );
+
+  /** Backward-kompatibler Wrapper: nur die Zielposition (ohne shouldPlay). */
+  const computeStageTargetSec = React.useCallback(
+    (playMs: number): number | null => {
+      const p = computeStagePlayback(playMs);
+      return p ? p.sourceSec : null;
+    },
+    [computeStagePlayback],
   );
 
   /**
@@ -417,25 +466,32 @@ export function PreviewPlayer({
     [computeStageTargetSec, computeWebcamTargetSec, isVideoSegment],
   );
 
-  /** Ruft play() oder pause() auf beiden Spuren auf. */
+  /** Ruft play() oder pause() auf beiden Spuren auf. Das Stage-Video darf
+   *  nur spielen, wenn (a) globales `playing` UND (b) segLocalMs innerhalb
+   *  eines playbackWindows liegt. */
   const setMediaPlayback = React.useCallback(
     (shouldPlay: boolean) => {
       const stEl = stageVideoRef.current;
       const webEl = webcamRef.current;
 
       if (shouldPlay) {
-        // Ton folgt dem User-Toggle. play() läuft immer nach einer
-        // User-Geste (Play-Button), daher blockiert die Autoplay-Policy
-        // auch unmuted nicht.
         if (webEl) {
           webEl.muted = webcamMutedRef.current;
-          // play() liefert ein Promise, das bei abgebrochenem play()
-          // (z.B. wenn unmittelbar gepaust wird) rejected — wir ignorieren das.
           webEl.play().catch(() => {});
         }
         if (stEl && isVideoSegment) {
           stEl.muted = true;
-          stEl.play().catch(() => {});
+          // Nur play, wenn wir gerade in einem Playback-Fenster sind.
+          const play = computeStagePlayback(playheadRef.current);
+          if (play?.shouldPlay) {
+            stEl.play().catch(() => {});
+          } else if (!stEl.paused) {
+            try {
+              stEl.pause();
+            } catch {
+              /* ignore */
+            }
+          }
         }
       } else {
         if (webEl && !webEl.paused) {
@@ -454,7 +510,7 @@ export function PreviewPlayer({
         }
       }
     },
-    [isVideoSegment],
+    [isVideoSegment, computeStagePlayback],
   );
 
   /* ------------------------------------------------------------------ */
@@ -522,16 +578,31 @@ export function PreviewPlayer({
             }
           }
           const stEl = stageVideoRef.current;
-          if (stEl && isVideoSegment && !stEl.paused) {
-            const target = computeStageTargetSec(nextMs);
-            if (
-              target !== null &&
-              Math.abs(stEl.currentTime - target) > DRIFT_THRESHOLD_SEC
-            ) {
-              try {
-                stEl.currentTime = target;
-              } catch {
-                /* ignore */
+          if (stEl && isVideoSegment) {
+            const stagePlay = computeStagePlayback(nextMs);
+            if (stagePlay) {
+              // Play/Pause-Übergang: playbackWindows-Grenze überschritten?
+              if (stagePlay.shouldPlay && stEl.paused) {
+                stEl.muted = true;
+                stEl.play().catch(() => {});
+              } else if (!stagePlay.shouldPlay && !stEl.paused) {
+                try {
+                  stEl.pause();
+                  // Auf die Freeze-Position setzen, damit das nächste
+                  // Frame das gewünschte Standbild ist.
+                  stEl.currentTime = stagePlay.sourceSec;
+                } catch {
+                  /* ignore */
+                }
+              } else if (
+                stagePlay.shouldPlay &&
+                Math.abs(stEl.currentTime - stagePlay.sourceSec) > DRIFT_THRESHOLD_SEC
+              ) {
+                try {
+                  stEl.currentTime = stagePlay.sourceSec;
+                } catch {
+                  /* ignore */
+                }
               }
             }
           }

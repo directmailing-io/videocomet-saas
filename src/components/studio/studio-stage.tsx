@@ -220,18 +220,17 @@ export function StudioStage({
             willChange: "transform",
           }}
         />
-        {/* Dezenter Preview-Banner: für jeden Empfänger wird HIER seine
-         *  eigene Website gezeigt. Damit klar ist, dass das nur die Vorschau
-         *  ist. Nur in interaktiver Regie sichtbar (nicht während Aufnahme
-         *  oder Wiedergabe im Review-Modus). */}
-        {interactive && (
+        {/* Preview-Banner NUR bei personalisierten Websites (URL kommt pro
+         *  Lead aus dem Kontakt). Bei fester Website (personalized === false)
+         *  sieht der Empfänger genau diese Seite → kein Hinweis nötig. */}
+        {interactive && segment.kind === "website" && segment.personalized !== false && (
           <div
             className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/60 to-transparent px-4 pt-2 pb-6 text-[11px] leading-snug text-white"
             role="status"
           >
             <b className="font-semibold">Vorschau.</b> Beim Empfänger steht
-            hier seine eigene Website. Dein Scroll wird 1:1 übernommen — also
-            ruhig scrollen für ein gutes Ergebnis.
+            hier seine eigene Website. Dein Scroll wird 1:1 übernommen. Ruhig
+            scrollen für ein gutes Ergebnis.
           </div>
         )}
       </div>
