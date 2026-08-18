@@ -15,7 +15,7 @@
  */
 
 import * as React from "react";
-import { AlertCircle, Pause, Play, RotateCcw } from "lucide-react";
+import { AlertCircle, Pause, Play, RotateCcw, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MEDIA_STAGE_BG, type Segment } from "@/lib/segments/types";
 import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
@@ -220,6 +220,20 @@ export function StudioStage({
             willChange: "transform",
           }}
         />
+        {/* Dezenter Preview-Banner: für jeden Empfänger wird HIER seine
+         *  eigene Website gezeigt. Damit klar ist, dass das nur die Vorschau
+         *  ist. Nur in interaktiver Regie sichtbar (nicht während Aufnahme
+         *  oder Wiedergabe im Review-Modus). */}
+        {interactive && (
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/60 to-transparent px-4 pt-2 pb-6 text-[11px] leading-snug text-white"
+            role="status"
+          >
+            <b className="font-semibold">Vorschau.</b> Beim Empfänger steht
+            hier seine eigene Website. Dein Scroll wird 1:1 übernommen — also
+            ruhig scrollen für ein gutes Ergebnis.
+          </div>
+        )}
       </div>
     );
   } else if (doc) {
@@ -364,6 +378,15 @@ function StageVideo({
    *  brauchen 15-60s bis Bunny die MP4 bereit hat). */
   const autoRetryRef = React.useRef(0);
   const [autoRetrying, setAutoRetrying] = React.useState(false);
+  /** Lautstärke 0..1. Default 1.0 (Video-Ton läuft). */
+  const [volume, setVolume] = React.useState(1);
+  const [muted, setMuted] = React.useState(false);
+  React.useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.volume = volume;
+    v.muted = muted;
+  }, [volume, muted, loadNonce]);
 
   // Bunny-Stream-HLS → progressive MP4 (480p existiert für jedes Video —
   // sobald Bunny fertig encodiert hat).
@@ -522,23 +545,59 @@ function StageVideo({
         </div>
       ) : (
         !locked && (
-          <button
-            type="button"
-            aria-label={playing ? "Video pausieren" : "Video abspielen"}
-            onClick={toggle}
-            className={cn(
-              "absolute left-1/2 top-1/2 z-20 flex size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink shadow-lift backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:bg-white",
-              playing
-                ? "opacity-0 group-hover:opacity-100"
-                : "opacity-100",
-            )}
-          >
-            {playing ? (
-              <Pause className="size-6 fill-current" />
-            ) : (
-              <Play className="size-6 translate-x-0.5 fill-current" />
-            )}
-          </button>
+          <>
+            <button
+              type="button"
+              aria-label={playing ? "Video pausieren" : "Video abspielen"}
+              onClick={toggle}
+              className={cn(
+                "absolute left-1/2 top-1/2 z-20 flex size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink shadow-lift backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:bg-white",
+                playing
+                  ? "opacity-0 group-hover:opacity-100"
+                  : "opacity-100",
+              )}
+            >
+              {playing ? (
+                <Pause className="size-6 fill-current" />
+              ) : (
+                <Play className="size-6 translate-x-0.5 fill-current" />
+              )}
+            </button>
+            {/* Volume-Control unten links, auto-hide bei Nicht-Hover.
+             *  Der User kann so den Ton des Video-Segments regeln. */}
+            <div
+              className={cn(
+                "absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-full bg-black/60 pl-2 pr-3 py-1.5 text-white backdrop-blur-sm transition-opacity",
+                playing ? "opacity-0 group-hover:opacity-100" : "opacity-100",
+              )}
+            >
+              <button
+                type="button"
+                aria-label={muted ? "Ton an" : "Stumm"}
+                onClick={() => setMuted((v) => !v)}
+                className="rounded-full p-1 hover:bg-white/10"
+              >
+                {muted || volume === 0 ? (
+                  <VolumeX className="size-4" />
+                ) : (
+                  <Volume2 className="size-4" />
+                )}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round((muted ? 0 : volume) * 100)}
+                onChange={(e) => {
+                  const next = Number(e.target.value) / 100;
+                  setVolume(next);
+                  if (next > 0 && muted) setMuted(false);
+                }}
+                aria-label="Lautstärke"
+                className="h-1 w-24 cursor-pointer appearance-none rounded-full bg-white/30 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+              />
+            </div>
+          </>
         )
       )}
     </div>

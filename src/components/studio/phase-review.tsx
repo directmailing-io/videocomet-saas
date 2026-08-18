@@ -15,9 +15,9 @@ import {
   AlertCircle,
   AlertTriangle,
   Check,
+  Info,
   Loader2,
   RotateCcw,
-  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -265,28 +265,24 @@ export function PhaseReview({
                       {formatSegmentDuration(d.segment.durationMs)}
                     </span>
                     {d.flagged && (
-                      <>
-                        <span className="flex shrink-0 items-center gap-1 rounded-full bg-warn/15 px-2 py-0.5 text-[10px] font-semibold text-warn">
-                          <AlertTriangle className="size-3" />
-                          Versehen?
-                        </span>
-                        <button
-                          type="button"
-                          aria-label="Segment entfernen"
-                          onClick={() => handleRemove(i)}
-                          className="shrink-0 rounded p-1 text-ink-muted transition-colors hover:bg-danger/10 hover:text-danger"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </>
+                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-warn/15 px-2 py-0.5 text-[10px] font-semibold text-warn">
+                        <AlertTriangle className="size-3" />
+                        Sehr kurz
+                      </span>
                     )}
                   </div>
                 );
               })}
-              <p className="px-1 text-[10px] leading-snug text-ink-muted">
-                Entfernst du eine Szene, übernimmt die vorherige Szene deren
-                Zeit. Bild und Ton bleiben synchron.
-              </p>
+              <div className="mt-1 rounded-squircle-md bg-brand-soft/40 px-3 py-2.5 text-[11px] leading-snug text-ink">
+                <div className="flex items-start gap-2">
+                  <Info className="mt-0.5 size-3.5 shrink-0 text-brand-deep" />
+                  <span>
+                    Zum Bearbeiten deiner Szenen (Reihenfolge, Länge, Löschen)
+                    öffnest du nach dem Übernehmen den Video-Editor deiner
+                    Kampagne.
+                  </span>
+                </div>
+              </div>
             </div>
           </>
         )}
