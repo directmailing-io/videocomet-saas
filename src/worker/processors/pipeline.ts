@@ -1911,27 +1911,50 @@ export async function pipelineProcessor(
     }
 
     // ── Stage 9b: Deferred Video-Finalize awaiten (M3) ───────────────
-    // Der Bunny-Encoding-Wait lief seit der Upload-Stage parallel. Erst
-    // JETZT (vor completed) darauf warten — schlägt er fehl oder timeouted
-    // (BunnyEncodingRetryableError nach 5 min), failed der Job und BullMQ
-    // retried; der Resume-Pfad pollt dann das existierende Video weiter.
+    // Der Bunny-Encoding-Wait lief seit der Upload-Stage parallel. Wir
+    // warten JETZT drauf — TOLERANT (2026-08-18):
+    //   • Erfolg → mp4Url + availableResolutions in der DB
+    //   • Timeout / BunnyEncodingRetryableError → Lead trotzdem completen.
+    //     Das Video ist bereits als HLS bei Bunny erreichbar; die MP4-
+    //     Fallback-URL wird lazy nachgezogen (Public-LP-Fetch oder Cron).
+    // So blockiert eine langsame Bunny-Encoding-Warteschlange NIE mehr die
+    // Runde. Die "warte auf Bunny-Encoding"-Anzeige verschwindet.
     if (pendingVideoFinalize) {
       await setCurrentStage(data.leadId, "videoUpload");
       const finalizeWaitStart = Date.now();
-      const finalized = await withStageTimeout(
-        () => pendingVideoFinalize!,
-        STAGE_TIMEOUTS_MS.videoUpload,
-        "videoUpload",
-      );
-      const extraWaitMs = Date.now() - finalizeWaitStart;
-      await insertPipelineEvent({
-        runId: data.runId,
-        leadId: data.leadId,
-        level: "info",
-        stage: "upload",
-        message: `${leadLabel}: Bunny-Encoding fertig (${(extraWaitMs / 1000).toFixed(1)}s zusätzlich gewartet)${finalized.mp4Url ? " (mp4=ready)" : " (mp4=pending)"}`,
-        durationMs: extraWaitMs,
-      });
+      try {
+        const finalized = await withStageTimeout(
+          () => pendingVideoFinalize!,
+          STAGE_TIMEOUTS_MS.videoUpload,
+          "videoUpload",
+        );
+        const extraWaitMs = Date.now() - finalizeWaitStart;
+        await insertPipelineEvent({
+          runId: data.runId,
+          leadId: data.leadId,
+          level: "info",
+          stage: "upload",
+          message: `${leadLabel}: Bunny-Encoding fertig (${(extraWaitMs / 1000).toFixed(1)}s zusätzlich gewartet)${finalized.mp4Url ? " (mp4=ready)" : " (mp4=pending)"}`,
+          durationMs: extraWaitMs,
+        });
+      } catch (err) {
+        // Bunny war zu langsam — Lead trotzdem als completed markieren,
+        // HLS-Playback läuft eh. Wir loggen die Warnung, damit im Admin
+        // sichtbar ist, dass mp4Url noch fehlt (Public-LP zieht nach).
+        const extraWaitMs = Date.now() - finalizeWaitStart;
+        const msg = err instanceof Error ? err.message : String(err);
+        await insertPipelineEvent({
+          runId: data.runId,
+          leadId: data.leadId,
+          level: "warn",
+          stage: "upload",
+          message: `${leadLabel}: Bunny-Encoding hat länger gedauert (${(extraWaitMs / 1000).toFixed(1)}s) — Video läuft trotzdem (HLS bereit, MP4-Fallback wird lazy nachgezogen). Detail: ${msg.slice(0, 200)}`,
+          durationMs: extraWaitMs,
+        });
+        // Sicherheitshalber unschädlich machen (falls das Promise später
+        // doch noch settled — kein unhandled-rejection).
+        pendingVideoFinalize.catch(() => {});
+      }
     }
 
     // ── Stage 9c: Frame-Thumbnail nach Bunny Storage persistieren ────
