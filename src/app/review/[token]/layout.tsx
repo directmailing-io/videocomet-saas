@@ -32,8 +32,8 @@ export default function ReviewLayout({
             className="min-h-screen flex flex-col"
             style={{
               backgroundImage:
-                "linear-gradient(180deg, rgba(170,140,245,0.18) 0%, rgba(170,140,245,0.06) 30%, rgba(243,242,249,1) 100%)",
-              backgroundColor: "#f3f2f9",
+                "linear-gradient(180deg, rgba(170,140,245,0.20) 0%, rgba(170,140,245,0.10) 20%, rgba(255,255,255,0.6) 55%, #ffffff 100%)",
+              backgroundColor: "#ffffff",
             }}
           >
             <main className="flex-1 w-full">{children}</main>

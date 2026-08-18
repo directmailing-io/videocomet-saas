@@ -65,6 +65,14 @@ export interface PreviewPlayerProps {
    * kein Play-Befehl.
    */
   pauseRequest?: { nonce: number } | null;
+  /**
+   * Hintergrund der 16:9-Bühne. Default `bg-ink` (Editor). Reviewer nutzt
+   * einen hellen Ton, damit letterbox-Ränder (z. B. Portrait-Screenshot in
+   * Landscape-Stage) nicht wie schwarze Löcher wirken.
+   */
+  stageBgClassName?: string;
+  /** Max-Breite der Stage. Editor: 800px (default). Reviewer: unbegrenzt. */
+  maxStageWidthClassName?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -153,6 +161,8 @@ export function PreviewPlayer({
   onPipClick,
   pipSelected,
   pauseRequest,
+  stageBgClassName,
+  maxStageWidthClassName,
 }: PreviewPlayerProps) {
   const totalDurationMs = React.useMemo(
     () => getTotalDurationMs(segments),
@@ -701,10 +711,12 @@ export function PreviewPlayer({
 
   const showLoader = isVideoSegment && !stageVideoReady;
 
+  const stageBg = stageBgClassName ?? "bg-ink";
+  const stageMax = maxStageWidthClassName ?? "max-w-[800px]";
   return (
-    <div className="w-full max-w-[800px]">
+    <div className={cn("w-full", stageMax)}>
       {/* Bühne */}
-      <div className="relative aspect-video w-full overflow-hidden rounded-squircle-md bg-ink shadow-card">
+      <div className={cn("relative aspect-video w-full overflow-hidden rounded-squircle-md shadow-card", stageBg)}>
         {!hasContent ? (
           <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
             <p className="max-w-sm text-sm text-white/80">

@@ -416,21 +416,22 @@ export function FeedbackReviewer({
   // ── Haupt-Reviewer ──────────────────────────────────────────────────────
   const isGuest = mode === "guest";
   return (
-    <div className={cn("mx-auto w-full max-w-5xl", isGuest ? "px-4 pt-6 pb-10 sm:px-6" : "px-0")}>
+    <div className={cn("mx-auto w-full max-w-5xl", isGuest ? "px-4 pt-8 pb-12 sm:px-6" : "px-0")}>
       {/* Zentrierter Kopf — nur im Guest-Modus (Owner sieht den Reviewer im Tab). */}
       {isGuest && (
-        <div className="mb-6 flex flex-col items-center text-center gap-1">
-          <div className="mb-1">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <div className="scale-[1.6] origin-top mb-2">
             <Logo />
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-brand-deep">
+          <span className="mt-3 text-[13px] font-semibold uppercase tracking-[0.22em] text-brand-deep">
             Feedback-Session
           </span>
-          <h1 className="mt-2 text-2xl sm:text-3xl font-semibold text-ink truncate max-w-full">
+          <div className="mt-4 h-px w-16 bg-line/80" aria-hidden />
+          <h1 className="mt-6 text-3xl sm:text-4xl font-semibold text-ink truncate max-w-full">
             {video.campaignName || "Video"}
           </h1>
           {guestName && (
-            <p className="text-xs text-ink-muted">
+            <p className="mt-1 text-sm text-ink-muted">
               <b className="text-ink">{guestEmail || guestName}</b>
               {guestEmail && (
                 <>
@@ -445,7 +446,7 @@ export function FeedbackReviewer({
 
       {/* Player groß mittig */}
       <div className="mx-auto w-full">
-        <div className="relative overflow-hidden rounded-2xl bg-black shadow-lg">
+        <div className="relative overflow-hidden rounded-2xl bg-surface shadow-lg border border-line/70">
           {usePresentation ? (
             <PreviewPlayer
               segments={segmentList}
@@ -456,6 +457,8 @@ export function FeedbackReviewer({
               onTimeChange={(ms) => setCurrentSec(ms / 1000)}
               seekRequest={seekRequest}
               pauseRequest={pauseRequest}
+              stageBgClassName="bg-canvas-deep"
+              maxStageWidthClassName="max-w-none"
             />
           ) : video.videoUrl ? (
             <video
@@ -469,20 +472,15 @@ export function FeedbackReviewer({
               className="block h-full w-full max-h-[68vh] object-contain bg-black"
             />
           ) : (
-            <div className="aspect-video flex items-center justify-center text-white/60 text-sm">
+            <div className="aspect-video flex items-center justify-center text-ink-muted text-sm">
               Für diese Kampagne wurde noch kein Video hinterlegt.
             </div>
           )}
         </div>
       </div>
 
-      {/* Guest: Feld links + Liste rechts. Owner: nur Liste volle Breite. */}
-      <div
-        className={cn(
-          "mt-6 grid gap-4",
-          isGuest ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-1",
-        )}
-      >
+      {/* Stacked: Eingabe volle Breite (nur Guest), Liste darunter. */}
+      <div className="mt-6 grid gap-4 grid-cols-1">
         {/* Eingabe (nur Guest) */}
         {mode === "guest" && token ? (
           <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
@@ -747,8 +745,8 @@ function CommentCard({
   return (
     <li
       className={cn(
-        "rounded-2xl border border-line bg-surface p-3 shadow-sm",
-        resolved ? "opacity-70" : "",
+        "rounded-2xl border border-line bg-surface p-3 shadow-sm transition",
+        resolved ? "opacity-40 saturate-50" : "",
       )}
     >
       <div className="flex items-center gap-2 text-xs mb-1 flex-wrap">
