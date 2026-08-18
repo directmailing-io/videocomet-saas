@@ -136,6 +136,12 @@ export interface EditCampaignData {
      * ältere Server-Snapshots das Feld nicht zwingend liefern müssen.
      */
     introEnabled?: boolean;
+    /**
+     * Segmente-Array (with-presentation). Für den Composite-Thumbnail-
+     * Preview im PDF-Tab — der Editor selbst verändert diese nicht,
+     * das passiert im dedizierten Video-Editor.
+     */
+    segments?: unknown[];
   };
   webcams: EditCampaignWebcam[];
   templates: EditCampaignTemplate[];
@@ -992,6 +998,13 @@ export function EditCampaignForm({
                     <ThumbnailFramePicker
                       webcamMediaId={state.webcamMediaId}
                       webcamDurationSec={currentWebcam?.durationSec ?? null}
+                      webcamUrl={currentWebcam?.publicUrl ?? null}
+                      mode={state.mode}
+                      segments={
+                        (data.campaign.segments ?? []) as import("@/lib/segments/types").Segment[]
+                      }
+                      pipPosition={state.pipPosition}
+                      pipShape={state.pipShape}
                       value={state.pdfThumbnailFrameMs}
                       onChange={(ms) => {
                         setState((s) => ({ ...s, pdfThumbnailFrameMs: ms }));

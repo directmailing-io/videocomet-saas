@@ -70,6 +70,13 @@ export interface WizardStep5Props {
   webcamMediaId: string | null;
   /** Duration of the selected webcam in seconds — for slider max + presets. */
   webcamDurationSec: number | null;
+  /** URL of the selected webcam recording — for the Composite-PreviewPlayer. */
+  webcamUrl?: string | null;
+  /** Kampagnen-Modus + Segmente + PiP-Config für den Composite-Preview. */
+  mode?: "webcam-only" | "with-presentation";
+  segments?: import("@/lib/segments/types").Segment[];
+  pipPosition?: "bottom-left" | "bottom-right";
+  pipShape?: "square" | "rounded" | "circle";
   /** Paket C — Personalisiertes Vorschaubild. */
   thumbnailImageEnabled: boolean;
   thumbnailImage: CampaignThumbnailImage | null;
@@ -92,6 +99,11 @@ export function WizardStep5Pdf({
   frameMs,
   webcamMediaId,
   webcamDurationSec,
+  webcamUrl,
+  mode,
+  segments,
+  pipPosition,
+  pipShape,
   thumbnailImageEnabled,
   thumbnailImage,
   thumbnailMode,
@@ -322,6 +334,11 @@ export function WizardStep5Pdf({
                     <ThumbnailFramePicker
                       webcamMediaId={webcamMediaId}
                       webcamDurationSec={webcamDurationSec}
+                      webcamUrl={webcamUrl}
+                      mode={mode}
+                      segments={segments}
+                      pipPosition={pipPosition}
+                      pipShape={pipShape}
                       value={frameMs}
                       onChange={(ms) =>
                         onChange({ pdfThumbnailFrameMs: ms })

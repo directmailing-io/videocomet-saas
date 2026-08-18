@@ -673,6 +673,11 @@ export function NewCampaignWizard({
               frameMs={state.pdfThumbnailFrameMs}
               webcamMediaId={state.webcamMediaId}
               webcamDurationSec={wc?.durationSec ?? null}
+              webcamUrl={wc?.publicUrl ?? null}
+              mode={state.mode}
+              segments={state.segments as import("@/lib/segments/types").Segment[]}
+              pipPosition={state.pipPosition}
+              pipShape={state.pipShape}
               thumbnailImageEnabled={state.thumbnailImageEnabled}
               thumbnailImage={state.thumbnailImage}
               thumbnailMode={state.thumbnailMode}

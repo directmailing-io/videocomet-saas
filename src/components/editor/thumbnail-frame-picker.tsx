@@ -5,6 +5,8 @@ import { ImageOff, Loader2, RotateCw, Film } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { PreviewPlayer } from "./preview-player";
+import type { Segment } from "@/lib/segments/types";
 
 export interface ThumbnailFramePickerProps {
   /** Webcam media item the frame is extracted from. */
@@ -17,6 +19,17 @@ export interface ThumbnailFramePickerProps {
   onChange: (ms: number | null) => void;
   /** Optional id for the number input (label association). */
   inputId?: string;
+  /**
+   * Kampagnen-Modus. Bei "with-presentation" zeigen wir den PreviewPlayer
+   * (Webcam + Präsentation), damit die Vorschau exakt dem entspricht, was
+   * der Worker aus dem finalen Composite-Video extrahiert.
+   */
+  mode?: "webcam-only" | "with-presentation";
+  segments?: Segment[];
+  pipPosition?: "bottom-left" | "bottom-right";
+  pipShape?: "square" | "rounded" | "circle";
+  /** Direkte MP4/HLS-URL der Webcam-Spur (für den PreviewPlayer). */
+  webcamUrl?: string | null;
 }
 
 const DEFAULT_FALLBACK_DURATION_MS = 10_000;
@@ -34,11 +47,36 @@ export function ThumbnailFramePicker({
   value,
   onChange,
   inputId = "thumbnail-frame-ms",
+  mode,
+  segments,
+  pipPosition,
+  pipShape,
+  webcamUrl,
 }: ThumbnailFramePickerProps) {
-  const durationMs =
-    webcamDurationSec && webcamDurationSec > 0
+  // Composite-Modus: wenn Präsentation UND Segmente vorhanden, zeigen wir
+  // den PreviewPlayer statt eines ffmpeg-Bilds. Der Worker extrahiert das
+  // finale PDF-Thumbnail ebenfalls aus dem Composite-Video → beide zeigen
+  // bei gleichem `ms` dasselbe Layout. Personalisierbare Platzhalter (z.B.
+  // {{firstName}}) sind pro Lead unterschiedlich, das ist so gewollt.
+  const useComposite =
+    mode === "with-presentation" && !!segments && segments.length > 0;
+
+  const durationMs = React.useMemo(() => {
+    if (useComposite && segments && segments.length > 0) {
+      let total = 0;
+      for (const s of segments) {
+        const ms =
+          typeof (s as { durationMs?: number }).durationMs === "number"
+            ? (s as { durationMs?: number }).durationMs!
+            : 0;
+        total += ms;
+      }
+      return total || DEFAULT_FALLBACK_DURATION_MS;
+    }
+    return webcamDurationSec && webcamDurationSec > 0
       ? Math.round(webcamDurationSec * 1000)
       : DEFAULT_FALLBACK_DURATION_MS;
+  }, [useComposite, segments, webcamDurationSec]);
 
   const effectiveMs = React.useMemo(() => {
     if (value === null || !Number.isFinite(value) || value < 0) return 0;
@@ -53,14 +91,26 @@ export function ThumbnailFramePicker({
     return () => clearTimeout(t);
   }, [effectiveMs]);
 
+  // Composite-Mode: Seek + Pause an den PreviewPlayer schicken.
+  const [seekRequest, setSeekRequest] = React.useState<{ ms: number; nonce: number } | null>(null);
+  const [pauseRequest, setPauseRequest] = React.useState<{ nonce: number } | null>(null);
+  const nonceRef = React.useRef(0);
+  React.useEffect(() => {
+    if (!useComposite) return;
+    nonceRef.current += 1;
+    setSeekRequest({ ms: debouncedMs, nonce: nonceRef.current });
+    setPauseRequest({ nonce: nonceRef.current });
+  }, [debouncedMs, useComposite]);
+
   const [reloadKey, setReloadKey] = React.useState(0);
   const [status, setStatus] = React.useState<
     "idle" | "loading" | "loaded" | "error"
   >("idle");
 
-  const src = webcamMediaId
-    ? `/api/media/${webcamMediaId}/frame?ms=${debouncedMs}&_=${reloadKey}`
-    : null;
+  const src =
+    !useComposite && webcamMediaId
+      ? `/api/media/${webcamMediaId}/frame?ms=${debouncedMs}&_=${reloadKey}`
+      : null;
 
   React.useEffect(() => {
     if (src) setStatus("loading");
@@ -209,42 +259,66 @@ export function ThumbnailFramePicker({
       <div>
         <div className="mb-1.5 flex items-center justify-between">
           <p className="text-xs font-medium text-ink">Vorschau</p>
-          {webcamMediaId && status === "loaded" && (
+          {(webcamMediaId || useComposite) && (
             <span className="rounded-full bg-ink/90 px-2 py-0.5 text-[10px] font-medium text-white tabular-nums">
               {formatTime(effectiveMs)}
             </span>
           )}
         </div>
 
-        <div className="relative aspect-video w-full overflow-hidden rounded-squircle-sm border border-line bg-gradient-to-br from-surface-muted to-line">
-          {!webcamMediaId ? (
-            <EmptyState />
-          ) : (
-            <>
-              {/* Image — only visible once loaded. Stays hidden during
-                  loading + error so the broken-image glyph never appears. */}
-              {src && (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  key={src}
-                  src={src}
-                  alt=""
-                  className={cn(
-                    "absolute inset-0 h-full w-full object-cover transition-opacity duration-200",
-                    status === "loaded" ? "opacity-100" : "opacity-0",
-                  )}
-                  onLoad={() => setStatus("loaded")}
-                  onError={() => setStatus("error")}
-                />
-              )}
+        {useComposite ? (
+          // Composite: PreviewPlayer springt auf debouncedMs und pausiert
+          // → identisches Layout wie der Worker-Extract aus dem finalen
+          // Composite-Video (Webcam + Präsentation + Cursor-Overlay).
+          <div className="rounded-squircle-sm overflow-hidden">
+            <PreviewPlayer
+              segments={segments ?? []}
+              webcamUrl={webcamUrl ?? null}
+              webcamDurationSec={webcamDurationSec ?? null}
+              pipPosition={pipPosition ?? "bottom-left"}
+              pipShape={pipShape ?? "rounded"}
+              seekRequest={seekRequest}
+              pauseRequest={pauseRequest}
+              stageBgClassName="bg-canvas-deep"
+              maxStageWidthClassName="max-w-none"
+            />
+            <p className="mt-2 text-[11px] text-ink-muted leading-relaxed">
+              Der Worker extrahiert im PDF genau diesen Zeitpunkt aus dem
+              finalen Composite-Video — Layout ist identisch. Platzhalter wie
+              &#123;&#123;firstName&#125;&#125; werden pro Empfänger ersetzt.
+            </p>
+          </div>
+        ) : (
+          <div className="relative aspect-video w-full overflow-hidden rounded-squircle-sm border border-line bg-gradient-to-br from-surface-muted to-line">
+            {!webcamMediaId ? (
+              <EmptyState />
+            ) : (
+              <>
+                {/* Image — only visible once loaded. Stays hidden during
+                    loading + error so the broken-image glyph never appears. */}
+                {src && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    key={src}
+                    src={src}
+                    alt=""
+                    className={cn(
+                      "absolute inset-0 h-full w-full object-cover transition-opacity duration-200",
+                      status === "loaded" ? "opacity-100" : "opacity-0",
+                    )}
+                    onLoad={() => setStatus("loaded")}
+                    onError={() => setStatus("error")}
+                  />
+                )}
 
-              {status === "loading" && <LoadingState />}
-              {status === "error" && (
-                <ErrorState onRetry={() => setReloadKey((k) => k + 1)} />
-              )}
-            </>
-          )}
-        </div>
+                {status === "loading" && <LoadingState />}
+                {status === "error" && (
+                  <ErrorState onRetry={() => setReloadKey((k) => k + 1)} />
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

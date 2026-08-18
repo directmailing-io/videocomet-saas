@@ -89,6 +89,8 @@ export default async function CampaignEditPage({
       thumbnailPlayIcon: campaign.thumbnailPlayIcon,
       // Migration 0042 — Personalisierte Video-Begrüßung.
       introEnabled: campaign.introEnabled,
+      // Segmente (with-presentation): für Composite-Thumbnail-Preview.
+      segments: (campaign.segments ?? []) as unknown[],
     },
     webcams: webcams.map((w) => ({
       id: w.id,
