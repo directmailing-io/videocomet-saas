@@ -85,6 +85,10 @@ export interface DocsNativePipelineOutput {
   copyDocId: string;
   /** true, wenn der QR per PDF-Overlay (Renderer 4.1) gestempelt wurde. */
   qrOverlayApplied: boolean;
+  /** Platzhalter, die im Doc standen aber im Lead nicht gemappt waren.
+   *  Wurden mit leerem String weggesweept — der Brief geht raus, hat aber
+   *  eine Lücke. Für Owner-Warnung im Runden-Log. */
+  unmappedPlaceholders: string[];
 }
 
 export function isDocsNativeConfigured(): boolean {
@@ -524,26 +528,55 @@ export async function renderViaDocsApi(
         replies.find((r) => r.insertInlineImage?.objectId)?.insertInlineImage?.objectId ?? null;
     }
 
-    // 4b. Partial-Failure-Detection: verbleibende {{…}}-Platzhalter im
-    // fertigen Doc sind ein harter Fehler — ein Brief mit sichtbarem
-    // "{{name}}" darf nie beim Kunden landen. Wir holen das Doc nach dem
-    // batchUpdate erneut und scannen den kompletten Text (inkl. Tabellen,
-    // Header/Footer). Das fängt beide Fehlrichtungen: Keys, die die API
-    // nicht ersetzt hat, UND Template-Platzhalter, für die gar kein Wert
-    // gemappt war (Tippfehler im Template, fehlendes Lead-Feld).
+    // 4b. Partial-Failure-Handling: verbleibende {{…}}-Platzhalter im
+    // fertigen Doc dürfen nie sichtbar beim Empfänger landen. Zwei Ursachen:
+    //   1. Google-API hat einen bekannten Key nicht ersetzt (selten).
+    //   2. Template nennt einen Platzhalter, den es im Lead nicht gibt
+    //      (Tippfehler im Doc oder fehlendes/nicht-gemapptes Kontakt-Feld).
+    //
+    // Früher hat der ganze Lead gefailt. Das ist zu hart — ein einzelner
+    // Tippfehler im Template killt sonst 100 Leads. Neue Semantik:
+    //   • Wir zählen die verbleibenden Platzhalter (für Log/Metriken).
+    //   • Wir sweepen sie in einer zweiten batchUpdate-Runde mit leerem
+    //     String weg (der Brief hat dort dann eine Lücke, aber wird
+    //     ausgeliefert).
+    //   • Nur wenn AUCH DER SWEEP fehlschlägt (Google-API-Fehler), failt
+    //     der Lead.
+    let unmappedPlaceholders: string[] = [];
     if (Object.keys(input.textVars).length > 0) {
       const verify = await withGoogleRetry("docs.documents.get(verify)", () =>
         docs.documents.get({ documentId: copyDocId! }),
       );
-      const remaining = Array.from(
+      unmappedPlaceholders = Array.from(
         new Set(collectDocText(verify.data).match(/\{\{[^{}\n]{1,80}\}\}/g) ?? []),
       );
-      if (remaining.length > 0) {
-        throw new Error(
-          `docs-native: ${remaining.length} Platzhalter nicht ersetzt: ${remaining
-            .slice(0, 10)
-            .join(", ")}`,
+      if (unmappedPlaceholders.length > 0) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[docs-native] ${unmappedPlaceholders.length} unmapped placeholder(s) — sweeping empty: ${unmappedPlaceholders.slice(0, 10).join(", ")}`,
         );
+        const sweepRequests = unmappedPlaceholders.map((token) => ({
+          replaceAllText: {
+            containsText: { text: token, matchCase: true },
+            replaceText: "",
+          },
+        }));
+        try {
+          await withGoogleRetry("docs.batchUpdate(sweep)", () =>
+            docs.documents.batchUpdate({
+              documentId: copyDocId!,
+              requestBody: { requests: sweepRequests },
+            }),
+          );
+        } catch (sweepErr) {
+          // Sweep selbst gescheitert → jetzt DOCH hart failen, sonst geht
+          // sichtbarer {{...}}-Text raus.
+          throw new Error(
+            `docs-native: ${unmappedPlaceholders.length} Platzhalter nicht ersetzt und Sweep gescheitert: ${
+              sweepErr instanceof Error ? sweepErr.message : String(sweepErr)
+            }`,
+          );
+        }
       }
     }
 
@@ -704,6 +737,7 @@ export async function renderViaDocsApi(
       thumbReplaced: thumbObjectId !== null && thumbBunnyUrl !== null,
       copyDocId,
       qrOverlayApplied,
+      unmappedPlaceholders,
     };
   } finally {
     // 6. Cleanup — auch bei Fehlern.

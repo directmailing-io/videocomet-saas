@@ -1602,6 +1602,17 @@ export async function pipelineProcessor(
               message: `${leadLabel}: docs-native rendered in ${((Date.now() - nativeStart) / 1000).toFixed(1)}s (vars=${nativeResult.textReplacements}, qr=${nativeResult.qrReplaced}, thumb=${nativeResult.thumbReplaced})`,
               durationMs: Date.now() - nativeStart,
             });
+            // Unmapped-Platzhalter: als Warnung ins Log, aber der Lead
+            // rendert trotzdem sauber (Platzhalter wurden weggesweept).
+            if (nativeResult.unmappedPlaceholders.length > 0) {
+              await insertPipelineEvent({
+                runId: data.runId,
+                leadId: data.leadId,
+                level: "warn",
+                stage: "docx",
+                message: `${leadLabel}: ${nativeResult.unmappedPlaceholders.length} Platzhalter im Brief-Template konnten nicht gefüllt werden (leer gelassen): ${nativeResult.unmappedPlaceholders.slice(0, 10).join(", ")}${nativeResult.unmappedPlaceholders.length > 10 ? ", …" : ""}`,
+              });
+            }
           } else {
             // Sichtbar machen, dass hier ein anderer Renderer läuft: der
             // HTML-Renderer 3.0 liefert strukturell anderes Layout — ein
