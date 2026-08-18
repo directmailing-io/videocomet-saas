@@ -159,7 +159,13 @@ async function renderCached(
       await rm(target, { force: true }).catch(() => {});
     }
 
-    const tmp = `${target}.tmp.${process.pid}.${Date.now()}`;
+    // KRITISCH: `.mp4` MUSS die letzte Extension sein (2026-08-18 Bug).
+    // ffmpeg leitet das Output-Format aus der Dateiendung ab. Ohne `.mp4`
+    // am Ende wirft es "Unable to find a suitable output format for
+    // <path>.tmp.<pid>.<ts>" und der Video-Segment-Renderer failt, der
+    // Composite-Fallback rendert dann einen SCHWARZEN Clip an Stelle des
+    // Video-Segments → alle Video-Szenen im finalen Lead-Video schwarz.
+    const tmp = `${target}.tmp.${process.pid}.${Date.now()}.mp4`;
     try {
       await withTimeout(produce(tmp), HARD_TIMEOUT_MS, label);
       await rename(tmp, target); // atomar (gleiches FS)
