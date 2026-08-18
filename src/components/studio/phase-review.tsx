@@ -277,11 +277,9 @@ export function PhaseReview({
                 <div className="flex items-start gap-2">
                   <Info className="mt-0.5 size-3.5 shrink-0 text-brand-deep" />
                   <span>
-                    <b>Keine Sorge — du kannst später alles anpassen.</b>{" "}
-                    Nach dem Übernehmen findest du deine Kampagne unter
-                    „Kampagnen". Im Video-Editor kannst du dann jederzeit
-                    einzelne Szenen bearbeiten, löschen, verschieben oder neue
-                    hinzufügen.
+                    <b>Nichts ist festgezurrt.</b> Im Video-Editor deiner
+                    Kampagne kannst du Szenen später ändern, löschen oder
+                    ergänzen.
                   </span>
                 </div>
               </div>
