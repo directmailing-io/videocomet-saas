@@ -101,6 +101,17 @@ const SYSTEM_PLACEHOLDER_ALIASES: Record<string, SystemPlaceholderKey> = {
 };
 
 /**
+ * Alle akzeptierten Schreibweisen des pageUrl-Platzhalters (ohne canonical
+ * `pageUrl`). Renderer OHNE die zentrale `substitute()`-Engine (z. B. der
+ * Google-Docs-Brief-Pfad, der mit einer flachen Vars-Map arbeitet) müssen
+ * diese Keys selbst befüllen — sonst bleibt z. B. `{{uname}}` unersetzt
+ * und wird vom Unmapped-Sweep leer entfernt (Bug 2026-08-19).
+ */
+export const PAGE_URL_ALIAS_KEYS: readonly string[] = Object.keys(
+  SYSTEM_PLACEHOLDER_ALIASES,
+);
+
+/**
  * Erweiterter Substitution-Context. Lead-Daten sind weiterhin Pflicht;
  * `system` enthält von der Pipeline berechnete Werte wie `pageUrl`.
  *

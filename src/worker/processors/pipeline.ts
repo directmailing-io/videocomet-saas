@@ -68,7 +68,10 @@ import {
   rehomeLeadDomain,
 } from "./landingpage-create";
 import { runDocxModify } from "./docx-modify";
-import { substitute as substitutePlaceholder } from "@/lib/placeholders/substitute";
+import {
+  PAGE_URL_ALIAS_KEYS,
+  substitute as substitutePlaceholder,
+} from "@/lib/placeholders/substitute";
 import { buildPageUrlShort } from "@/lib/placeholders/page-url";
 import { runDocxToPdf } from "./docx-to-pdf";
 import { runPdfCompress } from "./pdf-compress";
@@ -346,7 +349,6 @@ function buildDocxVars(
   landingpageUrl: string,
   mapping?: Record<string, string> | Record<string, { column?: string; fallback?: string }>,
   pageUrlShort?: string | null,
-  pageUrlUserAliases?: ReadonlyArray<string> | null,
 ): Record<string, string> {
   const firstName = pickField(leadData, [
     "firstName",
@@ -373,6 +375,16 @@ function buildDocxVars(
   // `substitute()`-Engine) `{{pageUrl}}` mit der korrekten Adresse ersetzt.
   if (pageUrlShort) {
     base.pageUrl = pageUrlShort;
+    // Alle Alias-Schreibweisen ({{uname}}, {{landingpage-link}}, {{url}}, …)
+    // ebenfalls befüllen — der Docs-/Docx-Renderer kennt die zentrale
+    // Alias-Auflösung nicht und ersetzt nur exakte Keys dieser Map. Ohne
+    // diesen Block blieb z. B. {{uname}} stehen und wurde vom Unmapped-
+    // Sweep leer entfernt (Brief ohne Landingpage-URL, 2026-08-19).
+    // Bestehende Keys (Lead-Spalten, landingpageUrl mit voller URL)
+    // werden NICHT überschrieben.
+    for (const alias of PAGE_URL_ALIAS_KEYS) {
+      if (!(alias in base)) base[alias] = pageUrlShort;
+    }
   }
   // Wenn der User explizit gemappt hat, schreiben wir die aufgelösten Werte
   // unter dem PLATZHALTER-Key in die Vars-Map — der nachgelagerte
