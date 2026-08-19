@@ -92,7 +92,12 @@ export interface RenderWebsiteResult {
 }
 
 const HARD_TIMEOUT_MS = 90_000;
-const GOTO_TIMEOUT_MS = 12_000;
+// 12s war zu knapp: wotruba-gmbh.de u.ä. haben TTFB von 5-8s + JS-heavy
+// Frontend, `networkidle2` wird nie erreicht → jede Kampagne bekam den
+// „Website nicht erreichbar"-Placeholder statt der Kunden-Seite
+// (Vorfall 2026-08-19). 30s deckt langsame WordPress-Shops komfortabel ab
+// und bleibt unter dem videoRender-Stage-Timeout von 300s.
+const GOTO_TIMEOUT_MS = 30_000;
 
 /**
  * Module-level cache for per-host browser-chrome / static-hero JPGs.
@@ -312,7 +317,7 @@ async function fallbackScreenshotPath(
     const fbClean = await prepareCleanPage(fbPage, opts.url);
     await fbPage
       .goto(opts.url, {
-        waitUntil: "networkidle2",
+        waitUntil: "domcontentloaded",
         timeout: GOTO_TIMEOUT_MS,
       })
       .catch(() => undefined);
@@ -482,16 +487,21 @@ export async function renderWebsiteCapture(
     const clean = await prepareCleanPage(page, opts.url);
     cleanupHolder.clean = clean;
 
+    // DOM reicht für den anschließenden Screenshot-Lauf; auf `networkidle2`
+    // (Analytics, Chatwidgets, LazyLoad-Bilder) kommen viele Marketing-Sites
+    // nie zur Ruhe → früher stumme Timeout-Fallbacks. Der 1,2 s-Sleep unten
+    // fängt DOM-Nachrenderings auf, der Scroll-Loop belädt LazyLoad-Bereiche
+    // beim Vorbeiscrollen automatisch nach.
     try {
       await page.goto(opts.url, {
-        waitUntil: "networkidle2",
+        waitUntil: "domcontentloaded",
         timeout: GOTO_TIMEOUT_MS,
       });
     } catch (e) {
       try {
         await page.goto(opts.url, {
-          waitUntil: "domcontentloaded",
-          timeout: 10_000,
+          waitUntil: "load",
+          timeout: 15_000,
         });
       } catch {
         throw e instanceof Error ? e : new Error(String(e));
