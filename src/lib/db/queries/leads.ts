@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, gt } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { leads, leadSlugAliases, runs } from "@/lib/db/schema";
+import { campaigns, leads, leadSlugAliases, runs } from "@/lib/db/schema";
 import type { RemovedDetail, RemovedReason } from "@/lib/db/schema";
 import type {
   PreflightCounts,
@@ -187,12 +187,30 @@ export async function getLeadBySlugForDefaultDomain(
   // denselben Slug haben, ist das fuer die LP-Aufloesung gefaehrlich —
   // wir nehmen technisch den neusten, aber loggen es als Indikator
   // damit Monitoring/Alarm das mitkriegt.
+  //
+  // Soft-Delete-Filter (2026-08-19): eine gelöschte Kampagne (oder Run,
+  // oder Lead-Removal) darf die LP nicht mehr ausliefern — sonst zeigt die
+  // Seite nach `DELETE /api/campaigns/[id]` noch den Video-Player, obwohl
+  // das Bunny-Video längst gepurged ist. Der Ownership-Snapshot der
+  // Delete-Route räumt zwar die Assets ab, aber die Lead-Rows selbst
+  // bleiben zwecks Historie stehen — also filtern wir hier.
   const rows = await db
-    .select()
+    .select({ lead: leads })
     .from(leads)
-    .where(and(eq(leads.slug, slug), isNull(leads.domainId)))
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .innerJoin(campaigns, eq(campaigns.id, leads.campaignId))
+    .where(
+      and(
+        eq(leads.slug, slug),
+        isNull(leads.domainId),
+        isNull(leads.removedAt),
+        isNull(runs.deletedAt),
+        isNull(campaigns.deletedAt),
+      ),
+    )
     .orderBy(desc(leads.createdAt))
-    .limit(2);
+    .limit(2)
+    .then((r) => r.map((row) => row.lead));
   if (rows.length > 1) {
     // eslint-disable-next-line no-console
     console.warn(
@@ -229,11 +247,20 @@ export async function getLeadBySlugForDefaultDomain(
     .limit(1);
   if (!alias) return null;
   const [aliasLead] = await db
-    .select()
+    .select({ lead: leads })
     .from(leads)
-    .where(eq(leads.id, alias.leadId))
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .innerJoin(campaigns, eq(campaigns.id, leads.campaignId))
+    .where(
+      and(
+        eq(leads.id, alias.leadId),
+        isNull(leads.removedAt),
+        isNull(runs.deletedAt),
+        isNull(campaigns.deletedAt),
+      ),
+    )
     .limit(1);
-  return projectPublicLead(aliasLead ?? null);
+  return projectPublicLead(aliasLead?.lead ?? null);
 }
 
 /**
@@ -255,12 +282,26 @@ export async function getLeadBySlugAndDomain(
   // erkennen. Ein Custom-Domain-Owner darf eine Domain mit mehreren
   // Kampagnen teilen — wenn dabei Slugs kollidieren ist das ein
   // Konfigurations-Issue der gemeldet werden sollte.
+  //
+  // Soft-Delete-Filter (2026-08-19): siehe `getLeadBySlugForDefaultDomain`
+  // — gelöschte Kampagnen dürfen die LP nicht mehr ausliefern.
   const rows = await db
-    .select()
+    .select({ lead: leads })
     .from(leads)
-    .where(and(eq(leads.slug, slug), eq(leads.domainId, domainId)))
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .innerJoin(campaigns, eq(campaigns.id, leads.campaignId))
+    .where(
+      and(
+        eq(leads.slug, slug),
+        eq(leads.domainId, domainId),
+        isNull(leads.removedAt),
+        isNull(runs.deletedAt),
+        isNull(campaigns.deletedAt),
+      ),
+    )
     .orderBy(desc(leads.createdAt))
-    .limit(2);
+    .limit(2)
+    .then((r) => r.map((row) => row.lead));
   if (rows.length > 1) {
     // eslint-disable-next-line no-console
     console.warn(
@@ -296,11 +337,20 @@ export async function getLeadBySlugAndDomain(
     .limit(1);
   if (!alias) return null;
   const [aliasLead] = await db
-    .select()
+    .select({ lead: leads })
     .from(leads)
-    .where(eq(leads.id, alias.leadId))
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .innerJoin(campaigns, eq(campaigns.id, leads.campaignId))
+    .where(
+      and(
+        eq(leads.id, alias.leadId),
+        isNull(leads.removedAt),
+        isNull(runs.deletedAt),
+        isNull(campaigns.deletedAt),
+      ),
+    )
     .limit(1);
-  return projectPublicLead(aliasLead ?? null);
+  return projectPublicLead(aliasLead?.lead ?? null);
 }
 
 export async function listLeadsByRun(runId: string, userId: string): Promise<Lead[]> {
