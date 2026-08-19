@@ -90,7 +90,15 @@ export interface RecordScrollInput {
 /** Legacy-Alias-Output, identisch zu `RecordResult`. */
 export type RecordScrollOutput = RecordResult;
 
-const HARD_TIMEOUT_MS = 60_000;
+// Wie in website-render-pipeline.ts: der 60-s-Fix-Cap deckelte den
+// GESAMTEN Capture (goto + Setup + Realzeit-Frame-Aufnahme über die
+// volle Segmentdauer). Für Segmente > ~40 s stumme Timeouts →
+// Placeholder statt echter Aufnahme. Jetzt dynamisch je Segmentdauer.
+const MIN_CAPTURE_TIMEOUT_MS = 60_000;
+const CAPTURE_TIMEOUT_OVERHEAD_MS = 60_000;
+function captureHardTimeoutMs(durationMs: number): number {
+  return Math.max(MIN_CAPTURE_TIMEOUT_MS, durationMs + CAPTURE_TIMEOUT_OVERHEAD_MS);
+}
 const GOTO_TIMEOUT_MS = 30_000;
 
 /**
@@ -383,7 +391,11 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
   };
 
   try {
-    const result = await withTimeout(run(), HARD_TIMEOUT_MS, "recordCapture");
+    const result = await withTimeout(
+      run(),
+      captureHardTimeoutMs(opts.durationMs),
+      "recordCapture",
+    );
     captureOk = true;
     return result;
   } catch (err) {
