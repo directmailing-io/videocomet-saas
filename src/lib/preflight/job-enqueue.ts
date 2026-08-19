@@ -36,7 +36,10 @@ import {
   type DuplicateInput,
 } from "./inline-validate";
 import { firstNameCoveredWhenEmpty } from "@/lib/placeholders/substitute";
-import { leadJobPriority } from "@/lib/queue-priority";
+import {
+  countUserRenderBacklog,
+  fairLeadPriority,
+} from "@/lib/queue-fairness";
 import {
   bulkSetPreflightStatus,
   getLeadsForPreflightStart,
@@ -197,6 +200,7 @@ function introGenerationQueueLocal(): Queue<IntroGenerationJobData> {
 export async function enqueueLeadsForIntroStaging(
   leadIds: string[],
   runId: string,
+  userBacklog = 0,
 ): Promise<void> {
   if (leadIds.length === 0) return;
   await db
@@ -222,7 +226,7 @@ export async function enqueueLeadsForIntroStaging(
       data: { leadId, runId },
       opts: {
         jobId: `intro-gen-${leadId}`,
-        priority: leadJobPriority(rowIndexById.get(leadId)),
+        priority: fairLeadPriority(rowIndexById.get(leadId), userBacklog),
       },
     })),
   );
@@ -475,6 +479,9 @@ export async function enqueueApprovedLeadsForPhase2(
   //    zweiten Fehlschlag; der Run bleibt in `generating` und wird vom
   //    Orphaned-Pending-Recovery bzw. Intro-Watchdog im Worker aufgesammelt.
   const rowIndexById = new Map(rows.map((r) => [r.leadId, r.rowIndex]));
+  // User-Fairness (Phase 1): eigener offener Backlog anderer Runs schiebt
+  // diesen Run nach hinten — fremde User interleaven weiter vorne.
+  const userBacklog = await countUserRenderBacklog(userId, runId);
   const queue = pipelineQueueLocal();
   const purgeAndAdd = async (): Promise<void> => {
     if (directLeadIds.length > 0) {
@@ -487,12 +494,12 @@ export async function enqueueApprovedLeadsForPhase2(
           data: { leadId, runId, userId, campaignId },
           opts: {
             jobId: leadId,
-            priority: leadJobPriority(rowIndexById.get(leadId)),
+            priority: fairLeadPriority(rowIndexById.get(leadId), userBacklog),
           },
         })),
       );
     }
-    await enqueueLeadsForIntroStaging(stagingLeadIds, runId);
+    await enqueueLeadsForIntroStaging(stagingLeadIds, runId, userBacklog);
   };
   try {
     await purgeAndAdd();

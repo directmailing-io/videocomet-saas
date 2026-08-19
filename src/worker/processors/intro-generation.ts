@@ -54,7 +54,10 @@ import {
   releaseIntroCacheClaim,
 } from "../lib/intro-dedup";
 import { recordIntroDuration } from "../lib/run-eta";
-import { leadJobPriority } from "@/lib/queue-priority";
+import {
+  countUserRenderBacklog,
+  fairLeadPriority,
+} from "@/lib/queue-fairness";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
 import { pipelineQueue } from "../queue";
 import type { IntroGenerationJobData } from "../intro-queue";
@@ -118,15 +121,17 @@ async function enqueueRenderJob(data: LeadJobData): Promise<void> {
   } catch {
     // Aktiver Job lässt sich nicht entfernen — Dedup greift, kein Doppel.
   }
-  // Fairness (W3): Priorität = Zeilen-Reihenfolge des Leads.
+  // Fairness: Zeilen-Reihenfolge + User-Backlog-Offset (Phase 1) — der
+  // Count läuft pro Lead frisch und ist damit adaptiv zum aktuellen Stand.
   const [row] = await db
     .select({ rowIndex: leads.rowIndex })
     .from(leads)
     .where(eq(leads.id, data.leadId))
     .limit(1);
+  const userBacklog = await countUserRenderBacklog(data.userId, data.runId);
   await queue.add("lead-pipeline", data, {
     jobId: data.leadId,
-    priority: leadJobPriority(row?.rowIndex),
+    priority: fairLeadPriority(row?.rowIndex, userBacklog),
   });
 }
 

@@ -22,7 +22,10 @@ import { db } from "@/lib/db";
 import { campaigns, contactLists, contacts, leads, listMemberships, runs } from "@/lib/db/schema";
 import { createRun } from "@/lib/db/queries/runs";
 import { pipelineQueue } from "@/worker/queue";
-import { leadJobPriority } from "@/lib/queue-priority";
+import {
+  countUserRenderBacklog,
+  fairLeadPriority,
+} from "@/lib/queue-fairness";
 import {
   buildLeadDataFromContact,
   normalizeContactMapping,
@@ -199,6 +202,9 @@ export async function POST(
 
   // Pipeline-Jobs enqueuen.
   try {
+    // User-Fairness (Phase 1): eigener offener Backlog anderer Runs
+    // verschiebt die Priorität nach hinten.
+    const userBacklog = await countUserRenderBacklog(auth.user.id, run.id);
     const queue = pipelineQueue();
     await queue.addBulk(
       inserted.map((l) => ({
@@ -209,7 +215,7 @@ export async function POST(
           userId: auth.user.id,
           campaignId: params.id,
         },
-        opts: { jobId: l.id, priority: leadJobPriority(l.rowIndex) },
+        opts: { jobId: l.id, priority: fairLeadPriority(l.rowIndex, userBacklog) },
       })),
     );
   } catch (err) {
