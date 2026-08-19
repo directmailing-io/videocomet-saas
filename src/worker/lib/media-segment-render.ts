@@ -265,6 +265,8 @@ async function stillToMp4(opts: {
     "128k",
     "-movflags",
     "+faststart",
+    "-f",
+    "mp4",
     opts.outputPath,
   ]);
 }
@@ -353,6 +355,8 @@ async function playPieceToMp4(opts: {
     "128k",
     "-movflags",
     "+faststart",
+    "-f",
+    "mp4",
     opts.outputPath,
   );
   await runFfmpeg(args);

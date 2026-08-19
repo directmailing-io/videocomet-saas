@@ -225,6 +225,11 @@ export async function compressVideo(input: CompressInput): Promise<void> {
     s.audioBitrate,
     "-movflags",
     "+faststart",
+    // Container explizit festlegen — ffmpeg rät das Format sonst aus der
+    // Datei-Endung, und endungslose Tmp-Pfade haben schon zweimal stille
+    // Schwarz-Clips produziert (2026-08-17 Video-Segmente, 08-19 PDF).
+    "-f",
+    "mp4",
     input.outputPath,
   ]);
 }
@@ -371,6 +376,8 @@ export async function composePip(input: ComposePipInput): Promise<void> {
     "128k",
     "-movflags",
     "+faststart",
+    "-f",
+    "mp4",
     input.outputPath,
   ]);
 }
@@ -422,6 +429,8 @@ export async function imageSeqToMp4(input: ImageSeqToMp4Input): Promise<void> {
     "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
     "-movflags",
     "+faststart",
+    "-f",
+    "mp4",
     input.outputPath,
   ]);
 }
@@ -472,6 +481,8 @@ export async function renderImageToMp4(opts: {
     "-shortest",
     "-movflags",
     "+faststart",
+    "-f",
+    "mp4",
     opts.outputPath,
   ]);
 }
@@ -516,6 +527,8 @@ export async function generateBlackClip(opts: {
     "128k",
     "-movflags",
     "+faststart",
+    "-f",
+    "mp4",
     opts.outputPath,
   ]);
 }
@@ -627,6 +640,8 @@ export async function renderTextSegment(input: RenderTextSegmentInput): Promise<
     "128k",
     "-movflags",
     "+faststart",
+    "-f",
+    "mp4",
     input.outputPath,
   ]);
 }
@@ -667,7 +682,7 @@ export async function concatClips(input: ConcatClipsInput & {
   if (typeof input.maxDurationSec === "number" && input.maxDurationSec > 0) {
     args.push("-t", input.maxDurationSec.toFixed(3));
   }
-  args.push("-c", "copy", input.outputPath);
+  args.push("-c", "copy", "-f", "mp4", input.outputPath);
   await runFfmpeg(args);
 }
 
@@ -693,6 +708,8 @@ export async function trimVideoToDuration(input: {
     "copy",
     "-movflags",
     "+faststart",
+    "-f",
+    "mp4",
     input.outputPath,
   ]);
 }
@@ -731,6 +748,8 @@ export async function addSilentAudioTrack(input: {
     "128k",
     "-movflags",
     "+faststart",
+    "-f",
+    "mp4",
     input.outputPath,
   ]);
 }

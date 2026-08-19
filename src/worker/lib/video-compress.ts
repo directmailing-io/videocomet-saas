@@ -265,6 +265,8 @@ export async function compressForBunny(
         "copy",
         "-movflags",
         "+faststart",
+        "-f",
+        "mp4",
         task.outputPath,
       ]);
       const outStat = await stat(task.outputPath);
@@ -376,6 +378,10 @@ async function reEncode(opts: {
     "128k",
     "-movflags",
     "+faststart",
+    // Explizites Container-Format: Caller übergeben teils endungslose
+    // Tmp-Pfade — ffmpeg darf das Format nie aus der Endung raten müssen.
+    "-f",
+    "mp4",
     opts.outputPath,
   ]);
 }

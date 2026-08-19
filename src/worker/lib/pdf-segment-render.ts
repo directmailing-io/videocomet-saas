@@ -630,7 +630,10 @@ export async function renderPdfSegment(
       await rm(target, { force: true }).catch(() => {});
     }
 
-    const tmp = `${target}.tmp.${process.pid}.${Date.now()}`;
+    // MUSS auf .mp4 enden — ffmpeg leitet das Container-Format aus der
+    // Endung ab; ohne sie schlug der Encode fehl und alle PDF-Szenen
+    // wurden schwarze Ersatz-Clips (Incident 2026-08-19).
+    const tmp = `${target}.tmp.${process.pid}.${Date.now()}.mp4`;
     try {
       await renderPdfSegmentUncached(opts, tmp, fps);
       await rename(tmp, target); // atomar (gleiches FS)

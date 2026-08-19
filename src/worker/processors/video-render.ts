@@ -523,7 +523,10 @@ async function normalizeWebcamCached(url: string): Promise<string> {
 
     const suffix = `${process.pid}.${Date.now()}`;
     const rawTmp = join(WEBCAM_CACHE_DIR, `${key}.raw.${suffix}`);
-    const normTmp = `${target}.tmp.${suffix}`;
+    // MUSS auf .mp4 enden — sonst scheiterte compressForBunny still und
+    // der Copy-Fallback legte die rohe WebM-Quelle in den Cache: die
+    // Normalisierung (Perf-Paket M1) war dadurch seit Deploy wirkungslos.
+    const normTmp = `${target}.tmp.${suffix}.mp4`;
     try {
       await fetchToFile(url, rawTmp);
       const res = await compressForBunny({
