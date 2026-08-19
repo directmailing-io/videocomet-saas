@@ -91,7 +91,21 @@ export interface RenderWebsiteResult {
   fps: number;
 }
 
-const HARD_TIMEOUT_MS = 90_000;
+// HARD_TIMEOUT_MS deckt den GESAMTEN Capture-Prozess (goto + Setup +
+// Frame-Aufnahme). Frame-Aufnahme läuft in Realzeit über die volle
+// durationMs des Segments — 90 s Fix-Timeout waren fatal für alle
+// Segmente > 60 s: sie liefen unweigerlich in den Timeout und lieferten
+// den „Website nicht erreichbar"-Placeholder statt der echten Aufnahme
+// (Vorfall 2026-08-19, Kampagne Test 3 mit 111 s-Segment). Jetzt
+// dynamisch: durationMs + 60 s Overhead (goto bis 30 s, Setup + Screencast-
+// Puffer). Bleibt unter dem videoRender-Stage-Timeout, weil das
+// Stage-Timeout die Summe ALLER Segmente deckelt — der Einzel-Timeout
+// hier ist nur die Notbremse für hängende Browser.
+const CAPTURE_TIMEOUT_OVERHEAD_MS = 60_000;
+const MIN_CAPTURE_TIMEOUT_MS = 90_000;
+function captureHardTimeoutMs(durationMs: number): number {
+  return Math.max(MIN_CAPTURE_TIMEOUT_MS, durationMs + CAPTURE_TIMEOUT_OVERHEAD_MS);
+}
 // 12s war zu knapp: wotruba-gmbh.de u.ä. haben TTFB von 5-8s + JS-heavy
 // Frontend, `networkidle2` wird nie erreicht → jede Kampagne bekam den
 // „Website nicht erreichbar"-Placeholder statt der Kunden-Seite
@@ -788,7 +802,11 @@ export async function renderWebsiteCapture(
   };
 
   try {
-    const result = await withTimeout(run(), HARD_TIMEOUT_MS, "renderWebsiteCapture");
+    const result = await withTimeout(
+      run(),
+      captureHardTimeoutMs(opts.durationMs),
+      "renderWebsiteCapture",
+    );
     captureOk = true;
     return result;
   } catch (err) {
