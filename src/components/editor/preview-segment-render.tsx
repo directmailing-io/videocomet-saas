@@ -37,6 +37,7 @@ import {
   type GSlideSegment,
   type CanvaSegment,
   type WebCaptureMode,
+  MEDIA_STAGE_BG,
 } from "@/lib/segments/types";
 import { interpolateScrollRatio } from "@/lib/segments/scroll-math";
 import {
@@ -196,12 +197,18 @@ function RenderImage({ segment }: { segment: ImageSegment }) {
   }
 
   if (segment.displayMode === "fullscreen") {
+    // object-contain + MEDIA_STAGE_BG: identisch zu Aufnahme
+    // (studio-stage.tsx) und Worker (sharp fit:"contain") — sonst
+    // zeigt die Review Hochformat-Bilder beschnitten.
     return (
-      <div className="absolute inset-0 bg-ink">
+      <div
+        className="absolute inset-0"
+        style={{ backgroundColor: MEDIA_STAGE_BG }}
+      >
         <img
           src={segment.publicUrl}
           alt=""
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
           draggable={false}
         />
       </div>
@@ -247,6 +254,33 @@ function RenderVideo({
   onLoadedMetadata?: React.ReactEventHandler<HTMLVideoElement>;
   onCanPlay?: React.ReactEventHandler<HTMLVideoElement>;
 }) {
+  // Bunny braucht nach dem Upload 15-60s Encoding-Zeit für den
+  // 480p-MP4-Fallback und liefert solange 404 — ohne leisen Retry
+  // blieb die Video-Szene in der Überprüfen-Ansicht schwarz
+  // (Studio-Review-Bug 2026-08-19). 5 Versuche mit Backoff, analog
+  // studio-stage.tsx und dem Webcam-Retry in preview-player.tsx.
+  const retryCountRef = React.useRef(0);
+  const [retryNonce, setRetryNonce] = React.useState(0);
+  React.useEffect(() => {
+    retryCountRef.current = 0;
+    setRetryNonce(0);
+  }, [segment.publicUrl]);
+  const handleVideoError = React.useCallback(() => {
+    if (retryCountRef.current >= 5) return;
+    retryCountRef.current += 1;
+    const delayMs = Math.min(3000 + retryCountRef.current * 2000, 15000);
+    window.setTimeout(() => setRetryNonce((n) => n + 1), delayMs);
+  }, []);
+  const handleLoadedData = React.useCallback<
+    React.ReactEventHandler<HTMLVideoElement>
+  >(
+    (e) => {
+      retryCountRef.current = 0;
+      onCanPlay?.(e);
+    },
+    [onCanPlay],
+  );
+
   if (!segment.publicUrl) {
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-surface-soft">
@@ -263,7 +297,11 @@ function RenderVideo({
   // bleibt der Loader hängen (canplay feuert nie). Wir mappen deshalb auf
   // die MP4-Fallback-URL, die Bunny parallel anbietet. Analog zur
   // Webcam-Spur (webcam-monitor.tsx) und studio-stage.tsx.
-  const playbackUrl = pickBunnyMp4Fallback(segment.publicUrl);
+  const baseUrl = pickBunnyMp4Fallback(segment.publicUrl);
+  const playbackUrl =
+    retryNonce > 0
+      ? `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}vcretry=${retryNonce}`
+      : baseUrl;
 
   if (segment.showAsBrowserFrame) {
     return (
@@ -288,8 +326,9 @@ function RenderVideo({
             preload="auto"
             className="absolute inset-0 h-full w-full object-contain"
             onLoadedMetadata={onLoadedMetadata}
-            onLoadedData={onCanPlay}
+            onLoadedData={handleLoadedData}
             onCanPlay={onCanPlay}
+            onError={handleVideoError}
           />
         </div>
       </div>
@@ -307,8 +346,9 @@ function RenderVideo({
         preload="auto"
         className="h-full w-full object-contain"
         onLoadedMetadata={onLoadedMetadata}
-        onLoadedData={onCanPlay}
+        onLoadedData={handleLoadedData}
         onCanPlay={onCanPlay}
+        onError={handleVideoError}
       />
     </div>
   );

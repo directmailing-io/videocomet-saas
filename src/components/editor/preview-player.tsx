@@ -587,7 +587,13 @@ export function PreviewPlayer({
             }
           }
           const stEl = stageVideoRef.current;
-          if (stEl && isVideoSegment) {
+          // KEIN `&& isVideoSegment` hier: der Effekt hängt nur an
+          // [playing], die Variable wäre eine stale Closure — startete die
+          // Wiedergabe auf einer Nicht-Video-Szene, blieb die Video-Szene
+          // dauerhaft Standbild (Studio-Review-Bug 2026-08-19). `stEl` ist
+          // nur gesetzt, wenn ein Video-Segment gemountet ist, und
+          // computeStagePlaybackRef liefert sonst ohnehin null.
+          if (stEl) {
             const stagePlay = computeStagePlaybackRef.current(nextMs);
             if (stagePlay) {
               // Play/Pause-Übergang: playbackWindows-Grenze überschritten?
