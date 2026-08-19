@@ -9,10 +9,10 @@
  *
  * Zwei Mechanismen:
  *  1. `acquireDocsWriteSlot()` — Sliding-Window-Limiter (Default 50/min,
- *     Marge unter 60), damit 429 gar nicht erst entsteht. In-Process
- *     reicht: es gibt genau einen Worker-Prozess (BullMQ concurrency=16
- *     im selben Node-Prozess). Bei horizontaler Skalierung muss das auf
- *     Redis umgestellt werden.
+ *     Marge unter 60), damit 429 gar nicht erst entsteht. Seit 2026-08-19
+ *     (zweiter Render-Server) läuft das Fenster über Redis, damit ALLE
+ *     Worker-Prozesse zusammen unter der Quota bleiben; fällt Redis aus,
+ *     greift der alte In-Process-Limiter als Fallback.
  *  2. `withGoogleRetry()` — Retry mit exponentiellem Backoff + Jitter für
  *     transiente Fehler (429, 5xx, Netzwerk, quota-kodierte 403). Permanente
  *     Fehler (404 Template gelöscht, echte Permission-Fehler) werfen sofort.
@@ -21,6 +21,8 @@
  * Drive-Calls (copy/export/delete) haben ~12.000 Queries/min und brauchen
  * keinen Limiter — aber denselben Retry-Schutz.
  */
+
+import { getRedisConnection } from "../queue";
 
 const WINDOW_MS = 60_000;
 
@@ -33,9 +35,50 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// ── Redis-Sliding-Window (geteilt über alle Worker-Prozesse) ───────────────
+
+const REDIS_WINDOW_KEY = "gapi:docs-write-window";
+/**
+ * Atomar: Fenster aufräumen, zählen, bei freiem Slot reservieren. Lua,
+ * damit zwei Prozesse nicht zwischen ZCARD und ZADD denselben letzten
+ * Slot doppelt nehmen.
+ */
+const ACQUIRE_LUA = `
+redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, tonumber(ARGV[1]) - ${WINDOW_MS})
+if redis.call('ZCARD', KEYS[1]) < tonumber(ARGV[2]) then
+  redis.call('ZADD', KEYS[1], tonumber(ARGV[1]), ARGV[3])
+  redis.call('PEXPIRE', KEYS[1], ${2 * WINDOW_MS})
+  return 1
+end
+return 0
+`;
+
+let slotSeq = 0;
+
+/** true = Slot reserviert, false = Fenster voll, null = Redis nicht nutzbar. */
+async function tryAcquireDistributedSlot(
+  limit: number,
+): Promise<boolean | null> {
+  try {
+    const redis = getRedisConnection();
+    const member = `${process.pid}-${Date.now()}-${slotSeq++}`;
+    const res = await redis.eval(
+      ACQUIRE_LUA,
+      1,
+      REDIS_WINDOW_KEY,
+      String(Date.now()),
+      String(limit),
+      member,
+    );
+    return res === 1;
+  } catch {
+    return null;
+  }
+}
+
 let writeStamps: number[] = [];
 // Promise-Kette serialisiert die Slot-Vergabe → FIFO-Fairness zwischen
-// den bis zu 16 parallelen Pipeline-Jobs.
+// den parallelen Pipeline-Jobs EINES Prozesses.
 let acquireTail: Promise<void> = Promise.resolve();
 
 /**
@@ -47,6 +90,15 @@ export function acquireDocsWriteSlot(): Promise<void> {
   const run = async () => {
     const limit = docsWriteLimitPerMin();
     for (;;) {
+      const acquired = await tryAcquireDistributedSlot(limit);
+      if (acquired === true) return;
+      if (acquired === false) {
+        // Fenster global voll — kurz warten, Jitter gegen Gleichtakt
+        // der Worker-Prozesse.
+        await sleep(1_000 + Math.random() * 500);
+        continue;
+      }
+      // Redis nicht erreichbar → alter In-Process-Limiter als Fallback.
       const now = Date.now();
       writeStamps = writeStamps.filter((t) => now - t < WINDOW_MS);
       if (writeStamps.length < limit) {
