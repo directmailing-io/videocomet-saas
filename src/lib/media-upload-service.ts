@@ -12,7 +12,7 @@
  * Logging is prefixed with `[media-upload]` to make log greps trivial.
  */
 
-import { writeFile, unlink, mkdir, stat } from "node:fs/promises";
+import { writeFile, unlink, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -27,42 +27,6 @@ import {
   probeVideoDuration,
 } from "@/lib/ffprobe";
 import { trackBunnyAsset } from "@/lib/db/queries/bunny-assets";
-
-/**
- * Defensive Import von `compressForBunny` (Paket D). Existiert das Modul
- * → Compression aktiv. Wenn das Modul nicht (mehr) geladen werden kann
- * → Pass-through Upload mit Original-Datei. Defensiv weil:
- *  1. Mergebar bevor Paket D landet,
- *  2. Wenn ffmpeg im Container fehlt, fängt der Try-Block den Fehler ab.
- *
- * Cache: dynamic import wird beim ersten Aufruf gesettelt; Fehlschlag wird zu
- * `null` und auf STDERR geloggt.
- */
-interface CompressTaskLike {
-  inputPath: string;
-  outputPath: string;
-  reason: string;
-}
-type CompressForBunnyFn = (task: CompressTaskLike) => Promise<unknown>;
-let _compressForBunnyCache: CompressForBunnyFn | null | undefined;
-async function loadCompressForBunny(): Promise<CompressForBunnyFn | null> {
-  if (_compressForBunnyCache !== undefined) return _compressForBunnyCache;
-  try {
-    const mod = (await import("@/worker/lib/video-compress")) as unknown as {
-      compressForBunny?: CompressForBunnyFn;
-    };
-    _compressForBunnyCache = typeof mod.compressForBunny === "function"
-      ? mod.compressForBunny
-      : null;
-  } catch (err) {
-    console.warn(
-      "[media-upload] compressForBunny not available — falling back to raw upload:",
-      err instanceof Error ? err.message : err,
-    );
-    _compressForBunnyCache = null;
-  }
-  return _compressForBunnyCache;
-}
 
 export type MediaKind = "webcam" | "image" | "video" | "logo";
 
@@ -157,14 +121,16 @@ export async function uploadMediaFile(
     // Pipeline:
     //   1. write raw upload to /tmp/<uuid>.<ext>
     //   2. ffprobe für (width, height) UND duration auf der QUELLE
-    //   3. compressForBunny → /tmp/<uuid>-compressed.mp4 (1080p H.264, ca. 2-5 Mbps)
-    //      → Bunny Storage-Footprint sinkt drastisch (typisch 80-90% Reduktion)
-    //   4. uploadVideo (komprimierte Datei) → Bunny Stream
-    //   5. trackBunnyAsset für späteres Cleanup (Paket E)
-    //   6. /tmp aufräumen
+    //   3. uploadVideo (ORIGINAL-Datei) → Bunny Stream
+    //   4. trackBunnyAsset für späteres Cleanup (Paket E)
+    //   5. /tmp aufräumen
     //
-    // Wenn compressForBunny nicht verfügbar ist (Paket D noch nicht gemerged),
-    // fällt der Code auf Pass-through zurück und uploaded die Originaldatei.
+    // BEWUSST KEINE Server-Kompression mehr (Perf-Paket 2026-08-19): Bunny
+    // Stream re-encodiert jede Quelle ohnehin in seine Renditionen — der
+    // frühere libx264-Encode (30-90s bei 1-min-Handyvideos) verdoppelte nur
+    // die Encode-Arbeit, blockierte die HTTP-Antwort und damit die Szene im
+    // Studio. Trade-off: die Original-Datei liegt unkomprimiert bei Bunny
+    // (Storage-Cent-Beträge) — dafür ist die Szene in Sekunden nutzbar.
     const tmpDir = join(tmpdir(), "videocomet-uploads");
     await mkdir(tmpDir, { recursive: true });
     const baseName = slugify(filename, false) || "upload";
@@ -174,7 +140,6 @@ export async function uploadMediaFile(
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "") || "mp4";
     const tmpInputPath = join(tmpDir, `${uid}-${baseName}.${inExt}`);
-    const tmpCompressedPath = join(tmpDir, `${uid}-compressed.mp4`);
 
     try {
       await writeFile(tmpInputPath, buffer);
@@ -208,52 +173,16 @@ export async function uploadMediaFile(
         );
       }
 
-      // ── Compression ────────────────────────────────────────────────────
-      const compressFn = await loadCompressForBunny();
-      let uploadPath = tmpInputPath;
-      let usedCompression = false;
-      if (compressFn) {
-        try {
-          await compressFn({
-            inputPath: tmpInputPath,
-            outputPath: tmpCompressedPath,
-            reason: "media-upload-video",
-          });
-          uploadPath = tmpCompressedPath;
-          usedCompression = true;
-          console.log(
-            `[media-upload] compression ok input=${tmpInputPath} output=${tmpCompressedPath}`,
-          );
-        } catch (err) {
-          console.warn(
-            "[media-upload] compressForBunny failed — falling back to raw upload:",
-            err instanceof Error ? err.message : err,
-          );
-          uploadPath = tmpInputPath;
-          usedCompression = false;
-        }
-      } else {
-        console.log(
-          "[media-upload] compressForBunny not loaded — raw upload (Paket D not merged?)",
-        );
-      }
+      // ── Upload (Original) ──────────────────────────────────────────────
+      const result = await uploadVideo({ filePath: tmpInputPath, title: filename });
 
-      // ── Upload (compressed or raw) ─────────────────────────────────────
-      const result = await uploadVideo({ filePath: uploadPath, title: filename });
-
-      // Echte Bytes des HOCHGELADENEN Files (Caller will den finalen
-      // Storage-Footprint sehen, nicht den Source-Size).
-      let uploadedBytes = bytes;
-      try {
-        const st = await stat(uploadPath);
-        uploadedBytes = st.size;
-      } catch {
-        /* fall back to source bytes */
-      }
-
-      const durationSec = (await pollStreamDuration(result.videoId)) ?? sourceDurationSec;
+      // Dauer kommt aus dem ffprobe der Quelle. Das Bunny-Encoding-Poll
+      // (bis 7,5s Wartezeit) läuft NUR noch, wenn der Probe scheiterte —
+      // vorher wartete jeder Upload grundlos darauf.
+      const durationSec =
+        sourceDurationSec ?? (await pollStreamDuration(result.videoId));
       console.log(
-        `[media-upload] stream-upload ok videoId=${result.videoId} duration=${durationSec ?? "n/a"} dims=${width ?? "n/a"}x${height ?? "n/a"} compressed=${usedCompression} bytes=${uploadedBytes}`,
+        `[media-upload] stream-upload ok videoId=${result.videoId} duration=${durationSec ?? "n/a"} dims=${width ?? "n/a"}x${height ?? "n/a"} bytes=${bytes}`,
       );
 
       // ── Register asset für Cleanup-Tracking (Paket E) ──────────────────
@@ -269,7 +198,7 @@ export async function uploadMediaFile(
           cdnUrl: result.hlsUrl,
           width,
           height,
-          bytes: uploadedBytes,
+          bytes,
         });
         bunnyAssetId = tracked.assetId;
       } catch (err) {
@@ -287,13 +216,12 @@ export async function uploadMediaFile(
         durationSec,
         width,
         height,
-        bytes: uploadedBytes,
+        bytes,
         bunnyVideoId: result.videoId,
         bunnyAssetId,
       };
     } finally {
       try { await unlink(tmpInputPath); } catch { /* ignore */ }
-      try { await unlink(tmpCompressedPath); } catch { /* ignore */ }
     }
   }
 

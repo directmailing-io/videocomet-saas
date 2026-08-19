@@ -119,6 +119,13 @@ export interface VideoRenderInput {
     kind: string;
     reason: string;
   }) => void;
+  /**
+   * Nicht-fatale Degradierungen (Kompressions-Fallback, fehlende stille
+   * Tonspur, Platzhalter statt Website): der Pipeline-Caller schreibt
+   * daraus ein warn-Level pipeline_event. Gleiche Lektion wie bei
+   * onSegmentFallback — Soft-Fails dürfen nie nur in console.warn landen.
+   */
+  onRenderWarning?: (info: { stage: string; reason: string }) => void;
 }
 
 /**
@@ -365,6 +372,8 @@ async function renderPresentationBase(opts: {
   outDir: string;
   basePath: string;
   durationSec: number;
+  onPlaceholderFallback?: (reason: string) => void;
+  onBlackFallback?: (reason: string) => void;
 }): Promise<void> {
   const durationMs = Math.max(1, opts.durationSec * 1000);
   const url = normaliseWebsiteUrl(opts.website);
@@ -381,6 +390,7 @@ async function renderPresentationBase(opts: {
   const fallbackToPlaceholder = async (reason: string) => {
     // eslint-disable-next-line no-console
     console.warn(`[render] scroll-capture fallback → placeholder: ${reason}`);
+    opts.onPlaceholderFallback?.(reason);
     try {
       const fb = await recordFallbackPage({
         outputDir: opts.outDir,
@@ -396,9 +406,10 @@ async function renderPresentationBase(opts: {
     }
   };
 
-  const fallbackToBlackClip = async () => {
+  const fallbackToBlackClip = async (reason: string) => {
     // eslint-disable-next-line no-console
     console.warn(`[render] falling back to black clip`);
+    opts.onBlackFallback?.(reason);
     await generateBlackClip({
       outputPath: opts.basePath,
       durationSec: opts.durationSec,
@@ -407,7 +418,7 @@ async function renderPresentationBase(opts: {
 
   if (!url) {
     if (await fallbackToPlaceholder("invalid or empty website value")) return;
-    await fallbackToBlackClip();
+    await fallbackToBlackClip("invalid or empty website value");
     return;
   }
 
@@ -421,7 +432,7 @@ async function renderPresentationBase(opts: {
     });
   } catch (e) {
     if (await fallbackToPlaceholder((e as Error).message)) return;
-    await fallbackToBlackClip();
+    await fallbackToBlackClip((e as Error).message);
     return;
   }
 
@@ -430,7 +441,7 @@ async function renderPresentationBase(opts: {
     await encode(framesResult.framesDir, framesResult.fps);
   } catch (e) {
     if (await fallbackToPlaceholder(`encode failed: ${(e as Error).message}`)) return;
-    await fallbackToBlackClip();
+    await fallbackToBlackClip(`encode failed: ${(e as Error).message}`);
   }
 }
 
@@ -476,7 +487,10 @@ async function sweepWebcamCache(): Promise<void> {
   }
 }
 
-async function normalizeWebcamCached(url: string): Promise<string> {
+async function normalizeWebcamCached(
+  url: string,
+  onFallback?: (reason: string) => void,
+): Promise<string> {
   const key = createHash("sha1").update(url).digest("hex");
   const target = join(WEBCAM_CACHE_DIR, `${key}.mp4`);
 
@@ -533,6 +547,7 @@ async function normalizeWebcamCached(url: string): Promise<string> {
         inputPath: rawTmp,
         outputPath: normTmp,
         reason: "webcam-source-normalize",
+        onFallback,
       });
       await rename(normTmp, target); // atomar (gleiches FS)
       console.log(
@@ -581,12 +596,16 @@ export async function runVideoRender(
       inputPath: rawPath,
       outputPath: webcamLocal,
       reason: "webcam-source-normalize",
+      onFallback: (reason) =>
+        input.onRenderWarning?.({ stage: "webcam-normalize", reason }),
     });
     console.log(
       `[render] webcam normalised: ${compressResult.skipped ? "passthrough" : "re-encode"} (${compressResult.orientation}, ${(compressResult.bytesIn / 1024 / 1024).toFixed(2)}MB → ${(compressResult.bytesOut / 1024 / 1024).toFixed(2)}MB)`,
     );
   } else {
-    webcamLocal = await normalizeWebcamCached(input.webcamSourceUrl);
+    webcamLocal = await normalizeWebcamCached(input.webcamSourceUrl, (reason) =>
+      input.onRenderWarning?.({ stage: "webcam-normalize", reason }),
+    );
   }
 
   // KRITISCH: die wahre Webcam-Dauer aus der normalisierten Source messen.
@@ -633,6 +652,7 @@ export async function runVideoRender(
       totalDurationSec: duration,
       introTrimMs: input.introTrimMs ?? 0,
       onSegmentFallback: input.onSegmentFallback,
+      onRenderWarning: input.onRenderWarning,
     });
   } else {
     await renderPresentationBase({
@@ -642,6 +662,13 @@ export async function runVideoRender(
       outDir: input.outDir,
       basePath,
       durationSec: duration,
+      onPlaceholderFallback: (reason) =>
+        input.onRenderWarning?.({
+          stage: "website-capture",
+          reason: `Website nicht aufnehmbar — Platzhalter-Seite gezeigt (${reason})`,
+        }),
+      onBlackFallback: (reason) =>
+        input.onSegmentFallback?.({ index: 0, kind: "website", reason }),
     });
   }
 
@@ -705,6 +732,7 @@ async function renderSegmentsBase(opts: {
     kind: string;
     reason: string;
   }) => void;
+  onRenderWarning?: (info: { stage: string; reason: string }) => void;
 }): Promise<void> {
   // Intro-Kompensation (vordere Segmente um introTrimMs kürzen, damit
   // Segmentwechsel synchron zur früher liegenden Sprache bleiben) +
@@ -1031,11 +1059,21 @@ async function renderSegmentsBase(opts: {
           `[render] silent-audio remux failed for part ${i} — base audio may drift:`,
           e instanceof Error ? e.message : e,
         );
+        opts.onRenderWarning?.({
+          stage: "silent-audio",
+          reason: `Stille Tonspur für Teil ${i + 1} fehlgeschlagen — Ton kann asynchron laufen (${e instanceof Error ? e.message : String(e)})`,
+        });
       }
     }
   }
 
   if (parts.length === 0) {
+    opts.onSegmentFallback?.({
+      index: 0,
+      kind: "base",
+      reason:
+        "Kein einziges Segment ergab einen Clip — gesamte Präsentationsspur ist schwarz",
+    });
     await generateBlackClip({
       outputPath: opts.basePath,
       durationSec: opts.totalDurationSec,

@@ -51,6 +51,10 @@ import type { CursorFrame } from "@/lib/segments/types";
 import { SlideRender } from "@/lib/slide/slide-render";
 import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
 import {
+  dropLocalMediaPreview,
+  getLocalMediaPreview,
+} from "@/lib/media/local-preview";
+import {
   DocStackPreview,
   perPageHeightFromStackHeight,
 } from "./doc-stack-preview";
@@ -265,12 +269,29 @@ function RenderVideo({
     retryCountRef.current = 0;
     setRetryNonce(0);
   }, [segment.publicUrl]);
+  // Frisch hochgeladene Videos: lokale Blob-Vorschau sofort abspielen,
+  // während Bunny noch encodiert (Upload-Perf-Paket 2026-08-19).
+  const [useLocal, setUseLocal] = React.useState(
+    () =>
+      !!segment.publicUrl && getLocalMediaPreview(segment.publicUrl) != null,
+  );
+  React.useEffect(() => {
+    setUseLocal(
+      !!segment.publicUrl && getLocalMediaPreview(segment.publicUrl) != null,
+    );
+  }, [segment.publicUrl]);
   const handleVideoError = React.useCallback(() => {
+    // Blob-Vorschau kaputt → sofort auf Bunny wechseln, ohne Retry-Budget.
+    if (useLocal) {
+      if (segment.publicUrl) dropLocalMediaPreview(segment.publicUrl);
+      setUseLocal(false);
+      return;
+    }
     if (retryCountRef.current >= 5) return;
     retryCountRef.current += 1;
     const delayMs = Math.min(3000 + retryCountRef.current * 2000, 15000);
     window.setTimeout(() => setRetryNonce((n) => n + 1), delayMs);
-  }, []);
+  }, [useLocal, segment.publicUrl]);
   const handleLoadedData = React.useCallback<
     React.ReactEventHandler<HTMLVideoElement>
   >(
@@ -297,9 +318,10 @@ function RenderVideo({
   // bleibt der Loader hängen (canplay feuert nie). Wir mappen deshalb auf
   // die MP4-Fallback-URL, die Bunny parallel anbietet. Analog zur
   // Webcam-Spur (webcam-monitor.tsx) und studio-stage.tsx.
-  const baseUrl = pickBunnyMp4Fallback(segment.publicUrl);
+  const localUrl = useLocal ? getLocalMediaPreview(segment.publicUrl) : null;
+  const baseUrl = localUrl ?? pickBunnyMp4Fallback(segment.publicUrl);
   const playbackUrl =
-    retryNonce > 0
+    retryNonce > 0 && !localUrl
       ? `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}vcretry=${retryNonce}`
       : baseUrl;
 

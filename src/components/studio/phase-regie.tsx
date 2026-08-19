@@ -40,6 +40,7 @@ import type { StudioTab } from "@/lib/studio/types";
 import type { PdfSegment, Segment, TextSegment } from "@/lib/segments/types";
 import { friendlyScreenshotError } from "@/lib/screenshot-error-text";
 import { normalizeUrlInput, urlInputError } from "@/lib/studio/url-input";
+import { registerLocalMediaPreview } from "@/lib/media/local-preview";
 import {
   slugifyUrlColumn,
   websiteSegmentMappingKey,
@@ -540,6 +541,9 @@ export function PhaseRegie({
     setMediaError(null);
     try {
       const media = await uploadStudioMediaFile(file, kind, setMediaProgress);
+      if (kind === "video" && media.publicUrl) {
+        registerLocalMediaPreview(media.publicUrl, file);
+      }
       addScene(
         kind === "image"
           ? createStudioImageSegment(media)

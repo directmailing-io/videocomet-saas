@@ -35,6 +35,18 @@ export class DuplicateChargeError extends Error {
   }
 }
 
+/**
+ * Drizzle wirft bei Query-Fehlern einen Wrapper — der Postgres-Fehlercode
+ * (z.B. 23505) steckt dann in `err.cause`, nicht auf dem Error selbst.
+ * Ohne den cause-Check wurden Duplicate-Charges bei Regenerierungen als
+ * „charge failed — needs admin review" gemeldet statt still dedupliziert.
+ */
+function pgErrorCode(err: unknown): string | undefined {
+  const direct = (err as { code?: string })?.code;
+  if (direct) return direct;
+  return ((err as { cause?: { code?: string } })?.cause)?.code;
+}
+
 export interface BalanceInfo {
   /** Cached balance aus users.creditBalance — schneller Read. */
   balance: number;
@@ -116,8 +128,7 @@ export async function chargeForVideo(input: {
       return txRow!;
     } catch (err) {
       // Postgres unique-violation = code 23505
-      const code = (err as { code?: string })?.code;
-      if (code === "23505") {
+      if (pgErrorCode(err) === "23505") {
         throw new DuplicateChargeError(input.leadId);
       }
       throw err;
@@ -168,8 +179,7 @@ export async function grantTopup(input: {
 
       return txRow!;
     } catch (err) {
-      const code = (err as { code?: string })?.code;
-      if (code === "23505") {
+      if (pgErrorCode(err) === "23505") {
         // Duplicate-Event: Webhook-Replay — already-processed, return null
         // damit Caller (Webhook-Handler) das als "ok already done" werten kann.
         return null;

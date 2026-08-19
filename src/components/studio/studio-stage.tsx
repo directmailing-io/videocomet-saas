@@ -20,6 +20,10 @@ import { cn } from "@/lib/utils";
 import { MEDIA_STAGE_BG, type Segment } from "@/lib/segments/types";
 import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
 import {
+  dropLocalMediaPreview,
+  getLocalMediaPreview,
+} from "@/lib/media/local-preview";
+import {
   DocStackPreview,
   perPageHeightFromStackHeight,
 } from "@/components/editor/doc-stack-preview";
@@ -387,9 +391,32 @@ function StageVideo({
     v.muted = muted;
   }, [volume, muted, loadNonce]);
 
+  // Frisch hochgeladene Videos: lokale Blob-Vorschau sofort abspielen,
+  // während Bunny noch encodiert. Fällt bei Fehlern auf Bunny zurück.
+  const [useLocal, setUseLocal] = React.useState(
+    () => getLocalMediaPreview(url) != null,
+  );
+  React.useEffect(() => {
+    setUseLocal(getLocalMediaPreview(url) != null);
+  }, [url]);
+  const useLocalRef = React.useRef(useLocal);
+  React.useEffect(() => {
+    useLocalRef.current = useLocal;
+  }, [useLocal]);
+  const urlRef = React.useRef(url);
+  React.useEffect(() => {
+    urlRef.current = url;
+  }, [url]);
+
   // Bunny-Stream-HLS → progressive MP4 (480p existiert für jedes Video —
   // sobald Bunny fertig encodiert hat).
-  const src = React.useMemo(() => pickBunnyMp4Fallback(url), [url]);
+  const src = React.useMemo(() => {
+    if (useLocal) {
+      const local = getLocalMediaPreview(url);
+      if (local) return local;
+    }
+    return pickBunnyMp4Fallback(url);
+  }, [url, useLocal]);
 
   const startSecRef = React.useRef(startSec);
   React.useEffect(() => {
@@ -479,6 +506,15 @@ function StageVideo({
   // 404 zurück — der User sah bisher „Video konnte nicht geladen werden"
   // und musste manuell klicken. Wir versuchen leise 5× mit Backoff.
   const handleError = React.useCallback(() => {
+    // Blob-Vorschau kaputt (z. B. nach Hard-Reload ungültig) → sofort auf
+    // Bunny wechseln, ohne Retry-Budget zu verbrauchen.
+    if (useLocalRef.current) {
+      dropLocalMediaPreview(urlRef.current);
+      setUseLocal(false);
+      setLoadNonce((n) => n + 1);
+      videoRef.current?.load();
+      return;
+    }
     if (autoRetryRef.current < 5) {
       autoRetryRef.current += 1;
       setAutoRetrying(true);

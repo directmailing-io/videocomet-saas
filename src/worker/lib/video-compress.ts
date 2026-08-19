@@ -55,6 +55,13 @@ export interface CompressTask {
   outputPath: string;
   /** Free-form label for logs (e.g. "webcam-source", "rendered-final"). */
   reason: string;
+  /**
+   * Wird gerufen, wenn die Kompression scheitert und die Quelle unverändert
+   * kopiert wird (Soft-Fail). Ohne diesen Kanal liefen echte Encode-Fehler
+   * wochenlang nur über console.warn — so blieb die kaputte Webcam-
+   * Normalisierung (tmp-Extension-Bug, Incident 2026-08-19) unentdeckt.
+   */
+  onFallback?: (reason: string) => void;
 }
 
 export interface CompressResult {
@@ -230,6 +237,9 @@ export async function compressForBunny(
         `[video-compress] re-encode failed after probe fail, copying source as-is:`,
         err instanceof Error ? err.message : err,
       );
+      task.onFallback?.(
+        `Probe + Re-Encode fehlgeschlagen (${err instanceof Error ? err.message : String(err)}) — Quelle unverändert übernommen`,
+      );
       await copyFile(task.inputPath, task.outputPath);
       return {
         outputPath: task.outputPath,
@@ -317,6 +327,9 @@ export async function compressForBunny(
     // klappt und der Lead completed.
     console.warn(
       `[video-compress] re-encode failed for ${task.reason} (${err instanceof Error ? err.message : err}) — copying source as-is`,
+    );
+    task.onFallback?.(
+      `Re-Encode fehlgeschlagen (${err instanceof Error ? err.message : String(err)}) — Quelle unverändert übernommen`,
     );
     await copyFile(task.inputPath, task.outputPath);
     return {

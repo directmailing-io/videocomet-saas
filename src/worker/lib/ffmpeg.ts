@@ -1,11 +1,9 @@
 /**
  * FFmpeg wrapper.
  *
- * Three public helpers are needed by the pipeline:
+ * Public helpers needed by the pipeline, u.a.:
  *  - `extractFrame`  - grab a single JPG at a given time offset (for the
  *                       PDF-letter thumbnail)
- *  - `compressVideo` - re-encode to the Bunny-friendly H.264 baseline
- *                       (3-5 MB target for 30 seconds)
  *  - `composePip`    - overlay a webcam clip on top of a "base" clip with
  *                       a configurable PiP position and shape
  *
@@ -165,71 +163,6 @@ export async function extractFrame(input: ExtractFrameInput): Promise<void> {
     "1",
     "-q:v",
     "2",
-    input.outputPath,
-  ]);
-}
-
-export interface CompressSettings {
-  width?: number;
-  height?: number;
-  fps?: number;
-  crf?: number;
-  preset?: string;
-  audioBitrate?: string;
-}
-
-const DEFAULT_COMPRESS: Required<CompressSettings> = {
-  width: 1280,
-  height: 720,
-  fps: 30,
-  crf: 26,
-  preset: "veryfast",
-  audioBitrate: "128k",
-};
-
-export interface CompressInput {
-  inputPath: string;
-  outputPath: string;
-  settings?: CompressSettings;
-}
-
-/**
- * Re-encodes a video to the Bunny-friendly preset:
- *   H.264 baseline, yuv420p, 30 fps, 1280x720, CRF 26, AAC 128k, +faststart.
- */
-export async function compressVideo(input: CompressInput): Promise<void> {
-  const s = { ...DEFAULT_COMPRESS, ...(input.settings ?? {}) };
-  await runFfmpeg([
-    "-y",
-    "-i",
-    input.inputPath,
-    "-c:v",
-    "libx264",
-    "-preset",
-    s.preset,
-    "-profile:v",
-    "baseline",
-    "-level",
-    "3.1",
-    "-pix_fmt",
-    "yuv420p",
-    "-crf",
-    String(s.crf),
-    "-r",
-    String(s.fps),
-    "-vf",
-    `scale=${s.width}:${s.height}:force_original_aspect_ratio=decrease,pad=${s.width}:${s.height}:(ow-iw)/2:(oh-ih)/2:black`,
-    "-c:a",
-    "aac",
-    "-b:a",
-    s.audioBitrate,
-    "-movflags",
-    "+faststart",
-    // Container explizit festlegen — ffmpeg rät das Format sonst aus der
-    // Datei-Endung, und endungslose Tmp-Pfade haben schon zweimal stille
-    // Schwarz-Clips produziert (2026-08-17 Video-Segmente, 08-19 PDF).
-    "-f",
-    "mp4",
     input.outputPath,
   ]);
 }

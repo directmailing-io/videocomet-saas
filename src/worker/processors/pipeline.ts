@@ -870,6 +870,15 @@ export async function pipelineProcessor(
                 message: `${leadLabel}: Szene ${index + 1} (${kind}) konnte nicht gerendert werden — schwarzer Ersatz-Clip. Grund: ${reason}`,
               });
             },
+            onRenderWarning: ({ stage, reason }) => {
+              void insertPipelineEvent({
+                runId: data.runId,
+                leadId: data.leadId,
+                level: "warn",
+                stage: "render",
+                message: `${leadLabel}: ${stage}: ${reason}`,
+              });
+            },
           }),
         STAGE_TIMEOUTS_MS.videoRender,
         "videoRender",
