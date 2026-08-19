@@ -57,6 +57,13 @@ import type {
 
 export interface VideoRenderInput {
   outDir: string;
+  /**
+   * Kooperativer Abbruch (ENOENT-Race-Fix 2026-08-19): feuert, wenn das
+   * Stage-Timeout in pipeline.ts reißt. Alle Frame-Loops prüfen das Signal
+   * und stoppen — sonst schreiben Zombie-Captures nach dem Timeout weiter
+   * Frames in den bereits gelöschten workDir und fressen CPU.
+   */
+  signal?: AbortSignal;
   /** Campaign mode determines the render strategy. */
   mode: "webcam-only" | "with-presentation";
   /** Absolute or remote URL to the webcam clip in the mediathek. */
@@ -368,6 +375,7 @@ function comparableHost(u: string): string | null {
 }
 
 async function renderPresentationBase(opts: {
+  signal?: AbortSignal;
   website: string | null | undefined;
   outDir: string;
   basePath: string;
@@ -638,9 +646,11 @@ export async function runVideoRender(
   // with-presentation: build a base track. If the campaign has segments,
   // render each one and concat them; otherwise fall back to the legacy
   // scroll-capture / placeholder flow.
+  input.signal?.throwIfAborted();
   const basePath = join(input.outDir, "base.mp4");
   if (input.segments && input.segments.length > 0) {
     await renderSegmentsBase({
+      signal: input.signal,
       segments: input.segments,
       leadData: input.leadData,
       placeholderMapping: input.placeholderMapping,
@@ -656,6 +666,7 @@ export async function runVideoRender(
     });
   } else {
     await renderPresentationBase({
+      signal: input.signal,
       // Legacy-Pfad zeigt immer die Haupt-Website des Leads — die vom
       // Preflight verifizierte finale URL ist hier die verlässlichste Quelle.
       website: input.preflightFinalUrl ?? input.website ?? null,
@@ -717,6 +728,7 @@ export async function runVideoRender(
  * capture for the per-segment duration), gdocs (live doc fetch + capture).
  */
 async function renderSegmentsBase(opts: {
+  signal?: AbortSignal;
   segments: Segment[];
   leadData?: Record<string, string>;
   placeholderMapping?: PlaceholderMapping | LegacyMapping;
@@ -766,6 +778,9 @@ async function renderSegmentsBase(opts: {
 
   const parts: string[] = [];
   for (let i = 0; i < clampedSegments.length; i++) {
+    // Timeout-Abbruch: VOR jedem Segment prüfen — außerhalb des try, damit
+    // der Abbruch nie als Black-Clip-Fallback verschluckt wird.
+    opts.signal?.throwIfAborted();
     const { seg, durationMs: clampedMs } = clampedSegments[i];
     const partPath = join(opts.outDir, `seg-${i}.mp4`);
     const durationMs = clampedMs;
@@ -835,6 +850,7 @@ async function renderSegmentsBase(opts: {
           // recordFallbackPage wenn die Site z.B. nicht laedt.
           try {
             const fr = await renderWebsiteCapture({
+              signal: opts.signal,
               url,
               outputDir: join(opts.outDir, `web-${i}`),
               durationMs,
@@ -848,6 +864,7 @@ async function renderSegmentsBase(opts: {
               fps: fr.fps,
             });
           } catch (err) {
+            if (opts.signal?.aborted) throw err;
             // eslint-disable-next-line no-console
             console.warn(
               `[render] website capture failed for ${url} → placeholder:`,
@@ -884,6 +901,7 @@ async function renderSegmentsBase(opts: {
           const gdocsOutDir = join(opts.outDir, `gdocs-${i}`);
           try {
             const fr = await renderPersonalizedGDocs({
+              signal: opts.signal,
               docsUrl: seg.docsUrl,
               vars,
               outputDir: gdocsOutDir,
@@ -898,6 +916,7 @@ async function renderSegmentsBase(opts: {
               fps: fr.fps,
             });
           } catch (e) {
+            if (opts.signal?.aborted) throw e;
             // Same defensive fallback as the website branch: render a
             // labelled placeholder so the lead still completes.
             // eslint-disable-next-line no-console
@@ -1027,6 +1046,9 @@ async function renderSegmentsBase(opts: {
       }
       parts.push(partPath);
     } catch (e) {
+      // Abbruch (Stage-Timeout) sofort nach oben — kein Black-Clip, keine
+      // weiteren Segmente, keine Zombie-Schreibvorgänge.
+      if (opts.signal?.aborted) throw e;
       console.error(
         `[render] segment ${i} (${seg.kind}) failed; using black clip:`,
         e instanceof Error ? e.message : e,

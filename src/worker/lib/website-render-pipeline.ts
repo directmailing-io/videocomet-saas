@@ -74,6 +74,8 @@ export interface RenderWebsiteOpts {
   url: string;
   outputDir: string;
   durationMs: number;
+  /** Kooperativer Abbruch bei Stage-Timeout (ENOENT-Race-Fix 2026-08-19). */
+  signal?: AbortSignal;
   mode: "static-hero" | "scroll-recorded";
   scrollFrames?: ScrollFrame[];
   /** Mauszeiger-Samples aus der Studio-Aufnahme (optional). */
@@ -169,6 +171,7 @@ async function writeStaticFramesWithCursor(
   viewport: { width: number; height: number },
   fps: number,
   cursorFrames?: CursorFrame[],
+  signal?: AbortSignal,
 ): Promise<void> {
   const hasCursor = Array.isArray(cursorFrames) && cursorFrames.length > 0;
   const cursorPng = hasCursor ? await getCursorPng(viewport.height) : null;
@@ -176,6 +179,7 @@ async function writeStaticFramesWithCursor(
     ? buildCursorPlan(cursorFrames, totalFrames, viewport, fps, cursorPng)
     : null;
   for (let i = 0; i < totalFrames; i++) {
+    signal?.throwIfAborted();
     const place = plan?.[i];
     const buf =
       cursorPng && place
@@ -435,6 +439,7 @@ export async function renderWebsiteCapture(
         viewport,
         fps,
         opts.cursorFrames,
+        opts.signal,
       );
       return {
         durationSec: opts.durationMs / 1000,
@@ -456,6 +461,7 @@ export async function renderWebsiteCapture(
   let captureProblem: string | null = null;
 
   const run = async (): Promise<RenderWebsiteResult> => {
+    opts.signal?.throwIfAborted();
     // Host-Throttle: max. 2 parallele Loads pro Shop-Host (Schicht 4b).
     cleanupHolder.releaseSlot = await acquireHostSlot(opts.url);
 
@@ -567,6 +573,7 @@ export async function renderWebsiteCapture(
         viewport,
         fps,
         opts.cursorFrames,
+        opts.signal,
       );
       return {
         durationSec: opts.durationMs / 1000,
@@ -672,6 +679,7 @@ export async function renderWebsiteCapture(
     }
 
     for (let i = 0; i < totalFrames; i++) {
+      opts.signal?.throwIfAborted();
       const targetT = i * frameIntervalMs;
       const currentT = Date.now() - screencastStart;
       if (currentT < targetT) {
@@ -748,6 +756,7 @@ export async function renderWebsiteCapture(
 
     const CONCURRENCY = 4;
     for (let start = 0; start < totalFrames; start += CONCURRENCY) {
+      opts.signal?.throwIfAborted();
       const batch: Promise<void>[] = [];
       for (let i = start; i < Math.min(totalFrames, start + CONCURRENCY); i++) {
         batch.push(writeFrame(i));

@@ -53,6 +53,7 @@ import { finalizeRunIfAllLeadsDone } from "@/lib/db/queries/runs";
 import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
 import type { LeadJobData } from "../types";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
+import { withRenderSlot } from "../lib/render-slots";
 import { runVideoRender } from "./video-render";
 import { runVideoCompress } from "./video-compress";
 import {
@@ -141,19 +142,27 @@ async function withStageTimeout<T>(
   fn: () => Promise<T>,
   ms: number,
   stage: string,
+  // ENOENT-Race-Fix (2026-08-19): Promise.race bricht nur das WARTEN ab —
+  // die Stage-Arbeit (ffmpeg, Puppeteer-Capture) lief nach dem Timeout im
+  // Hintergrund weiter, während das finally des Jobs den workDir löschte →
+  // Zombie-Prozesse schrieben frame-NNNN.jpg in gelöschte Ordner (ENOENT)
+  // und fraßen weiter CPU. `onTimeout` feuert im Timeout-Moment und muss
+  // die Arbeit kooperativ abbrechen (AbortController).
+  onTimeout?: () => void,
 ): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
       fn(),
       new Promise<T>((_, reject) => {
-        timer = setTimeout(
-          () =>
-            reject(
-              new Error(`[pipeline:${stage}] timed out after ${ms}ms`),
-            ),
-          ms,
-        );
+        timer = setTimeout(() => {
+          try {
+            onTimeout?.();
+          } catch {
+            /* Abbruch-Hook darf den Timeout-Throw nie verschlucken */
+          }
+          reject(new Error(`[pipeline:${stage}] timed out after ${ms}ms`));
+        }, ms);
       }),
     ]);
   } finally {
@@ -840,9 +849,17 @@ export async function pipelineProcessor(
       if (!resumedUpload) {
       await setCurrentStage(data.leadId, "videoRender");
       const renderStart = Date.now();
-      const render = await withStageTimeout(
-        () =>
-          runVideoRender({
+      // Überlast-Schutz (2026-08-19): with-presentation-Renders (Chromium-
+      // Capture, CPU-bound) laufen durch die globale Render-Semaphore —
+      // max. 6 gleichzeitig statt bis zu 24. Slot-Wartezeit liegt VOR dem
+      // Stage-Timeout, zählt also nie als Timeout. webcam-only braucht
+      // kein Chromium → ungedrosselt.
+      const renderAbort = new AbortController();
+      const doRender = () =>
+        withStageTimeout(
+          () =>
+            runVideoRender({
+            signal: renderAbort.signal,
             outDir: workDir,
             mode: (campaign.mode === "with-presentation"
               ? "with-presentation"
@@ -892,9 +909,29 @@ export async function pipelineProcessor(
               });
             },
           }),
-        STAGE_TIMEOUTS_MS.videoRender,
-        "videoRender",
-      );
+          STAGE_TIMEOUTS_MS.videoRender,
+          "videoRender",
+          () =>
+            renderAbort.abort(
+              new Error(
+                "[pipeline:videoRender] Timeout — Aufnahme abgebrochen (Überlast-Schutz)",
+              ),
+            ),
+        );
+      const render =
+        campaign.mode === "with-presentation"
+          ? await withRenderSlot(doRender, (waitedMs) => {
+              if (waitedMs > 10_000) {
+                void insertPipelineEvent({
+                  runId: data.runId,
+                  leadId: data.leadId,
+                  level: "info",
+                  stage: "render",
+                  message: `${leadLabel}: ${(waitedMs / 1000).toFixed(0)}s auf freien Render-Slot gewartet (Überlast-Schutz, kein Fehler)`,
+                });
+              }
+            })
+          : await doRender();
       renderedVideoPath = render.videoFilePath;
       renderedDurationSec = render.durationSec;
       const renderMs = Date.now() - renderStart;

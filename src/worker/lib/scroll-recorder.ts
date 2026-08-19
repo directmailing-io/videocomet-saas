@@ -62,6 +62,12 @@ export interface RecordOpts {
    * der Server-fullPage-Capture nicht).
    */
   scrollFrames?: ScrollSample[];
+  /**
+   * Kooperativer Abbruch (Stage-Timeout in pipeline.ts): die Frame-Loops
+   * prüfen das Signal pro Frame und stoppen sofort — verhindert Zombie-
+   * Writes in bereits gelöschte workDirs (ENOENT-Race 2026-08-19).
+   */
+  signal?: AbortSignal;
 }
 
 export interface RecordResult {
@@ -78,6 +84,7 @@ export interface RecordScrollInput {
   durationMs: number;
   viewport?: { width: number; height: number };
   fps?: number;
+  signal?: AbortSignal;
 }
 
 /** Legacy-Alias-Output, identisch zu `RecordResult`. */
@@ -248,6 +255,7 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
   let captureProblem: string | null = null;
 
   const run = async (): Promise<RecordResult> => {
+    opts.signal?.throwIfAborted();
     // Host-Throttle: max. 2 parallele Loads pro Shop-Host (Schicht 4b).
     cleanupHolder.releaseSlot = await acquireHostSlot(opts.url);
 
@@ -335,6 +343,7 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
         fromSurface: true,
       })) as Buffer;
       for (let i = 0; i < totalFrames; i++) {
+        opts.signal?.throwIfAborted();
         const frameName = `frame-${String(i).padStart(4, "0")}.jpg`;
         await writeFile(join(framesDir, frameName), buf);
       }
@@ -360,6 +369,7 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
     );
 
     for (let i = 0; i < totalFrames; i++) {
+      opts.signal?.throwIfAborted();
       await scrollPageTo(page, plan[i] ?? 0);
       await shootFrame(page, framesDir, i, viewport);
     }
@@ -415,6 +425,7 @@ export async function recordScroll(
     mode: "scroll-recorded",
     viewport: opts.viewport,
     fps: opts.fps,
+    signal: opts.signal,
     scrollFrames: [
       { t: 0, y: 0 },
       { t: opts.durationMs, y: 1 },
@@ -432,6 +443,7 @@ export async function recordFallbackPage(opts: {
   durationMs: number;
   websiteLabel: string;
   fps?: number;
+  signal?: AbortSignal;
 }): Promise<RecordResult> {
   const fps = opts.fps ?? 30;
   const viewport = { width: 1280, height: 720 };
@@ -491,6 +503,7 @@ export async function recordFallbackPage(opts: {
     })) as Buffer;
 
     for (let i = 0; i < totalFrames; i++) {
+      opts.signal?.throwIfAborted();
       const name = `frame-${String(i).padStart(4, "0")}.jpg`;
       await writeFile(join(framesDir, name), firstShot);
     }

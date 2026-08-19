@@ -41,6 +41,8 @@ export interface RenderGDocsOpts {
   vars: Record<string, string>;
   outputDir: string;
   durationMs: number;
+  /** Kooperativer Abbruch bei Stage-Timeout (ENOENT-Race-Fix 2026-08-19). */
+  signal?: AbortSignal;
   mode: "static-hero" | "scroll-recorded";
   scrollFrames?: ScrollFrame[];
   /** Mauszeiger-Samples aus der Studio-Aufnahme (optional). */
@@ -191,6 +193,7 @@ export async function renderPersonalizedGDocs(
   const framesDir = join(opts.outputDir, "frames");
   await mkdir(framesDir, { recursive: true });
 
+  opts.signal?.throwIfAborted();
   // 1-4. DOCX -> Platzhalter -> LibreOffice/PDF -> Poppler/PNG -> HTML-Stack.
   await mkdir(opts.outputDir, { recursive: true });
   const renderWorkDir = join(opts.outputDir, "gdocs-render");
@@ -417,6 +420,7 @@ export async function renderPersonalizedGDocs(
       const firstPath = join(framesDir, "frame-0000.jpg");
       const firstBuf = await sharp(firstPath).toBuffer();
       for (let i = 1; i < totalFrames; i++) {
+        opts.signal?.throwIfAborted();
         const frameName = `frame-${String(i).padStart(4, "0")}.jpg`;
         await writeFile(join(framesDir, frameName), firstBuf);
       }
@@ -433,6 +437,7 @@ export async function renderPersonalizedGDocs(
       // (Scroll-Position konstant 0).
       const BATCH = 4;
       for (let start = 0; start < totalFrames; start += BATCH) {
+        opts.signal?.throwIfAborted();
         const batch: Promise<void>[] = [];
         for (let i = start; i < Math.min(totalFrames, start + BATCH); i++) {
           batch.push(writeFrame(i, 0));
@@ -465,6 +470,7 @@ export async function renderPersonalizedGDocs(
     // aber wir wollen die Memory-Spitze begrenzen.
     const CONCURRENCY = 4;
     for (let start = 0; start < totalFrames; start += CONCURRENCY) {
+      opts.signal?.throwIfAborted();
       const batch: Promise<void>[] = [];
       for (let i = start; i < Math.min(totalFrames, start + CONCURRENCY); i++) {
         batch.push(writeFrame(i, plan[i] ?? 0));
