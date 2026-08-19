@@ -97,9 +97,33 @@ export async function finalizeRunIfAllLeadsDone(runId: string): Promise<{
   if (total === 0 || done < total) {
     return { finalized: false, total, done };
   }
+  // Denormalisierte Counter aus dem aktuellen Lead-Status ableiten und
+  // im selben UPDATE mitschreiben — sonst bleiben `completed_leads`/
+  // `failed_leads` auf 0, was die UI mit „0 von X fertig" verwirrend
+  // anzeigt (Vorfall 2026-08-19: 10 fertige Runs in 24 h wirken kaputt).
+  // Backfill für alte Runs siehe drizzle/0055_run_counter_backfill.sql.
+  const tally = (await db.execute(sql`
+    SELECT
+      COUNT(*) FILTER (WHERE ${leads.status} = 'completed')::int AS completed,
+      COUNT(*) FILTER (WHERE ${leads.status} = 'failed')::int AS failed
+    FROM ${leads}
+    WHERE ${leads.runId} = ${runId}
+      AND ${leads.removedAt} IS NULL
+  `)) as unknown as Array<{ completed: number; failed: number }>;
+  const tallyRow = Array.isArray(tally)
+    ? tally[0]
+    : (tally as { rows?: Array<{ completed: number; failed: number }> }).rows?.[0];
+  const completedCount = Number(tallyRow?.completed ?? 0);
+  const failedCount = Number(tallyRow?.failed ?? 0);
+
   const result = await db
     .update(runs)
-    .set({ status: "completed", completedAt: new Date() })
+    .set({
+      status: "completed",
+      completedAt: new Date(),
+      completedLeads: completedCount,
+      failedLeads: failedCount,
+    })
     .where(
       and(
         eq(runs.id, runId),

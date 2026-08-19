@@ -22,6 +22,7 @@ import { db } from "@/lib/db";
 import { campaigns, contactLists, contacts, leads, listMemberships, runs } from "@/lib/db/schema";
 import { createRun } from "@/lib/db/queries/runs";
 import { pipelineQueue } from "@/worker/queue";
+import { enqueueForPreflight } from "@/lib/preflight/job-enqueue";
 import {
   countUserRenderBacklog,
   fairLeadPriority,
@@ -224,6 +225,19 @@ export async function POST(
       { error: "Runde angelegt, aber Jobs konnten nicht eingereiht werden.", runId: run.id },
       { status: 500 },
     );
+  }
+
+  // Preflight-Info parallel nachziehen: das Rendering läuft weiter über
+  // den bulk-add oben (unverändertes Verhalten), aber der Preflight-Worker
+  // schreibt zusätzlich `preflight_status` + `preflight_final_url` in die DB,
+  // damit die UI bei kaputten URLs Warnungen zeigen kann (Vorfall
+  // 2026-08-19: alle Leads dieser Route blieben auf pending). Fehler hier
+  // sind nie fatal für die Runde — die Videos werden trotzdem gerendert.
+  const skipPreflight = b.skipPreflight === true;
+  if (!skipPreflight) {
+    void enqueueForPreflight(run.id, auth.user.id, params.id).catch((err) => {
+      console.warn("[from-list] preflight side-enqueue failed:", err);
+    });
   }
 
   return NextResponse.json({ runId: run.id, leadCount: inserted.length });
