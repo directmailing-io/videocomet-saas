@@ -109,9 +109,14 @@ const STAGE_TIMEOUTS_MS = {
   fetchIntroSegment: 60_000,
   // PPTX-basierte Segmente (gslide/canva) sind teuer: LibreOffice (5-15s)
   // + pdftoppm + ffmpeg-Loop, multiplied with parallel leads under
-  // BullMQ concurrency=16. 300s gibt realistischen Puffer auch fuer
-  // mehrere Slides pro Lead.
-  videoRender: 300_000,
+  // BullMQ concurrency=16. 300s war zu knapp, seit Website-Segmente
+  // durchgängig echt aufgenommen werden (statt bei HARD_TIMEOUT-Kaskade
+  // in den Placeholder zu fallen — Vorfall 2026-08-19): ein 203-s-Video
+  // aus 3 Segmenten braucht mit goto + Frame-Capture + Encode leicht
+  // ~280 s auf einem geladenen Worker, unter Last kippt das über 300 s.
+  // 600 s (10 min) deckt auch Kampagnen mit 4-5 langen Segmenten +
+  // GDocs-Personalisierung + Retry-Backoff auf einer Site.
+  videoRender: 600_000,
   videoCompress: 90_000, // ffmpeg re-encode + remux (passthrough is fast)
   // Upload selbst ist schnell, aber die Stage enthält waitForBunnyEncoding
   // (bis 5 min Polling bis Bunny transcodiert). 60s hat ganze Runden gekillt.
