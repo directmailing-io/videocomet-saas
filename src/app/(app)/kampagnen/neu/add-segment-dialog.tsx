@@ -5,7 +5,9 @@ import {
   FileText,
   FileType2,
   Globe,
+  Image as ImageIcon,
   Presentation,
+  Type,
   Video as VideoIcon,
   Wand2,
 } from "lucide-react";
@@ -62,6 +64,18 @@ const SEGMENT_TYPE_OPTIONS: SegmentTypeOption[] = [
     title: "PDF",
     description: "PDF hochladen und wie eine Präsentation durchscrollen.",
     Icon: FileType2,
+  },
+  {
+    kind: "image",
+    title: "Bild",
+    description: "Ein Bild oder eine Grafik im Video zeigen.",
+    Icon: ImageIcon,
+  },
+  {
+    kind: "text",
+    title: "Text",
+    description: "Eine Textfolie zeigen, z. B. mit Name des Empfängers.",
+    Icon: Type,
   },
 ];
 

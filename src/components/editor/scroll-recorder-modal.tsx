@@ -813,7 +813,7 @@ function ViewportArea({
   }
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0">
       {/* progress bar during recording */}
       {phase.kind === "recording" && (
         <div className="absolute inset-x-0 top-0 z-10 h-1 bg-line">
@@ -968,8 +968,12 @@ function PagesViewport({
       {/* Sticky Toolbar: Layout-Höhe = skalierte 56px, Inhalt ist das echte
           Worker-HTML in 1280px Breite, per transform skaliert
           (position:fixed wird vom transform eingefangen). */}
-      <div className="sticky top-0 z-10" style={{ height: layout.toolbarPx }}>
+      <div
+        className="sticky top-0 z-10 overflow-hidden"
+        style={{ height: layout.toolbarPx }}
+      >
         <div
+          className="absolute left-0 top-0"
           style={{
             width: `${DOC_VIEWER_WIDTH_PX}px`,
             height: `${PDF_TOOLBAR_HEIGHT_PX}px`,
@@ -1048,7 +1052,7 @@ function IframeViewport({
         onLoad={onLoad}
         onError={onError}
         title="Google-Docs-Vorschau"
-        className="block bg-white"
+        className="absolute left-0 top-0 block bg-white"
         style={{
           width: `${DOC_VIEWER_WIDTH_PX}px`,
           height: `${DOC_VIEWER_HEIGHT_PX}px`,
