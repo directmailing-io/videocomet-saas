@@ -753,8 +753,8 @@ const APPROVED_STUCK_TIMEOUT_MS = 10 * 60 * 1000;
  * dieser Watchdog nicht (bekannte Grenze, externes Monitoring nötig).
  */
 async function staleWorkerWatchdog(): Promise<void> {
-  const staleBefore = new Date(Date.now() - 3 * 60 * 1000);
-  const ignoreBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  // Kein JS-Date als Query-Param — der Treiber akzeptiert hier nur Strings
+  // (Boot-Fehler 2026-08-20: ERR_INVALID_ARG_TYPE bei Date-Parametern).
   const stale = await db
     .select({
       workerId: workerHeartbeats.workerId,
@@ -764,8 +764,8 @@ async function staleWorkerWatchdog(): Promise<void> {
     .from(workerHeartbeats)
     .where(
       and(
-        lt(workerHeartbeats.lastSeenAt, staleBefore),
-        sql`${workerHeartbeats.lastSeenAt} > ${ignoreBefore}`,
+        sql`${workerHeartbeats.lastSeenAt} < now() - interval '3 minutes'`,
+        sql`${workerHeartbeats.lastSeenAt} > now() - interval '24 hours'`,
       ),
     );
   for (const w of stale) {
