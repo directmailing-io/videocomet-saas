@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { CookieBanner } from "@/components/consent/CookieBanner";
 import { MetaPixelLoader } from "@/components/meta/meta-pixel-loader";
-import { CONSENT_COOKIE, parseConsentCookie } from "@/components/consent/consent";
+import { CONSENT_COOKIE, parseConsentCookie } from "@/components/consent/consent-parse";
 import { fontClasses } from "@/lib/fonts";
 import "./globals.css";
 

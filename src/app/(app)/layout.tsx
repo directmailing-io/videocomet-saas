@@ -7,7 +7,7 @@ import { loadAccessDecision, isPathAllowedWhenBlocked } from "@/lib/billing/acce
 import { PaywallScreen } from "@/components/billing/paywall-screen";
 import { CookieBanner } from "@/components/consent/CookieBanner";
 import { MetaPixelLoader } from "@/components/meta/meta-pixel-loader";
-import { CONSENT_COOKIE, parseConsentCookie } from "@/components/consent/consent";
+import { CONSENT_COOKIE, parseConsentCookie } from "@/components/consent/consent-parse";
 
 export default async function AppLayout({
   children,

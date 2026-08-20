@@ -7,65 +7,32 @@
  * das ist ohne Einwilligung zulaessig (technisch erforderlich, um die
  * Wahl des Nutzers zu respektieren). Version hochzaehlen, wenn neue
  * Kategorien/Dienste dazukommen: dann wird der Banner erneut gezeigt.
+ *
+ * Konstanten + Parser leben in `./consent-parse` (kein "use client"),
+ * damit Server-Components sie importieren können — hier re-exportiert
+ * für abwärtskompatible Imports.
  */
 
-export const CONSENT_COOKIE = "vc_consent";
-/** v2: Marketing-Kategorie (Meta Pixel + CAPI) neu hinzugefügt. */
-export const CONSENT_VERSION = 2;
-export const CONSENT_MAX_AGE_DAYS = 180;
+export {
+  CONSENT_COOKIE,
+  CONSENT_VERSION,
+  CONSENT_MAX_AGE_DAYS,
+  parseConsentCookie,
+  type ConsentCategories,
+  type ConsentState,
+} from "./consent-parse";
+
+import {
+  CONSENT_COOKIE,
+  CONSENT_VERSION,
+  CONSENT_MAX_AGE_DAYS,
+  parseConsentCookie,
+  type ConsentCategories,
+  type ConsentState,
+} from "./consent-parse";
+
 export const OPEN_SETTINGS_EVENT = "vc:open-cookie-settings";
 export const CONSENT_CHANGED_EVENT = "vc:consent-changed";
-
-export interface ConsentCategories {
-  /** Immer true — Session, Consent-Cookie, Bot-Schutz. */
-  necessary: true;
-  /** Statistik/Analyse (derzeit keine Dienste aktiv, aber vorbereitet). */
-  statistics: boolean;
-  /** Marketing/Retargeting: Meta Pixel + Conversions API. */
-  marketing: boolean;
-}
-
-export interface ConsentState {
-  version: number;
-  timestamp: string;
-  categories: ConsentCategories;
-}
-
-/**
- * Parser für den Consent-Cookie-Wert, ohne document-Abhängigkeit — damit
- * derselbe Code sowohl serverseitig (SSR-Layout-Read via next/headers) als
- * auch clientseitig läuft. Toleriert v1-Cookies (Bestandsnutzer aus der
- * Zeit vor Marketing-Kategorie): wenn eine ältere, aber gültige Version
- * vorliegt, wird sie in das aktuelle Schema hochgezogen (marketing=false
- * als Default). So verschwindet der Banner sofort nach Reload — auch wenn
- * der User in dieser Session noch nicht neu geklickt hat.
- */
-export function parseConsentCookie(raw: string | undefined): ConsentState | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(decodeURIComponent(raw)) as Partial<ConsentState> & {
-      categories?: Partial<ConsentCategories>;
-    };
-    const cats = parsed.categories;
-    if (!cats || typeof cats.statistics !== "boolean") return null;
-    const marketing =
-      typeof cats.marketing === "boolean" ? cats.marketing : false;
-    return {
-      version: CONSENT_VERSION,
-      timestamp:
-        typeof parsed.timestamp === "string"
-          ? parsed.timestamp
-          : new Date().toISOString(),
-      categories: {
-        necessary: true,
-        statistics: cats.statistics,
-        marketing,
-      },
-    };
-  } catch {
-    return null;
-  }
-}
 
 export function readConsent(): ConsentState | null {
   if (typeof document === "undefined") return null;
