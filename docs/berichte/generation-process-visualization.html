@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VIDEOCOMET – So funktioniert die Videogenerierung heute (Ist-Zustand)</title>
+<style>
+  :root{
+    --canvas:#f4f1fb; --card:#ffffff; --ink:#1a1533; --ink-soft:#4b4463;
+    --muted:#8b84a3; --line:#e7e2f3; --accent:#6d5bd0; --accent-soft:#ece8fb;
+    --ok:#15803d; --ok-bg:#e8f7ee; --warn:#b45309; --warn-bg:#fef3e2;
+    --crit:#b91c1c; --crit-bg:#fdeaea; --chip:#d9d2f0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--canvas);color:var(--ink);line-height:1.55}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px 20px 80px}
+  header.hero{padding:34px 20px 10px;text-align:center}
+  header.hero h1{font-size:clamp(22px,3.4vw,34px);margin:0 0 8px;letter-spacing:.2px}
+  header.hero p{margin:0 auto;max-width:760px;color:var(--ink-soft)}
+  .source-note{display:inline-block;margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 16px;font-size:13px;color:var(--muted)}
+  /* Tabs */
+  .tabs{display:flex;gap:10px;justify-content:center;margin:26px 0 30px;flex-wrap:wrap}
+  .tab-btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:12px 22px;font-size:16px;font-weight:600;cursor:pointer;transition:all .15s}
+  .tab-btn:hover{border-color:var(--accent)}
+  .tab-btn.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .tab{display:none}
+  .tab.active{display:block;animation:fadein .25s ease}
+  @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  /* Cards */
+  .card{background:var(--card);border-radius:18px;padding:26px 28px;margin:0 0 22px;box-shadow:0 6px 24px rgba(38,28,92,.07)}
+  .card h2{margin:0 0 6px;font-size:21px}
+  .card h3{margin:22px 0 8px;font-size:16px}
+  .card .lead{color:var(--ink-soft);margin:0 0 14px}
+  .pill{display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;vertical-align:middle}
+  .badge{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700}
+  .b-ok{background:var(--ok-bg);color:var(--ok)} .b-warn{background:var(--warn-bg);color:var(--warn)} .b-crit{background:var(--crit-bg);color:var(--crit)}
+  .b-unclear{background:#eef1f6;color:#475569;border:1px dashed #94a3b8}
+  code{background:#f1eefb;border-radius:6px;padding:1px 6px;font-size:12.5px;color:#3f3379;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  /* Flow (simple) */
+  .flow{display:flex;flex-direction:column;gap:0;margin-top:14px}
+  .flow-step{display:flex;gap:16px;align-items:flex-start}
+  .flow-num{flex:0 0 44px;height:44px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px}
+  .flow-body{flex:1;padding-bottom:8px}
+  .flow-body b{font-size:15.5px}
+  .flow-body p{margin:3px 0 0;color:var(--ink-soft);font-size:14.5px}
+  .flow-arrow{margin:2px 0 10px 21px;border-left:2px dashed var(--chip);height:18px}
+  /* Queue viz */
+  .queue-strip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0}
+  .q-box{border:2px dashed var(--accent);background:var(--accent-soft);border-radius:12px;padding:10px 14px;text-align:center;min-width:120px}
+  .q-box.solid{border-style:solid;background:#fff}
+  .q-box .big{font-size:22px;font-weight:800;color:var(--ink)}
+  .q-box .lbl{font-size:12px;color:var(--ink-soft)}
+  .q-arrow{font-size:20px;color:var(--muted)}
+  /* Sim */
+  .sim-controls{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 16px}
+  .btn{border:0;background:var(--ink);color:#fff;border-radius:999px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer}
+  .btn.secondary{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+  .btn:disabled{opacity:.4;cursor:default}
+  .sim-row{display:grid;grid-template-columns:190px 1fr 90px;gap:12px;align-items:center;margin:10px 0}
+  .sim-row .lbl{font-size:13.5px;font-weight:600}
+  .sim-row .lbl small{display:block;font-weight:400;color:var(--muted)}
+  .bar{height:22px;background:#efecf8;border-radius:999px;overflow:hidden;position:relative}
+  .bar-fill{height:100%;border-radius:999px;transition:width .35s ease;min-width:0}
+  .f-wait{background:#c7bfe8}.f-active{background:#8f7fe0}.f-render{background:#5b48c9}.f-done{background:#2e9e5b}
+  .sim-count{font-size:14px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+  .chips{display:flex;gap:3px;flex-wrap:wrap;margin-top:10px}
+  .chips span{width:14px;height:14px;border-radius:4px;display:inline-block}
+  .sim-note{font-size:12.5px;color:var(--muted);margin-top:8px}
+  .sim-clock{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:6px}
+  /* Tables */
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:10px 0}
+  th{background:var(--accent-soft);text-align:left;padding:8px 10px;font-size:12.5px;color:#3f3379}
+  td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  .tbl-scroll{overflow-x:auto}
+  /* Arch diagram */
+  .arch{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px}
+  .arch-col h4{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:center}
+  .node{border:1.5px solid var(--line);border-radius:12px;background:#fff;padding:10px 12px;margin-bottom:10px;font-size:13px}
+  .node b{display:block;font-size:13.5px}
+  .node small{color:var(--ink-soft)}
+  .node.hl{border-color:var(--accent);background:var(--accent-soft)}
+  .node.ext{border-style:dashed}
+  details{border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:10px 0;background:#fbfaff}
+  details summary{cursor:pointer;font-weight:600;font-size:14px}
+  details[open] summary{margin-bottom:8px}
+  .timeline{border-left:3px solid var(--accent);margin:14px 0 0 8px;padding-left:20px}
+  .t-item{margin-bottom:16px;position:relative}
+  .t-item::before{content:"";position:absolute;left:-27px;top:4px;width:11px;height:11px;border-radius:50%;background:var(--accent)}
+  .t-item .t-time{font-size:12px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.4px}
+  .t-item p{margin:2px 0 0;font-size:14px;color:var(--ink-soft)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin:8px 0}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .dot{width:12px;height:12px;border-radius:50%;display:inline-block}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:820px){.two-col{grid-template-columns:1fr}.arch{grid-template-columns:1fr}.sim-row{grid-template-columns:130px 1fr 70px}}
+  .tip{border-bottom:1px dotted var(--muted);cursor:help;position:relative}
+  .callout{border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:0 12px 12px 0;padding:12px 16px;margin:14px 0;font-size:14px}
+  .callout.warn{border-color:var(--warn);background:var(--warn-bg)}
+  .callout.crit{border-color:var(--crit);background:var(--crit-bg)}
+  footer{color:var(--muted);font-size:12.5px;text-align:center;margin-top:36px}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>So funktioniert die VIDEOCOMET-Videogenerierung heute</h1>
+  <p>Der komplette Weg vom Klick auf „Runde generieren" bis zur fertigen Runde – abgeleitet aus dem echten Code und der echten Server-Konfiguration. Kein Wunschbild, sondern der Ist-Zustand.</p>
+  <div class="source-note">Stand: 20.08.2026 · Quelle: Code-Analyse (pipeline.ts, queue.ts, index.ts u.&nbsp;a.) + Live-Server-Konfiguration</div>
+</header>
+
+<div class="wrap">
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="simple">👶 Einfach erklärt</button>
+    <button class="tab-btn" data-tab="tech">👨‍💻 Technische Ansicht</button>
+    <button class="tab-btn" data-tab="future">🔭 Geplante Optimierungen</button>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- TAB 1: EINFACH -->
+  <!-- ============================================================= -->
+  <section class="tab active" id="tab-simple">
+
+    <div class="card">
+      <h2>Die Fabrik-Metapher 🏭</h2>
+      <p class="lead">Stell dir VIDEOCOMET als Fabrik für persönliche Videopakete vor. Du bestellst 100 Pakete (eins pro Empfänger). Jedes Paket enthält: ein persönliches Video, eine eigene Webseite (Landingpage), einen Brief und einen Umschlag.</p>
+      <p class="lead">Die Fabrik hat <b>eine Warteschlange</b>, in die alle Aufträge kommen (auch die anderer Kunden), und <b>zwei Werkhallen</b> (zwei Server), die die Aufträge abarbeiten. Nicht alles kann gleichzeitig passieren, denn die teuerste Maschine – die „Filmkamera", die Webseiten und Präsentationen abfilmt – gibt es nur <b>12-mal</b> (4 in Halle 1, 8 in Halle 2).</p>
+    </div>
+
+    <div class="card">
+      <h2>Was passiert nach deinem Klick? Schritt für Schritt</h2>
+
+      <div class="flow">
+        <div class="flow-step"><div class="flow-num">1</div><div class="flow-body">
+          <b>📋 Bestellung annehmen (wenige Sekunden)</b>
+          <p>Die App prüft: Ist dein Abo aktiv? Reichen die Credits für 100 Videos? Dann werden alle 100 Empfänger aus deiner Liste in die Datenbank geschrieben. Doppelte Empfänger und Zeilen mit fehlenden Pflichtangaben werden sofort aussortiert. Falls du einen Brief-A/B-Test eingestellt hast, bekommt jetzt jeder Empfänger sein Los: Variante A oder Variante B.</p>
+        </div></div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-step"><div class="flow-num">2</div><div class="flow-body">
+          <b>🔍 Prüfstation: Preflight (ca. 1–2 Minuten bei 100 Empfängern)</b>
+          <p>Bevor teuer produziert wird, testet die Fabrik jede Empfänger-Webseite: Ist sie erreichbar? Lädt sie schnell genug? Blockt sie Roboter? 24 Prüfer arbeiten gleichzeitig. Kaputte Adressen werden markiert, damit du sie vorher siehst. <b>Danach wartet alles auf DICH:</b> Du schaust dir das Ergebnis an und klickst auf „Freigeben".</p>
+        </div></div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-step"><div class="flow-num">3</div><div class="flow-body">
+          <b>🎙️ Optional: Persönliche Begrüßung vorproduzieren</b>
+          <p>Wenn dein Video mit „Hallo Marcel!" per KI-Stimme und Lippenbewegung starten soll, wird das für jeden Empfänger einzeln vorproduziert. Der externe Dienst dafür erlaubt nur <b>3 gleichzeitig</b>. Bei 100 Empfängern entsteht hier also eine eigene, langsame Warteschlange. Klappt eine Begrüßung dreimal nicht, nimmt das System automatisch dein Original-Video ohne Namensansage (damit nichts hängen bleibt).</p>
+        </div></div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-step"><div class="flow-num">4</div><div class="flow-body">
+          <b>📥 100 Auftragszettel in die große Warteschlange</b>
+          <p>Nach deiner Freigabe wandern 100 Auftragszettel (einer pro Empfänger) in die zentrale Warteschlange. Diese Warteschlange teilen sich <b>alle Kunden</b>. Damit niemand alle anderen blockiert, gibt es eine Fairness-Regel: siehe unten.</p>
+        </div></div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-step"><div class="flow-num">5</div><div class="flow-body">
+          <b>🏭 Zwei Werkhallen holen sich Aufträge</b>
+          <p>Halle 1 (Hauptserver) und Halle 2 (reiner Video-Server) nehmen sich je bis zu <b>24 Aufträge gleichzeitig</b> in Bearbeitung. Aber Achtung: „In Bearbeitung" heißt nicht „wird gerade gefilmt". Viele der 48 aktiven Aufträge warten intern auf eine der nur <b>12 Filmkameras</b>. Das ist der wichtigste Engpass der ganzen Fabrik.</p>
+        </div></div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-step"><div class="flow-num">6</div><div class="flow-body">
+          <b>🎬 Pro Empfänger: das Video wird gedreht und geschnitten</b>
+          <p>Jetzt passiert das Aufwendigste, Szene für Szene in deiner Reihenfolge: deine eigene Aufnahme wird geladen, die Webseite des Empfängers wird <i>echt</i> in einem unsichtbaren Browser geöffnet und gescrollt (das dauert je nach Webseite 1–2 Minuten), persönliche Google-Docs- und Präsentations-Folien werden mit dem Namen des Empfängers befüllt und abgefilmt, PDFs durchgeblättert, Bilder und Videoclips eingefügt. Danach schneidet die Fabrik alles zu einem Video zusammen und verkleinert die Datei. Clever: Szenen, die bei allen Empfängern identisch sind (z.&nbsp;B. eine feste Webseite), werden nur <b>einmal</b> gefilmt und dann wiederverwendet.</p>
+        </div></div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-step"><div class="flow-num">7</div><div class="flow-body">
+          <b>📦 Hochladen + Landingpage + Brief + Umschlag</b>
+          <p>Das fertige Video geht zum Video-Speicherdienst (Bunny), der es für alle Handys/Browser umwandelt – das darf bis zu 5 Minuten dauern und läuft im Hintergrund weiter, während die Fabrik schon die nächsten Teile baut: die persönliche Landingpage-Adresse (z.&nbsp;B. <code>…/v/marcel-cancar</code>), das Vorschaubild, den QR-Code, den Brief (Variante A oder B, mit Name, QR und Vorschaubild) und den Umschlag mit der Adresse.</p>
+        </div></div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-step"><div class="flow-num">8</div><div class="flow-body">
+          <b>✅ Endkontrolle pro Empfänger</b>
+          <p>Bevor ein Empfänger als „fertig" gilt, prüft die Fabrik: Ist das Video wirklich da? Die Landingpage? Der Brief (falls bestellt)? Ist das Video so lang wie geplant? Erst dann: Stempel „fertig" und Abbuchung der Credits (1 Credit, bzw. 2 mit persönlicher Begrüßung).</p>
+        </div></div>
+        <div class="flow-arrow"></div>
+
+        <div class="flow-step"><div class="flow-num">9</div><div class="flow-body">
+          <b>🏁 Runde fertig – aber nur ehrlich</b>
+          <p>Die Runde gilt erst als abgeschlossen, wenn <b>jeder</b> Empfänger entweder fertig oder endgültig fehlgeschlagen ist. Fehlgeschlagene bekommen vorher automatisch <b>genau einen</b> zweiten Versuch. Bleiben Fehler übrig, siehst du genau welche Empfänger betroffen sind und kannst nur diese neu generieren lassen – nie die ganze Runde.</p>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Warum muss überhaupt etwas warten?</h2>
+      <p class="lead">Weil es viel mehr Aufträge als Maschinen gibt. So sieht der Stau bei 100 Videos aus:</p>
+      <div class="queue-strip">
+        <div class="q-box"><div class="big">100</div><div class="lbl">Aufträge in der<br>Warteschlange</div></div>
+        <div class="q-arrow">→</div>
+        <div class="q-box solid"><div class="big">48</div><div class="lbl">dürfen gleichzeitig<br>„in Bearbeitung" sein<br>(2 Hallen × 24)</div></div>
+        <div class="q-arrow">→</div>
+        <div class="q-box solid"><div class="big">12</div><div class="lbl">Filmkameras:<br>nur so viele Videos werden<br>wirklich gleichzeitig gedreht</div></div>
+        <div class="q-arrow">→</div>
+        <div class="q-box" style="border-color:var(--ok);background:var(--ok-bg)"><div class="big">✓</div><div class="lbl">fertige<br>Videopakete</div></div>
+      </div>
+      <p style="font-size:14px;color:var(--ink-soft)">Das heißt: In jedem Moment werden ca. 12 Videos gedreht, ca. 36 weitere sind in Vor- oder Nacharbeit (hochladen, Brief bauen, auf Kamera warten), und der Rest wartet in der Schlange. Ein einzelnes komplexes Video braucht grob 3–6 Minuten reine Arbeit. 100 Videos sind darum typischerweise in <b>etwa 30–60 Minuten</b> komplett fertig (stark abhängig davon, wie langsam die Empfänger-Webseiten sind).</p>
+    </div>
+
+    <div class="card">
+      <h2>Probier es aus: die Fabrik in Aktion ▶️</h2>
+      <p class="lead">Vereinfachte Simulation (Zeitraffer, keine echte Messung). Beobachte, wie wenige Kameras den Takt vorgeben.</p>
+      <div class="sim-controls">
+        <button class="btn" id="sim1">1 Kunde · 100 Videos</button>
+        <button class="btn" id="sim10">10 Kunden · 1.000 Videos</button>
+        <button class="btn secondary" id="simReset">Zurücksetzen</button>
+      </div>
+      <div class="sim-row"><div class="lbl">⏳ Warteschlange<small>wartet auf einen freien Platz</small></div><div class="bar"><div class="bar-fill f-wait" id="bWait"></div></div><div class="sim-count" id="cWait">0</div></div>
+      <div class="sim-row"><div class="lbl">🔧 In Bearbeitung<small>max. 48 (2 Hallen × 24)</small></div><div class="bar"><div class="bar-fill f-active" id="bActive"></div></div><div class="sim-count" id="cActive">0</div></div>
+      <div class="sim-row"><div class="lbl">🎥 Wird gedreht<small>max. 12 Kameras</small></div><div class="bar"><div class="bar-fill f-render" id="bRender"></div></div><div class="sim-count" id="cRender">0</div></div>
+      <div class="sim-row"><div class="lbl">✅ Fertig<small>Video + Landingpage + Brief + Umschlag</small></div><div class="bar"><div class="bar-fill f-done" id="bDone"></div></div><div class="sim-count" id="cDone">0</div></div>
+      <div class="sim-clock" id="simClock">Simulierte Zeit: –</div>
+      <div id="fairnessView" style="display:none">
+        <h3>Faire Reihenfolge bei 10 Kunden</h3>
+        <p style="font-size:13.5px;color:var(--ink-soft);margin:4px 0 4px">Jede Farbe = ein Kunde. Die nächsten 40 Aufträge in der Schlange – die Kunden wechseln sich ab, keiner blockiert die anderen:</p>
+        <div class="chips" id="fairChips"></div>
+      </div>
+      <p class="sim-note">Vereinfachung: Jedes Video braucht hier gleich lang. In echt variiert die Dauer stark (langsame Kundenwebseiten, Länge des Videos, Anzahl Szenen).</p>
+    </div>
+
+    <div class="card">
+      <h2>Und wenn 10 Kunden gleichzeitig bestellen?</h2>
+      <p class="lead">Dann liegen 1.000 Auftragszettel in derselben Warteschlange – aber es bleiben dieselben 12 Kameras.</p>
+      <ul style="font-size:14.5px;color:var(--ink-soft);margin:0;padding-left:20px">
+        <li><b>Fairness:</b> Die Aufträge werden nach Position sortiert: Erst kommt von jedem Kunden Empfänger Nr. 1 dran, dann von jedem Nr. 2, und so weiter. Jeder Kunde sieht also früh erste fertige Videos. Wer zusätzlich noch alte, unfertige Runden laufen hat, wird automatisch nach hinten einsortiert.</li>
+        <li><b>Kein VIP-Überholen:</b> Es gibt keine bezahlte Überholspur. Alle teilen sich dieselben Maschinen.</li>
+        <li><b>Dauer:</b> 1.000 komplexe Videos durch 12 Kameras heißt realistisch <b>mehrere Stunden</b> Gesamtdauer. Die Fabrik geht dabei nicht kaputt, sie arbeitet die Schlange einfach ab.</li>
+        <li><b>Sonderfall Begrüßung:</b> Die persönliche KI-Begrüßung darf nur 3× gleichzeitig produziert werden (Limit des externen Dienstes). Bei 1.000 Empfängern mit Begrüßung wäre DAS die längste Schlange von allen.</li>
+      </ul>
+      <div class="callout">💡 <b>Wichtigster Unterschied zum Verstehen:</b> „Ich habe die Generierung gestartet" heißt: Deine Zettel liegen in der Schlange. „Der Server arbeitet an diesem Empfänger" heißt: Einer der 48 Plätze gehört gerade ihm – und vielleicht sogar eine der 12 Kameras.</div>
+    </div>
+
+    <div class="card">
+      <h2>Mini-Lexikon</h2>
+      <table>
+        <tr><td><b>Warteschlange (Queue)</b></td><td>Digitale Schlange von Auftragszetteln. Wer vorne steht, kommt als Nächstes dran.</td></tr>
+        <tr><td><b>Worker</b></td><td>Ein Arbeiter-Programm auf einem Server, das sich Aufträge aus der Schlange nimmt und abarbeitet.</td></tr>
+        <tr><td><b>Server</b></td><td>Ein gemieteter Computer im Rechenzentrum. VIDEOCOMET nutzt zwei: einen Allrounder und einen reinen Video-Dreher.</td></tr>
+        <tr><td><b>Rendern</b></td><td>„Das Video drehen": Der Computer filmt unsichtbar Webseiten/Folien ab und schneidet alles zusammen.</td></tr>
+        <tr><td><b>Landingpage</b></td><td>Die persönliche Mini-Webseite pro Empfänger, auf der sein Video liegt (der QR-Code im Brief führt dorthin).</td></tr>
+        <tr><td><b>Preflight</b></td><td>Die Prüfstation vor der Produktion: Sind alle Webseiten-Adressen der Empfänger in Ordnung?</td></tr>
+      </table>
+    </div>
+
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- TAB 2: TECHNISCH -->
+  <!-- ============================================================= -->
+  <section class="tab" id="tab-tech">
+
+    <div class="card">
+      <h2>Systemarchitektur (Ist-Zustand)</h2>
+      <p class="lead">Alle Angaben aus Code + Live-Env (20.08.2026). Datei-Referenzen beziehen sich auf das Repo <code>videocomet-new</code>.</p>
+      <div class="arch">
+        <div class="arch-col">
+          <h4>Eingang</h4>
+          <div class="node hl"><b>Next.js App „videocomet-app"</b><small>Hauptserver · Traefik-Routing (app.videocomet.de)<br>API-Routen, Auth, Billing-Gate, Lead-Import, Enqueue<br><code>src/app/api/runs/[id]/start/route.ts</code></small></div>
+          <div class="node"><b>PostgreSQL „videocomet-postgres"</b><small>runs, leads, campaigns, pipeline_events, credit_ledger, worker_heartbeats, bunny_assets …<br><code>src/lib/db/schema.ts</code></small></div>
+          <div class="node"><b>Redis „videocomet-redis"</b><small>Alle BullMQ-Queues, Job-State, ETA-Cache (<code>eta:run:*</code>), Screenshot-Hashes<br>Für Server 2 via socat-Bridges auf 10.0.0.2 erreichbar</small></div>
+        </div>
+        <div class="arch-col">
+          <h4>Verarbeitung</h4>
+          <div class="node hl"><b>Server 1: Hauptserver (Hetzner CPX42)</b><small>8 vCPU · 16 GB RAM · Worker-Container auf 8 GB begrenzt<br>Container <code>videocomet-worker</code> (src/worker/index.ts)<br>ALLE Worker + alle Singleton-Loops (Recovery, Watchdogs, Domain-Verifier, Bunny-Reconciler, E-Mail-Drip, ETA)<br><b>MAX_CONCURRENT_RENDERS=4</b></small></div>
+          <div class="node hl"><b>Server 2: render-1 (Hetzner CX53)</b><small>16 vCPU · 32 GB RAM · Container-Limit 24 GB<br>Container <code>videocomet-render</code>, WORKER_ROLE=render (src/worker/render-only.ts)<br>NUR lead-pipeline-Worker, keine Singleton-Jobs<br><b>MAX_CONCURRENT_RENDERS=8 · MAX_CONCURRENT_ENCODES=6</b></small></div>
+          <div class="node"><b>Pro Worker-Prozess</b><small>1 persistenter Chromium-Prozess (browser-pool.ts), pro Lead frischer Incognito-Context · ffmpeg · LibreOffice headless · Ghostscript</small></div>
+        </div>
+        <div class="arch-col">
+          <h4>Externe Dienste</h4>
+          <div class="node ext"><b>Bunny Stream</b><small>Video-Hosting + Transcoding (Encoding-Wait bis 5 min, deferred)</small></div>
+          <div class="node ext"><b>Bunny Storage</b><small>PDFs, Thumbnails, QR, Custom-LPs, Intro-MP4s</small></div>
+          <div class="node ext"><b>Google Docs/Drive API</b><small>Brief-Renderer 4.0 (Copy→batchUpdate→PDF-Export) · Rate-Limit 50 Writes/min</small></div>
+          <div class="node ext"><b>Fish Audio + sync.so</b><small>Personalisierte Intro (TTS + Lip-Sync) · sync.so-Concurrency 3</small></div>
+          <div class="node ext"><b>Resend</b><small>Transaktions-Mails + Ops-Alerts</small></div>
+          <div class="node ext"><b>Kunden-Webseiten</b><small>Live-Scroll-Capture pro Lead (unkontrollierbare Latenz!)</small></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Alle BullMQ-Queues</h2>
+      <p class="lead">Eine Redis-Instanz, geteilte Connection (<code>src/worker/queue.ts:20-59</code>). Alle User teilen sich alle Queues.</p>
+      <div class="tbl-scroll">
+      <table>
+        <tr><th>Queue</th><th>Zweck</th><th>Concurrency (Env, Default)</th><th>Attempts/Backoff</th><th>Läuft auf</th></tr>
+        <tr><td><code>lead-pipeline</code> <span class="badge b-crit">Hauptlast</span></td><td>Komplette Lead-Produktion (Video→…→Umschlag)</td><td>24/Worker (<code>WORKER_CONCURRENCY</code>) → <b>48 gesamt</b>; real gedrosselt durch 12 Render-Slots</td><td>2 (App-Enqueue, job-enqueue.ts:160) bzw. 3 (Worker-Pfade, queue.ts:85) · 5s exp.</td><td>Server 1 + 2</td></tr>
+        <tr><td><code>lead-preflight</code></td><td>URL-Probe + Light-Screenshot je Lead</td><td>24 (<code>PREFLIGHT_WORKER_CONCURRENCY</code>)</td><td>2 · 5s exp.</td><td>Server 1</td></tr>
+        <tr><td><code>intro-generation</code></td><td>Intro-Staging je Lead (Fish TTS + sync.so)</td><td>3 (sync.so-Account-Limit)</td><td>4 · 30s exp.</td><td>Server 1</td></tr>
+        <tr><td><code>intro-preview</code> / <code>intro-calibration</code> / <code>voice-training</code></td><td>Intro-Vorschau, Audio-Analyse, Voice-Clone</td><td>1 (voice-training); Rest <span class="badge b-unclear">unklar</span></td><td>2</td><td>Server 1</td></tr>
+        <tr><td><code>screenshot</code> / <code>url-preview</code> / <code>brand-extract</code></td><td>Editor-Hilfsjobs (Shared Browser-Pool)</td><td>2 / 4 / 2</td><td>2 / 3 / 1</td><td>Server 1</td></tr>
+        <tr><td><code>crm-sync</code> / <code>webhook-delivery</code> / <code>email-gif</code></td><td>Lead-Events → CRM, signierte Webhooks, GIF-Erzeugung</td><td>2 / 8 (max 4 pro Endpoint) / 2</td><td>4 / 1 / 2</td><td>Server 1</td></tr>
+      </table>
+      </div>
+      <p style="font-size:13px;color:var(--ink-soft)"><b>Job-Identität:</b> <code>jobId = leadId</code> überall (BullMQ-Dedupe); Regenerationen nutzen <code>{leadId}-regen-{timestamp}</code>. <b>Priorität:</b> <code>fairLeadPriority = userBacklog + rowIndex</code> (queue-fairness.ts:33-82): offene Leads ÄLTERER eigener Runs zählen als Malus → parallele Runs eines Users laufen quasi sequenziell, fremde User interleaven per rowIndex. Kein User kann die Queue exklusiv belegen; eine harte Reservierung pro User existiert aber nicht.</p>
+    </div>
+
+    <div class="card">
+      <h2>Ablauf ab Klick (Phase für Phase)</h2>
+
+      <h3>Phase 0 · Run-Start (synchron im API-Call, Sekunden)</h3>
+      <p style="font-size:14px;color:var(--ink-soft)"><code>POST /api/runs/[id]/start</code> (route.ts:94-850): Auth → Status-Guard (nur aus draft/mapping/failed) → <b>Billing-Gate</b> (<code>assertBillingReadyForRun</code>: Abo aktiv + Credits ≥ Leads × Preis; Intro = 2 Credits/Lead) → <code>bulkInsertLeads</code> (Status <code>pending</code>, CSV-Daten als JSONB) → Soft-Remove von Duplikaten (Host+E-Mail) und unvollständigen Zeilen → <b>A/B-Zuteilung</b>: <code>leads.abVariant</code> = A/B nach <code>runs.abConfig</code>-Snapshot (mode random/sequential, weightA 10-90) → Run-Status <code>preflighting</code> → Preflight-Jobs enqueued (Purge + addBulk, jobId=leadId). Keine übergreifende DB-Transaktion (separate Writes). <b>Credits werden hier NICHT abgebucht</b> – nur geprüft.</p>
+
+      <h3>Phase 1 · Preflight (parallel 24, ~1-2 min bei 100 Leads)</h3>
+      <p style="font-size:14px;color:var(--ink-soft)">Pro Lead: URL-Probe (Erreichbarkeit, Redirects, TLS, Tempo, Bot-Block) + Light-Screenshot. Ergebnis-Status u. a. <code>ok | url_dead | slow | bot_block | duplicate</code>. Recovery-Loop finalisiert hängengebliebene Preflights nach 5 min (index.ts:469-654). Danach Run → <code>awaiting_approval</code>: <b>menschlicher Gate – der User muss freigeben.</b> Watchdog: 10 min nach Approval ohne Fortschritt → Run failed.</p>
+
+      <h3>Phase 1b · Intro-Staging (optional, parallel 3)</h3>
+      <p style="font-size:14px;color:var(--ink-soft)">Bei <code>introEnabled</code>: je Lead ein <code>intro-generation</code>-Job (Fish-TTS Best-of-N + sync.so Lip-Sync-Polling bis 6 min). Ergebnis wird als <code>leads.introResult</code> persistiert (MP4 in Bunny Storage). Nach 3 Fehlversuchen: <code>fallback_error</code> → Render nutzt das Original-Webcam-Video. Recovery: 20 min (generating) / 5 min (queued). <span class="badge b-unclear">UNKLAR</span> Exakte Übergabe-Reihenfolge Intro-Staging ↔ Pipeline-Start (ob Render-Jobs auf Intro warten oder Stage 0 nur das persistierte Ergebnis erwartet) ist aus dem Code nicht restlos eindeutig ableitbar.</p>
+
+      <h3>Phase 2 · Pipeline pro Lead (die eigentliche Produktion)</h3>
+      <div class="tbl-scroll">
+      <table>
+        <tr><th>#</th><th>Stage (pipeline.ts)</th><th>Was passiert</th><th>Timeout</th><th>Engpass</th></tr>
+        <tr><td>0</td><td><code>fetchIntroSegment</code></td><td>Persistiertes Intro-MP4 laden (nur bei Intro-Feature)</td><td>60s</td><td><span class="badge b-ok">🟢</span></td></tr>
+        <tr><td>1</td><td><code>video-render</code></td><td>Szene-für-Szene-Capture (Chromium-Scroll 30fps-JPG-Sequenz → ffmpeg) + Webcam-PiP-Compose. <b>Wartet auf Render-Slot (4+8=12 global)!</b> Segment-Fehler: 1 In-Job-Retry, dann Fail-Loud. Zu kurzes Endvideo → Fehler (Längen-Gate).</td><td>600s</td><td><span class="badge b-crit">🔴</span></td></tr>
+        <tr><td>1b</td><td><code>video-compress</code></td><td>libx264 CRF26 Re-Encode oder Remux · Encode-Semaphor (4 bzw. 6)</td><td>90s</td><td><span class="badge b-warn">🟠</span></td></tr>
+        <tr><td>2</td><td><code>video-upload</code></td><td>Upload zu Bunny Stream; <b>Encoding-Wait läuft DEFERRED parallel</b> zu Stage 3-9, awaited erst vor Stage 10 (tolerant bei Timeout)</td><td>330s</td><td><span class="badge b-ok">🟢</span></td></tr>
+        <tr><td>5</td><td><code>landingpage-create</code></td><td>Slug + finale URL (Custom-Domain &gt; lp.videocomet.de &gt; app…/v/{slug}); nur DB-Write, Seite rendert dynamisch</td><td>10s</td><td><span class="badge b-ok">🟢</span></td></tr>
+        <tr><td>3/3b</td><td><code>thumbnail-*</code></td><td>Frame-Extrakt, Custom-Template (run-shared via Advisory-Lock, 1× pro Run!) oder Live-LP-Screenshot</td><td>15-45s</td><td><span class="badge b-ok">🟢</span></td></tr>
+        <tr><td>4</td><td><code>qrGenerate</code></td><td>QR auf Landingpage-URL (CPU, pro Lead)</td><td>5s</td><td><span class="badge b-ok">🟢</span></td></tr>
+        <tr><td>6-9</td><td>PDF-Brief</td><td>Renderer 4.0: Google-Doc-Kopie → <code>batchUpdate</code>-Platzhalter → PDF-Export → QR-Stempel exakt in Platzhalter-Box. A/B: <code>abVariant==='B' ? urlB : urlA</code> (pipeline.ts:1561-1571). Fallback: LibreOffice-HTML-Pipeline. <b>Google-Rate-Limit: 50 Writes/min geteilt durch alle parallelen Jobs.</b></td><td>270s</td><td><span class="badge b-crit">🔴</span> (bei Skalierung)</td></tr>
+        <tr><td>9a/9b</td><td>PDF-Compress + Upload · Umschlag</td><td>Ghostscript → Bunny Storage (<code>runs/{runId}/letters/…</code>, 30-Tage-TTL). Umschlag-PDF aus Template (run- oder campaign-Level), <b>best-effort</b>: Lead wird auch ohne Umschlag fertig</td><td>20+30s</td><td><span class="badge b-ok">🟢</span></td></tr>
+        <tr><td>9c</td><td>Frame-Thumb persist</td><td>Nach Bunny-Finalize, best-effort</td><td>–</td><td><span class="badge b-ok">🟢</span></td></tr>
+        <tr><td>9d</td><td><b>Artefakt-Gate</b></td><td>Frischer DB-Check: videoUrl + slug + pdfUrl(falls Pflicht) vorhanden? Sonst Fail mit klarer Fehlermeldung (artifact-completeness.ts)</td><td>–</td><td><span class="badge b-ok">🟢</span></td></tr>
+        <tr><td>10/11</td><td>Complete + Credits</td><td>Status <code>completed</code> → Credit-Charge (1 bzw. 2; UNIQUE (lead_id, kind='video_charge') = idempotent) → <code>finalizeRunIfAllLeadsDone</code></td><td>–</td><td><span class="badge b-ok">🟢</span></td></tr>
+      </table>
+      </div>
+      <p style="font-size:13px;color:var(--ink-soft)"><b>Parallel vs. sequenziell:</b> Innerhalb eines Leads laufen die Stages sequenziell; nur der Bunny-Encoding-Wait läuft deferred parallel. Zwischen Leads: 24 Jobs/Worker parallel, real limitiert durch Render-Slots (12), Encode-Slots (4+6), Google-Rate-Limit, sync.so (3). Hard-Timeout pro Lead-Job: 20 min (index.ts / render-only.ts, <code>PIPELINE_HARD_TIMEOUT_MS</code>).</p>
+
+      <h3>Phase 3 · Runden-Abschluss (runs.ts, finalizeRunIfAllLeadsDone)</h3>
+      <p style="font-size:14px;color:var(--ink-soft)">Nach jedem Lead-Job: Sind alle Leads terminal? → Completeness-Gate (completed ohne Video/Slug → failed) → <b>Auto-Retry:</b> failed Leads ohne <code>autoretry</code>-Marker werden 1× neu eingereiht (jobId=leadId, Fairness-Priorität) → finale Run-UPDATE mit atomarem NOT-EXISTS-Guard (kein „completed" solange ein Lead nicht-terminal) → Webhooks + Notification + ggf. Ops-Alert-Mail bei Fehlschlägen.</p>
+    </div>
+
+    <div class="card">
+      <h2>Szenentypen + Wiederverwendung</h2>
+      <div class="tbl-scroll">
+      <table>
+        <tr><th>Segment-Typ (src/lib/segments/types.ts)</th><th>Render-Methode</th><th>Personalisiert?</th><th>Cache/1× pro Run?</th></tr>
+        <tr><td><code>website</code> (echtes Scrollen)</td><td>Chromium recordScroll (30fps JPG-Sequenz) oder Static-Hero; Cursor-Overlay möglich</td><td>optional (URL-Spalte pro Lead)</td><td><b>Fixed-Segmente: JA</b> – 1× rendern, 2h-Cache, alle Leads nutzen es (website-segment-cache.ts)</td></tr>
+        <tr><td><code>gdocs</code> (Google Docs)</td><td>Chromium-Render der personalisierten Doc-Ansicht (doc-geometry.ts = einzige Scroll-Geometrie-Quelle)</td><td>ja</td><td>nein (pro Lead)</td></tr>
+        <tr><td><code>pdf</code></td><td>Chromium Viewer-Scroll</td><td>nein</td><td>Segment-Cache (2h)</td></tr>
+        <tr><td><code>gslide</code> (Google Slides)</td><td>PPTX-Export → LibreOffice headless → Frames</td><td>ja ({{key}} im XML)</td><td>Cache wenn fixed</td></tr>
+        <tr><td><code>canva</code> (PPTX-Upload)</td><td>LibreOffice headless</td><td>ja ({{key}} im XML)</td><td>nein</td></tr>
+        <tr><td><code>slide</code> (eigener Editor)</td><td>Layer-Stack-Render 1280×720</td><td>ja (Text-Layer)</td><td>nein</td></tr>
+        <tr><td><code>text</code> / <code>image</code> / <code>video</code></td><td>Puppeteer-Text / Sharp / ffmpeg-Playback</td><td>text: ja</td><td>nein</td></tr>
+        <tr><td>Webcam (eigene Aufnahme)</td><td>Bunny-MP4-Download + Normalisierung</td><td>nein (bzw. Intro: ja)</td><td><b>Normalize-Cache 2h</b> pro Webcam-URL (alle Leads)</td></tr>
+      </table>
+      </div>
+      <p style="font-size:13px;color:var(--ink-soft)">Canva wird über <b>PPTX-Upload</b> unterstützt (kein Canva-URL-Direktimport). Webcam-only-Kampagnen überspringen Render/Compress komplett (Shared-Video-Pfad).</p>
+    </div>
+
+    <div class="card">
+      <h2>Szenario A · 1 User, 100 Leads (komplexes Video, Intro, Brief-A/B, Umschlag)</h2>
+      <p class="lead">Zeitangaben = grobe Ableitung aus Code-Timeouts und Live-Konfiguration, keine Messung.</p>
+      <div class="timeline">
+        <div class="t-item"><div class="t-time">Sekunde 0-5</div><p>API-Call: Billing-Gate, 100 Leads-Insert, Dedupe, A/B-Lose (z. B. 50/50), Run → preflighting, 100 Preflight-Jobs enqueued.</p></div>
+        <div class="t-item"><div class="t-time">Sekunde 5 - Minute 2</div><p>Preflight: 24 parallel, 100 URLs geprüft. Run → awaiting_approval. <b>Stopp: wartet auf User-Freigabe.</b></p></div>
+        <div class="t-item"><div class="t-time">Nach Freigabe + 0s</div><p>100 Pipeline-Jobs enqueued (Priorität = rowIndex, Backlog 0). Parallel: 100 Intro-Staging-Jobs (3 gleichzeitig, je ~1-6 min → Intro-Bahn braucht ggf. 1-3 h und ist bei aktivierter Begrüßung der langsamste Strang!).</p></div>
+        <div class="t-item"><div class="t-time">+ 10s</div><p>48 Jobs aktiv (24 je Server), davon 12 im Render-Slot. 52 warten in Redis, 36 warten in-process auf einen Slot.</p></div>
+        <div class="t-item"><div class="t-time">+ 2-6 min</div><p>Erste Leads fertig: Render 1-4 min (Website-Scroll 60-120s + Docs/PPTX-Szenen) → Compress ≤90s → Upload (Encoding deferred) → LP/Thumb/QR Sekunden → Brief ~10-60s (Rate-Limit) → Umschlag. Erste Credits abgebucht.</p></div>
+        <div class="t-item"><div class="t-time">+ ~30-60 min</div><p>Durchsatz ≈ 12 Render-Slots ÷ ~2-4 min Render ≈ 3-6 Leads/min → 100 Leads in grob 20-40 min Renderzeit + Nachläufer. Ohne Intro realistisch 30-60 min; mit Intro dominiert die Intro-Bahn.</p></div>
+        <div class="t-item"><div class="t-time">Abschluss</div><p>Letzter Lead terminal → Auto-Retry für Fehlschläge (1×) → Completeness-Gate → Run completed. User exportiert Briefe+Umschläge als ZIP (bulk-export, Sortierung nach Spalte für 1:1-Kuvertierung, inkl. Adressliste.xlsx).</p></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Szenario B · 10 User × 100 Leads gleichzeitig (1.000 Videopakete)</h2>
+      <p class="lead">Ja: ~1.000 Jobs entstehen binnen Sekunden in derselben <code>lead-pipeline</code>-Queue. Beide Server ziehen daraus. Danach gilt: dieselben 12 Render-Slots für alle.</p>
+      <div class="two-col">
+        <div>
+          <h3>Was passiert</h3>
+          <ul style="font-size:13.5px;color:var(--ink-soft);padding-left:18px;margin:0">
+            <li>Priorität = rowIndex ⇒ die Leads Nr. 1 aller 10 User laufen zuerst, dann Nr. 2 usw. – sauberes Interleaving, jeder User sieht früh Ergebnisse.</li>
+            <li>Ein User kann die Worker nicht exklusiv belegen: sein zweiter/dritter paralleler Run bekommt Backlog-Malus. Innerhalb EINES Runs konkurriert er aber gleichberechtigt.</li>
+            <li>Durchsatz bleibt ≈ 3-6 komplexe Videos/min ⇒ 1.000 Videos ≈ <b>3-6 Stunden</b>.</li>
+            <li>Redis/Queue selbst ist unkritisch (1.000 Jobs sind trivial); der Stau materialisiert sich vor den Render-Slots.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Engpass-Ranking bei 1.000 Videos</h3>
+          <table>
+            <tr><td><span class="badge b-crit">🔴 kritisch</span></td><td><b>CPU/Render-Slots (12):</b> Chromium-Capture + ffmpeg sind der harte Taktgeber (render-slots.ts; 4+8 laut Live-Env).</td></tr>
+            <tr><td><span class="badge b-crit">🔴 kritisch</span></td><td><b>Google-Docs-API 50 Writes/min:</b> 1.000 Briefe = min. ~20 min reines API-Budget; Wartezeiten bis ~40s/Job schon einkalkuliert (docsNativeRender-Timeout 270s).</td></tr>
+            <tr><td><span class="badge b-crit">🔴 kritisch</span></td><td><b>sync.so-Limit 3:</b> 1.000 Intros wären rechnerisch &gt;1 Tag – bei aktivierter Begrüßung DER dominante Engpass.</td></tr>
+            <tr><td><span class="badge b-warn">🟠 möglich</span></td><td><b>Externe Kundenwebseiten:</b> unkontrollierbar langsam (Incident 2026-08-19: 280s statt 60s) – frisst Render-Slot-Zeit.</td></tr>
+            <tr><td><span class="badge b-warn">🟠 möglich</span></td><td><b>RAM Server 1 (8-GB-Limit):</b> Chromium+ffmpeg+LibreOffice unter Volllast; potenzieller Bottleneck, nicht bewiesen.</td></tr>
+            <tr><td><span class="badge b-warn">🟠 möglich</span></td><td><b>Bunny-Encoding-Wellen:</b> deferred + tolerant, verzögert aber MP4-Fallback-Verfügbarkeit.</td></tr>
+            <tr><td><span class="badge b-ok">🟢 unkritisch</span></td><td>Postgres, Redis, Landingpages (dynamisch, kein Build), QR, Umschläge, Storage-Uploads.</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Fehlerbehandlung, Retries, Recovery</h2>
+      <div class="two-col">
+        <div>
+          <h3>Pro Job/Lead</h3>
+          <ul style="font-size:13.5px;color:var(--ink-soft);padding-left:18px;margin:0">
+            <li>BullMQ-Retry: attempts 2-3, 5s exponentiell; <code>UnrecoverableError</code> (z. B. SegmentConfigError) bricht sofort ab.</li>
+            <li>Segment-Retry: 1 In-Job-Wiederholung mit frischem Workdir, dann Fail-Loud (seit Incident 20.08. kein stiller Platzhalter mehr).</li>
+            <li>Hard-Timeout 20 min pro Job (Promise.race in beiden Worker-Entries).</li>
+            <li>Video-Längen-Gate + Artefakt-Gate (Stage 9d) + Run-Completeness-Gate.</li>
+            <li>Credits: UNIQUE-Charge, kein Doppelabzug bei Retries.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Singleton-Loops (nur Server 1, index.ts)</h3>
+          <ul style="font-size:13.5px;color:var(--ink-soft);padding-left:18px;margin:0">
+            <li>Stuck-Lead-Recovery alle 2 min: rendering/uploading &gt; 21 min → re-enqueue (attempts&lt;3) oder failed; orphaned-pending → re-enqueue.</li>
+            <li>Preflight-Recovery (5 min), Intro-Recovery (20/5 min), Approved-Run-Watcher (10 min).</li>
+            <li>Stale-Worker-Watchdog alle 2 min: Heartbeat &gt; 3 min alt → Ops-Alert-Mail. Heartbeats: 30s-Upserts je Worker, Row-Delete bei sauberem Shutdown.</li>
+            <li>Auto-Retry beim Finalize: genau 1× pro failed Lead (idempotenter Marker in pipeline_events).</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout warn"><b>Bekannte Grenze:</b> Stirbt Server 1 (Haupt-Worker) komplett, laufen weder Recovery-Loops noch der Watchdog – externes Monitoring existiert noch nicht.</div>
+    </div>
+
+    <div class="card">
+      <h2>Unklar / nicht eindeutig aus dem System ableitbar</h2>
+      <ul style="font-size:13.5px;color:var(--ink-soft);padding-left:18px;margin:0">
+        <li><span class="badge b-unclear">UNKLAR</span> Exakte Wartelogik Pipeline ↔ Intro-Staging (wartet der Render-Job aktiv, oder scheitert Stage 0 bis das Intro da ist?).</li>
+        <li><span class="badge b-unclear">UNKLAR</span> Concurrency von <code>intro-calibration</code> / <code>intro-preview</code> (vermutlich 1-2, nicht explizit belegt).</li>
+        <li><span class="badge b-unclear">UNKLAR</span> Ob die Webcam-Normalisierung durch einen eigenen Semaphor läuft oder nur durch den Encode-Limiter gedeckelt ist.</li>
+        <li><span class="badge b-unclear">UNKLAR</span> Reale Stage-Dauern unter Prod-Last (keine historisierten Metriken; nur Timeouts + Einzel-Incidents als Anhaltspunkt). Alle Zeitangaben hier sind daher Schätzungen.</li>
+      </ul>
+    </div>
+
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- TAB 3: AUSBLICK -->
+  <!-- ============================================================= -->
+  <section class="tab" id="tab-future">
+    <div class="card">
+      <h2>Was würde sich durch die geplanten Optimierungen ändern?</h2>
+      <p class="lead">Bewusst getrennt vom Ist-Zustand. Diese Punkte sind diskutiert/geplant, aber <b>nicht umgesetzt</b>:</p>
+      <div class="tbl-scroll">
+      <table>
+        <tr><th>Heute (Ist)</th><th>Geplant / diskutiert</th><th>Effekt</th></tr>
+        <tr><td>Feste 2 Server, 12 Render-Slots – Kapazität wird manuell vorgehalten</td><td><b>Autoscaler (Phase 3):</b> zusätzliche Render-Server automatisch bei Queue-Stau starten/stoppen</td><td>1.000er-Wellen in Stunden statt halben Tagen, ohne Dauerkosten</td></tr>
+        <tr><td>Stages pro Lead strikt sequenziell (nur Bunny-Wait parallel)</td><td><b>Parallel-Pipeline:</b> unabhängige Stages (z. B. Brief parallel zum Video) gleichzeitig</td><td>Kürzere Zeit pro Lead, bessere Slot-Auslastung</td></tr>
+        <tr><td>Personalisierte Google-Docs-Szenen werden pro Lead komplett neu gerendert</td><td><b>Doc-Cache:</b> Basis-Rendering je Kampagne cachen, nur Platzhalter-Delta pro Lead</td><td>Google-Docs-Szenen waren im Perf-Deep-Dive (18.08.) der größte Einzelposten</td></tr>
+        <tr><td>Intro-Staging hart auf 3 parallele sync.so-Jobs begrenzt</td><td>Höheres sync.so-Kontingent bzw. Mehr-Account-Strategie (offen)</td><td>Intro-Runden skalieren über ~100 Leads hinaus</td></tr>
+        <tr><td>Watchdog läuft auf Server 1 selbst</td><td>Externes Monitoring (Uptime-Dienst) für den Haupt-Worker</td><td>Alarm auch wenn Server 1 komplett ausfällt</td></tr>
+      </table>
+      </div>
+      <p style="font-size:13px;color:var(--muted)">Quellen: Pipeline-Performance-Analyse 18.08.2026, Skalierungs-Paket 10×1000 (Phasen 0-2 umgesetzt, Phase 3 offen).</p>
+    </div>
+  </section>
+
+  <footer>VIDEOCOMET · Interne Prozess-Dokumentation · generiert am 20.08.2026 aus dem realen Code-Stand (Commit 4d52972) · Datei funktioniert komplett offline</footer>
+</div>
+
+<script>
+(function(){
+  // Tabs
+  var btns = document.querySelectorAll('.tab-btn');
+  btns.forEach(function(b){
+    b.addEventListener('click', function(){
+      btns.forEach(function(x){ x.classList.remove('active'); });
+      document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+      b.classList.add('active');
+      document.getElementById('tab-' + b.dataset.tab).classList.add('active');
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
+  });
+
+  // Simulation
+  var MAX_ACTIVE = 48, MAX_RENDER = 12;
+  var state = null, timer = null;
+  var els = {
+    bWait: document.getElementById('bWait'), cWait: document.getElementById('cWait'),
+    bActive: document.getElementById('bActive'), cActive: document.getElementById('cActive'),
+    bRender: document.getElementById('bRender'), cRender: document.getElementById('cRender'),
+    bDone: document.getElementById('bDone'), cDone: document.getElementById('cDone'),
+    clock: document.getElementById('simClock'),
+    fairView: document.getElementById('fairnessView'),
+    fairChips: document.getElementById('fairChips')
+  };
+  var userColors = ['#6d5bd0','#2e9e5b','#d97706','#dc2626','#0891b2','#7c3aed','#be185d','#65a30d','#475569','#b45309'];
+
+  function reset(){
+    if (timer) { clearInterval(timer); timer = null; }
+    state = null;
+    ['bWait','bActive','bRender','bDone'].forEach(function(k){ els[k].style.width = '0%'; });
+    ['cWait','cActive','cRender','cDone'].forEach(function(k){ els[k].textContent = '0'; });
+    els.clock.textContent = 'Simulierte Zeit: –';
+    els.fairView.style.display = 'none';
+  }
+
+  function start(users){
+    reset();
+    var total = users * 100;
+    // Queue sorted by priority = rowIndex (all users backlog 0) -> interleaved
+    var queue = [];
+    for (var row = 0; row < 100; row++)
+      for (var u = 0; u < users; u++)
+        queue.push(u);
+    state = {
+      total: total, users: users, queue: queue,
+      active: [],   // items in bearbeitung, jedes: {user, phase:'pre'|'render'|'post', ticks}
+      done: 0, tick: 0
+    };
+    if (users > 1) {
+      els.fairView.style.display = 'block';
+      els.fairChips.innerHTML = '';
+      queue.slice(0, 40).forEach(function(u){
+        var s = document.createElement('span');
+        s.style.background = userColors[u % userColors.length];
+        s.title = 'Kunde ' + (u + 1);
+        els.fairChips.appendChild(s);
+      });
+    }
+    timer = setInterval(step, 300);
+  }
+
+  function step(){
+    var s = state; if (!s) return;
+    s.tick++;
+    // Pull from queue into active
+    while (s.active.length < MAX_ACTIVE && s.queue.length > 0) {
+      s.active.push({ user: s.queue.shift(), phase: 'pre', ticks: 1 });
+    }
+    // Assign render slots (FIFO among phase 'pre' done)
+    var rendering = s.active.filter(function(a){ return a.phase === 'render'; }).length;
+    s.active.forEach(function(a){
+      if (a.phase === 'pre') {
+        a.ticks--;
+        if (a.ticks <= 0 && rendering < MAX_RENDER) { a.phase = 'render'; a.ticks = 6; rendering++; }
+      } else if (a.phase === 'render') {
+        a.ticks--;
+        if (a.ticks <= 0) { a.phase = 'post'; a.ticks = 3; }
+      } else if (a.phase === 'post') {
+        a.ticks--;
+      }
+    });
+    // Complete
+    var before = s.active.length;
+    s.active = s.active.filter(function(a){ return !(a.phase === 'post' && a.ticks <= 0); });
+    s.done += before - s.active.length;
+
+    // Render UI
+    var renderNow = s.active.filter(function(a){ return a.phase === 'render'; }).length;
+    var waitNow = s.queue.length;
+    var activeNow = s.active.length;
+    els.cWait.textContent = waitNow; els.bWait.style.width = (waitNow / s.total * 100) + '%';
+    els.cActive.textContent = activeNow; els.bActive.style.width = (activeNow / MAX_ACTIVE * 100) + '%';
+    els.cRender.textContent = renderNow; els.bRender.style.width = (renderNow / MAX_RENDER * 100) + '%';
+    els.cDone.textContent = s.done; els.bDone.style.width = (s.done / s.total * 100) + '%';
+    // 1 tick ~ 30s simulated
+    var simMin = Math.round(s.tick * 0.5);
+    els.clock.textContent = 'Simulierte Zeit: ca. ' + simMin + ' Minuten' + (s.done >= s.total ? ' – Runde komplett fertig ✅' : '');
+    if (s.done >= s.total) { clearInterval(timer); timer = null; }
+  }
+
+  document.getElementById('sim1').addEventListener('click', function(){ start(1); });
+  document.getElementById('sim10').addEventListener('click', function(){ start(10); });
+  document.getElementById('simReset').addEventListener('click', reset);
+})();
+</script>
+</body>
+</html>
