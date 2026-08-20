@@ -6,6 +6,12 @@ import { hasConsent, CONSENT_CHANGED_EVENT } from "@/components/consent/consent"
 
 interface Props {
   pixelId: string;
+  /**
+   * Vom Root-Layout aus dem SSR-Cookie-Read übergeben. Wenn true,
+   * lädt der Pixel SOFORT beim Hydration (statt erst nach useEffect-
+   * Cookie-Check), sodass Meta Pixel Helper ihn beim Load-Scan sieht.
+   */
+  initialMarketingConsent?: boolean;
 }
 
 /**
@@ -21,11 +27,18 @@ interface Props {
  * Navigationen (App-Router) wollen wir zusätzlich PageView tracken —
  * deshalb der zweite useEffect mit `pathname`-Watcher.
  */
-export function MetaPixelLoader({ pixelId }: Props) {
-  const [enabled, setEnabled] = React.useState(false);
+export function MetaPixelLoader({
+  pixelId,
+  initialMarketingConsent = false,
+}: Props) {
+  // Initial-Value aus SSR: kein Client-Delay mehr, kein Race gegen den
+  // Pixel-Helper, der beim Load-Scan sonst „keine Pixel" meldet.
+  const [enabled, setEnabled] = React.useState(initialMarketingConsent);
 
   React.useEffect(() => {
-    // Beim Mount: Ist Marketing-Consent gesetzt?
+    // Nach Hydration: Cookie noch mal client-seitig prüfen (deckt den
+    // Fall ab, dass zwischen SSR und Hydration ein Consent-Wechsel in
+    // einem anderen Tab passiert ist).
     setEnabled(hasConsent("marketing"));
     const onChange = () => setEnabled(hasConsent("marketing"));
     window.addEventListener(CONSENT_CHANGED_EVENT, onChange);

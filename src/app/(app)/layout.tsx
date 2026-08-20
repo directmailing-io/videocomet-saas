@@ -1,5 +1,5 @@
 import * as React from "react";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { requireUser } from "@/lib/auth-guard";
 import { AppShell } from "@/components/layouts/AppShell";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,6 +7,7 @@ import { loadAccessDecision, isPathAllowedWhenBlocked } from "@/lib/billing/acce
 import { PaywallScreen } from "@/components/billing/paywall-screen";
 import { CookieBanner } from "@/components/consent/CookieBanner";
 import { MetaPixelLoader } from "@/components/meta/meta-pixel-loader";
+import { CONSENT_COOKIE, parseConsentCookie } from "@/components/consent/consent";
 
 export default async function AppLayout({
   children,
@@ -25,6 +26,9 @@ export default async function AppLayout({
     access.access === "blocked" && !isPathAllowedWhenBlocked(pathname);
 
   const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "";
+  const consentCookie = (await cookies()).get(CONSENT_COOKIE)?.value;
+  const initialConsent = parseConsentCookie(consentCookie);
+  const marketingConsent = initialConsent?.categories.marketing === true;
   return (
     <Toaster>
       <AppShell
@@ -43,8 +47,13 @@ export default async function AppLayout({
           children
         )}
       </AppShell>
-      <CookieBanner />
-      {pixelId ? <MetaPixelLoader pixelId={pixelId} /> : null}
+      <CookieBanner initialConsent={initialConsent} />
+      {pixelId ? (
+        <MetaPixelLoader
+          pixelId={pixelId}
+          initialMarketingConsent={marketingConsent}
+        />
+      ) : null}
     </Toaster>
   );
 }

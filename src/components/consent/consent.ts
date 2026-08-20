@@ -31,22 +31,49 @@ export interface ConsentState {
   categories: ConsentCategories;
 }
 
+/**
+ * Parser für den Consent-Cookie-Wert, ohne document-Abhängigkeit — damit
+ * derselbe Code sowohl serverseitig (SSR-Layout-Read via next/headers) als
+ * auch clientseitig läuft. Toleriert v1-Cookies (Bestandsnutzer aus der
+ * Zeit vor Marketing-Kategorie): wenn eine ältere, aber gültige Version
+ * vorliegt, wird sie in das aktuelle Schema hochgezogen (marketing=false
+ * als Default). So verschwindet der Banner sofort nach Reload — auch wenn
+ * der User in dieser Session noch nicht neu geklickt hat.
+ */
+export function parseConsentCookie(raw: string | undefined): ConsentState | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(decodeURIComponent(raw)) as Partial<ConsentState> & {
+      categories?: Partial<ConsentCategories>;
+    };
+    const cats = parsed.categories;
+    if (!cats || typeof cats.statistics !== "boolean") return null;
+    const marketing =
+      typeof cats.marketing === "boolean" ? cats.marketing : false;
+    return {
+      version: CONSENT_VERSION,
+      timestamp:
+        typeof parsed.timestamp === "string"
+          ? parsed.timestamp
+          : new Date().toISOString(),
+      categories: {
+        necessary: true,
+        statistics: cats.statistics,
+        marketing,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function readConsent(): ConsentState | null {
   if (typeof document === "undefined") return null;
   const raw = document.cookie
     .split("; ")
     .find((c) => c.startsWith(`${CONSENT_COOKIE}=`))
     ?.slice(CONSENT_COOKIE.length + 1);
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(decodeURIComponent(raw)) as ConsentState;
-    if (parsed.version !== CONSENT_VERSION) return null;
-    if (typeof parsed.categories?.statistics !== "boolean") return null;
-    if (typeof parsed.categories?.marketing !== "boolean") return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+  return parseConsentCookie(raw);
 }
 
 export function writeConsent(categories: {

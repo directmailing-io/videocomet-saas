@@ -7,6 +7,7 @@ import {
   OPEN_SETTINGS_EVENT,
   readConsent,
   writeConsent,
+  type ConsentState,
 } from "./consent";
 
 /** Wo der Banner sichtbar ist. Die Wahl wird per Domain-Cookie auf
@@ -22,29 +23,41 @@ const BANNER_HOSTS = new Set([
 /**
  * Cookie-Banner + Einstellungs-Modal.
  *
- * Wird nur auf der Marketing-Domain gerendert (nicht auf Custom-Domains
- * der Kunden und nicht in der App). Aktuell setzen wir ausschliesslich
- * technisch notwendige Cookies — der Banner informiert daher vor allem
- * transparent und haelt die Infrastruktur fuer kuenftige, einwilligungs-
- * pflichtige Dienste (Statistik) bereit.
+ * `initialConsent` kommt aus dem Root-Layout (SSR-Read aus dem Cookie via
+ * next/headers). Damit rendert der Banner nur dann initial HTML, wenn
+ * WIRKLICH keine Einwilligung im Cookie liegt — kein Client-Hydration-
+ * Race mehr, kein Flash. Zusätzlich reagiert der Banner nach Mount auf
+ * ein Client-Read (falls SSR und Client unterschiedlich sein sollten,
+ * z. B. bei einem Nachfolge-Cookie ohne Reload).
  */
-export function CookieBanner() {
-  const [visible, setVisible] = React.useState(false);
+export function CookieBanner({
+  initialConsent = null,
+}: {
+  initialConsent?: ConsentState | null;
+} = {}) {
+  const [visible, setVisible] = React.useState(initialConsent === null);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [statistics, setStatistics] = React.useState(false);
-  const [marketing, setMarketing] = React.useState(false);
-  const [isBannerHost, setIsBannerHost] = React.useState(false);
+  const [statistics, setStatistics] = React.useState(
+    initialConsent?.categories.statistics ?? false,
+  );
+  const [marketing, setMarketing] = React.useState(
+    initialConsent?.categories.marketing ?? false,
+  );
+  // Wenn Root-Layout keinen Host-Filter macht, prüfen wir es hier nochmal —
+  // damit der Banner z. B. auf Custom-Domains von Kunden nicht auftaucht.
+  const [isBannerHost, setIsBannerHost] = React.useState(true);
 
   React.useEffect(() => {
     const onHost = BANNER_HOSTS.has(window.location.hostname);
     setIsBannerHost(onHost);
     if (!onHost) return;
+    // Zweiter Read als Sicherheitsnetz: wenn zwischen SSR und Client der
+    // Cookie geändert wurde (z. B. in einem anderen Tab), Banner ausblenden.
     const existing = readConsent();
     if (existing) {
       setStatistics(existing.categories.statistics);
       setMarketing(existing.categories.marketing);
-    } else {
-      setVisible(true);
+      setVisible(false);
     }
     const openSettings = () => {
       const current = readConsent();

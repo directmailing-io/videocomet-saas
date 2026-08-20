@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { CookieBanner } from "@/components/consent/CookieBanner";
 import { MetaPixelLoader } from "@/components/meta/meta-pixel-loader";
+import { CONSENT_COOKIE, parseConsentCookie } from "@/components/consent/consent";
 import { fontClasses } from "@/lib/fonts";
 import "./globals.css";
 
@@ -31,14 +33,25 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "";
+  // SSR-Cookie-Read: der Banner rendert nur dann initial HTML, wenn
+  // WIRKLICH kein Consent vorliegt. Kein Client-Hydration-Race, kein
+  // Flash, kein "Banner kommt beim Reload wieder" (Vorfall 2026-08-20).
+  const consentCookie = (await cookies()).get(CONSENT_COOKIE)?.value;
+  const initialConsent = parseConsentCookie(consentCookie);
+  const marketingConsent = initialConsent?.categories.marketing === true;
   return (
     <html lang="de" className={fontClasses}>
       <body>
         {children}
-        <CookieBanner />
-        {pixelId ? <MetaPixelLoader pixelId={pixelId} /> : null}
+        <CookieBanner initialConsent={initialConsent} />
+        {pixelId ? (
+          <MetaPixelLoader
+            pixelId={pixelId}
+            initialMarketingConsent={marketingConsent}
+          />
+        ) : null}
       </body>
     </html>
   );
