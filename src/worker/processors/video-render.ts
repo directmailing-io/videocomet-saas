@@ -46,6 +46,7 @@ import {
 import { renderPersonalizedGDocs } from "../lib/personalized-gdocs";
 import { renderWebsiteCapture } from "../lib/website-render-pipeline";
 import { renderFixedWebsiteSegment } from "../lib/website-segment-cache";
+import { isDurationShortfall } from "../lib/artifact-completeness";
 import type { Segment } from "@/lib/segments/types";
 import { planSegmentDurations } from "@/lib/segments/plan-durations";
 import { substitute, resolveValue } from "@/lib/placeholders/substitute";
@@ -648,6 +649,9 @@ export async function runVideoRender(
     candidates.length > 0
       ? Math.max(0.5, Math.min(...candidates))
       : input.defaultDurationSec ?? 30;
+  // Ohne Messwert UND ohne DB-Wert ist 30s ein blinder Fallback — dann darf
+  // die Shortfall-Validierung unten nicht greifen (False Positive).
+  const durationTrusted = candidates.length > 0;
   console.log(
     `[render] webcam duration probed=${probedSec ?? "n/a"} db=${dbSec ?? "n/a"} → effective=${webcamSec}s`,
   );
@@ -729,6 +733,16 @@ export async function runVideoRender(
       durationSec: duration,
     });
     return { videoFilePath: trimmedPath, durationSec: duration };
+  }
+
+  // Shortfall-Validierung (Reliability by Design 2026-08-20): ein deutlich
+  // zu KURZES Video heißt fast immer, dass ein Bestandteil fehlt (Segment
+  // nicht gerendert, concat abgebrochen, Codec-Abbruch). Das darf nie still
+  // als Erfolg durchlaufen — fail-loud, der Lead wird sichtbar failed.
+  if (durationTrusted && isDurationShortfall(duration, finalProbed)) {
+    throw new Error(
+      `Finales Video ist zu kurz: ${finalProbed?.toFixed(1)}s statt erwarteter ${duration.toFixed(1)}s — vermutlich fehlt ein Bestandteil (Render unvollständig)`,
+    );
   }
 
   return { videoFilePath: finalPath, durationSec: duration };

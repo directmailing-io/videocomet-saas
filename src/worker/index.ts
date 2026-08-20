@@ -75,7 +75,8 @@ import {
   decrementInFlight,
 } from "./lib/heartbeat";
 import { db } from "@/lib/db";
-import { leads, runs } from "@/lib/db/schema";
+import { leads, runs, workerHeartbeats } from "@/lib/db/schema";
+import { sendOpsAlert } from "@/lib/ops-alert";
 import {
   enqueueApprovedLeadsForPhase2,
   requeuePreflightLeads,
@@ -743,6 +744,41 @@ async function preflightRecovery(): Promise<void> {
 const approvedStuckFirstSeen = new Map<string, number>();
 const APPROVED_STUCK_TIMEOUT_MS = 10 * 60 * 1000;
 
+/**
+ * Heartbeat-Watchdog (Reliability 2026-08-20): Worker schreiben alle 30 s
+ * einen Heartbeat. Bleibt ein Heartbeat > 3 min aus, gilt der Worker als
+ * tot → Ops-Alert an den Admin. Fenster nach oben: 24 h, damit längst
+ * ausgemusterte Worker-IDs nicht ewig alarmieren. Läuft nur auf dem
+ * Haupt-Worker (Singleton) — stirbt der Haupt-Worker selbst, greift
+ * dieser Watchdog nicht (bekannte Grenze, externes Monitoring nötig).
+ */
+async function staleWorkerWatchdog(): Promise<void> {
+  const staleBefore = new Date(Date.now() - 3 * 60 * 1000);
+  const ignoreBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const stale = await db
+    .select({
+      workerId: workerHeartbeats.workerId,
+      hostname: workerHeartbeats.hostname,
+      lastSeenAt: workerHeartbeats.lastSeenAt,
+    })
+    .from(workerHeartbeats)
+    .where(
+      and(
+        lt(workerHeartbeats.lastSeenAt, staleBefore),
+        sql`${workerHeartbeats.lastSeenAt} > ${ignoreBefore}`,
+      ),
+    );
+  for (const w of stale) {
+    // Eigener Prozess kann hier nicht stale sein (wir schreiben alle 30s).
+    log("warn", `stale worker heartbeat: ${w.workerId} last seen ${w.lastSeenAt.toISOString()}`);
+    await sendOpsAlert({
+      topic: `stale-worker-${w.workerId}`,
+      subject: `Worker ohne Heartbeat: ${w.hostname}`,
+      text: `Der Worker ${w.workerId} (Host ${w.hostname}) hat seit ${w.lastSeenAt.toISOString()} keinen Heartbeat mehr geschrieben. Bitte Container und Server pruefen.`,
+    });
+  }
+}
+
 const WORKER_ID = `${hostname()}-${randomUUID().slice(0, 8)}`;
 
 function log(level: "info" | "warn" | "error", msg: string, extra?: unknown): void {
@@ -794,6 +830,14 @@ async function main(): Promise<void> {
     });
   }, 120_000);
   preflightRecoveryTimer.unref();
+
+  // Heartbeat-Watchdog: tote Worker (z. B. render-1 down) per Mail melden.
+  const staleWorkerTimer = setInterval(() => {
+    staleWorkerWatchdog().catch((err) => {
+      log("error", "stale-worker-watchdog failed:", err);
+    });
+  }, 120_000);
+  staleWorkerTimer.unref();
 
   // Run-ETA (W3): auslastungsbewusste Restzeit für alle laufenden Runs,
   // alle 12 s frisch nach Redis. Reine Anzeige-Hilfe — Fehler loggen, nie
@@ -1400,7 +1444,7 @@ async function main(): Promise<void> {
         log("error", "preflight worker stop failed:", err);
       }
     }
-    stopHeartbeat();
+    await stopHeartbeat();
     log("info", "bye.");
     process.exit(0);
   };

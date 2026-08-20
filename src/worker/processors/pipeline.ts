@@ -54,6 +54,7 @@ import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
 import type { LeadJobData } from "../types";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
 import { withRenderSlot } from "../lib/render-slots";
+import { missingLeadArtifacts } from "../lib/artifact-completeness";
 import { runVideoRender } from "./video-render";
 import { runVideoCompress } from "./video-compress";
 import {
@@ -457,6 +458,14 @@ export async function pipelineProcessor(
     throw new Error(`[pipeline] missing context for lead=${data.leadId}`);
   }
   const { lead, run, campaign, webcam } = ctx;
+
+  // Cancelled-Guard (Reliability 2026-08-20): Jobs einer abgebrochenen
+  // Runde (auch verspätete Auto-Retries) nicht mehr rendern — teure
+  // Browser-/Bunny-Arbeit für einen Run, den der User verworfen hat.
+  // Kein Fehlschlag, kein Status-Wechsel: der Lead bleibt wie er ist.
+  if (run.status === "cancelled") {
+    return { ok: false, skipped: "run_cancelled" };
+  }
 
   const workDir = await createTempDir(`lead-${data.leadId.slice(0, 8)}`);
   const appUrl = process.env.APP_URL ?? "https://app.videocomet.de";
@@ -2056,6 +2065,48 @@ export async function pipelineProcessor(
       } catch (err) {
         console.warn(
           `[pipeline] frame-thumbnail persist failed for ${data.leadId}: ${(err as Error)?.message}`,
+        );
+      }
+    }
+
+    // ── Stage 9d: Artefakt-Completeness-Gate (Reliability 2026-08-20) ─
+    // Ein Lead darf NUR completed werden, wenn alle erforderlichen
+    // Artefakte tatsächlich in der DB stehen. Wir prüfen die frische
+    // DB-Row (nicht In-Memory-Variablen), weil die Stages ihre Ergebnisse
+    // dorthin schreiben. Envelope ist bewusst Best-Effort (siehe Stage 9b)
+    // und wird hier nicht erzwungen.
+    {
+      const [finalLead] = await db
+        .select({
+          videoUrl: leads.videoUrl,
+          slug: leads.slug,
+          pdfUrl: leads.pdfUrl,
+        })
+        .from(leads)
+        .where(eq(leads.id, data.leadId))
+        .limit(1);
+      const missing = missingLeadArtifacts({
+        videoUrl: finalLead?.videoUrl ?? null,
+        slug: finalLead?.slug ?? null,
+        pdfUrl: finalLead?.pdfUrl ?? null,
+        // Exakt die Bedingung der PDF-Stage (Stages 6-9) — inkl. pageUrl,
+        // sonst verlangt das Gate ein PDF, das die Stage nie gebaut hätte.
+        pdfRequired:
+          !skipPdfFlag &&
+          campaign.pdfEnabled &&
+          !!effectivePdfDocsUrl &&
+          !!pageUrl,
+      });
+      if (missing.length > 0) {
+        await insertPipelineEvent({
+          runId: data.runId,
+          leadId: data.leadId,
+          level: "error",
+          stage: "run",
+          message: `${leadLabel}: Completeness-Gate — Lead nicht vollständig, fehlend: ${missing.join(", ")}. Lead wird NICHT als erfolgreich markiert.`,
+        });
+        throw new Error(
+          `Lead unvollständig, fehlende Bestandteile: ${missing.join(", ")}`,
         );
       }
     }

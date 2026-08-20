@@ -95,7 +95,7 @@ async function main(): Promise<void> {
     } catch (err) {
       log("error", "browser pool shutdown failed:", err);
     }
-    stopHeartbeat();
+    await stopHeartbeat();
     log("info", "bye.");
     process.exit(0);
   };

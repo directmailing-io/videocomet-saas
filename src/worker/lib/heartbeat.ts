@@ -102,19 +102,36 @@ async function writeHeartbeat(workerId: string): Promise<void> {
  */
 export function startHeartbeat(workerId: string): () => void {
   if (interval) {
-    return () => stopHeartbeat();
+    return () => void stopHeartbeat();
   }
   currentWorkerId = workerId;
   void writeHeartbeat(workerId);
   interval = setInterval(() => {
     void writeHeartbeat(workerId);
   }, 30_000);
-  return () => stopHeartbeat();
+  return () => void stopHeartbeat();
 }
 
-export function stopHeartbeat(): void {
+export async function stopHeartbeat(): Promise<void> {
   if (interval) {
     clearInterval(interval);
     interval = null;
+  }
+  // Heartbeat-Row beim Graceful Shutdown löschen: die WORKER_ID enthält
+  // eine Random-UUID pro Boot — ohne Delete bliebe nach jedem Deploy eine
+  // stale Row liegen, die der Heartbeat-Watchdog 24 h lang anmailen würde.
+  // Bei einem CRASH bleibt die Row stehen — dann ist der Alert gewollt.
+  if (currentWorkerId) {
+    const id = currentWorkerId;
+    try {
+      await db
+        .delete(workerHeartbeats)
+        .where(sql`${workerHeartbeats.workerId} = ${id}`);
+    } catch (err) {
+      console.warn(
+        `[worker:heartbeat] cleanup failed for ${id}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 }

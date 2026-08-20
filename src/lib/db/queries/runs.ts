@@ -1,9 +1,18 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { analyticsEvents, leadEvents, leads, runs } from "@/lib/db/schema";
+import {
+  analyticsEvents,
+  leadEvents,
+  leads,
+  pipelineEvents,
+  runs,
+} from "@/lib/db/schema";
 import type { RunAbConfig } from "@/lib/db/schema";
 import { enqueueWebhooksForRunFinalized } from "@/lib/webhooks/lead-event-hook";
 import { sendRunCompletionNotification } from "@/lib/run-notifications";
+import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
+import { sendOpsAlert } from "@/lib/ops-alert";
+import { leadJobPriority } from "@/lib/queue-priority";
 
 /**
  * Erlaubte Run-Status-Übergänge für die Preflight-Pipeline.
@@ -97,6 +106,136 @@ export async function finalizeRunIfAllLeadsDone(runId: string): Promise<{
   if (total === 0 || done < total) {
     return { finalized: false, total, done };
   }
+
+  // Gate + Auto-Retry laufen nur für aktiv generierende Runs — sonst
+  // würde ein später Aufruf (Resume-Route, Nachzügler-Job) Leads einer
+  // längst abgeschlossenen Runde erneut einreihen.
+  const [runRow] = await db
+    .select({
+      status: runs.status,
+      userId: runs.userId,
+      campaignId: runs.campaignId,
+    })
+    .from(runs)
+    .where(eq(runs.id, runId))
+    .limit(1);
+  if (runRow?.status === "generating") {
+    // ── Run-Completeness-Gate (Reliability 2026-08-20) ────────────────
+    // Safety-Net unter dem per-Lead-Gate in der Pipeline: ein Lead, der
+    // "completed" ist, aber kein Video oder keine Landingpage hat, wird
+    // hier auf failed gekippt. Ein User darf NIE eine erfolgreiche Runde
+    // sehen, in der ein Pflicht-Bestandteil fehlt.
+    const flipped = await db
+      .update(leads)
+      .set({
+        status: "failed",
+        errorMessage:
+          "Automatisch als fehlgeschlagen markiert: Pflicht-Bestandteil fehlt (Video oder Landingpage)",
+      })
+      .where(
+        and(
+          eq(leads.runId, runId),
+          isNull(leads.removedAt),
+          eq(leads.status, "completed"),
+          sql`(${leads.videoUrl} IS NULL OR ${leads.slug} IS NULL)`,
+        ),
+      )
+      .returning({ id: leads.id });
+    for (const f of flipped) {
+      await insertPipelineEvent({
+        runId,
+        leadId: f.id,
+        level: "error",
+        stage: "run",
+        message:
+          "Completeness-Gate: Lead war als erfolgreich markiert, aber Video oder Landingpage fehlt — auf fehlgeschlagen gesetzt.",
+      });
+    }
+
+    // ── Auto-Retry fehlgeschlagener Leads (genau 1× pro Lead) ─────────
+    // Bevor die Runde mit Fehlschlägen finalisiert wird, bekommt jeder
+    // failed Lead EINE automatische Neu-Einreihung (frische 3 BullMQ-
+    // Versuche). Idempotenz: pipeline_events-Marker (stage='autoretry',
+    // DIREKT und werfend geschrieben — insertPipelineEvent würde Fehler
+    // schlucken und den Einmal-Schutz aushebeln). Konfigurationsfehler
+    // schlagen im Retry sofort wieder fehl (UnrecoverableError) — dann
+    // finalisiert die Runde beim nächsten Aufruf mit Fehlschlägen.
+    if (runRow.userId && runRow.campaignId) {
+      const retryRows = (await db.execute(sql`
+        SELECT ${leads.id} AS id, ${leads.rowIndex} AS row_index
+        FROM ${leads}
+        WHERE ${leads.runId} = ${runId}
+          AND ${leads.removedAt} IS NULL
+          AND ${leads.status} = 'failed'
+          AND NOT EXISTS (
+            SELECT 1 FROM ${pipelineEvents} pe
+            WHERE pe.lead_id = ${leads.id} AND pe.stage = 'autoretry'
+          )
+      `)) as unknown as Array<{ id: string; row_index: number | null }>;
+      const retryable = Array.isArray(retryRows)
+        ? retryRows
+        : ((retryRows as { rows?: Array<{ id: string; row_index: number | null }> })
+            .rows ?? []);
+      let requeued = 0;
+      for (const lead of retryable) {
+        try {
+          await db.insert(pipelineEvents).values({
+            runId,
+            leadId: lead.id,
+            level: "info",
+            stage: "autoretry",
+            message:
+              "Automatischer Wiederholungsversuch: Lead wird einmalig neu eingereiht, bevor die Runde abgeschlossen wird.",
+          });
+          await db
+            .update(leads)
+            .set({ status: "pending", errorMessage: null })
+            .where(eq(leads.id, lead.id));
+          const { pipelineQueue } = await import("@/worker/queue");
+          const queue = pipelineQueue();
+          // jobId = leadId wie überall sonst (Recovery-Loops purgen und
+          // dedupen über genau diese ID — eine abweichende Autoretry-ID
+          // würde bei >2 min Queue-Wartezeit eine Doppel-Pipeline durch
+          // die Orphaned-Pending-Recovery erzeugen). Stale-Job vorher
+          // entfernen, sonst dedupt BullMQ gegen den alten failed-Job.
+          await queue.remove(lead.id).catch(() => undefined);
+          await queue.add(
+            "lead-pipeline",
+            {
+              leadId: lead.id,
+              runId,
+              userId: runRow.userId,
+              campaignId: runRow.campaignId,
+            },
+            {
+              jobId: lead.id,
+              priority: leadJobPriority(lead.row_index),
+            },
+          );
+          requeued++;
+        } catch (err) {
+          // Enqueue fehlgeschlagen (Redis?) → Lead bleibt/wird wieder
+          // failed, Runde finalisiert mit Fehlschlägen statt zu hängen.
+          await db
+            .update(leads)
+            .set({
+              status: "failed",
+              errorMessage:
+                "Automatischer Wiederholungsversuch konnte nicht eingereiht werden",
+            })
+            .where(eq(leads.id, lead.id))
+            .catch(() => undefined);
+          console.warn(
+            `[run-finalize] autoretry enqueue failed for lead=${lead.id}:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+      if (requeued > 0) {
+        return { finalized: false, total, done: done - requeued };
+      }
+    }
+  }
   // Denormalisierte Counter aus dem aktuellen Lead-Status ableiten und
   // im selben UPDATE mitschreiben — sonst bleiben `completed_leads`/
   // `failed_leads` auf 0, was die UI mit „0 von X fertig" verwirrend
@@ -131,6 +270,18 @@ export async function finalizeRunIfAllLeadsDone(runId: string): Promise<{
         // nicht durch nebenläufig fertig werdende Leads „completed" werden —
         // der User soll erst prüfen und explizit fortsetzen.
         sql`${runs.status} NOT IN ('completed', 'failed', 'cancelled', 'paused')`,
+        // Race-Guard (Reliability 2026-08-20): ein NEBENLÄUFIGER Finalize-
+        // Aufruf kann einen failed Lead gerade auf pending geflippt haben
+        // (Auto-Retry), NACHDEM wir oben total/done gezählt haben. Der
+        // UPDATE prüft deshalb atomar nochmal, dass wirklich kein Lead
+        // mehr nicht-terminal ist — sonst würde die Runde "completed",
+        // während ein Retry-Lead noch läuft.
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${leads}
+          WHERE ${leads.runId} = ${runs.id}
+            AND ${leads.removedAt} IS NULL
+            AND ${leads.status} NOT IN ('completed', 'failed')
+        )`,
       ),
     )
     .returning({ id: runs.id });
@@ -145,6 +296,15 @@ export async function finalizeRunIfAllLeadsDone(runId: string): Promise<{
     // atomarem Claim auf runs.completion_email_sent_at — falls mehrere
     // Pfade finalisieren, verschickt trotzdem nur einer.
     void sendRunCompletionNotification(runId);
+    // Ops-Alert an den Admin, wenn trotz Auto-Retry Leads fehlgeschlagen
+    // sind. Fire-and-forget + intern gedrosselt — darf nie blockieren.
+    if (failedCount > 0) {
+      void sendOpsAlert({
+        topic: `run-failures-${runId}`,
+        subject: `Runde mit ${failedCount} fehlgeschlagenen Leads abgeschlossen`,
+        text: `Run ${runId} wurde abgeschlossen mit ${failedCount} von ${total} fehlgeschlagenen Leads (nach automatischem Wiederholungsversuch). Details im Admin unter dem Run-Log.`,
+      });
+    }
   }
   return { finalized, total, done };
 }
