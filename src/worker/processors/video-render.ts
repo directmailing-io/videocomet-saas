@@ -853,25 +853,46 @@ export async function renderSegmentsBase(opts: {
             "Keine Webseiten-URL für diesen Lead auflösbar",
           );
         }
-        if (fixed) {
+        if (fixed && durationMs <= seg.durationMs) {
           // Fixe Webseite (für alle Leads identisch): einmal pro Prozess
           // rendern, danach nur noch Copy aus dem Cache. KEIN per-Lead-
           // Signal — der geteilte Render darf nicht vom Stage-Timeout
           // eines einzelnen Leads gekillt werden; nach dem await prüfen
           // wir unser eigenes Signal.
+          //
+          // Cache-Key-Falle Intro-Trim: planSegmentDurations kürzt vordere
+          // Segmente pro Lead unterschiedlich — die geclampte durationMs
+          // im Key würde den Cache pro Lead fragmentieren (= wieder 77
+          // Realzeit-Renders). Deshalb rendert der Cache IMMER mit der
+          // Kampagnen-Dauer seg.durationMs; kürzere Lead-Dauern werden aus
+          // der Kopie getrimmt (zeigt dieselben ersten Sekunden wie ein
+          // direkter kürzerer Render).
+          const needsTrim = durationMs < seg.durationMs;
+          const cachedPath = needsTrim
+            ? join(opts.outDir, `seg-${i}-full.mp4`)
+            : partPath;
           await renderFixedWebsiteSegment({
             url,
-            durationMs,
+            durationMs: seg.durationMs,
             mode: seg.captureMode ?? "static-hero",
             scrollFrames: seg.scrollFrames,
             cursorFrames: seg.cursorFrames,
-            outputPath: partPath,
+            outputPath: cachedPath,
           });
           opts.signal?.throwIfAborted();
+          if (needsTrim) {
+            await trimVideoToDuration({
+              inputPath: cachedPath,
+              outputPath: partPath,
+              durationSec: durationMs / 1000,
+            });
+          }
         } else {
-          // Personalisierte Website: Capture-Fehler (DNS/Timeout/Hang)
-          // bekommen genau EINEN In-Job-Retry mit frischem Verzeichnis —
-          // danach wirft das Segment (kein stiller Platzhalter mehr).
+          // Personalisiert ODER fixer Sonderfall „Intro hat das erste
+          // Segment über die Kampagnen-Dauer hinaus VERLÄNGERT" (Trimmen
+          // unmöglich) → per-Lead-Capture. Capture-Fehler (DNS/Timeout/
+          // Hang) bekommen genau EINEN In-Job-Retry mit frischem
+          // Verzeichnis — danach wirft das Segment (kein Platzhalter).
           const capture = async (dir: string) => {
             const fr = await renderWebsiteCapture({
               signal: opts.signal,

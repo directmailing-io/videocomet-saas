@@ -95,10 +95,16 @@ export type RecordScrollOutput = RecordResult;
 // durationMs + 60 s war zu knapp und produzierte stumme Placeholder.
 const MIN_CAPTURE_TIMEOUT_MS = 150_000;
 const CAPTURE_TIMEOUT_OVERHEAD_MS = 120_000;
+// Cap unter dem videoRender-Stage-Timeout (600 s), Begründung in
+// website-render-pipeline.ts.
+const MAX_CAPTURE_TIMEOUT_MS = 540_000;
 function captureHardTimeoutMs(durationMs: number): number {
-  return Math.max(
-    MIN_CAPTURE_TIMEOUT_MS,
-    durationMs * 2 + CAPTURE_TIMEOUT_OVERHEAD_MS,
+  return Math.min(
+    MAX_CAPTURE_TIMEOUT_MS,
+    Math.max(
+      MIN_CAPTURE_TIMEOUT_MS,
+      durationMs * 2 + CAPTURE_TIMEOUT_OVERHEAD_MS,
+    ),
   );
 }
 const GOTO_TIMEOUT_MS = 30_000;

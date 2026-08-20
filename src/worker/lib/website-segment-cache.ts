@@ -100,8 +100,15 @@ export async function renderFixedWebsiteSegment(
   const key = buildCacheKey(opts, fps);
   const target = join(WEB_SEG_CACHE_DIR, `${key}.mp4`);
 
-  const existing = WEB_SEG_CACHE.get(key);
-  if (existing) {
+  // Waiter-Loop statt Einmal-Check: wenn die geteilte Promise rejected,
+  // wachen ALLE Waiter gleichzeitig auf. Ohne Re-Check würde jeder von
+  // ihnen einen eigenen frischen Render starten (Thundering Herd — exakt
+  // das Incident-Muster, das dieser Cache verhindern soll). Der Loop lässt
+  // nur den ERSTEN Waiter neu bauen (delete+create+set laufen synchron in
+  // einem Microtask); alle anderen finden dessen frische Promise vor.
+  for (;;) {
+    const existing = WEB_SEG_CACHE.get(key);
+    if (!existing) break;
     try {
       const p = await existing;
       if (existsSync(p)) {
@@ -114,9 +121,12 @@ export async function renderFixedWebsiteSegment(
         return;
       }
     } catch {
-      // rejected — unten frisch aufbauen
+      // rejected — unten frisch aufbauen (bzw. auf den Neubau eines
+      // anderen Waiters aufsetzen)
     }
-    WEB_SEG_CACHE.delete(key);
+    // Nur löschen, wenn noch DIESELBE (kaputte) Promise drin ist — sonst
+    // würden wir die frische Promise eines schnelleren Waiters killen.
+    if (WEB_SEG_CACHE.get(key) === existing) WEB_SEG_CACHE.delete(key);
   }
 
   const job = (async () => {
@@ -180,8 +190,9 @@ export async function renderFixedWebsiteSegment(
     const p = await job;
     await copyFile(p, opts.outputPath);
   } catch (e) {
-    // Fehlgeschlagene Renders nicht cachen — nächster Lead versucht frisch.
-    WEB_SEG_CACHE.delete(key);
+    // Fehlgeschlagene Renders nicht cachen — aber nur die EIGENE Promise
+    // entfernen, nie eine inzwischen gesetzte frische eines anderen Callers.
+    if (WEB_SEG_CACHE.get(key) === job) WEB_SEG_CACHE.delete(key);
     throw e;
   }
 }

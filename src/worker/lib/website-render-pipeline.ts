@@ -107,10 +107,18 @@ export interface RenderWebsiteResult {
 // nur die Notbremse für hängende Browser.
 const CAPTURE_TIMEOUT_OVERHEAD_MS = 120_000;
 const MIN_CAPTURE_TIMEOUT_MS = 150_000;
+// Cap unterhalb des videoRender-Stage-Timeouts (600 s): ein einzelner
+// Capture darf nie länger leben als die Stage selbst — sonst rendert der
+// (signalfreie) Fixed-Segment-Cache weiter, obwohl alle Waiter längst
+// abgebrochen sind.
+const MAX_CAPTURE_TIMEOUT_MS = 540_000;
 function captureHardTimeoutMs(durationMs: number): number {
-  return Math.max(
-    MIN_CAPTURE_TIMEOUT_MS,
-    durationMs * 2 + CAPTURE_TIMEOUT_OVERHEAD_MS,
+  return Math.min(
+    MAX_CAPTURE_TIMEOUT_MS,
+    Math.max(
+      MIN_CAPTURE_TIMEOUT_MS,
+      durationMs * 2 + CAPTURE_TIMEOUT_OVERHEAD_MS,
+    ),
   );
 }
 // 12s war zu knapp: wotruba-gmbh.de u.ä. haben TTFB von 5-8s + JS-heavy

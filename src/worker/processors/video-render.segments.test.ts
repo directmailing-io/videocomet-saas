@@ -37,7 +37,7 @@ vi.mock("../lib/website-render-pipeline", () => websiteMocks);
 
 const cacheMocks = vi.hoisted(() => ({
   renderFixedWebsiteSegment: vi.fn(
-    async (o: { outputPath: string }) => {
+    async (o: { outputPath: string; url: string; durationMs: number }) => {
       await writeFile(o.outputPath, "cached-mp4");
     },
   ),
@@ -237,6 +237,31 @@ describe("renderSegmentsBase — Fixed-Segment-Cache", () => {
       "https://juliusthiesen.de",
     );
     expect(websiteMocks.renderWebsiteCapture).not.toHaveBeenCalled();
+  });
+
+  it("Intro-Trim kürzt fixes Segment → Cache rendert Kampagnen-Dauer, Kopie wird getrimmt", async () => {
+    const outDir = await makeOutDir();
+    ffmpegMocks.trimVideoToDuration.mockImplementation(
+      async (o: { outputPath: string }) => {
+        await writeFile(o.outputPath, "trimmed-mp4");
+      },
+    );
+
+    await renderSegmentsBase({
+      ...baseOpts(outDir, [
+        websiteSeg({ personalized: false, fallbackUrl: "juliusthiesen.de" }),
+        textSeg("t-2"),
+      ]),
+      // 1s Intro-Trim → erstes Segment wird pro Lead von 4000ms auf
+      // 3000ms gekürzt; der Cache muss trotzdem mit 4000ms rendern,
+      // sonst fragmentiert der Key pro Lead.
+      introTrimMs: 1000,
+    });
+
+    expect(
+      cacheMocks.renderFixedWebsiteSegment.mock.calls[0][0].durationMs,
+    ).toBe(4000);
+    expect(ffmpegMocks.trimVideoToDuration).toHaveBeenCalledTimes(1);
   });
 
   it("personalisiertes Segment → KEIN Cache, echter Capture", async () => {
