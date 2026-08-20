@@ -64,6 +64,13 @@ export async function POST(
       ? b.skipContactIds.filter((v): v is string => typeof v === "string")
       : [],
   );
+  // Runden-Override: Umschlag-Vorlage aus dem Wizard-Step-3. Ohne diese
+  // Zeile landete die Auswahl nie im Run und die Pipeline generierte
+  // keinen Umschlag, obwohl der User es angehakt hatte (Vorfall 2026-08-20).
+  const envelopeTemplateId =
+    typeof b.envelopeTemplateId === "string" && b.envelopeTemplateId
+      ? b.envelopeTemplateId
+      : null;
 
   if (!listId) {
     return NextResponse.json({ error: "Bitte wähl eine Liste aus." }, { status: 400 });
@@ -140,6 +147,7 @@ export async function POST(
     status: "generating",
     startedAt: new Date(),
     totalLeads: effectiveContacts.length,
+    envelopeTemplateId,
   });
 
   // Für jeden Contact einen Lead-Row anlegen. Wenn ein Placeholder-Mapping

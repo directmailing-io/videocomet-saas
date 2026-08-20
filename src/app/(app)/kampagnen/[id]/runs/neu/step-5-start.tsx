@@ -59,6 +59,12 @@ export function Step5Start({
           name: state.runName.trim(),
           contactMapping: state.contactMapping,
           skipContactIds,
+          // Runden-Overrides: der Wizard fragt in Step 3 nach Umschlag +
+          // Vorlage, aber ohne diese Zeilen landete die Auswahl nie im
+          // Run (Vorfall 2026-08-20: Umschlag aktiviert, kein PDF erzeugt).
+          envelopeTemplateId: state.options.envelopeEnabled
+            ? state.options.envelopeTemplateId
+            : null,
         }),
       });
       const body = await res.json();
