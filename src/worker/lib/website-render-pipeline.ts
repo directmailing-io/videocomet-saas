@@ -97,14 +97,21 @@ export interface RenderWebsiteResult {
 // Segmente > 60 s: sie liefen unweigerlich in den Timeout und lieferten
 // den „Website nicht erreichbar"-Placeholder statt der echten Aufnahme
 // (Vorfall 2026-08-19, Kampagne Test 3 mit 111 s-Segment). Jetzt
-// dynamisch: durationMs + 60 s Overhead (goto bis 30 s, Setup + Screencast-
-// Puffer). Bleibt unter dem videoRender-Stage-Timeout, weil das
-// Stage-Timeout die Summe ALLER Segmente deckelt — der Einzel-Timeout
-// hier ist nur die Notbremse für hängende Browser.
-const CAPTURE_TIMEOUT_OVERHEAD_MS = 60_000;
-const MIN_CAPTURE_TIMEOUT_MS = 90_000;
+// dynamisch. 2026-08-20: durationMs + 60 s war unter Volllast IMMER NOCH
+// zu knapp — der Host-Slot-Wait (max. 2 Loads/Host) läuft INNERHALB dieses
+// Timeouts; bei 77 parallelen Leads auf dieselbe fixe URL fraß die Slot-
+// Warteschlange das Budget und 49 fertige Captures liefen trotzdem in den
+// Timeout (Run „2. Runde 20.8.2026"). Jetzt: 2×durationMs + 120 s, min.
+// 150 s. Bleibt unter dem videoRender-Stage-Timeout, weil das Stage-
+// Timeout die Summe ALLER Segmente deckelt — der Einzel-Timeout hier ist
+// nur die Notbremse für hängende Browser.
+const CAPTURE_TIMEOUT_OVERHEAD_MS = 120_000;
+const MIN_CAPTURE_TIMEOUT_MS = 150_000;
 function captureHardTimeoutMs(durationMs: number): number {
-  return Math.max(MIN_CAPTURE_TIMEOUT_MS, durationMs + CAPTURE_TIMEOUT_OVERHEAD_MS);
+  return Math.max(
+    MIN_CAPTURE_TIMEOUT_MS,
+    durationMs * 2 + CAPTURE_TIMEOUT_OVERHEAD_MS,
+  );
 }
 // 12s war zu knapp: wotruba-gmbh.de u.ä. haben TTFB von 5-8s + JS-heavy
 // Frontend, `networkidle2` wird nie erreicht → jede Kampagne bekam den

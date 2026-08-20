@@ -90,14 +90,16 @@ export interface RecordScrollInput {
 /** Legacy-Alias-Output, identisch zu `RecordResult`. */
 export type RecordScrollOutput = RecordResult;
 
-// Wie in website-render-pipeline.ts: der 60-s-Fix-Cap deckelte den
-// GESAMTEN Capture (goto + Setup + Realzeit-Frame-Aufnahme über die
-// volle Segmentdauer). Für Segmente > ~40 s stumme Timeouts →
-// Placeholder statt echter Aufnahme. Jetzt dynamisch je Segmentdauer.
-const MIN_CAPTURE_TIMEOUT_MS = 60_000;
-const CAPTURE_TIMEOUT_OVERHEAD_MS = 60_000;
+// Wie in website-render-pipeline.ts (Formel dort begründet, 2026-08-20):
+// der Timeout deckt den GESAMTEN Capture inkl. Slot-Warten unter Volllast —
+// durationMs + 60 s war zu knapp und produzierte stumme Placeholder.
+const MIN_CAPTURE_TIMEOUT_MS = 150_000;
+const CAPTURE_TIMEOUT_OVERHEAD_MS = 120_000;
 function captureHardTimeoutMs(durationMs: number): number {
-  return Math.max(MIN_CAPTURE_TIMEOUT_MS, durationMs + CAPTURE_TIMEOUT_OVERHEAD_MS);
+  return Math.max(
+    MIN_CAPTURE_TIMEOUT_MS,
+    durationMs * 2 + CAPTURE_TIMEOUT_OVERHEAD_MS,
+  );
 }
 const GOTO_TIMEOUT_MS = 30_000;
 

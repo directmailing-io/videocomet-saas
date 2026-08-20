@@ -9,18 +9,20 @@
  *                            into a base MP4, and the webcam clip is overlaid
  *                            as PiP on top.
  *
- * Fallbacks for `with-presentation`:
- *  1. Website value empty / not parseable → render a "Website nicht erreichbar"
- *     placeholder page and use that as the base track.
- *  2. Puppeteer scroll-capture throws (DNS/404/timeout/hang) → same fallback
- *     placeholder. If the fallback ALSO throws (e.g. browser pool dead), we
- *     fall all the way back to a black clip so the lead still completes.
+ * Fehler-Politik für `with-presentation` (Reliability by Design, 2026-08-20):
+ * Segment-Fehler laufen NIE mehr still als Platzhalter/Black-Clip durch.
+ * Website-/GDocs-Captures bekommen genau EINEN In-Job-Retry (5s Pause,
+ * frisches Arbeitsverzeichnis); schlägt auch der fehl, wirft das Segment und
+ * der Lead-Job schlägt fehl (BullMQ retried den ganzen Job bis zu 3×).
+ * Konfigurationsfehler (fehlende URL/Datei) sind nicht retry-fähig und
+ * werfen `SegmentConfigError` (UnrecoverableError → kein BullMQ-Retry).
  *
  * Both flows return a single MP4 + the measured duration.
  */
 
 import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { UnrecoverableError } from "bullmq";
 import { mkdir, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -42,10 +44,8 @@ import {
   recordScroll,
 } from "../lib/scroll-recorder";
 import { renderPersonalizedGDocs } from "../lib/personalized-gdocs";
-import {
-  renderWebsiteCapture,
-  renderUnreachablePlaceholder,
-} from "../lib/website-render-pipeline";
+import { renderWebsiteCapture } from "../lib/website-render-pipeline";
+import { renderFixedWebsiteSegment } from "../lib/website-segment-cache";
 import type { Segment } from "@/lib/segments/types";
 import { planSegmentDurations } from "@/lib/segments/plan-durations";
 import { substitute, resolveValue } from "@/lib/placeholders/substitute";
@@ -54,6 +54,21 @@ import type {
   LegacyMapping,
   PlaceholderMapping,
 } from "@/lib/placeholders/types";
+
+/**
+ * Konfigurationsfehler eines Segments (fehlende URL/Datei/unbekannter Typ):
+ * ein BullMQ-Retry kann daran nichts ändern — der User muss die Kampagne
+ * korrigieren. `name` wird explizit auf "UnrecoverableError" gesetzt, weil
+ * sowohl BullMQ als auch pipeline.ts (`willRetry`) über den String prüfen.
+ */
+export class SegmentConfigError extends UnrecoverableError {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnrecoverableError";
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export interface VideoRenderInput {
   outDir: string;
@@ -727,7 +742,8 @@ export async function runVideoRender(
  * v2 TODOs: image (image overlay), video (re-encode + trim), website (scroll
  * capture for the per-segment duration), gdocs (live doc fetch + capture).
  */
-async function renderSegmentsBase(opts: {
+// Exportiert für Unit-Tests (Fail-Loud-Verhalten, Cache-Routing).
+export async function renderSegmentsBase(opts: {
   signal?: AbortSignal;
   segments: Segment[];
   leadData?: Record<string, string>;
@@ -785,16 +801,6 @@ async function renderSegmentsBase(opts: {
     const partPath = join(opts.outDir, `seg-${i}.mp4`);
     const durationMs = clampedMs;
 
-    // Schwarzer Ersatz-Clip + Meldung nach oben (pipeline_event level=error)
-    // — Black-Fallbacks dürfen NIE wieder still passieren (Bug 2026-08-18).
-    const blackFallback = async (reason: string) => {
-      opts.onSegmentFallback?.({ index: i, kind: seg.kind, reason });
-      await generateBlackClip({
-        outputPath: partPath,
-        durationSec: durationMs / 1000,
-      });
-    };
-
     try {
       if (seg.kind === "text") {
         await renderTextSegment({
@@ -843,16 +849,34 @@ async function renderSegmentsBase(opts: {
             ? probed
             : leadUrl;
         if (!url) {
-          await blackFallback("Keine Webseiten-URL für diesen Lead auflösbar");
+          throw new SegmentConfigError(
+            "Keine Webseiten-URL für diesen Lead auflösbar",
+          );
+        }
+        if (fixed) {
+          // Fixe Webseite (für alle Leads identisch): einmal pro Prozess
+          // rendern, danach nur noch Copy aus dem Cache. KEIN per-Lead-
+          // Signal — der geteilte Render darf nicht vom Stage-Timeout
+          // eines einzelnen Leads gekillt werden; nach dem await prüfen
+          // wir unser eigenes Signal.
+          await renderFixedWebsiteSegment({
+            url,
+            durationMs,
+            mode: seg.captureMode ?? "static-hero",
+            scrollFrames: seg.scrollFrames,
+            cursorFrames: seg.cursorFrames,
+            outputPath: partPath,
+          });
+          opts.signal?.throwIfAborted();
         } else {
-          // Sharp-basierte Pipeline mit Browser-Chrome-Overlay — sieht aus
-          // wie eine echte Bildschirm-Aufnahme. Fallback auf
-          // recordFallbackPage wenn die Site z.B. nicht laedt.
-          try {
+          // Personalisierte Website: Capture-Fehler (DNS/Timeout/Hang)
+          // bekommen genau EINEN In-Job-Retry mit frischem Verzeichnis —
+          // danach wirft das Segment (kein stiller Platzhalter mehr).
+          const capture = async (dir: string) => {
             const fr = await renderWebsiteCapture({
               signal: opts.signal,
               url,
-              outputDir: join(opts.outDir, `web-${i}`),
+              outputDir: dir,
               durationMs,
               mode: seg.captureMode ?? "static-hero",
               scrollFrames: seg.scrollFrames,
@@ -863,25 +887,19 @@ async function renderSegmentsBase(opts: {
               outputPath: partPath,
               fps: fr.fps,
             });
+          };
+          try {
+            await capture(join(opts.outDir, `web-${i}`));
           } catch (err) {
             if (opts.signal?.aborted) throw err;
             // eslint-disable-next-line no-console
             console.warn(
-              `[render] website capture failed for ${url} → placeholder:`,
+              `[render] website capture failed for ${url} → retry in 5s:`,
               err instanceof Error ? err.message : err,
             );
-            // Pure-sharp Placeholder (kein Puppeteer) — verhindert
-            // 5-min Hard-Timeout wenn der Browser-Pool deadlocked ist.
-            const fb = await renderUnreachablePlaceholder({
-              url,
-              outputDir: join(opts.outDir, `web-${i}`),
-              durationMs,
-            });
-            await imageSeqToMp4({
-              framesDir: fb.framesDir,
-              outputPath: partPath,
-              fps: fb.fps,
-            });
+            await sleep(5_000);
+            opts.signal?.throwIfAborted();
+            await capture(join(opts.outDir, `web-${i}-retry`));
           }
         }
       } else if (seg.kind === "gdocs") {
@@ -891,20 +909,21 @@ async function renderSegmentsBase(opts: {
         // als HTML exportieren, Placeholder substituieren, in Puppeteer per
         // `file://` rendern und capturen.
         if (!seg.docsUrl || !seg.docsUrl.trim()) {
-          await blackFallback("Google-Docs-Segment ohne Dokument-URL");
+          throw new SegmentConfigError("Google-Docs-Segment ohne Dokument-URL");
         } else {
           const vars = buildGDocsVars(
             opts.leadData ?? {},
             opts.landingpageUrl,
             opts.placeholderMapping,
           );
-          const gdocsOutDir = join(opts.outDir, `gdocs-${i}`);
-          try {
+          // Wie im Website-Branch: EIN In-Job-Retry mit frischem
+          // Verzeichnis, danach wirft das Segment (kein Platzhalter).
+          const capture = async (dir: string) => {
             const fr = await renderPersonalizedGDocs({
               signal: opts.signal,
               docsUrl: seg.docsUrl,
               vars,
-              outputDir: gdocsOutDir,
+              outputDir: dir,
               durationMs,
               mode: seg.captureMode ?? "static-hero",
               scrollFrames: seg.scrollFrames,
@@ -915,24 +934,18 @@ async function renderSegmentsBase(opts: {
               outputPath: partPath,
               fps: fr.fps,
             });
+          };
+          try {
+            await capture(join(opts.outDir, `gdocs-${i}`));
           } catch (e) {
             if (opts.signal?.aborted) throw e;
-            // Same defensive fallback as the website branch: render a
-            // labelled placeholder so the lead still completes.
             // eslint-disable-next-line no-console
             console.warn(
-              `[render] gdocs personalised capture failed → placeholder: ${(e as Error).message}`,
+              `[render] gdocs personalised capture failed → retry in 5s: ${(e as Error).message}`,
             );
-            const fb = await recordFallbackPage({
-              outputDir: gdocsOutDir,
-              durationMs,
-              websiteLabel: seg.docsUrl,
-            });
-            await imageSeqToMp4({
-              framesDir: fb.framesDir,
-              outputPath: partPath,
-              fps: fb.fps,
-            });
+            await sleep(5_000);
+            opts.signal?.throwIfAborted();
+            await capture(join(opts.outDir, `gdocs-${i}-retry`));
           }
         }
       } else if (seg.kind === "slide") {
@@ -950,7 +963,9 @@ async function renderSegmentsBase(opts: {
         // User die Veröffentlichung zurückgezogen hat), fängt der catch
         // weiter unten und liefert einen Black-Clip.
         if (!seg.publishedUrl?.trim()) {
-          await blackFallback("Google-Slides-Segment ohne veröffentlichte URL");
+          throw new SegmentConfigError(
+            "Google-Slides-Segment ohne veröffentlichte URL",
+          );
         } else {
           const { renderGSlideToMp4 } = await import("../lib/gslide-render");
           await renderGSlideToMp4({
@@ -969,7 +984,9 @@ async function renderSegmentsBase(opts: {
         // LibreOffice, fängt der catch weiter unten und liefert einen
         // Black-Clip.
         if (!seg.pptxPublicUrl?.trim()) {
-          await blackFallback("Canva-Segment ohne hochgeladene PPTX-Datei");
+          throw new SegmentConfigError(
+            "Canva-Segment ohne hochgeladene PPTX-Datei",
+          );
         } else {
           const { renderCanvaSlideToMp4 } = await import("../lib/canva-render");
           await renderCanvaSlideToMp4({
@@ -989,7 +1006,7 @@ async function renderSegmentsBase(opts: {
         // und cached das fertige MP4 prozessweit, weil das Ergebnis für
         // alle Leads einer Kampagne identisch ist.
         if (!seg.pdfUrl?.trim()) {
-          await blackFallback("PDF-Segment ohne hochgeladene Datei");
+          throw new SegmentConfigError("PDF-Segment ohne hochgeladene Datei");
         } else {
           console.log(
             `[render] pdf segment ${seg.id}: "${seg.fileName}" (${seg.pageCount} Seiten, mode=${seg.captureMode})`,
@@ -1006,7 +1023,7 @@ async function renderSegmentsBase(opts: {
         // Bild-Segment (Studio): statisches Bild, contain auf dunklem
         // Bühnen-Grund — für alle Leads identisch, prozessweit gecached.
         if (!seg.publicUrl?.trim()) {
-          await blackFallback("Bild-Segment ohne hochgeladene Datei");
+          throw new SegmentConfigError("Bild-Segment ohne hochgeladene Datei");
         } else {
           const { renderImageSegment } = await import(
             "../lib/media-segment-render"
@@ -1023,7 +1040,7 @@ async function renderSegmentsBase(opts: {
         // in den Wiedergabefenstern (playbackWindows) inkl. Original-Ton.
         // Ohne Fenster: Poster-Still über die gesamte Segmentdauer.
         if (!seg.publicUrl?.trim()) {
-          await blackFallback("Video-Segment ohne hochgeladene Datei");
+          throw new SegmentConfigError("Video-Segment ohne hochgeladene Datei");
         } else {
           const { renderVideoSegment } = await import(
             "../lib/media-segment-render"
@@ -1036,25 +1053,23 @@ async function renderSegmentsBase(opts: {
           });
         }
       } else {
-        // Unbekannter Segment-Typ — black clip placeholder.
-        console.warn(
-          `[render] segment kind=${(seg as Segment).kind} not supported — using placeholder`,
-        );
-        await blackFallback(
+        throw new SegmentConfigError(
           `Unbekannter Segment-Typ „${(seg as Segment).kind}"`,
         );
       }
       parts.push(partPath);
     } catch (e) {
-      // Abbruch (Stage-Timeout) sofort nach oben — kein Black-Clip, keine
-      // weiteren Segmente, keine Zombie-Schreibvorgänge.
+      // Abbruch (Stage-Timeout) sofort nach oben — ohne Event, der
+      // Timeout selbst wird vom Pipeline-Caller gemeldet.
       if (opts.signal?.aborted) throw e;
-      console.error(
-        `[render] segment ${i} (${seg.kind}) failed; using black clip:`,
-        e instanceof Error ? e.message : e,
-      );
-      await blackFallback(e instanceof Error ? e.message : String(e));
-      parts.push(partPath);
+      // Reliability by Design (2026-08-20): Segment-Fehler beenden den
+      // Lead-Job — KEIN Black-Clip, KEIN Platzhalter-Erfolg mehr. Das
+      // Event dokumentiert das fehlgeschlagene Segment, der Throw lässt
+      // BullMQ den Job retrien (außer UnrecoverableError).
+      const reason = e instanceof Error ? e.message : String(e);
+      console.error(`[render] segment ${i} (${seg.kind}) failed:`, reason);
+      opts.onSegmentFallback?.({ index: i, kind: seg.kind, reason });
+      throw e;
     }
   }
 
@@ -1090,17 +1105,13 @@ async function renderSegmentsBase(opts: {
   }
 
   if (parts.length === 0) {
-    opts.onSegmentFallback?.({
-      index: 0,
-      kind: "base",
-      reason:
-        "Kein einziges Segment ergab einen Clip — gesamte Präsentationsspur ist schwarz",
-    });
-    await generateBlackClip({
-      outputPath: opts.basePath,
-      durationSec: opts.totalDurationSec,
-    });
-    return;
+    // Kann nur passieren, wenn der Duration-Plan alle Segmente wegclampt —
+    // jeder Render-Fehler wirft bereits oben. Trotzdem fail-loud statt
+    // schwarzer Basisspur.
+    const reason =
+      "Kein einziges Segment ergab einen Clip — Präsentationsspur wäre leer";
+    opts.onSegmentFallback?.({ index: 0, kind: "base", reason });
+    throw new SegmentConfigError(reason);
   }
 
   if (parts.length === 1) {

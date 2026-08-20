@@ -233,8 +233,15 @@ export async function processPreflightJob(
   }
   // Same narrow-vs-wide-enum dance: cast on the COMPARISON side, never on
   // the runtime value (which is whatever Postgres returned).
-  if ((runRow.status as string) !== "preflighting") {
-    // Cancelled / already approved / already generating. Silent skip.
+  //
+  // 2026-08-20: "generating" MUSS erlaubt sein — Runs aus Listen starten
+  // direkt mit status='generating', wodurch ALLE ihre Preflight-Jobs hier
+  // still übersprangen (75/77 Leads blieben preflight_status='pending',
+  // preflightFinalUrl NULL → Render ohne verifizierte URL). Nur wirklich
+  // beendete/abgebrochene Runs überspringen.
+  const runStatus = runRow.status as string;
+  if (runStatus !== "preflighting" && runStatus !== "generating") {
+    // Cancelled / completed / failed. Silent skip.
     return;
   }
 
