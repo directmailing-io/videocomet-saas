@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { IntroStructureError } from "./intro-structure";
 import {
+  asrHearsTokens,
   asrSegmentsToWords,
   analyzeIntroStructureFromAsr,
   sentenceTranscriptFromWords,
@@ -234,6 +235,35 @@ describe("transcriptHead", () => {
   it("kürzt lange Transkripte mit Ellipse", () => {
     expect(transcriptHead(DANIEL_WORDS, 4)).toBe("Hey ich nehme dieses …");
     expect(transcriptHead(DANIEL_WORDS.slice(0, 2))).toBe("Hey ich");
+  });
+});
+
+describe("asrHearsTokens", () => {
+  it("Incident 2026-08-21: TTS-Cut sagt nur Hey, Name Axel fehlt", () => {
+    expect(asrHearsTokens("Hey.", ["Axel"])).toBe(false);
+  });
+
+  it("exakter Treffer und Interpunktion", () => {
+    expect(asrHearsTokens("Hey, Axel!", ["Axel"])).toBe(true);
+  });
+
+  it("fuzzy: kleine ASR-Abweichung beim Eigennamen", () => {
+    expect(asrHearsTokens("Hey Aksel!", ["Axel"])).toBe(true);
+    expect(asrHearsTokens("Hallo Jurgen!", ["Jürgen"])).toBe(true);
+  });
+
+  it("mehrteilige Tokens (Anrede + Nachname) müssen alle hörbar sein", () => {
+    expect(asrHearsTokens("Hallo Herr Müller!", ["Herr", "Müller"])).toBe(true);
+    expect(asrHearsTokens("Hallo Herr!", ["Herr", "Müller"])).toBe(false);
+  });
+
+  it("völlig anderes Wort zählt nicht als Name", () => {
+    expect(asrHearsTokens("Hey du!", ["Katharina"])).toBe(false);
+  });
+
+  it("best effort: leerer ASR-Text oder keine Tokens → true", () => {
+    expect(asrHearsTokens("", ["Axel"])).toBe(true);
+    expect(asrHearsTokens("Hey Axel", [])).toBe(true);
   });
 });
 

@@ -49,6 +49,7 @@ import {
   SPECTRAL_BAND_CENTERS_HZ,
 } from "./intro-audio";
 import { computeEnvelopeDb, findTtsCutMs } from "./intro-structure";
+import { asrHearsTokens } from "./intro-structure-asr";
 
 const SAMPLE_RATE = 48000;
 const FPS = 30;
@@ -358,6 +359,9 @@ export async function generatePersonalizedWebcam(
           (a, b) =>
             Math.abs(a.cutMs - medianCutMs) - Math.abs(b.cutMs - medianCutMs),
         );
+        const nameTokens = Object.values(opts.substitutions)
+          .flatMap((v) => v.trim().split(/\s+/))
+          .filter((t) => t.length > 0);
         for (const cand of ordered) {
           const cutSec = cand.cutMs / 1000;
           await runFfmpeg([
@@ -375,6 +379,16 @@ export async function generatePersonalizedWebcam(
             const cutAsr = await asr({ audioPath: ttsRawPath });
             const cutText = cutAsr?.text?.toLowerCase() ?? "";
             if (/sch(ö|oe)n|reinschau/.test(cutText)) continue;
+            // Positive Gegenprobe: der NAME muss im Schnitt hörbar sein.
+            // Fish setzt gelegentlich eine Mikro-Pause ZWISCHEN Anrede-
+            // Wort und Name — dann schneidet findTtsCutMs den Namen weg
+            // (Incident 2026-08-21: „Hey" ohne „Axel").
+            if (cutText && !asrHearsTokens(cutText, nameTokens)) {
+              console.warn(
+                `[intro-engine:${tag}] tts-cut ohne Name verworfen (asr="${cutText.slice(0, 60)}")`,
+              );
+              continue;
+            }
           } catch {
             // ASR nicht verfügbar → Kandidat ungeprüft akzeptieren.
           }

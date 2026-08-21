@@ -126,6 +126,46 @@ export function transcriptHead(words: AsrWord[], maxWords = 12): string {
   return words.length > maxWords ? `${head} …` : head;
 }
 
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * Fuzzy-Check: hört die ASR alle erwarteten Tokens (z. B. den Lead-Namen)?
+ * Toleriert kleine Transkriptions-Abweichungen (Levenshtein ≤1 bei kurzen,
+ * ≤2 bei längeren Tokens) — ASR schreibt Eigennamen oft leicht anders
+ * („Aksel" statt „Axel"). Leere Token-Liste oder leerer ASR-Text → true
+ * (best effort, kein Urteil möglich).
+ */
+export function asrHearsTokens(asrText: string, tokens: string[]): boolean {
+  const heard = asrText
+    .split(/\s+/)
+    .map(normalizeWord)
+    .filter((w) => w.length > 0);
+  if (heard.length === 0) return true;
+  for (const token of tokens) {
+    const want = normalizeWord(token);
+    if (want.length === 0) continue;
+    const maxDist = want.length <= 3 ? 1 : 2;
+    const hit = heard.some((w) => levenshtein(w, want) <= maxDist);
+    if (!hit) return false;
+  }
+  return true;
+}
+
 /**
  * Struktur (Anrede → Pause → erster Satz → Atempause) aus ASR-Wörtern.
  *
