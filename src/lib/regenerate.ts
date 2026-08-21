@@ -126,6 +126,11 @@ export async function regenerateLeadCore(
     errorMessage: null,
     startedAt: null,
     completedAt: null,
+    // Frischer Zähler wie beim Run-Regen: die Stuck-Recovery requeut nur
+    // Leads mit attempts < 3 — ohne Reset gilt ein oft gefailter Lead nach
+    // manueller Regen sofort wieder als "ausgeschöpft" und wird terminal
+    // auf failed gesetzt statt requeued.
+    attempts: 0,
     updatedAt: new Date(),
   };
   const skipVideo = scope === "pdf" || scope === "envelope";

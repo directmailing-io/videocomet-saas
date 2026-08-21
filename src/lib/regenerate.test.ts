@@ -198,6 +198,17 @@ describe("regenerateLeadCore — Intro-Staging-Routing", () => {
     );
   });
 
+  it("resettet attempts auf 0 — sonst gilt ein oft gefailter Lead sofort wieder als ausgeschöpft", async () => {
+    setCampaign(true);
+    setLeads([{ id: "lead-1", status: "failed" }]);
+
+    const res = await regenerateLeadCore(LEAD_INPUT, "video");
+
+    expect(res.status).toBe(200);
+    const [patch] = leadUpdatePatches();
+    expect(patch.attempts).toBe(0);
+  });
+
   it("laufende Runde: 409, nichts enqueued", async () => {
     setCampaign(true);
     const res = await regenerateLeadCore(
