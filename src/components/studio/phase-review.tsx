@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { PreviewPlayer } from "@/components/editor/preview-player";
+import { IntroAnalysisStatus } from "@/components/intro/intro-analysis-status";
 import type { StudioTab } from "@/lib/studio/types";
 import {
   deriveStudioSegments,
@@ -219,6 +220,7 @@ export function PhaseReview({
                   />
                 </div>
               </div>
+              <IntroAnalysisStatus mediaId={upload.media.id} />
               <p className="px-2 text-xs text-ink-muted">
                 Schau dir deine Aufnahme an. Verdächtig kurze Szenen kannst du
                 rechts entfernen. Dein Video bleibt dabei ungeschnitten.

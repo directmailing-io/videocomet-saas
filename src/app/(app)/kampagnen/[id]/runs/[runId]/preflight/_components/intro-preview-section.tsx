@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { calibrationErrorHint } from "@/lib/intro-calibration-hints";
 import { cn } from "@/lib/utils";
 
 export interface IntroPreviewInfo {
@@ -50,21 +51,10 @@ export interface IntroPreviewInfo {
 
 /** Konkrete Handlungsanweisung pro Kalibrierungs-Fehler-Code. */
 function calibrationHint(error: string | null | undefined): string {
-  switch (error) {
-    case "greeting_too_late":
-      return "Deine Anrede beginnt zu spät oder du hast durchgesprochen. Nimm neu auf und starte SOFORT mit einer kurzen Anrede („Hi!“), dann 1 Sekunde Stille, dann der erste Satz.";
-    case "no_pause_detected":
-      return "Wir haben keine deutliche Pause nach deiner Anrede gefunden. Nimm neu auf: erst „Hi!“ sagen, dann 1 Sekunde Stille, dann der erste Satz.";
-    case "no_speech_detected":
-    case "audio_flat":
-      return "Wir konnten keine Sprache am Anfang des Videos erkennen.";
-    case "greeting_inaudible":
-      return "Deine Anrede am Anfang war zu leise oder nicht erkennbar. Nimm neu auf und sprich die Anrede klar und deutlich.";
-    case "no_sentence_after_pause":
-      return "Nach der Pause hinter deiner Anrede kommt keine Sprache mehr. Sprich nach der kurzen Pause einen ersten Satz weiter.";
-    default:
-      return "Die Anrede im Webcam-Video war zu kurz oder die Pause danach zu knapp. Du kannst neu aufnehmen oder einfach ohne KI-Begrüßung starten (1 Credit pro Video).";
-  }
+  return (
+    calibrationErrorHint(error) ??
+    "Die Begrüßung im Webcam-Video war zu kurz oder die Pause danach zu knapp. Du kannst neu aufnehmen oder einfach ohne KI-Begrüßung starten (1 Credit pro Video)."
+  );
 }
 
 /**

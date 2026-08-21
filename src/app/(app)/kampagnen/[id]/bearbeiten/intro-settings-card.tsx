@@ -43,6 +43,7 @@ import {
   buildGreetingTemplate,
   parseGreetingTemplate,
 } from "@/lib/intro";
+import { calibrationErrorHint } from "@/lib/intro-calibration-hints";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_PICK = parseGreetingTemplate(DEFAULT_TTS_TEMPLATE) ?? {
@@ -65,33 +66,11 @@ interface CalibrationDto {
   error: string | null;
 }
 
-/** Analyse-Fehler-Codes des Workers → deutsche Hinweise. */
-function calibrationErrorHint(code: string | null): string {
-  switch (code) {
-    case "no_pause_detected":
-      return "Wir haben keine deutliche Pause nach deiner Anrede gefunden. Nimm neu auf: erst „Hi!“ sagen, dann 1 Sekunde Stille, dann der erste Satz.";
-    case "greeting_too_late":
-      return "Deine Anrede beginnt zu spät oder du hast durchgesprochen. Nimm neu auf und starte SOFORT mit der kurzen Anrede („Hi!“), dann 1 Sekunde Stille, dann der erste Satz. Ohne diese Struktur hat die KI keinen sauberen Cut-Punkt.";
-    case "no_speech_detected":
-    case "audio_flat":
-      return "Wir konnten keine Sprache am Anfang des Videos erkennen. Bitte prüfe die Tonspur des Videos.";
-    case "greeting_inaudible":
-      return "Deine Anrede am Anfang war zu leise oder nicht erkennbar. Sprich die Anrede („Hi!“) klar und in normaler Lautstärke, dann eine kurze Pause, dann der erste Satz.";
-    case "no_sentence_after_pause":
-      return "Nach der Pause hinter deiner Anrede kommt keine Sprache mehr. Sprich nach der kurzen Pause bitte einen ersten Satz weiter.";
-    case "no_breath_gap_detected":
-      return "Der erste Satz nach der Anrede geht ohne Atempause weiter. Sprich nach dem ersten kompletten Satz kurz ein und atme durch, dann weiter.";
-    case "sentence_too_short":
-      return "Der erste Satz war zu kurz. Sprich mindestens ein bis zwei Sekunden am Stück, bevor du wieder pausierst.";
-    case "sentence_too_long":
-      return "Der erste Satz war zu lang für eine saubere Erkennung. Kürze ihn auf einen kompakten Einleitungssatz und mach danach eine Atempause.";
-    case "anchor_too_late":
-      return "Deine Einleitung dauert zu lang. Sprich nach der Anrede-Pause einen KURZEN ersten Satz (max. 10 Sekunden), dann eine kleine Atempause.";
-    case "transcription_failed":
-      return "Die Tonspur konnte nicht ausgewertet werden. Bitte versuche die Analyse erneut.";
-    default:
-      return "Die Analyse ist fehlgeschlagen. Bitte versuche es erneut oder nimm das Video neu auf.";
-  }
+function errorHint(code: string | null): string {
+  return (
+    calibrationErrorHint(code) ??
+    "Die Analyse ist fehlgeschlagen. Bitte versuche es erneut oder nimm das Video neu auf."
+  );
 }
 
 export function IntroSettingsCard({
@@ -112,6 +91,9 @@ export function IntroSettingsCard({
     null,
   );
   const [calibrationLoading, setCalibrationLoading] = React.useState(false);
+  // true, sobald der erste GET der Kalibrierung abgeschlossen ist — erst
+  // dann darf der Auto-Start entscheiden, ob eine Analyse fehlt.
+  const [calibrationChecked, setCalibrationChecked] = React.useState(false);
   const [analyzeStarting, setAnalyzeStarting] = React.useState(false);
   const [enabled, setEnabled] = React.useState(initialEnabled);
   const [toggleSaving, setToggleSaving] = React.useState(false);
@@ -172,6 +154,7 @@ export function IntroSettingsCard({
       setCalibration(null);
     } finally {
       setCalibrationLoading(false);
+      setCalibrationChecked(true);
     }
     // greetingDirty bewusst nicht in den Deps — der User-Edit soll beim
     // Polling nicht überschrieben werden.
@@ -196,6 +179,25 @@ export function IntroSettingsCard({
     }, 5000);
     return () => window.clearInterval(handle);
   }, [calibrationRunning, loadCalibration]);
+
+  // Ältere Videos ohne Kalibrierung: Analyse automatisch anstoßen, damit
+  // der User nichts klicken muss (neue Uploads starten sie schon beim
+  // Upload). Ref-Guard: höchstens 1× pro Video.
+  const autoStartedRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (
+      !webcamMediaId ||
+      !calibrationChecked ||
+      calibrationLoading ||
+      calibration !== null ||
+      autoStartedRef.current === webcamMediaId
+    ) {
+      return;
+    }
+    autoStartedRef.current = webcamMediaId;
+    void startAnalysis();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [webcamMediaId, calibrationChecked, calibrationLoading, calibration]);
 
   // ── Aktionen ────────────────────────────────────────────────────────
   async function startAnalysis() {
@@ -381,10 +383,20 @@ export function IntroSettingsCard({
         ) : !calibration || calibration.status === "failed" ? (
           <div className="rounded-squircle-sm bg-surface-soft px-4 py-3 space-y-3">
             {calibration?.status === "failed" && (
-              <p className="flex items-start gap-2 text-sm text-danger">
-                <AlertCircle className="size-4 shrink-0 mt-0.5" />
-                {calibrationErrorHint(calibration.error)}
-              </p>
+              <div className="space-y-1.5">
+                <p className="flex items-start gap-2 text-sm text-danger">
+                  <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                  {errorHint(calibration.error)}
+                </p>
+                {calibration.transcriptSentence && (
+                  <p className="pl-6 text-xs text-ink-muted leading-relaxed">
+                    Gehört haben wir:{" "}
+                    <span className="italic">
+                      &bdquo;{calibration.transcriptSentence}&ldquo;
+                    </span>
+                  </p>
+                )}
+              </div>
             )}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-ink-muted">

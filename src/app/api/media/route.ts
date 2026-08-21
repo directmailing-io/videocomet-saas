@@ -12,6 +12,7 @@ import { uploadMediaFile, type MediaKind } from "@/lib/media-upload-service";
 import { validateUpload, type UploadKind } from "@/lib/upload";
 import { sniffImage } from "@/lib/upload-sniff";
 import { addBunnyAssetRef } from "@/lib/db/queries/bunny-assets";
+import { ensureIntroCalibration } from "@/lib/intro-calibration-enqueue";
 
 const MEDIA_TYPES: ReadonlyArray<MediaType> = [
   "webcam",
@@ -187,6 +188,13 @@ export async function POST(req: NextRequest) {
           err instanceof Error ? err.message : err,
         );
       }
+    }
+
+    // Webcam-Aufnahmen sofort analysieren (Anrede/Pause/erster Satz), damit
+    // der User direkt nach der Aufnahme Feedback bekommt — nicht erst beim
+    // Kampagnen-Start. Best-effort, bricht den Upload nie ab.
+    if (kind === "webcam") {
+      await ensureIntroCalibration(auth.user.id, media.id);
     }
 
     return NextResponse.json({ media }, { status: 201 });

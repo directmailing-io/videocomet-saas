@@ -49,6 +49,14 @@ import {
   IntroStructureError,
   type IntroStructure,
 } from "../lib/intro-structure";
+import {
+  asrSegmentsToWords,
+  analyzeIntroStructureFromAsr,
+  sentenceTranscriptFromWords,
+  transcriptHead,
+  findQuietestWindowMs,
+  type AsrWord,
+} from "../lib/intro-structure-asr";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
 import { trainVoiceFromWav, VoiceTrainError } from "../lib/voice-clone";
 import { DEFAULT_TTS_TEMPLATE } from "@/lib/intro";
@@ -69,7 +77,11 @@ const FPS = 30;
 const ROOMTONE_MIN_SEC = 0.15;
 
 class CalibrationError extends Error {
-  constructor(public code: string) {
+  constructor(
+    public code: string,
+    /** Was die ASR gehört hat — fürs UI („Gehört haben wir: ‚…‘"). */
+    public transcript: string | null = null,
+  ) {
     super(code);
   }
 }
@@ -126,7 +138,14 @@ export async function processIntroCalibrationJob(job: {
       "-y", "-i", videoPath, "-vn", "-ac", "1", "-ar", String(SAMPLE_RATE), wavPath,
     ]);
 
-    // 2. Struktur-Analyse: Hüllkurve der ersten ~40s, adaptive Schwelle
+    // 2. Struktur-Analyse — ASR-first mit Envelope-Fallback.
+    //
+    // Primär entscheiden Wort-Timestamps der Fish-ASR über die Struktur
+    // (Anrede/Pause/Satz): Sie sind pegel-unabhängig und erkennen die
+    // bewusste Pause auch dann, wenn Webcam-AGC/Atmen sie akustisch
+    // „füllt" (Incident 2026-08-21). Die Hüllkurve bleibt für Roomtone
+    // und Pegel-Referenzen zuständig und ist Fallback, wenn die ASR
+    // nicht antwortet.
     const pcmHead = await runFfmpegCaptureStdout([
       "-i", wavPath,
       "-t", String(ANALYSIS_WINDOW_SEC),
@@ -134,15 +153,46 @@ export async function processIntroCalibrationJob(job: {
       "-",
     ]);
     const envDb = computeEnvelopeDb(pcmHead, SAMPLE_RATE, HOP_MS);
+
+    const headPath = join(tmpDir, "head.wav");
+    await runFfmpeg([
+      "-y", "-i", wavPath, "-t", String(ANALYSIS_WINDOW_SEC), headPath,
+    ]);
+    const headAsr = await asr({ audioPath: headPath });
+    const words: AsrWord[] = headAsr ? asrSegmentsToWords(headAsr.segments) : [];
+
     let structure: IntroStructure;
-    try {
-      structure = analyzeIntroStructure(envDb, HOP_MS);
-    } catch (err) {
-      if (err instanceof IntroStructureError) {
-        throw new CalibrationError(err.code);
+    let structureSource: "asr" | "envelope";
+    if (words.length > 0) {
+      try {
+        structure = analyzeIntroStructureFromAsr(words, envDb, HOP_MS);
+        structureSource = "asr";
+      } catch (asrErr) {
+        if (!(asrErr instanceof IntroStructureError)) throw asrErr;
+        // Envelope als zweite Chance — findet sie eine gültige Struktur,
+        // gewinnt sie. Sonst ist der ASR-Fehlercode aussagekräftiger
+        // (er kann zitieren, was gehört wurde).
+        try {
+          structure = analyzeIntroStructure(envDb, HOP_MS);
+          structureSource = "envelope";
+        } catch {
+          throw new CalibrationError(asrErr.code, transcriptHead(words));
+        }
       }
-      throw err;
+    } else {
+      try {
+        structure = analyzeIntroStructure(envDb, HOP_MS);
+        structureSource = "envelope";
+      } catch (err) {
+        if (err instanceof IntroStructureError) {
+          throw new CalibrationError(err.code);
+        }
+        throw err;
+      }
     }
+    console.log(
+      `[intro-calibration] structure via ${structureSource}: greeting ${structure.speechStartMs}–${structure.greetingEndMs}ms, pause →${structure.sentenceStartMs}ms, anchor ${structure.anchorEndMs}ms`,
+    );
 
     const sentenceStartSec = structure.sentenceStartMs / 1000;
     const anchorEndSec = structure.anchorEndMs / 1000;
@@ -158,17 +208,29 @@ export async function processIntroCalibrationJob(job: {
     }
     const resumeMs = roundUpToFrameMs(resumeTargetMs);
 
-    // 3. Transkript des ersten Satzes via Fish-ASR (best effort)
-    const sentencePath = join(tmpDir, "sentence.wav");
-    await runFfmpeg([
-      "-y",
-      "-ss", sentenceStartSec.toFixed(3),
-      "-t", (anchorEndSec - sentenceStartSec).toFixed(3),
-      "-i", wavPath,
-      sentencePath,
-    ]);
-    const asrResult = await asr({ audioPath: sentencePath });
-    const transcriptSentence = asrResult?.text?.trim() || null;
+    // 3. Transkript des ersten Satzes: im ASR-Pfad direkt aus den
+    // Wort-Timestamps (kein zweiter ASR-Call); im Envelope-Fallback wie
+    // bisher per ASR auf dem Satz-Fenster (best effort).
+    let transcriptSentence: string | null = null;
+    if (structureSource === "asr") {
+      transcriptSentence = sentenceTranscriptFromWords(
+        words,
+        structure.sentenceStartMs,
+        structure.anchorEndMs,
+      );
+    }
+    if (!transcriptSentence) {
+      const sentencePath = join(tmpDir, "sentence.wav");
+      await runFfmpeg([
+        "-y",
+        "-ss", sentenceStartSec.toFixed(3),
+        "-t", (anchorEndSec - sentenceStartSec).toFixed(3),
+        "-i", wavPath,
+        sentencePath,
+      ]);
+      const asrResult = await asr({ audioPath: sentencePath });
+      transcriptSentence = asrResult?.text?.trim() || null;
+    }
 
     // 4. Loudness-Referenz über [sentence_start, min(+3.5s, anchor_end)]
     const refWindowLen = Math.min(3.5, anchorEndSec - sentenceStartSec);
@@ -191,11 +253,18 @@ export async function processIntroCalibrationJob(job: {
     ]);
     const spectralRef = computeSpectralRef(pcm, SAMPLE_RATE);
 
-    // 6. Raumton aus der Mitte der bewussten Pause
-    const pauseStartSec = structure.pause.startMs / 1000;
+    // 6. Raumton: leisestes Teilfenster der bewussten Pause (die Mitte
+    // kann Atmer/AGC-Rauschen enthalten — das leiseste Fenster nicht).
     const pauseDur = (structure.pause.endMs - structure.pause.startMs) / 1000;
     const roomtoneLen = Math.min(1.0, Math.max(ROOMTONE_MIN_SEC, pauseDur));
-    const roomtoneStart = pauseStartSec + Math.max(0, (pauseDur - roomtoneLen) / 2);
+    const roomtoneStart =
+      findQuietestWindowMs(
+        envDb,
+        HOP_MS,
+        structure.pause.startMs,
+        structure.pause.endMs,
+        roomtoneLen * 1000,
+      ) / 1000;
     const roomtonePath = join(tmpDir, "roomtone.wav");
     await runFfmpeg([
       "-y",
@@ -275,7 +344,15 @@ export async function processIntroCalibrationJob(job: {
       err instanceof CalibrationError
         ? err.code
         : ((err as Error).message?.slice(0, 500) ?? "unknown");
-    await setStatus(calibrationId, { status: "failed", error: code });
+    // Transkript auch im Fehlerfall speichern — das UI kann dann zitieren,
+    // was gehört wurde („Dein Video beginnt mit ‚…‘").
+    const transcript =
+      err instanceof CalibrationError ? err.transcript : null;
+    await setStatus(calibrationId, {
+      status: "failed",
+      error: code,
+      transcriptSentence: transcript,
+    });
     return { status: "failed", error: code };
   } finally {
     await cleanupTempDir(tmpDir);

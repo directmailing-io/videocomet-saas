@@ -13,6 +13,7 @@ import {
   Clapperboard,
   Monitor,
 } from "lucide-react";
+import { IntroAnalysisStatus } from "@/components/intro/intro-analysis-status";
 import { RecordingHint } from "@/components/intro/recording-hint";
 import { StudioWordmark } from "@/components/studio/studio-wordmark";
 import { Button } from "@/components/ui/button";
@@ -194,6 +195,10 @@ export function WizardStep1Webcam({
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [pickerLoading, setPickerLoading] = React.useState(false);
   const [pickerError, setPickerError] = React.useState<string | null>(null);
+  // Frisch aufgenommenes Video → Sofort-Feedback der Begrüßungs-Analyse.
+  const [justRecordedId, setJustRecordedId] = React.useState<string | null>(
+    null,
+  );
 
   // Klassischer Weg gewählt? Initial true bei bereits gewähltem Video
   // (Wizard-Entwurf) oder bei alten Callsites ohne Studio — dann zeigen wir
@@ -277,6 +282,7 @@ export function WizardStep1Webcam({
     onChange(newItem.id);
     setRecordOpen(false);
     setUploadError(null);
+    setJustRecordedId(newItem.id);
   }
 
   return (
@@ -292,6 +298,9 @@ export function WizardStep1Webcam({
           {classicChosen && (
             <div ref={mediaSectionRef} className="space-y-4 scroll-mt-24">
               <KiRecordingTeaser />
+              {justRecordedId && (
+                <IntroAnalysisStatus mediaId={justRecordedId} />
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm text-ink-muted">
                   {webcams.length === 0
