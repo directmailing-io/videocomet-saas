@@ -49,5 +49,8 @@ ENV LIBREOFFICE_PATH=/usr/bin/libreoffice
 ENV GHOSTSCRIPT_PATH=/usr/bin/gs
 
 # tini handles SIGTERM correctly for graceful shutdown.
+# Kein `npm run` dazwischen: npm reicht SIGTERM nicht an sein Kind weiter,
+# der Worker starb per SIGKILL ohne stopHeartbeat (Heartbeat-Leichen,
+# Alert-Sturm 2026-08-21). `node --import tsx` läuft als EIN Prozess.
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["npm", "run", "worker:start"]
+CMD ["node", "--import", "tsx", "scripts/start-worker.ts"]
