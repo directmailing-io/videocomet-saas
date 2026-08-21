@@ -5,7 +5,28 @@ import { removeStreamAssetRefsForGuids } from "@/lib/db/queries/bunny-assets";
 import { updateRun } from "@/lib/db/queries/runs";
 import { pipelineQueue } from "@/worker/queue";
 import { leadJobPriority } from "@/lib/queue-priority";
+import { enqueueLeadsForIntroStaging } from "@/lib/preflight/job-enqueue";
+
+/**
+ * Entscheidet, ob ein Regen mit Video-Anteil über die Intro-Staging-Queue
+ * laufen muss. Die eigentliche Intro-Entscheidung (Kalibrierung ready?
+ * Fish-Model da? Name vorhanden?) trifft ausschließlich der
+ * `intro-generation`-Processor — hier wird nur geprüft, ob das Feature an
+ * der Kampagne aktiv ist. Historische `introStatus`-Snapshots (z.B.
+ * 'disabled' aus einer Runde mit damals kaputter Kalibrierung) dürfen ein
+ * "Neu generieren" NIE stumm überleben — genau das war die Root Cause des
+ * Kristina-Incidents (2026-08-21).
+ */
 import { deleteFile, parseStorageUrl } from "@/lib/bunny/storage";
+
+async function campaignHasIntroEnabled(campaignId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ introEnabled: campaigns.introEnabled })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId))
+    .limit(1);
+  return row?.introEnabled === true;
+}
 
 /**
  * Löscht eine Datei aus Bunny Storage anhand ihrer CDN-URL. Best-Effort:
@@ -114,6 +135,11 @@ export async function regenerateLeadCore(
     patch.videoMp4Url = null;
     patch.bunnyVideoId = null;
     patch.thumbnailUrl = null;
+    // Intro-Snapshot mit zurücksetzen: das Video wird neu gerendert, also
+    // muss auch die Begrüßungs-Entscheidung neu fallen (W4-Cache macht das
+    // billig — unveränderte Kalibrierung ⇒ Cache-Hit statt Neu-Generierung).
+    patch.introStatus = null;
+    patch.introResult = null;
   }
   if (scope === "all" || scope === "pdf") {
     patch.pdfUrl = null;
@@ -149,7 +175,24 @@ export async function regenerateLeadCore(
   // (videoAlreadyDone/pdfAlreadyDone), sodass ein "envelope"-only-Regen
   // videoUrl + pdfUrl unangetastet laesst und nur Stage 9b (Envelope)
   // ausfuehrt.
+  //
+  // Video-Regen + aktives Intro-Feature: der Lead läuft über die
+  // `intro-generation`-Staging-Queue — exakt derselbe Weg wie bei einer
+  // frischen Runde (enqueueApprovedLeadsForPhase2). Das Staging enqueued
+  // nach Abschluss selbst den Render-Job. Der Run muss dafür auf
+  // 'generating' stehen (Guard im Processor + Intro-Watchdog greifen nur
+  // dort); finalizeRunIfAllLeadsDone setzt ihn nach dem Lead wieder auf
+  // 'completed'.
   try {
+    if (!skipVideo && (await campaignHasIntroEnabled(input.campaignId))) {
+      await updateRun(input.runId, input.ownerUserId, {
+        status: "generating",
+        startedAt: new Date(),
+        completedAt: null,
+      });
+      await enqueueLeadsForIntroStaging([input.leadId], input.runId);
+      return { status: 200, body: { ok: true, scope } };
+    }
     const queue = pipelineQueue();
     // BullMQ dedupliziert per jobId — eindeutiger jobId pro Regenerate
     // (leadId + Timestamp), damit BullMQ ihn immer annimmt.
@@ -275,10 +318,18 @@ export async function regenerateRunCore(
   // `bunny_video_id` + `videoMp4Url` müssen synchron zu `video_url` resetted
   // werden — sonst zeigen Landingpage/Custom-LP-Renderer auf alte Bunny-
   // Assets, während die neue Pipeline noch läuft.
+  //
+  // introStatus/introResult werden bei allen Video-fähigen Modi (all/video/
+  // failed) mit genullt: die Begrüßungs-Entscheidung fällt beim Re-Staging
+  // neu (intro-generation-Processor), statt einen historischen Snapshot
+  // ('disabled' aus einer Runde mit damals kaputter Kalibrierung) stumm zu
+  // übernehmen. Der W4-Intro-Cache macht das billig.
+  const introReset = { introStatus: null, introResult: null };
   const resetPatch =
     mode === "all"
       ? {
           ...baseReset,
+          ...introReset,
           bunnyVideoId: null,
           videoContentHash: null,
           videoUrl: null,
@@ -289,6 +340,7 @@ export async function regenerateRunCore(
       : mode === "video"
         ? {
             ...baseReset,
+            ...introReset,
             bunnyVideoId: null,
             videoContentHash: null,
             videoUrl: null,
@@ -306,8 +358,10 @@ export async function regenerateRunCore(
                 envelopePdfUrl: null,
                 envelopePdfExpiresAt: null,
               }
-            : // mode === "failed": keine URLs anfassen, nur Status/Error/Timestamps
-              baseReset;
+            : // mode === "failed": keine URLs anfassen, nur Status/Error/
+              // Timestamps — plus Intro-Reset, weil failed-Leads die volle
+              // aktuelle Pipeline (inkl. Intro-Staging) neu durchlaufen.
+              { ...baseReset, ...introReset };
 
   // Asset-Deref VOR dem Reset: ohne das Lösen der bunny_asset_refs hielte
   // der alte Ref das Video für immer "referenziert" — der Purge-Worker
@@ -434,6 +488,25 @@ export async function regenerateRunCore(
     } catch (cleanupErr) {
       // eslint-disable-next-line no-console
       console.warn("[regenerate] stale-job cleanup failed:", cleanupErr);
+    }
+    // Video-fähige Modi + aktives Intro-Feature: Leads laufen über die
+    // `intro-generation`-Staging-Queue (derselbe Weg wie eine frische
+    // Runde); das Staging enqueued nach Abschluss selbst die Render-Jobs.
+    // Der introStatus wurde oben genullt, damit die Entscheidung neu fällt.
+    if (!skipVideo && (await campaignHasIntroEnabled(run.campaignId))) {
+      await enqueueLeadsForIntroStaging(
+        leadRows.map((lr) => lr.id),
+        run.id,
+      );
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          mode,
+          totalLeads: leadRows.length,
+          retried: leadRows.length,
+        },
+      };
     }
     const nowStamp = Date.now();
     await queue.addBulk(
