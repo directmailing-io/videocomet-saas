@@ -9,7 +9,10 @@ import {
   videoSegmentCacheKeyPayload,
   volumeAudioFilterArgs,
 } from "./media-segment-render";
-import type { VideoSegment } from "@/lib/segments/types";
+import {
+  videoSegmentTrimEndMs,
+  type VideoSegment,
+} from "@/lib/segments/types";
 
 // ffprobe mocken: Tests schreiben Fake-Dateien, keine echten MP4s. Der
 // echte probeVideoDuration würde daran scheitern — hier steuern wir die
@@ -191,6 +194,68 @@ describe("volumeAudioFilterArgs — FFmpeg-Filter pro Lautstärke", () => {
   it("Quelle ohne Audio → nie ein Filter (anullsrc bleibt unangetastet)", () => {
     expect(volumeAudioFilterArgs(false, 0)).toEqual([]);
     expect(volumeAudioFilterArgs(false, 0.5)).toEqual([]);
+  });
+});
+
+describe("videoSegmentTrimEndMs — Trim-Ende-Interpretation (Fix 2026-08-21)", () => {
+  it("gültiger Wert → gerundete ms", () => {
+    expect(videoSegmentTrimEndMs({ trimEndMs: 2000.4, trimStartMs: 0 })).toBe(
+      2000,
+    );
+  });
+
+  it("null / 0 / negativ / NaN → kein Trim-Ende", () => {
+    expect(videoSegmentTrimEndMs({ trimEndMs: null, trimStartMs: 0 })).toBeNull();
+    expect(videoSegmentTrimEndMs({ trimEndMs: 0, trimStartMs: 0 })).toBeNull();
+    expect(videoSegmentTrimEndMs({ trimEndMs: -500, trimStartMs: 0 })).toBeNull();
+    expect(videoSegmentTrimEndMs({ trimEndMs: NaN, trimStartMs: 0 })).toBeNull();
+  });
+
+  it("Ende ≤ Start → ignoriert (nie ein leeres Video erzeugen)", () => {
+    expect(
+      videoSegmentTrimEndMs({ trimEndMs: 3000, trimStartMs: 3000 }),
+    ).toBeNull();
+    expect(
+      videoSegmentTrimEndMs({ trimEndMs: 2000, trimStartMs: 5000 }),
+    ).toBeNull();
+  });
+});
+
+describe("videoSegmentCacheKeyPayload — Trim-Ende im Render-Cache-Key", () => {
+  it("ohne Trim-Ende: Key unverändert (Alt-Cache bleibt gültig)", () => {
+    const def = videoSegmentCacheKeyPayload(
+      { segment: videoSegment(), durationMs: 5000 },
+      30,
+    );
+    expect(def).not.toContain("trimEndMs");
+  });
+
+  it("aktives Trim-Ende verändert den Key", () => {
+    const def = videoSegmentCacheKeyPayload(
+      { segment: videoSegment(), durationMs: 5000 },
+      30,
+    );
+    const withEnd = videoSegmentCacheKeyPayload(
+      { segment: videoSegment({ trimEndMs: 2000 }), durationMs: 5000 },
+      30,
+    );
+    expect(withEnd).not.toBe(def);
+    expect(withEnd).toContain('"trimEndMs":2000');
+  });
+
+  it("ungültiges Trim-Ende (≤ Start) → Key wie ohne", () => {
+    const def = videoSegmentCacheKeyPayload(
+      { segment: videoSegment({ trimStartMs: 5000 }), durationMs: 5000 },
+      30,
+    );
+    const invalid = videoSegmentCacheKeyPayload(
+      {
+        segment: videoSegment({ trimStartMs: 5000, trimEndMs: 2000 }),
+        durationMs: 5000,
+      },
+      30,
+    );
+    expect(invalid).toBe(def);
   });
 });
 

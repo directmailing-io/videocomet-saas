@@ -32,7 +32,11 @@
 import * as React from "react";
 import { Play, Pause, Loader2, VideoOff, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { videoSegmentVolume, type Segment } from "@/lib/segments/types";
+import {
+  videoSegmentTrimEndMs,
+  videoSegmentVolume,
+  type Segment,
+} from "@/lib/segments/types";
 import { segmentStartMs } from "@/lib/segments/timeline";
 import {
   PreviewSegmentRender,
@@ -408,31 +412,50 @@ export function PreviewPlayer({
       if (!active || active.segment.kind !== "video") return null;
       const segLocalMs = Math.max(0, playMs - activeStartMs);
       const trimMs = active.segment.trimStartMs ?? 0;
+      // Trim-Ende: ab dieser Quellposition friert das Video ein — identisch
+      // zum Worker-Render (dort clampt trimEnd die effektive Quelldauer).
+      const trimEndMs = videoSegmentTrimEndMs(active.segment);
+      const clampEnd = (r: {
+        sourceSec: number;
+        shouldPlay: boolean;
+      }): { sourceSec: number; shouldPlay: boolean } =>
+        trimEndMs !== null && r.sourceSec * 1000 >= trimEndMs
+          ? { sourceSec: trimEndMs / 1000, shouldPlay: false }
+          : r;
       const windows = active.segment.playbackWindows ?? [];
       if (windows.length === 0) {
         // Kein spezifisches Playback-Fenster → Video spielt normal ab.
-        return { sourceSec: (trimMs + segLocalMs) / 1000, shouldPlay: true };
+        return clampEnd({
+          sourceSec: (trimMs + segLocalMs) / 1000,
+          shouldPlay: true,
+        });
       }
       const sorted = [...windows].sort((a, b) => a.startMs - b.startMs);
       let accumPlayedMs = 0;
       for (const w of sorted) {
         if (segLocalMs < w.startMs) {
           // Vor diesem Window (oder in einer Pause davor) → still.
-          return { sourceSec: (trimMs + accumPlayedMs) / 1000, shouldPlay: false };
+          return clampEnd({
+            sourceSec: (trimMs + accumPlayedMs) / 1000,
+            shouldPlay: false,
+          });
         }
         if (segLocalMs <= w.stopMs) {
           // Innerhalb dieses Windows → play, mit akkumulierter Vorlauf-
           // Playzeit + Position im aktuellen Window.
           const inWin = segLocalMs - w.startMs;
-          return {
+          return clampEnd({
             sourceSec: (trimMs + accumPlayedMs + inWin) / 1000,
             shouldPlay: true,
-          };
+          });
         }
         accumPlayedMs += w.stopMs - w.startMs;
       }
       // Nach allen Windows → still am letzten Play-Ende.
-      return { sourceSec: (trimMs + accumPlayedMs) / 1000, shouldPlay: false };
+      return clampEnd({
+        sourceSec: (trimMs + accumPlayedMs) / 1000,
+        shouldPlay: false,
+      });
     },
     [active, activeStartMs],
   );

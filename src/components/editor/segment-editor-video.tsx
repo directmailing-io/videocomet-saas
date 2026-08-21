@@ -247,6 +247,10 @@ export function SegmentEditorVideo({
           />
         </div>
       </div>
+      <p className="-mt-2 text-xs text-ink-muted">
+        Spielt nur den Abschnitt zwischen Start und Ende ab. Ist die Szene
+        länger, bleibt danach das letzte Bild stehen.
+      </p>
 
       <div>
         <Label>Seitenverhältnis</Label>

@@ -48,7 +48,11 @@ import type {
   VideoPlaybackWindow,
   VideoSegment,
 } from "@/lib/segments/types";
-import { MEDIA_STAGE_BG, videoSegmentVolume } from "@/lib/segments/types";
+import {
+  MEDIA_STAGE_BG,
+  videoSegmentTrimEndMs,
+  videoSegmentVolume,
+} from "@/lib/segments/types";
 import { probeHasAudioStream, probeVideoDuration } from "@/lib/ffprobe";
 import { concatClips, runFfmpeg } from "./ffmpeg";
 import { fetchToFile } from "../processors/video-render";
@@ -590,13 +594,20 @@ async function renderVideoSegmentUncached(
 
     // 2. Quelle vermessen (Dauer für Fenster-Clamp, Audio für die Tonspur).
     const probedSec = await probeVideoDuration(srcPath);
-    const sourceDurationMs =
+    const probedDurationMs =
       typeof probedSec === "number" && probedSec > 0
         ? probedSec * 1000
         : typeof opts.segment.originalDurationSec === "number" &&
             opts.segment.originalDurationSec > 0
           ? opts.segment.originalDurationSec * 1000
           : Infinity;
+    // Trim-Ende = Quelle endet dort effektiv früher. Die bestehende
+    // Freeze-Logik (Quelle erschöpft → Standbild) übernimmt den Rest.
+    const trimEndMs = videoSegmentTrimEndMs(opts.segment);
+    const sourceDurationMs =
+      trimEndMs !== null
+        ? Math.min(probedDurationMs, trimEndMs)
+        : probedDurationMs;
     const hasAudio = await probeHasAudioStream(srcPath);
 
     // 3. Stückliste planen (Fenster → Stills + Play-Abschnitte).
@@ -697,6 +708,12 @@ export function videoSegmentCacheKeyPayload(
     // Cache-Einträge (Default-Lautstärke) gültig.
     ...(videoSegmentVolume(opts.segment) !== 1
       ? { volume: videoSegmentVolume(opts.segment) }
+      : {}),
+    // Analog: Trim-Ende nur wenn aktiv — Alt-Einträge ohne Trim-Ende
+    // (bzw. mit bisher wirkungslosem Wert existieren nicht im Key) bleiben
+    // gültig.
+    ...(videoSegmentTrimEndMs(opts.segment) !== null
+      ? { trimEndMs: videoSegmentTrimEndMs(opts.segment) }
       : {}),
     fps,
   });

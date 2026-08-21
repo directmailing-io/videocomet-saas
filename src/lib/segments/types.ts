@@ -174,6 +174,25 @@ export function videoSegmentVolume(
 }
 
 /**
+ * Effektives Trim-Ende eines Video-Segments in ms, oder null wenn keins
+ * aktiv ist (bis Original-Ende). EINZIGE Stelle, die `trimEndMs`
+ * interpretiert — Vorschau-Player und Worker-Render MÜSSEN beide hierüber
+ * gehen. Ungültige Werte (≤0, ≤ trimStart, NaN) werden wie "kein Trim-Ende"
+ * behandelt, damit ein kaputter Wert nie ein leeres Video erzeugt.
+ */
+export function videoSegmentTrimEndMs(
+  segment: Pick<VideoSegment, "trimEndMs" | "trimStartMs">,
+): number | null {
+  const end = segment.trimEndMs;
+  if (typeof end !== "number" || !Number.isFinite(end) || end <= 0) {
+    return null;
+  }
+  const start = segment.trimStartMs ?? 0;
+  if (end <= start) return null;
+  return Math.round(end);
+}
+
+/**
  * Hintergrundfarbe der Bühne für Bild-/Video-Szenen (contain auf dunklem
  * Grund). MUSS zwischen Studio-Stage (CSS) und Worker-Render (sharp/ffmpeg)
  * identisch sein, damit Vorschau und fertiges Video übereinstimmen.
