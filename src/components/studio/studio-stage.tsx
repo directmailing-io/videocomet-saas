@@ -17,7 +17,11 @@
 import * as React from "react";
 import { AlertCircle, Pause, Play, RotateCcw, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MEDIA_STAGE_BG, type Segment } from "@/lib/segments/types";
+import {
+  MEDIA_STAGE_BG,
+  videoSegmentVolume,
+  type Segment,
+} from "@/lib/segments/types";
 import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
 import {
   dropLocalMediaPreview,
@@ -64,6 +68,12 @@ export interface StudioStageProps {
    * `mediaStartSec` (Aufnahme-Start: Standby → Countdown).
    */
   mediaResetNonce?: number;
+  /**
+   * Video-Szene: Slider-Änderung der Lautstärke (0..1) an den Host melden,
+   * damit sie am Segment PERSISTIERT wird — sonst gilt sie nur für die
+   * Vorschau und das finale Video spielt mit voller Lautstärke.
+   */
+  onMediaVolume?: (volume: number) => void;
   className?: string;
 }
 
@@ -115,6 +125,7 @@ export function StudioStage({
   mediaStartSec,
   onMediaPlayback,
   mediaResetNonce = 0,
+  onMediaVolume,
   className,
 }: StudioStageProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -293,6 +304,8 @@ export function StudioStage({
         startSec={mediaStartSec ?? segment.trimStartMs / 1000}
         resetNonce={mediaResetNonce}
         onPlayback={onMediaPlayback}
+        volume={videoSegmentVolume(segment)}
+        onVolumeChange={onMediaVolume}
       />
     );
   } else {
@@ -366,11 +379,17 @@ function StageVideo({
   startSec,
   resetNonce,
   onPlayback,
+  volume: configuredVolume = 1,
+  onVolumeChange,
 }: {
   url: string;
   startSec: number;
   resetNonce: number;
   onPlayback?: (playing: boolean, timeSec: number) => void;
+  /** Persistierte Segment-Lautstärke 0..1 (Quelle: segment.volume). */
+  volume?: number;
+  /** Slider/Mute-Änderung → Host persistiert sie am Segment. */
+  onVolumeChange?: (volume: number) => void;
 }) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = React.useState(false);
@@ -381,15 +400,25 @@ function StageVideo({
    *  brauchen 15-60s bis Bunny die MP4 bereit hat). */
   const autoRetryRef = React.useRef(0);
   const [autoRetrying, setAutoRetrying] = React.useState(false);
-  /** Lautstärke 0..1. Default 1.0 (Video-Ton läuft). */
-  const [volume, setVolume] = React.useState(1);
-  const [muted, setMuted] = React.useState(false);
+  /** Lautstärke 0..1 — gespiegelt von der persistierten Segment-Lautstärke. */
+  const [volume, setVolume] = React.useState(configuredVolume);
+  React.useEffect(() => {
+    setVolume(configuredVolume);
+  }, [configuredVolume]);
+  /** Letzte Lautstärke > 0, damit „Ton an" nach Stumm dahin zurückkehrt. */
+  const lastAudibleRef = React.useRef(configuredVolume > 0 ? configuredVolume : 1);
+  const changeVolume = (next: number) => {
+    setVolume(next);
+    if (next > 0) lastAudibleRef.current = next;
+    onVolumeChange?.(next);
+  };
+  const muted = volume <= 0;
   React.useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     v.volume = volume;
-    v.muted = muted;
-  }, [volume, muted, loadNonce]);
+    v.muted = volume <= 0;
+  }, [volume, loadNonce]);
 
   // Frisch hochgeladene Videos: lokale Blob-Vorschau sofort abspielen,
   // während Bunny noch encodiert. Fällt bei Fehlern auf Bunny zurück.
@@ -609,10 +638,12 @@ function StageVideo({
               <button
                 type="button"
                 aria-label={muted ? "Ton an" : "Stumm"}
-                onClick={() => setMuted((v) => !v)}
+                onClick={() =>
+                  changeVolume(muted ? lastAudibleRef.current : 0)
+                }
                 className="rounded-full p-1 hover:bg-white/10"
               >
-                {muted || volume === 0 ? (
+                {muted ? (
                   <VolumeX className="size-4" />
                 ) : (
                   <Volume2 className="size-4" />
@@ -622,11 +653,9 @@ function StageVideo({
                 type="range"
                 min={0}
                 max={100}
-                value={Math.round((muted ? 0 : volume) * 100)}
+                value={Math.round(volume * 100)}
                 onChange={(e) => {
-                  const next = Number(e.target.value) / 100;
-                  setVolume(next);
-                  if (next > 0 && muted) setMuted(false);
+                  changeVolume(Number(e.target.value) / 100);
                 }}
                 aria-label="Lautstärke"
                 className="h-1 w-24 cursor-pointer appearance-none rounded-full bg-white/30 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"

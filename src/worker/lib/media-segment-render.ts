@@ -48,7 +48,7 @@ import type {
   VideoPlaybackWindow,
   VideoSegment,
 } from "@/lib/segments/types";
-import { MEDIA_STAGE_BG } from "@/lib/segments/types";
+import { MEDIA_STAGE_BG, videoSegmentVolume } from "@/lib/segments/types";
 import { probeHasAudioStream, probeVideoDuration } from "@/lib/ffprobe";
 import { concatClips, runFfmpeg } from "./ffmpeg";
 import { fetchToFile } from "../processors/video-render";
@@ -309,6 +309,19 @@ async function extractFrame(opts: {
 }
 
 /**
+ * FFmpeg-Audio-Filter für die Segment-Lautstärke. Pure Funktion, exportiert
+ * für Tests: volume=1 (Default) ergibt KEINEN Filter — bitidentisch zum
+ * Verhalten vor Einführung des Volume-Features.
+ */
+export function volumeAudioFilterArgs(
+  hasAudio: boolean,
+  volume: number,
+): string[] {
+  if (!hasAudio || volume === 1) return [];
+  return ["-af", `volume=${volume.toFixed(4)}`];
+}
+
+/**
  * Encodiert einen Play-Abschnitt: Quelle ab `sourcePosMs` für `durationMs`,
  * 1280x720 contain, 30fps. Mit Quell-Audio (resampled 44100/stereo) oder —
  * wenn die Quelle keinen Audio-Stream hat — anullsrc-Stille.
@@ -320,6 +333,8 @@ async function playPieceToMp4(opts: {
   outputPath: string;
   fps: number;
   hasAudio: boolean;
+  /** Lautstärke des Quell-Tons 0..1 (Segment-Einstellung). Default 1. */
+  volume?: number;
 }): Promise<void> {
   const args: string[] = [
     "-y",
@@ -331,6 +346,7 @@ async function playPieceToMp4(opts: {
   if (!opts.hasAudio) {
     args.push("-f", "lavfi", "-i", ANULLSRC, "-map", "0:v:0", "-map", "1:a:0");
   }
+  args.push(...volumeAudioFilterArgs(opts.hasAudio, opts.volume ?? 1));
   args.push(
     "-t",
     (opts.durationMs / 1000).toFixed(3),
@@ -637,6 +653,7 @@ async function renderVideoSegmentUncached(
           outputPath: piecePath,
           fps,
           hasAudio,
+          volume: videoSegmentVolume(opts.segment),
         });
       }
       piecePaths.push(piecePath);
@@ -658,9 +675,37 @@ async function renderVideoSegmentUncached(
 }
 
 /**
+ * Cache-Key-Payload eines Video-Segments. Pure Funktion, exportiert für
+ * Tests: volume=1 (Default) darf den Key NICHT verändern, damit alle vor
+ * dem Volume-Feature gerenderten Cache-Einträge gültig bleiben.
+ */
+export function videoSegmentCacheKeyPayload(
+  opts: Pick<RenderVideoSegmentOpts, "segment" | "durationMs">,
+  fps: number,
+): string {
+  return JSON.stringify({
+    // v2: default-playback bei leeren windows (2026-08-18). Bumpen
+    // invalidiert Alt-Cache-Einträge, die bei windows:[] als Standbild
+    // gerendert wurden — sonst blockiert der Cache die neue Semantik.
+    v: 2,
+    kind: "video",
+    url: opts.segment.publicUrl,
+    durationMs: opts.durationMs,
+    trimStartMs: opts.segment.trimStartMs ?? 0,
+    windows: opts.segment.playbackWindows ?? [],
+    // Nur bei ≠1 in den Key aufnehmen — hält alle bestehenden
+    // Cache-Einträge (Default-Lautstärke) gültig.
+    ...(videoSegmentVolume(opts.segment) !== 1
+      ? { volume: videoSegmentVolume(opts.segment) }
+      : {}),
+    fps,
+  });
+}
+
+/**
  * Rendert ein Video-Segment (Studio-Wiedergabefenster) zu einem
  * 1280x720-MP4 exakter Segment-Dauer nach `opts.outputPath`. Prozessweit
- * gecached — Fenster/Trim gehen in den Key ein.
+ * gecached — Fenster/Trim/Lautstärke gehen in den Key ein.
  */
 export async function renderVideoSegment(
   opts: RenderVideoSegmentOpts,
@@ -670,20 +715,7 @@ export async function renderVideoSegment(
   }
   const fps = opts.fps ?? DEFAULT_FPS;
   const key = createHash("sha1")
-    .update(
-      JSON.stringify({
-        // v2: default-playback bei leeren windows (2026-08-18). Bumpen
-        // invalidiert Alt-Cache-Einträge, die bei windows:[] als Standbild
-        // gerendert wurden — sonst blockiert der Cache die neue Semantik.
-        v: 2,
-        kind: "video",
-        url: opts.segment.publicUrl,
-        durationMs: opts.durationMs,
-        trimStartMs: opts.segment.trimStartMs ?? 0,
-        windows: opts.segment.playbackWindows ?? [],
-        fps,
-      }),
-    )
+    .update(videoSegmentCacheKeyPayload(opts, fps))
     .digest("hex");
   await renderCached(key, opts.outputPath, "video", (tmp) =>
     renderVideoSegmentUncached(opts, tmp, fps),

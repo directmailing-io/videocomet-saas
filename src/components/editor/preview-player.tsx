@@ -32,7 +32,7 @@
 import * as React from "react";
 import { Play, Pause, Loader2, VideoOff, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Segment } from "@/lib/segments/types";
+import { videoSegmentVolume, type Segment } from "@/lib/segments/types";
 import { segmentStartMs } from "@/lib/segments/timeline";
 import {
   PreviewSegmentRender,
@@ -284,6 +284,32 @@ export function PreviewPlayer({
     active && active.segment.kind === "video"
       ? (active.segment.trimStartMs ?? 0)
       : 0;
+  /**
+   * Konfigurierte Lautstärke des aktiven Video-Segments (0..1). Die Preview
+   * MUSS sie identisch zum Worker-Render anwenden — vorher war das Bühnen-
+   * Video hart gemutet und der User hörte erst im fertigen Video, dass der
+   * Original-Ton mit voller Lautstärke mitgemischt wird (Bug 2026-08-21).
+   */
+  const stageVolume =
+    active && active.segment.kind === "video"
+      ? videoSegmentVolume(active.segment)
+      : 1;
+  /** stageVolume in einer Ref für rAF-Loop/Callbacks mit stale Closures. */
+  const stageVolumeRef = React.useRef(stageVolume);
+  React.useEffect(() => {
+    stageVolumeRef.current = stageVolume;
+    const el = stageVideoRef.current;
+    if (el) {
+      el.volume = stageVolume;
+      el.muted = stageVolume <= 0;
+    }
+  }, [stageVolume]);
+
+  const applyStageAudio = React.useCallback((el: HTMLVideoElement) => {
+    const v = stageVolumeRef.current;
+    el.volume = v;
+    el.muted = v <= 0;
+  }, []);
 
   /** URL des NÄCHSTEN Video-Segments (nach dem aktuellen) → Preload-Hint. */
   const nextVideoUrl = React.useMemo(
@@ -489,7 +515,7 @@ export function PreviewPlayer({
           webEl.play().catch(() => {});
         }
         if (stEl && isVideoSegment) {
-          stEl.muted = true;
+          applyStageAudio(stEl);
           // Nur play, wenn wir gerade in einem Playback-Fenster sind.
           const play = computeStagePlaybackRef.current(playheadRef.current);
           if (play?.shouldPlay) {
@@ -519,7 +545,7 @@ export function PreviewPlayer({
         }
       }
     },
-    [isVideoSegment, computeStagePlayback],
+    [isVideoSegment, computeStagePlayback, applyStageAudio],
   );
 
   /* ------------------------------------------------------------------ */
@@ -598,7 +624,7 @@ export function PreviewPlayer({
             if (stagePlay) {
               // Play/Pause-Übergang: playbackWindows-Grenze überschritten?
               if (stagePlay.shouldPlay && stEl.paused) {
-                stEl.muted = true;
+                applyStageAudio(stEl);
                 stEl.play().catch(() => {});
               } else if (!stagePlay.shouldPlay && !stEl.paused) {
                 try {
@@ -755,7 +781,7 @@ export function PreviewPlayer({
     // wieder pausiert — sichtbar als kurzer Blitz).
     const stagePlay = computeStagePlaybackRef.current(playheadRef.current);
     if (stagePlay?.shouldPlay) {
-      el.muted = true;
+      applyStageAudio(el);
       el.play().catch(() => {});
     } else if (stagePlay) {
       // Freeze-Frame auf die Soll-Position setzen, damit der User NICHT

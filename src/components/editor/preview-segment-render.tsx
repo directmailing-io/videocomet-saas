@@ -38,6 +38,7 @@ import {
   type CanvaSegment,
   type WebCaptureMode,
   MEDIA_STAGE_BG,
+  videoSegmentVolume,
 } from "@/lib/segments/types";
 import { interpolateScrollRatio } from "@/lib/segments/scroll-math";
 import {
@@ -343,7 +344,7 @@ function RenderVideo({
           <video
             ref={videoRef}
             src={playbackUrl}
-            muted
+            muted={videoSegmentVolume(segment) <= 0}
             playsInline
             preload="auto"
             className="absolute inset-0 h-full w-full object-contain"
@@ -363,7 +364,7 @@ function RenderVideo({
       <video
         ref={videoRef}
         src={playbackUrl}
-        muted
+        muted={videoSegmentVolume(segment) <= 0}
         playsInline
         preload="auto"
         className="h-full w-full object-contain"

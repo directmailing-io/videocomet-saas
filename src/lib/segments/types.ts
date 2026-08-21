@@ -150,6 +150,27 @@ export interface VideoSegment extends SegmentBase {
    * Poster-Standbild über die gesamte Segmentdauer.
    */
   playbackWindows?: VideoPlaybackWindow[];
+  /**
+   * Lautstärke des Original-Tons im fertigen Video, 0..1.
+   * undefined = 1 (volle Lautstärke). 0 = stumm. Gilt identisch für
+   * Editor-Vorschau, Studio-Bühne und Worker-Render (FFmpeg volume-Filter).
+   */
+  volume?: number;
+}
+
+/**
+ * Effektive Lautstärke eines Video-Segments (0..1). EINZIGE Stelle, die
+ * das `volume`-Feld interpretiert — Vorschau-Player, Studio-Bühne und
+ * Worker-Render MÜSSEN alle hierüber gehen, damit Vorschau und fertiges
+ * Video nie auseinanderlaufen (Volume-Incident 2026-08-21: UI-Regler war
+ * reiner Player-State und wurde im Render ignoriert).
+ */
+export function videoSegmentVolume(
+  segment: Pick<VideoSegment, "volume">,
+): number {
+  const v = segment.volume;
+  if (typeof v !== "number" || !Number.isFinite(v)) return 1;
+  return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
 /**

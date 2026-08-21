@@ -227,6 +227,7 @@ export function StudioFlow({ onComplete, onCancel }: StudioFlowProps) {
           script={script}
           onScriptChange={handleScriptChange}
           onFinished={handleFinished}
+          updateSegment={updateSegment}
           onBack={handleLiveBack}
         />
       )}

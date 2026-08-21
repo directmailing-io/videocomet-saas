@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { planVideoPieces, renderCached } from "./media-segment-render";
+import {
+  planVideoPieces,
+  renderCached,
+  videoSegmentCacheKeyPayload,
+  volumeAudioFilterArgs,
+} from "./media-segment-render";
+import type { VideoSegment } from "@/lib/segments/types";
 
 // ffprobe mocken: Tests schreiben Fake-Dateien, keine echten MP4s. Der
 // echte probeVideoDuration würde daran scheitern — hier steuern wir die
@@ -143,5 +149,90 @@ describe("renderCached (Regression Bug 2026-08-18: schwarze Video-Szenen)", () =
         throw new Error("ffmpeg exploded");
       }),
     ).rejects.toThrow("ffmpeg exploded");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Segment-Lautstärke (Volume-Incident 2026-08-21)                     */
+/* ------------------------------------------------------------------ */
+
+function videoSegment(overrides: Partial<VideoSegment> = {}): VideoSegment {
+  return {
+    id: "seg-1",
+    kind: "video",
+    durationMs: 5000,
+    mediaId: "media-1",
+    publicUrl: "https://cdn.example/video.mp4",
+    originalDurationSec: 30,
+    trimStartMs: 0,
+    trimEndMs: null,
+    cropRatio: "16:9",
+    showAsBrowserFrame: false,
+    browserTabName: "",
+    browserTabUrl: "",
+    ...overrides,
+  };
+}
+
+describe("volumeAudioFilterArgs — FFmpeg-Filter pro Lautstärke", () => {
+  it.each([
+    [0, ["-af", "volume=0.0000"]],
+    [0.25, ["-af", "volume=0.2500"]],
+    [0.5, ["-af", "volume=0.5000"]],
+    [0.75, ["-af", "volume=0.7500"]],
+  ])("volume=%s → %j", (volume, expected) => {
+    expect(volumeAudioFilterArgs(true, volume as number)).toEqual(expected);
+  });
+
+  it("volume=1 (Default) → KEIN Filter (bitidentisch zu vorher)", () => {
+    expect(volumeAudioFilterArgs(true, 1)).toEqual([]);
+  });
+
+  it("Quelle ohne Audio → nie ein Filter (anullsrc bleibt unangetastet)", () => {
+    expect(volumeAudioFilterArgs(false, 0)).toEqual([]);
+    expect(volumeAudioFilterArgs(false, 0.5)).toEqual([]);
+  });
+});
+
+describe("videoSegmentCacheKeyPayload — Volume im Render-Cache-Key", () => {
+  it("volume=1 und volume=undefined erzeugen DENSELBEN Key (Alt-Cache bleibt gültig)", () => {
+    const a = videoSegmentCacheKeyPayload(
+      { segment: videoSegment(), durationMs: 5000 },
+      30,
+    );
+    const b = videoSegmentCacheKeyPayload(
+      { segment: videoSegment({ volume: 1 }), durationMs: 5000 },
+      30,
+    );
+    expect(a).toBe(b);
+    expect(a).not.toContain("volume");
+  });
+
+  it.each([0, 0.25, 0.5, 0.75])(
+    "volume=%s verändert den Key gegenüber Default",
+    (volume) => {
+      const def = videoSegmentCacheKeyPayload(
+        { segment: videoSegment(), durationMs: 5000 },
+        30,
+      );
+      const withVol = videoSegmentCacheKeyPayload(
+        { segment: videoSegment({ volume }), durationMs: 5000 },
+        30,
+      );
+      expect(withVol).not.toBe(def);
+      expect(withVol).toContain(`"volume":${volume}`);
+    },
+  );
+
+  it("unterschiedliche Volumes → unterschiedliche Keys", () => {
+    const k25 = videoSegmentCacheKeyPayload(
+      { segment: videoSegment({ volume: 0.25 }), durationMs: 5000 },
+      30,
+    );
+    const k75 = videoSegmentCacheKeyPayload(
+      { segment: videoSegment({ volume: 0.75 }), durationMs: 5000 },
+      30,
+    );
+    expect(k25).not.toBe(k75);
   });
 });

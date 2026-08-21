@@ -50,6 +50,7 @@ import {
   tabLabel,
   tabThumbUrl,
   type StudioRecording,
+  type UpdateSegmentFn,
 } from "./internal";
 import { useStudioRecorder } from "./use-studio-recorder";
 
@@ -66,6 +67,11 @@ export interface PhaseLiveProps {
   onScriptChange: (script: string) => void;
   /** Fertige Aufnahme (Blob + Event-Log). */
   onFinished: (rec: StudioRecording) => void;
+  /**
+   * Persistiert Segment-Änderungen aus dem Standby/Live (z. B. Lautstärke
+   * des Video-Tons) — landet über die Studio-Tabs im finalen Segment.
+   */
+  updateSegment: UpdateSegmentFn;
   /**
    * Zurück zum Technik-Check: regulärer Ausgang im Standby UND
    * Fehler-Ausweg (Aufnahme konnte nicht starten / war leer).
@@ -99,6 +105,7 @@ export function PhaseLive({
   script,
   onScriptChange,
   onFinished,
+  updateSegment,
   onBack,
 }: PhaseLiveProps) {
   // ── Ablauf: standby (Vorschau) → countdown → live (Aufnahme) ─────────
@@ -625,6 +632,11 @@ export function PhaseLive({
                 mediaResetNonce={mediaResetNonce}
                 onMediaPlayback={(playing, timeSec) =>
                   handleMediaPlayback(activeTab.id, playing, timeSec)
+                }
+                onMediaVolume={(v) =>
+                  updateSegment(activeTab.id, (seg) =>
+                    seg.kind === "video" ? { ...seg, volume: v } : seg,
+                  )
                 }
               />
             )}

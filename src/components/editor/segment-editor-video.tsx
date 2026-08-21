@@ -13,7 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { CropRatio, VideoSegment } from "@/lib/segments/types";
+import {
+  videoSegmentVolume,
+  type CropRatio,
+  type VideoSegment,
+} from "@/lib/segments/types";
 import { AdvancedSettings } from "./advanced-settings";
 import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
 
@@ -185,6 +189,31 @@ export function SegmentEditorVideo({
           )}
         </div>
       )}
+
+      <div>
+        <div className="flex items-center justify-between">
+          <Label htmlFor={`volume-${segment.id}`}>Lautstärke des Video-Tons</Label>
+          <span className="font-mono text-xs text-ink-soft">
+            {Math.round(videoSegmentVolume(segment) * 100)} %
+          </span>
+        </div>
+        <input
+          id={`volume-${segment.id}`}
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={Math.round(videoSegmentVolume(segment) * 100)}
+          onChange={(e) =>
+            onChange({ ...segment, volume: Number(e.target.value) / 100 })
+          }
+          className="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-line accent-brand"
+        />
+        <p className="mt-1 text-xs text-ink-muted">
+          So laut ist der Original-Ton dieses Videos im fertigen Video. 0 % =
+          stumm, deine Stimme aus der Aufnahme bleibt immer zu hören.
+        </p>
+      </div>
 
       <AdvancedSettings hint="Zuschneiden, Seitenverhältnis, Browser-Rahmen">
         <div className="space-y-5">
