@@ -774,8 +774,16 @@ async function staleWorkerWatchdog(): Promise<void> {
     await sendOpsAlert({
       topic: `stale-worker-${w.workerId}`,
       subject: `Worker ohne Heartbeat: ${w.hostname}`,
-      text: `Der Worker ${w.workerId} (Host ${w.hostname}) hat seit ${w.lastSeenAt.toISOString()} keinen Heartbeat mehr geschrieben. Bitte Container und Server pruefen.`,
+      text: `Der Worker ${w.workerId} (Host ${w.hostname}) hat seit ${w.lastSeenAt.toISOString()} keinen Heartbeat mehr geschrieben. Bitte Container und Server pruefen. (Einmal-Alert: der Eintrag wird jetzt entfernt; meldet sich der Worker zurueck, legt sein Heartbeat ihn neu an.)`,
     });
+    // Alert once, then bury: die Row danach löschen. Jede WORKER_ID ist
+    // eine Einweg-Identität (Random-UUID pro Boot) — ein toter Eintrag wird
+    // nie wieder lebendig, nur sein Nachfolger. Ohne Delete mailt jeder
+    // `docker rm -f`-Deploy (SIGKILL, kein stopHeartbeat-Cleanup) den Admin
+    // 24 h lang alle 30 min an (Alert-Sturm 2026-08-21, 8 Deploy-Leichen).
+    await db
+      .delete(workerHeartbeats)
+      .where(eq(workerHeartbeats.workerId, w.workerId));
   }
 }
 
