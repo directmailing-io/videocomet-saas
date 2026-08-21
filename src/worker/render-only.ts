@@ -85,6 +85,14 @@ async function main(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     log("info", `received ${signal}, shutting down…`);
+    // Heartbeat-Row ZUERST löschen — BullMQ-Drain kann Dockers
+    // 10s-Stop-Timeout überschreiten (SIGKILL), sonst bleibt eine
+    // Watchdog-Alert-Leiche in worker_heartbeats zurück.
+    try {
+      await stopHeartbeat();
+    } catch (err) {
+      log("error", "heartbeat stop failed:", err);
+    }
     try {
       await worker.close(); // waits for in-flight jobs
     } catch (err) {
@@ -95,7 +103,6 @@ async function main(): Promise<void> {
     } catch (err) {
       log("error", "browser pool shutdown failed:", err);
     }
-    await stopHeartbeat();
     log("info", "bye.");
     process.exit(0);
   };

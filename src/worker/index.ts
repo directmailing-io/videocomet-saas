@@ -1350,6 +1350,16 @@ async function main(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     log("info", `received ${signal}, shutting down…`);
+    // Heartbeat-Row ZUERST löschen: die BullMQ-Drains unten können länger
+    // dauern als Dockers 10s-Stop-Timeout → SIGKILL, und die Leiche in
+    // worker_heartbeats triggert den Watchdog-Alert. Früh löschen ist
+    // sicher — die Row signalisiert nur Lebendigkeit, harte Crashes fängt
+    // der Watchdog weiterhin.
+    try {
+      await stopHeartbeat();
+    } catch (err) {
+      log("error", "heartbeat stop failed:", err);
+    }
     try {
       await worker.close(); // waits for in-flight jobs
     } catch (err) {
@@ -1452,7 +1462,6 @@ async function main(): Promise<void> {
         log("error", "preflight worker stop failed:", err);
       }
     }
-    await stopHeartbeat();
     log("info", "bye.");
     process.exit(0);
   };
