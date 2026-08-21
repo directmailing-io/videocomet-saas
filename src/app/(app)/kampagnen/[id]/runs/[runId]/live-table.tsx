@@ -431,13 +431,18 @@ export function LiveTable({
   // Fortsetzen nach Intro-Notbremse: der Server hat den Run pausiert, weil zu
   // viele personalisierte Begrüßungen fehlgeschlagen sind. POST /resume setzt
   // paused → generating und reiht die hängenden Leads wieder ein.
-  const resumeRun = React.useCallback(async () => {
+  // withoutIntro=true → explizites Opt-out: die Runde läuft bewusst ohne
+  // KI-Begrüßung weiter (setzt runs.introExpected=false), statt dass Leads
+  // mit fehlgeschlagener Begrüßung erneut hart fehlschlagen.
+  const resumeRun = React.useCallback(async (withoutIntro = false) => {
     if (runStatus !== "paused" || resuming) return;
     setResuming(true);
     try {
       const res = await fetch(`/api/runs/${runId}/resume`, {
         method: "POST",
         credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ continueWithoutIntro: withoutIntro }),
       });
       if (!res.ok) {
         let msg = `HTTP ${res.status}`;
@@ -456,7 +461,9 @@ export function LiveTable({
       }
       toast({
         title: "Lauf fortgesetzt",
-        description: "Die verbleibenden Leads werden jetzt weiterverarbeitet.",
+        description: withoutIntro
+          ? "Die verbleibenden Videos werden ohne KI-Begrüßung fertiggestellt."
+          : "Die verbleibenden Leads werden jetzt weiterverarbeitet.",
       });
       setRunStatus("generating");
       router.refresh();
@@ -878,19 +885,30 @@ export function LiveTable({
             </div>
             <div className="flex items-center gap-2">
               {runStatus === "paused" && (
-                <Button
-                  onClick={() => void resumeRun()}
-                  disabled={resuming}
-                  iconLeft={
-                    resuming ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Play className="size-4" />
-                    )
-                  }
-                >
-                  {resuming ? "Wird fortgesetzt…" : "Fortsetzen"}
-                </Button>
+                <>
+                  <Button
+                    variant="ghost"
+                    onClick={() => void resumeRun(true)}
+                    disabled={resuming}
+                    title="Setzt den Lauf fort und stellt die restlichen Videos ohne persönliche KI-Begrüßung fertig."
+                  >
+                    Ohne KI-Begrüßung fortsetzen
+                  </Button>
+                  <Button
+                    onClick={() => void resumeRun()}
+                    disabled={resuming}
+                    iconLeft={
+                      resuming ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Play className="size-4" />
+                      )
+                    }
+                    title="Versucht die fehlgeschlagenen KI-Begrüßungen erneut und setzt den Lauf fort."
+                  >
+                    {resuming ? "Wird fortgesetzt…" : "Fortsetzen"}
+                  </Button>
+                </>
               )}
               {isTerminal && (
                 <DropdownMenu>

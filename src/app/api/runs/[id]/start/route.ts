@@ -232,6 +232,32 @@ export async function POST(
     throw err;
   }
 
+  // ── READINESS-GATE (Reliability 2026-08-21) ─────────────────────────────
+  // Zentrale Vorab-Prüfung (gleiche wie im from-list-Pfad): Webcam-Video,
+  // Szenen, PDF-Vorlage, Umschlag-Vorlage. Die KI-Begrüßung blockiert hier
+  // NICHT hart (requireIntroReady: false) — dieser Pfad hat unten sein
+  // eigenes Intro-Gate mit expliziter „ohne KI-Begrüßung"-Entscheidung.
+  {
+    const { checkRunReadiness } = await import("@/lib/run-readiness");
+    const readiness = await checkRunReadiness({
+      userId: auth.user.id,
+      campaignId: run.campaignId,
+      envelopeTemplateIdOverride: run.envelopeTemplateId ?? null,
+      requireIntroReady: false,
+    });
+    if (!readiness.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: readiness.blockers.map((b) => b.message).join(" "),
+          errorKind: "run_not_ready",
+          blockers: readiness.blockers,
+        },
+        { status: 422 },
+      );
+    }
+  }
+
   const mapping = cm.mapping;
 
   const bulkRows: BulkLeadRow[] = rowsIn.map((row, index) => {
@@ -503,71 +529,27 @@ export async function POST(
   const skipPreflight =
     campaignRow?.mode === "webcam-only" || skipPreflightRequested;
 
-  // ── A/B-Test: Varianten-Zuteilung ────────────────────────────────────────
-  //
-  // Läuft NACH Dedupe + Validierung, damit nur echte (nicht-removed) Leads
-  // in die Quote zählen. Die Regel + beide Brief-URLs werden als Snapshot in
-  // `runs.abConfig` eingefroren — spätere Kampagnen-Änderungen (Test
-  // deaktivieren, Gewinner übernehmen) ändern laufende Runden nicht.
-  //
-  // Exakte Quote statt Münzwurf: bei "random" wird per Fisher-Yates
-  // geshuffelt und exakt round(n·weightA%) Leads bekommen A — ein
-  // Bernoulli-Wurf pro Lead würde bei kleinen Listen stark streuen.
+  // ── A/B-Test: Varianten-Zuteilung (gemeinsames Modul, 2026-08-21) ────────
+  // Der Snapshot wird hier NICHT direkt persistiert — er wandert unten im
+  // selben updateRun mit dem Status-Übergang in runs.abConfig.
   let abConfig: RunAbConfig | null = null;
-  const abActive =
-    campaignRow?.abTestingEnabled === true &&
-    campaignRow.pdfEnabled === true &&
-    typeof campaignRow.pdfGoogleDocsUrl === "string" &&
-    campaignRow.pdfGoogleDocsUrl.trim() !== "" &&
-    typeof campaignRow.pdfGoogleDocsUrlB === "string" &&
-    campaignRow.pdfGoogleDocsUrlB.trim() !== "";
-  if (abActive) {
-    // Wizard schickt die Regel mit; Fallback (z.B. API-Aufrufe ohne Body):
-    // Standard-Verteilung der Kampagne (Migration 0035).
-    const rule = abRequest ?? {
-      mode: campaignRow.abSplitMode,
-      weightA: campaignRow.abSplitWeightA,
-    };
-    abConfig = {
-      mode: rule.mode,
-      weightA: rule.weightA,
-      urlA: campaignRow.pdfGoogleDocsUrl!.trim(),
-      urlB: campaignRow.pdfGoogleDocsUrlB!.trim(),
-    };
-
-    const eligible = await db
-      .select({ id: leads.id, rowIndex: leads.rowIndex })
-      .from(leads)
-      .where(and(eq(leads.runId, params.id), isNull(leads.removedAt)))
-      .orderBy(leads.rowIndex);
-
-    const countA = Math.round((rule.weightA / 100) * eligible.length);
-    let idsA: string[];
-    if (rule.mode === "sequential") {
-      idsA = eligible.slice(0, countA).map((l) => l.id);
-    } else {
-      const shuffled = [...eligible];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      idsA = shuffled.slice(0, countA).map((l) => l.id);
-    }
-    const idsASet = new Set(idsA);
-    const idsB = eligible.filter((l) => !idsASet.has(l.id)).map((l) => l.id);
-
-    if (idsA.length > 0) {
-      await db
-        .update(leads)
-        .set({ abVariant: "A" })
-        .where(inArray(leads.id, idsA));
-    }
-    if (idsB.length > 0) {
-      await db
-        .update(leads)
-        .set({ abVariant: "B" })
-        .where(inArray(leads.id, idsB));
-    }
+  if (campaignRow) {
+    const { allocateAbVariantsForRun } = await import(
+      "@/lib/run-ab-allocation"
+    );
+    abConfig = await allocateAbVariantsForRun({
+      runId: params.id,
+      campaign: {
+        abTestingEnabled: campaignRow.abTestingEnabled,
+        pdfEnabled: campaignRow.pdfEnabled,
+        pdfGoogleDocsUrl: campaignRow.pdfGoogleDocsUrl,
+        pdfGoogleDocsUrlB: campaignRow.pdfGoogleDocsUrlB,
+        abSplitMode: campaignRow.abSplitMode,
+        abSplitWeightA: campaignRow.abSplitWeightA,
+      },
+      abRequest,
+      persistToRun: false,
+    });
   }
 
   if (skipPreflight) {
@@ -711,6 +693,10 @@ export async function POST(
       approvedLeadCount: inserted - incompleteCount - dedupeRemovedCount,
       customLpVersionId,
       abConfig,
+      // Dieser Direkt-Pfad läuft nur, wenn das Intro-Gate oben NICHT
+      // gegriffen hat (Feature aus oder kein Webcam-Video) — die Runde
+      // erwartet also verbindlich KEINE KI-Begrüßung (Migration 0064).
+      introExpected: false,
       // Retry-Pfad (failed → Neustart): Abschluss-Mail-Claim re-armen,
       // damit der neue Durchlauf wieder genau eine Mail bekommt.
       completionEmailSentAt: null,

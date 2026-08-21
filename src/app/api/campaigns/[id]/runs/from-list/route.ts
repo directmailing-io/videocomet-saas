@@ -32,6 +32,12 @@ import {
   normalizeContactMapping,
   type ContactMapping,
 } from "@/lib/contacts/mapping";
+import { checkRunReadiness } from "@/lib/run-readiness";
+import { allocateAbVariantsForRun } from "@/lib/run-ab-allocation";
+import {
+  assertBillingReadyForRun,
+  BillingGateError,
+} from "@/lib/billing/run-gate";
 
 export async function POST(
   req: NextRequest,
@@ -76,9 +82,19 @@ export async function POST(
     return NextResponse.json({ error: "Bitte wähl eine Liste aus." }, { status: 400 });
   }
 
-  // Ownership: Kampagne + Liste gehören dem User.
+  // Ownership: Kampagne + Liste gehören dem User. Config-Felder gleich
+  // mitladen — Readiness-Gate + A/B-Zuteilung brauchen sie (2026-08-21).
   const [campaign] = await db
-    .select({ id: campaigns.id })
+    .select({
+      id: campaigns.id,
+      introEnabled: campaigns.introEnabled,
+      abTestingEnabled: campaigns.abTestingEnabled,
+      pdfEnabled: campaigns.pdfEnabled,
+      pdfGoogleDocsUrl: campaigns.pdfGoogleDocsUrl,
+      pdfGoogleDocsUrlB: campaigns.pdfGoogleDocsUrlB,
+      abSplitMode: campaigns.abSplitMode,
+      abSplitWeightA: campaigns.abSplitWeightA,
+    })
     .from(campaigns)
     .where(and(eq(campaigns.id, params.id), eq(campaigns.userId, auth.user.id)))
     .limit(1);
@@ -140,7 +156,58 @@ export async function POST(
     );
   }
 
-  // Runde anlegen.
+  // ── READINESS-GATE (Reliability 2026-08-21) ─────────────────────────────
+  // Dieser Pfad startete bisher OHNE jede Vorab-Prüfung direkt in die
+  // Produktion — Vorfall 2026-08-21: Intro-Kampagne mit fehlgeschlagener
+  // Kalibrierung lief still komplett ohne KI-Begrüßung durch. Jetzt läuft
+  // hier dasselbe zentrale Gate wie im /start-Pfad. requireIntroReady=true,
+  // weil es hier keine Review-Seite mit „ohne KI-Begrüßung"-Opt-out gibt.
+  const readiness = await checkRunReadiness({
+    userId: auth.user.id,
+    campaignId: params.id,
+    envelopeTemplateIdOverride: envelopeTemplateId,
+    requireIntroReady: true,
+  });
+  if (!readiness.ok) {
+    return NextResponse.json(
+      {
+        error: readiness.blockers.map((b) => b.message).join(" "),
+        errorKind: "run_not_ready",
+        blockers: readiness.blockers,
+      },
+      { status: 422 },
+    );
+  }
+
+  // ── BILLING-GATE (Reliability 2026-08-21) ───────────────────────────────
+  // Gleiche Prüfung wie im /start-Pfad: aktive Subscription + genug
+  // Credits, BEVOR Leads angelegt werden. Vorher konnte dieser Pfad
+  // Runden ohne Guthaben starten (der Charge-Fehler in der Pipeline wird
+  // bewusst geschluckt → faktisch kostenlose Videos).
+  const pricePerVideo = readiness.introEnabled ? 2 : 1;
+  try {
+    await assertBillingReadyForRun({
+      userId: auth.user.id,
+      plannedLeadCount: effectiveContacts.length,
+      pricePerVideo,
+    });
+  } catch (err) {
+    if (err instanceof BillingGateError) {
+      return NextResponse.json(
+        {
+          error: err.message,
+          errorKind: err.kind,
+          ...(err.details ? { details: err.details } : {}),
+        },
+        { status: 402 },
+      );
+    }
+    throw err;
+  }
+
+  // Runde anlegen. introExpected: Das Readiness-Gate oben garantiert, dass
+  // bei aktivierter KI-Begrüßung Stimme + Kalibrierung bereit sind — die
+  // Runde erwartet die Begrüßung damit verbindlich (Migration 0064).
   const run = await createRun(auth.user.id, {
     campaignId: params.id,
     name: runName,
@@ -148,6 +215,7 @@ export async function POST(
     startedAt: new Date(),
     totalLeads: effectiveContacts.length,
     envelopeTemplateId,
+    introExpected: readiness.introEnabled,
   });
 
   // Für jeden Contact einen Lead-Row anlegen. Wenn ein Placeholder-Mapping
@@ -208,6 +276,23 @@ export async function POST(
     .insert(leads)
     .values(leadRows)
     .returning({ id: leads.id, rowIndex: leads.rowIndex });
+
+  // ── A/B-Zuteilung (Reliability 2026-08-21) ─────────────────────────────
+  // MUSS vor dem Enqueue laufen: die Pipeline liest runs.abConfig +
+  // leads.abVariant zur Laufzeit. Vorher bekamen from-list-Runden nie eine
+  // Zuteilung — alle Leads liefen still mit Brief-Variante A, ohne in der
+  // A/B-Statistik zu zählen.
+  await allocateAbVariantsForRun({
+    runId: run.id,
+    campaign: {
+      abTestingEnabled: campaign.abTestingEnabled,
+      pdfEnabled: campaign.pdfEnabled,
+      pdfGoogleDocsUrl: campaign.pdfGoogleDocsUrl,
+      pdfGoogleDocsUrlB: campaign.pdfGoogleDocsUrlB,
+      abSplitMode: campaign.abSplitMode,
+      abSplitWeightA: campaign.abSplitWeightA,
+    },
+  });
 
   // Pipeline-Jobs enqueuen.
   try {

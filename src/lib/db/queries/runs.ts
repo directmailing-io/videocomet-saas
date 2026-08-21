@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   analyticsEvents,
+  campaigns,
   leadEvents,
   leads,
   pipelineEvents,
@@ -115,29 +116,71 @@ export async function finalizeRunIfAllLeadsDone(runId: string): Promise<{
       status: runs.status,
       userId: runs.userId,
       campaignId: runs.campaignId,
+      envelopeTemplateId: runs.envelopeTemplateId,
+      abConfig: runs.abConfig,
+      introExpected: runs.introExpected,
     })
     .from(runs)
     .where(eq(runs.id, runId))
     .limit(1);
   if (runRow?.status === "generating") {
-    // ── Run-Completeness-Gate (Reliability 2026-08-20) ────────────────
+    // ── Run-Completeness-Gate (Reliability 2026-08-20, config-aware
+    // seit 2026-08-21) ────────────────────────────────────────────────
     // Safety-Net unter dem per-Lead-Gate in der Pipeline: ein Lead, der
-    // "completed" ist, aber kein Video oder keine Landingpage hat, wird
-    // hier auf failed gekippt. Ein User darf NIE eine erfolgreiche Runde
-    // sehen, in der ein Pflicht-Bestandteil fehlt.
+    // "completed" ist, aber einen für SEINE Konfiguration erforderlichen
+    // Bestandteil nicht hat, wird hier auf failed gekippt. Ein User darf
+    // NIE eine erfolgreiche Runde sehen, in der etwas fehlt. Die
+    // Bedingungen spiegeln missingLeadArtifacts (artifact-completeness.ts).
+    const [campaignRow] = runRow.campaignId
+      ? await db
+          .select({
+            introEnabled: campaigns.introEnabled,
+            envelopeTemplateId: campaigns.envelopeTemplateId,
+          })
+          .from(campaigns)
+          .where(eq(campaigns.id, runRow.campaignId))
+          .limit(1)
+      : [];
+    const introRequired =
+      campaignRow?.introEnabled === true && runRow.introExpected === true;
+    const envelopeRequired =
+      (runRow.envelopeTemplateId ?? campaignRow?.envelopeTemplateId) != null;
+    const abRequired = runRow.abConfig != null;
+
+    const incompleteConds = [
+      sql`${leads.videoUrl} IS NULL`,
+      sql`${leads.slug} IS NULL`,
+      // PDF-Pflicht wird hier bewusst NICHT geprüft: die exakte Stage-
+      // Bedingung hängt von skipPdf-Flags + pageUrl ab, die nur der
+      // Pipeline-Job kennt — das per-Lead-Gate (Stage 9d) deckt sie ab.
+      ...(introRequired
+        ? [
+            sql`(${leads.introStatus} IS NULL OR ${leads.introStatus} NOT IN ('generated', 'fallback_name'))`,
+          ]
+        : []),
+      ...(envelopeRequired ? [sql`${leads.envelopePdfUrl} IS NULL`] : []),
+      ...(abRequired
+        ? [
+            sql`(${leads.abVariant} IS NULL OR ${leads.abVariant} NOT IN ('A', 'B'))`,
+          ]
+        : []),
+    ];
     const flipped = await db
       .update(leads)
       .set({
         status: "failed",
         errorMessage:
-          "Automatisch als fehlgeschlagen markiert: Pflicht-Bestandteil fehlt (Video oder Landingpage)",
+          "Automatisch als fehlgeschlagen markiert: Pflicht-Bestandteil fehlt (Video, Landingpage, KI-Begrüßung, Umschlag oder A/B-Variante)",
       })
       .where(
         and(
           eq(leads.runId, runId),
           isNull(leads.removedAt),
           eq(leads.status, "completed"),
-          sql`(${leads.videoUrl} IS NULL OR ${leads.slug} IS NULL)`,
+          sql.join(
+            [sql`(`, sql.join(incompleteConds, sql` OR `), sql`)`],
+            sql``,
+          ),
         ),
       )
       .returning({ id: leads.id });
@@ -148,7 +191,7 @@ export async function finalizeRunIfAllLeadsDone(runId: string): Promise<{
         level: "error",
         stage: "run",
         message:
-          "Completeness-Gate: Lead war als erfolgreich markiert, aber Video oder Landingpage fehlt — auf fehlgeschlagen gesetzt.",
+          "Completeness-Gate: Lead war als erfolgreich markiert, aber ein Pflicht-Bestandteil fehlt (Video, Landingpage, KI-Begrüßung, Umschlag oder A/B-Variante) — auf fehlgeschlagen gesetzt.",
       });
     }
 

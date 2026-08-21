@@ -177,11 +177,19 @@ export async function POST(
   // ── 4. Run-Status hochziehen (atomic) ───────────────────────────────
   // Bei aktivem Intro-Gate wird die Bestätigung der Vorschau im selben
   // Update mit Zeitstempel festgehalten.
+  //
+  // introExpected (Migration 0064): Snapshot, ob diese Runde verbindlich
+  // eine KI-Begrüßung liefern MUSS. Genau dann true, wenn der User die
+  // Vorschau explizit bestätigt hat (introGateActive). Bei Intro-Kampagnen
+  // ohne bereite Vorschau („ohne KI-Begrüßung starten"-Fall) bleibt es
+  // false — das Completeness-Gate akzeptiert dann das Original-Video.
   const transition = await setRunStatus(
     params.id,
     auth.user.id,
     "approved",
-    introGateActive ? { introPreviewApprovedAt: new Date() } : undefined,
+    introGateActive
+      ? { introPreviewApprovedAt: new Date(), introExpected: true }
+      : { introExpected: false },
   );
   if (!transition.ok) {
     return NextResponse.json(

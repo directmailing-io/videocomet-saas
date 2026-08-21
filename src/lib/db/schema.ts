@@ -533,6 +533,15 @@ export const runs = pgTable("runs", {
   introPreviewCompletedAt: timestamp("intro_preview_completed_at", {
     withTimezone: true,
   }),
+  /**
+   * Snapshot beim Run-Start (Migration 0064): wird für diese Runde eine
+   * KI-Begrüßung verbindlich erwartet?
+   *   true  → Completeness-Gate verlangt pro Lead introStatus
+   *           'generated' oder 'fallback_name'.
+   *   false → Runde läuft bewusst ohne KI-Begrüßung.
+   *   NULL  → Alt-Runden vor der Migration (Gate prüft nicht).
+   */
+  introExpected: boolean("intro_expected"),
 
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),

@@ -54,7 +54,10 @@ import { insertPipelineEvent } from "@/lib/db/queries/pipeline-events";
 import type { LeadJobData } from "../types";
 import { createTempDir, cleanupTempDir } from "../lib/temp";
 import { withRenderSlot } from "../lib/render-slots";
-import { missingLeadArtifacts } from "../lib/artifact-completeness";
+import {
+  isIntroHardFailure,
+  missingLeadArtifacts,
+} from "../lib/artifact-completeness";
 import { runVideoRender } from "./video-render";
 import { runVideoCompress } from "./video-compress";
 import {
@@ -587,6 +590,26 @@ export async function pipelineProcessor(
           lead.introStatus === "fallback_name" ||
           lead.introStatus === "fallback_error" ||
           lead.introStatus === "disabled";
+        // Fail-fast (Reliability 2026-08-21): Die Runde wurde mit der
+        // verbindlichen Erwartung einer KI-Begrüßung gestartet
+        // (runs.introExpected), aber das Staging ist terminal ohne
+        // Ergebnis geendet. NICHT still mit dem Original rendern — das
+        // Completeness-Gate (9d) würde den Lead ohnehin ablehnen; hier
+        // sparen wir uns den kompletten (teuren) Render und liefern die
+        // Ursache klartext. fallback_name bleibt erlaubt (kein brauchbarer
+        // Vorname → nichts zu personalisieren, dokumentierte Entscheidung).
+        if (isIntroHardFailure(run.introExpected, lead.introStatus)) {
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "error",
+            stage: "render",
+            message: `${leadLabel}: KI-Begrüßung war für diese Runde fest eingeplant, konnte aber nicht erzeugt werden (Status: ${lead.introStatus}). Video wird NICHT ohne Begrüßung produziert. Bitte Webcam-Video/Stimme prüfen oder die Runde bewusst ohne KI-Begrüßung neu starten.`,
+          }).catch(() => undefined);
+          throw new Error(
+            `KI-Begrüßung fehlgeschlagen (introStatus=${lead.introStatus}) — Runde erwartet eine personalisierte Begrüßung`,
+          );
+        }
         if (lead.introStatus === "generated" && introResult) {
           await setCurrentStage(data.leadId, "fetchIntroSegment");
           const fetchStart = Date.now();
@@ -1983,14 +2006,27 @@ export async function pipelineProcessor(
             message: `${leadLabel}: envelope rendered (${((Date.now() - envStart) / 1000).toFixed(1)}s, ${pdfBuf.length} bytes)`,
             durationMs: Date.now() - envStart,
           });
+        } else {
+          // Vorlage wurde nach dem Run-Start gelöscht — laut sagen statt
+          // still skippen, denn das Completeness-Gate (9d) wird den Lead
+          // gleich wegen fehlendem Umschlag ablehnen.
+          await insertPipelineEvent({
+            runId: data.runId,
+            leadId: data.leadId,
+            level: "error",
+            stage: "pdf",
+            message: `${leadLabel}: Umschlag-Vorlage ${effectiveEnvelopeTemplateId} existiert nicht mehr — Umschlag kann nicht erzeugt werden`,
+          });
         }
       } catch (err) {
+        // Seit dem config-aware Completeness-Gate (2026-08-21) completed
+        // der Lead NICHT mehr ohne Umschlag — 9d lehnt ihn gleich ab.
         await insertPipelineEvent({
           runId: data.runId,
           leadId: data.leadId,
-          level: "warn",
+          level: "error",
           stage: "pdf",
-          message: `${leadLabel}: envelope-render failed (${err instanceof Error ? err.message : "?"}) — Lead completes without envelope`,
+          message: `${leadLabel}: envelope-render failed (${err instanceof Error ? err.message : "?"}) — Umschlag ist für diese Runde Pflicht, Lead wird vom Completeness-Gate abgelehnt`,
         });
       }
     }
@@ -2070,17 +2106,21 @@ export async function pipelineProcessor(
     }
 
     // ── Stage 9d: Artefakt-Completeness-Gate (Reliability 2026-08-20) ─
-    // Ein Lead darf NUR completed werden, wenn alle erforderlichen
-    // Artefakte tatsächlich in der DB stehen. Wir prüfen die frische
-    // DB-Row (nicht In-Memory-Variablen), weil die Stages ihre Ergebnisse
-    // dorthin schreiben. Envelope ist bewusst Best-Effort (siehe Stage 9b)
-    // und wird hier nicht erzwungen.
+    // Ein Lead darf NUR completed werden, wenn alle für seine KONKRETE
+    // Konfiguration erforderlichen Artefakte tatsächlich in der DB stehen.
+    // Wir prüfen die frische DB-Row (nicht In-Memory-Variablen), weil die
+    // Stages ihre Ergebnisse dorthin schreiben. Die Required-Flags spiegeln
+    // exakt die Bedingungen der jeweiligen Stage (siehe artifact-
+    // completeness.ts).
     {
       const [finalLead] = await db
         .select({
           videoUrl: leads.videoUrl,
           slug: leads.slug,
           pdfUrl: leads.pdfUrl,
+          introStatus: leads.introStatus,
+          envelopePdfUrl: leads.envelopePdfUrl,
+          abVariant: leads.abVariant,
         })
         .from(leads)
         .where(eq(leads.id, data.leadId))
@@ -2096,6 +2136,21 @@ export async function pipelineProcessor(
           campaign.pdfEnabled &&
           !!effectivePdfDocsUrl &&
           !!pageUrl,
+        // KI-Begrüßung: nur verbindlich, wenn die Runde mit dieser
+        // Erwartung gestartet wurde (Snapshot, Migration 0064) UND das
+        // Feature auf der Kampagne noch aktiv ist. Live-Check verhindert
+        // eine Sackgasse, wenn der User das Feature mid-run deaktiviert.
+        introRequired:
+          campaign.introEnabled === true && run.introExpected === true,
+        introStatus: finalLead?.introStatus ?? null,
+        // Exakt die Bedingung der Umschlag-Stage 9b.
+        envelopeRequired: effectiveEnvelopeTemplateId != null,
+        envelopePdfUrl: finalLead?.envelopePdfUrl ?? null,
+        // A/B-Snapshot auf der Runde ⇒ jeder Lead braucht eine Variante,
+        // sonst hätte er stillschweigend Variante A bekommen (Fallback in
+        // der PDF-Stage), ohne in der Statistik einer Variante zu zählen.
+        abRequired: runAbConfig != null,
+        abVariant: finalLead?.abVariant ?? null,
       });
       if (missing.length > 0) {
         await insertPipelineEvent({

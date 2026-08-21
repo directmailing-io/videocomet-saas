@@ -27,6 +27,14 @@ import IORedis from "ioredis";
  *     als auf den
  *     2-Minuten-Orphan-Watchdog im Worker zu warten).
  *
+ * Body (optional): { continueWithoutIntro: true } — explizites Opt-out für
+ * Runden mit verbindlicher KI-Begrüßung (runs.introExpected=true): setzt
+ * introExpected=false im selben atomaren Update, damit Leads mit
+ * fehlgeschlagener Begrüßung (fallback_error/disabled) NICHT im Stage-0-
+ * Fail-Fast bzw. Completeness-Gate landen, sondern bewusst mit dem
+ * Original-Video produziert werden. Ohne das Flag bleibt die Erwartung
+ * bestehen (fail-loud).
+ *
  * Idempotenz: nur der erste Aufruf gewinnt die Status-Transition; spätere
  * Aufrufe liefern 409 mit dem aktuellen Status.
  */
@@ -70,9 +78,16 @@ function pipelineQueueLocal() {
 }
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: { id: string } },
 ) {
+  let continueWithoutIntro = false;
+  try {
+    const body = (await req.json()) as { continueWithoutIntro?: unknown };
+    continueWithoutIntro = body?.continueWithoutIntro === true;
+  } catch {
+    // kein/ungültiger Body → Default-Verhalten
+  }
   // requireUserApi bewusst NICHT verwendet — das sperrt Admins aus (403 bei
   // role !== 'user'), Admins sollen fremde Runs aber fortsetzen dürfen.
   const { user } = await validateRequest();
@@ -90,7 +105,10 @@ export async function POST(
   // 1) Atomare Transition paused → generating.
   const [resumed] = await db
     .update(runs)
-    .set({ status: "generating" })
+    .set({
+      status: "generating",
+      ...(continueWithoutIntro ? { introExpected: false } : {}),
+    })
     .where(
       and(
         eq(runs.id, runId),
@@ -195,7 +213,9 @@ export async function POST(
     runId,
     level: "info",
     stage: "run",
-    message: `Lauf fortgesetzt — ${stagingQueued} Begrüßungen neu eingereiht, ${renderQueued} Leads direkt zum Render.`,
+    message: continueWithoutIntro
+      ? `Lauf fortgesetzt OHNE verbindliche KI-Begrüßung (explizite Nutzer-Entscheidung) — ${stagingQueued} Begrüßungen neu eingereiht, ${renderQueued} Leads direkt zum Render.`
+      : `Lauf fortgesetzt — ${stagingQueued} Begrüßungen neu eingereiht, ${renderQueued} Leads direkt zum Render.`,
   }).catch(() => undefined);
 
   // Edge-Case: alle Leads waren beim Pausieren schon terminal (nichts mehr
