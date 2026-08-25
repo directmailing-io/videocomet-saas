@@ -186,8 +186,12 @@ export function EmailBlastWizard({
   const [mailboxId, setMailboxId] = React.useState<string | null>(null);
   const [templateId, setTemplateId] = React.useState<string | null>(null);
   // ④ GIF
+  // Default statt null: Ohne Config ging der Blast STILL ohne GIF raus,
+  // wenn der User im GIF-Schritt nur „Weiter" klickte (Kundenfall
+  // contextagentur 2026-08-25 — gifConfig fehlte im Snapshot, Mail kam
+  // ohne GIF an). GIF ist jetzt opt-out („Ohne GIF fortfahren").
   const [gifValue, setGifValue] = React.useState<GifRangeValue | null>(
-    initialGifConfig,
+    initialGifConfig ?? { startSec: 0, durationSec: 3 },
   );
   const [gifSkipped, setGifSkipped] = React.useState(false);
   const [gifSaving, setGifSaving] = React.useState(false);

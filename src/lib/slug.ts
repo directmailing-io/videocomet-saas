@@ -282,6 +282,15 @@ export async function generateSlug(opts: GenerateSlugOptions): Promise<string> {
   );
 
   if (!base) {
+    // Kampagnen-Template hat leer gerendert (z. B. `{companyName}` ohne
+    // Firmen-Spalte im CSV — Kundenfall contextagentur 2026-08-25). Bevor
+    // wir den nichtssagenden `lead-<n>`-Fallback nehmen: mit dem Default-
+    // Template ({firstName}-{lastName}) versuchen, damit die URL wenigstens
+    // den Namen trägt.
+    base = renderSlugTemplate(DEFAULT_SLUG_TEMPLATE, opts.leadData, opts.mapping);
+  }
+
+  if (!base) {
     const fb = opts.fallbackId != null ? String(opts.fallbackId) : slugHexSuffix();
     base = slugifyBasic(`lead-${fb}`);
   }
