@@ -29,6 +29,7 @@ import { db } from "@/lib/db";
 import {
   campaigns,
   customLpVersions,
+  emailTemplates,
   envelopeTemplates,
   landingPageTemplates,
 } from "@/lib/db/schema";
@@ -396,6 +397,8 @@ export async function collectCampaignPlaceholders(
   options?: {
     /** Von der Runde ausgewaehlte Umschlag-Vorlage (ueberschreibt campaign). */
     envelopeTemplateId?: string | null;
+    /** Von der Runde ausgewaehlte E-Mail-Vorlage (Option „benachrichtigen"). */
+    emailTemplateId?: string | null;
   },
 ): Promise<DetectedPlaceholder[]> {
   const [campaign] = await db
@@ -521,6 +524,32 @@ export async function collectCampaignPlaceholders(
           label,
         });
       }
+    }
+  }
+
+  // 7. E-Mail-Vorlage (Runden-Option „Kontakte per E-Mail benachrichtigen").
+  //    Tenant-Guard über userId — die Vorlagen-Id kommt aus dem Client.
+  if (options?.emailTemplateId) {
+    const [mailTpl] = await db
+      .select()
+      .from(emailTemplates)
+      .where(
+        and(
+          eq(emailTemplates.id, options.emailTemplateId),
+          eq(emailTemplates.userId, userId),
+        ),
+      )
+      .limit(1);
+    if (mailTpl && !mailTpl.deletedAt) {
+      const source: PlaceholderSource = {
+        kind: "email",
+        label: `E-Mail: ${mailTpl.name}`,
+      };
+      scanDoubleBrace(mailTpl.subject, acc, source);
+      scanTiptapHtml(mailTpl.bodyHtml, acc, source);
+      scanDoubleBrace(mailTpl.ctaLabel, acc, source);
+      scanTiptapHtml(mailTpl.signatureHtml, acc, source);
+      scanTiptapHtml(mailTpl.impressumHtml, acc, source);
     }
   }
 

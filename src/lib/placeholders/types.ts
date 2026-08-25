@@ -23,7 +23,8 @@ export type PlaceholderSourceKind =
   | "lp-custom" // Custom-HTML-LP (ZIP-Upload)
   | "envelope" // Umschlag-Vorlage (envelope_templates)
   | "slug" // Slug-Template `{key}`
-  | "website"; // Website-Segment (Lead-URL-Spalte für Scroll-/Hero-Capture)
+  | "website" // Website-Segment (Lead-URL-Spalte für Scroll-/Hero-Capture)
+  | "email"; // E-Mail-Vorlage (email_templates, Runden-Option „benachrichtigen")
 
 /** Quellen-Eintrag pro Detected-Placeholder (mehrere möglich). */
 export interface PlaceholderSource {

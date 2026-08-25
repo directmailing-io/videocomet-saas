@@ -63,11 +63,26 @@ interface SpamResult {
   hints: SpamHint[];
 }
 
-const PLACEHOLDER_SUGGESTIONS = [
+/**
+ * Basis-Kontakt-Eigenschaften, wie sie nach dem Kontakt→Lead-Übertrag in den
+ * Lead-Daten heißen (buildLeadDataFromContact — z. B. `linkedin`, nicht
+ * `linkedinUrl`). `pageUrl` ist der System-Platzhalter für den Video-Link.
+ */
+const BASE_PLACEHOLDER_SUGGESTIONS = [
   "firstName",
   "lastName",
   "company",
+  "salutation",
+  "title",
+  "position",
+  "street",
+  "postalCode",
   "city",
+  "country",
+  "phone",
+  "email",
+  "website",
+  "linkedin",
   "pageUrl",
 ];
 
@@ -75,8 +90,17 @@ const SAMPLE_LEAD: Record<string, string> = {
   firstName: "Max",
   lastName: "Mustermann",
   company: "Muster GmbH",
+  salutation: "Herr",
+  title: "Dr.",
+  position: "Geschäftsführer",
+  street: "Musterstraße 12",
+  postalCode: "10115",
   city: "Berlin",
+  country: "Deutschland",
+  phone: "+49 30 1234567",
   email: "max@muster-gmbh.de",
+  website: "https://www.muster-gmbh.de",
+  linkedin: "https://www.linkedin.com/in/max-mustermann",
 };
 
 const SAMPLE_PAGE_URL = "https://app.videocomet.de/v/beispiel";
@@ -165,6 +189,32 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
   const [spamOpen, setSpamOpen] = React.useState(false);
 
   const subjectRef = React.useRef<HTMLInputElement | null>(null);
+
+  // Benutzerdefinierte Kontakt-Felder als zusätzliche Platzhalter (best-effort).
+  const [customFieldKeys, setCustomFieldKeys] = React.useState<string[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/api/contact-fields", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { fields: [] }))
+      .then((json) => {
+        if (cancelled) return;
+        const keys = (json.fields ?? [])
+          .map((f: { key?: string }) => f.key)
+          .filter((k: unknown): k is string => typeof k === "string" && k.length > 0);
+        setCustomFieldKeys(keys);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const placeholderSuggestions = React.useMemo(() => {
+    const extra = customFieldKeys.filter(
+      (k) => !BASE_PLACEHOLDER_SUGGESTIONS.includes(k),
+    );
+    return [...BASE_PLACEHOLDER_SUGGESTIONS, ...extra];
+  }, [customFieldKeys]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -390,7 +440,7 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
                   <span className="text-[11px] text-ink-muted mr-1">
                     Platzhalter:
                   </span>
-                  {PLACEHOLDER_SUGGESTIONS.map((key) => (
+                  {placeholderSuggestions.map((key) => (
                     <button
                       key={key}
                       type="button"
@@ -454,7 +504,7 @@ export function EmailTemplateEditor({ templateId }: { templateId: string }) {
                 onChange={({ json, html }) =>
                   patch({ bodyJson: json, bodyHtml: html })
                 }
-                placeholderSuggestions={PLACEHOLDER_SUGGESTIONS}
+                placeholderSuggestions={placeholderSuggestions}
                 ctaDefaults={{
                   label: tpl.ctaLabel || "Video ansehen",
                   url: tpl.ctaUrl || "@system:pageUrl",

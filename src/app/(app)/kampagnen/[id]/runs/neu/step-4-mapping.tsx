@@ -61,6 +61,7 @@ const SOURCE_GROUP_LABEL: Record<string, string> = {
   envelope: "Umschlag",
   slug: "Link",
   website: "Website",
+  email: "E-Mail",
 };
 
 function groupSources(sources: PlaceholderSource[]): string[] {
@@ -89,11 +90,16 @@ export function Step4Mapping({
 
   React.useEffect(() => {
     setLoading(true);
-    const envParam = state.options.envelopeTemplateId
-      ? `?envelopeTemplateId=${encodeURIComponent(state.options.envelopeTemplateId)}`
-      : "";
+    const params = new URLSearchParams();
+    if (state.options.envelopeTemplateId) {
+      params.set("envelopeTemplateId", state.options.envelopeTemplateId);
+    }
+    if (state.options.emailTemplateId) {
+      params.set("emailTemplateId", state.options.emailTemplateId);
+    }
+    const query = params.size > 0 ? `?${params.toString()}` : "";
     Promise.all([
-      fetch(`/api/campaigns/${campaignId}/placeholders${envParam}`).then((r) => r.json()),
+      fetch(`/api/campaigns/${campaignId}/placeholders${query}`).then((r) => r.json()),
       fetch("/api/contact-fields").then((r) => r.json()),
     ])
       .then(([phRes, cfRes]) => {
@@ -102,7 +108,12 @@ export function Step4Mapping({
       })
       .catch((err) => toastError(toast, err))
       .finally(() => setLoading(false));
-  }, [campaignId, state.options.envelopeTemplateId, toast]);
+  }, [
+    campaignId,
+    state.options.envelopeTemplateId,
+    state.options.emailTemplateId,
+    toast,
+  ]);
 
   // Auto-Suggest wenn noch kein Mapping vorhanden
   React.useEffect(() => {

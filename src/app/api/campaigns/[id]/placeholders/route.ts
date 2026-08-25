@@ -1,5 +1,5 @@
 /**
- * GET /api/campaigns/:id/placeholders?envelopeTemplateId=uuid
+ * GET /api/campaigns/:id/placeholders?envelopeTemplateId=uuid&emailTemplateId=uuid
  *
  * Liefert alle Platzhalter, die in den Assets der Kampagne (Slides, Text,
  * Google-Docs, PDF-Brief, Landingpage, Umschlag, Slug-Template) verwendet
@@ -24,12 +24,14 @@ export async function GET(
 
   const envelopeTemplateId =
     req.nextUrl.searchParams.get("envelopeTemplateId") ?? null;
+  const emailTemplateId =
+    req.nextUrl.searchParams.get("emailTemplateId") ?? null;
 
   try {
     const placeholders = await collectCampaignPlaceholders(
       params.id,
       auth.user.id,
-      { envelopeTemplateId },
+      { envelopeTemplateId, emailTemplateId },
     );
     return NextResponse.json({ placeholders });
   } catch (err) {
