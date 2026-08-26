@@ -7,6 +7,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${BASE}/`, changeFrequency: "weekly", priority: 1 },
     { url: `${BASE}/signup`, changeFrequency: "monthly", priority: 0.8 },
     { url: `${BASE}/login`, changeFrequency: "yearly", priority: 0.3 },
+    { url: `${BASE}/vergleich-mit-pitchlane`, changeFrequency: "monthly", priority: 0.6 },
     { url: `${BASE}/impressum`, changeFrequency: "yearly", priority: 0.2 },
     { url: `${BASE}/datenschutz`, changeFrequency: "yearly", priority: 0.2 },
     { url: `${BASE}/agb`, changeFrequency: "yearly", priority: 0.2 },

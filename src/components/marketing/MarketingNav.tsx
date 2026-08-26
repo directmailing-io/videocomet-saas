@@ -84,8 +84,8 @@ export function MarketingNav() {
           ref={menuWrapperRef}
           className="hidden md:flex items-center gap-1 relative"
         >
-          <NavLink href="#demo">Live-Demo</NavLink>
-          <NavLink href="#how-it-works">Ablauf</NavLink>
+          <NavLink href="/#demo">Live-Demo</NavLink>
+          <NavLink href="/#how-it-works">Ablauf</NavLink>
           <button
             type="button"
             onClick={() => setFeaturesOpen((v) => !v)}
@@ -147,11 +147,11 @@ export function MarketingNav() {
       {mobileOpen ? (
         <nav className="md:hidden border-t px-6 py-3 flex flex-col border-line">
           {[
-            { href: "#demo", label: "Live-Demo" },
-            { href: "#how-it-works", label: "Ablauf" },
-            { href: "#features", label: "Features" },
-            { href: "#pricing", label: "Preise" },
-            { href: "#faq", label: "FAQ" },
+            { href: "/#demo", label: "Live-Demo" },
+            { href: "/#how-it-works", label: "Ablauf" },
+            { href: "/#features", label: "Features" },
+            { href: "/#pricing", label: "Preise" },
+            { href: "/#faq", label: "FAQ" },
             { href: "/login", label: "Login" },
           ].map((item) => (
             <Link
@@ -263,7 +263,7 @@ function FeaturesMegaMenu({ onClose }: { onClose: () => void }) {
         ))}
         {/* Letzter Slot = "Alle Features"-CTA */}
         <Link
-          href="#how-it-works"
+          href="/#how-it-works"
           onClick={onClose}
           className="flex items-center justify-between gap-3 px-3 py-3 rounded-xl transition-colors group text-ink hover:bg-surface-soft"
         >
@@ -296,7 +296,7 @@ function FeatureItem({ feature }: { feature: Feature }) {
   const Icon = feature.icon;
   return (
     <Link
-      href={`#${feature.id}`}
+      href={`/#${feature.id}`}
       role="menuitem"
       className="flex items-start gap-3 px-3 py-3 rounded-xl transition-colors group hover:bg-surface-soft"
     >
