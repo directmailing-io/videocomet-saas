@@ -13,7 +13,14 @@ const COLUMNS: ReadonlyArray<{ title: string; links: ReadonlyArray<FooterLink> }
       { label: "Ablauf", href: "/#how-it-works" },
       { label: "Features", href: "/#features" },
       { label: "Preise", href: "/#pricing" },
+    ],
+  },
+  {
+    title: "Vergleiche",
+    links: [
       { label: "Pitchlane Vergleich", href: "/vergleich-mit-pitchlane" },
+      { label: "Sendspark Vergleich", href: "/vergleich-mit-sendspark" },
+      { label: "Loom Vergleich", href: "/vergleich-mit-loom" },
     ],
   },
   {
@@ -56,7 +63,7 @@ export function MarketingFooter({ variant = "light" }: { variant?: "light" | "da
 
       <div className="relative max-w-6xl mx-auto px-6 md:px-10">
         {/* Top: Brand + columns */}
-        <div className="py-14 md:py-20 grid grid-cols-2 md:grid-cols-[1.6fr_1fr_1fr_1fr] gap-10 md:gap-8 lg:gap-12">
+        <div className="py-14 md:py-20 grid grid-cols-2 md:grid-cols-[1.6fr_1fr_1fr_1fr_1fr] gap-10 md:gap-8 lg:gap-12">
           {/* Brand column */}
           <div className="col-span-2 md:col-span-1">
             <Link

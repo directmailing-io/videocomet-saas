@@ -106,6 +106,8 @@ const MARKETING_ONLY_PATHS = new Set<string>([
   "/impressum",
   "/datenschutz",
   "/vergleich-mit-pitchlane",
+  "/vergleich-mit-sendspark",
+  "/vergleich-mit-loom",
 ]);
 function isMarketingOnlyPath(pathname: string): boolean {
   if (MARKETING_ONLY_PATHS.has(pathname)) return true;

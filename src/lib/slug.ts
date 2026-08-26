@@ -100,7 +100,7 @@ export const RESERVED_SLUGS = new Set<string>([
   // Signup + E-Mail-Verifizierung, Abmelde-/Share-Links, Domain-Root-Redirect
   "signup", "abmelden", "share", "review", "domain-root",
   // Marketing-Unterseiten
-  "vergleich-mit-pitchlane",
+  "vergleich-mit-pitchlane", "vergleich-mit-sendspark", "vergleich-mit-loom",
   // Bridge-Script (wird vom Custom-LP Sandbox via /__videocomet-bridge.js
   // serviert; ein Lead-Slug `__videocomet-bridge.js` würde den Script-Pfad
   // schatten und Trackings brechen).
