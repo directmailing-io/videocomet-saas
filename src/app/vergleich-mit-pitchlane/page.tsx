@@ -240,7 +240,7 @@ export default function VergleichMitPitchlanePage() {
               Der ehrliche Vergleich
             </span>
             <h1 className="mt-5 max-w-3xl text-[clamp(1.9rem,5.5vw,3.6rem)] font-light leading-[1.12] tracking-[-0.035em]">
-              VIDEOCOMET und Pitchlane im Vergleich.{" "}
+              Die Pitchlane Alternative aus Deutschland.{" "}
               <span className="font-semibold text-brand-deep">
                 Der Unterschied liegt im Ergebnis.
               </span>
@@ -337,17 +337,19 @@ export default function VergleichMitPitchlanePage() {
                 Eine einfache Rechnung
               </span>
               <h2 className="mt-4 max-w-2xl text-[clamp(1.6rem,4vw,2.6rem)] font-light leading-[1.15] tracking-[-0.035em]">
-                1 Wunschkunde = 1 Credit.{" "}
+                Feste Credits pro Wunschkunde.{" "}
                 <span className="font-semibold text-brand-deep">
-                  Mehr musst du dir nicht merken.
+                  Du weißt vorher genau, was es kostet.
                 </span>
               </h2>
               <div className="mt-5 max-w-3xl flex flex-col gap-3 text-base text-ink-soft leading-relaxed">
                 <p>
-                  Ein Credit, und dein Wunschkunde bekommt das volle Paket:
+                  Ein Credit, und dein Wunschkunde bekommt das Paket:
                   persönliches Video, eigene Landingpage, fertiger Brief mit
-                  QR-Code samt Umschlag. Aus einem Tool, ohne etwas
-                  zusammenzustückeln.
+                  QR-Code samt Umschlag. Möchtest du zusätzlich die
+                  KI-Begrüßung, die deinen Wunschkunden mit Namen anspricht,
+                  kommt ein Credit dazu. Das war die ganze Rechnung. Alles aus
+                  einem Tool, ohne etwas zusammenzustückeln.
                 </p>
                 <p className="text-ink font-medium">
                   Und jetzt rechne kurz selbst: Was bringt dir ein einziger
