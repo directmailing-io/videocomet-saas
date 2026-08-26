@@ -299,9 +299,39 @@ export async function processIntroCalibrationJob(job: {
     if (!consentProfile?.consentVoiceAt || !consentProfile.consentAiAt) {
       voicePatch = { voiceStatus: "failed", voiceError: "consent_missing" };
     } else {
+      // Zusatz-Sprachprobe (kurze Videos <90s): an den Video-Ton anhängen,
+      // damit Fish genug Material bekommt. Best effort — schlägt der
+      // Download fehl, trainieren wir nur mit dem Video (Quality-Gate
+      // in trainVoiceFromWav fängt zu kurzes Material ab).
+      let trainWavPath = wavPath;
+      if (row.calibration.extraAudioUrl) {
+        try {
+          const extraRes = await fetch(row.calibration.extraAudioUrl);
+          if (!extraRes.ok) throw new Error(`HTTP ${extraRes.status}`);
+          const extraSrcPath = join(tmpDir, "extra-src");
+          await writeFile(
+            extraSrcPath,
+            Buffer.from(await extraRes.arrayBuffer()),
+          );
+          const combinedPath = join(tmpDir, "train-combined.wav");
+          await runFfmpeg([
+            "-y",
+            "-i", wavPath,
+            "-i", extraSrcPath,
+            "-filter_complex",
+            `[1:a]aresample=${SAMPLE_RATE},aformat=channel_layouts=mono[x];[0:a][x]concat=n=2:v=0:a=1`,
+            combinedPath,
+          ]);
+          trainWavPath = combinedPath;
+        } catch (err) {
+          console.warn(
+            `[intro-calibration] extra audio unusable (${(err as Error).message}) — training with video only`,
+          );
+        }
+      }
       try {
         const trained = await trainVoiceFromWav({
-          wavPath,
+          wavPath: trainWavPath,
           tmpDir,
           title: `videocomet-${row.calibration.userId}-${row.calibration.mediaItemId.slice(0, 8)}`,
           previousModelId: row.calibration.voiceFishModelId,

@@ -2000,6 +2000,10 @@ export const introCalibrations = pgTable("intro_calibrations", {
   lufsRef: real("lufs_ref"),
   spectralRef: jsonb("spectral_ref").$type<Record<string, number> | null>(),
   roomtoneUrl: text("roomtone_url"),
+  // Migration 0065 — Zusatz-Sprachprobe für kurze Videos (<90s Ton): wird
+  // beim Voice-Training an den Video-Ton angehängt, damit Fish genug
+  // Material bekommt. Analyse/Roomtone nutzen weiterhin NUR das Video.
+  extraAudioUrl: text("extra_audio_url"),
   // Migration 0046 — Voice-Clone PRO VIDEO: gleiche Tonquelle wie das
   // Video, an das die TTS nahtlos anschließen muss (andere Sprecher/Mikros
   // je Kampagne). Trainiert der Kalibrierungs-Processor mit; Account-

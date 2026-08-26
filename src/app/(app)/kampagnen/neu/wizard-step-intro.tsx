@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import { Check, Info, Sparkles } from "lucide-react";
+import { Check, Info, Mic, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -14,10 +13,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RecordingHint } from "@/components/intro/recording-hint";
+import { VoiceExtraRecorder } from "@/components/intro/voice-extra-recorder";
 import {
   CONSENT_AI_TEXT,
   CONSENT_VOICE_TEXT,
   GREETING_PREFIXES,
+  VOICE_VIDEO_OK_SECONDS,
   buildGreetingTemplate,
   type GreetingPrefix,
   type NamePatternKey,
@@ -27,15 +28,26 @@ import { cn } from "@/lib/utils";
 export interface WizardStepIntroProps {
   enabled: boolean;
   onChange: (enabled: boolean) => void;
-  /** Gewähltes Video aus Schritt 1 — Quelle für die Inline-Stimmerstellung. */
+  /** Gewähltes Video aus Schritt 1 — Quelle für die KI-Stimme. */
   webcamMediaId: string | null;
+  /** Länge des gewählten Videos (Sekunden) — entscheidet, ob eine Zusatz-Sprachprobe nötig ist. */
+  webcamDurationSec: number | null;
   greetingPrefix: GreetingPrefix;
   namePattern: NamePatternKey;
   onGreetingChange: (prefix: GreetingPrefix, pattern: NamePatternKey) => void;
+  /** true = „Weiter" blockieren, bis die Stimmquelle geklärt ist. */
+  onVoiceGateChange: (blocked: boolean) => void;
 }
 
-interface VoiceProfileDto {
-  status: "pending_sample" | "processing" | "ready" | "failed";
+interface VoiceProfileResponse {
+  profile: {
+    consentVoiceAt: string | null;
+    consentAiAt: string | null;
+  } | null;
+  calibrations: Array<{
+    mediaItemId: string;
+    extraAudioUrl: string | null;
+  }>;
 }
 
 /** Mini-Mockup: Vollbild-Video ohne Personalisierung. */
@@ -61,66 +73,44 @@ function VisualPersonalized() {
   );
 }
 
+function fmtMin(sec: number): string {
+  const s = Math.max(0, Math.round(sec));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 /**
  * Wizard-Schritt "KI-Begrüßung" — Opt-in für die personalisierte
  * Video-Begrüßung direkt bei der Kampagnen-Erstellung.
  *
- * Der Schritt trifft die Kampagnen-Entscheidung (intro_enabled). Fehlt
- * noch eine KI-Stimme, kann sie hier inline aus der Tonspur des gewählten
- * Videos erstellt werden (POST /api/voice-profile/from-media, beide
- * Einwilligungen Pflicht). Die Video-Kalibrierung wird beim Speichern der
- * Kampagne automatisch angestoßen. Ohne fertige Stimme rendern Videos
- * ganz normal ohne Begrüßung (1 Credit).
+ * Die KI-Stimme kommt IMMER aus der Tonspur des gewählten Videos
+ * (per-Video-Training in der Kalibrierung). Ist das Video kürzer als
+ * VOICE_VIDEO_OK_SECONDS, muss der User hier eine Zusatz-Sprachprobe
+ * aufnehmen — beide zusammen ergeben das Trainings-Material. „Weiter"
+ * ist so lange blockiert (onVoiceGateChange), bis die Stimmquelle steht.
  */
 export function WizardStepIntro({
   enabled,
   onChange,
   webcamMediaId,
+  webcamDurationSec,
   greetingPrefix,
   namePattern,
   onGreetingChange,
+  onVoiceGateChange,
 }: WizardStepIntroProps) {
-  const [voiceStatus, setVoiceStatus] = React.useState<
-    "loading" | "none" | "processing" | "ready"
-  >("loading");
+  const [loaded, setLoaded] = React.useState(false);
+  const [consentStored, setConsentStored] = React.useState(false);
+  const [extraDone, setExtraDone] = React.useState(false);
   const [consentVoice, setConsentVoice] = React.useState(false);
   const [consentAi, setConsentAi] = React.useState(false);
-  const [submitting, setSubmitting] = React.useState(false);
-  const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [consentSaving, setConsentSaving] = React.useState(false);
+  const [consentError, setConsentError] = React.useState<string | null>(null);
 
-  async function createVoiceFromVideo() {
-    if (!webcamMediaId || !consentVoice || !consentAi) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const res = await fetch("/api/voice-profile/from-media", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mediaItemId: webcamMediaId,
-          consentVoice: true,
-          consentAi: true,
-        }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(
-          data?.error ?? "Das Training konnte nicht gestartet werden.",
-        );
-      }
-      setVoiceStatus("processing");
-    } catch (err) {
-      setSubmitError(
-        err instanceof Error && err.message
-          ? err.message
-          : "Das Training konnte nicht gestartet werden.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  // Zusatz-Sprachprobe nötig? Unbekannte Länge behandeln wir wie „lang
+  // genug" — das Quality-Gate im Worker fängt Extremfälle ab.
+  const needExtra =
+    webcamDurationSec !== null && webcamDurationSec < VOICE_VIDEO_OK_SECONDS;
+  const consentOk = consentStored || (consentVoice && consentAi);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -128,20 +118,90 @@ export function WizardStepIntro({
       try {
         const res = await fetch("/api/voice-profile", { cache: "no-store" });
         if (!res.ok) throw new Error();
-        const data = (await res.json()) as { profile: VoiceProfileDto | null };
+        const data = (await res.json()) as VoiceProfileResponse;
         if (cancelled) return;
-        if (data.profile?.status === "ready") setVoiceStatus("ready");
-        else if (data.profile?.status === "processing")
-          setVoiceStatus("processing");
-        else setVoiceStatus("none");
+        setConsentStored(
+          Boolean(data.profile?.consentVoiceAt && data.profile?.consentAiAt),
+        );
+        if (webcamMediaId) {
+          setExtraDone(
+            data.calibrations.some(
+              (c) => c.mediaItemId === webcamMediaId && c.extraAudioUrl,
+            ),
+          );
+        }
       } catch {
-        if (!cancelled) setVoiceStatus("none");
+        // still bleiben — Gate blockiert dann höchstens unnötig streng
+      } finally {
+        if (!cancelled) setLoaded(true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [webcamMediaId]);
+
+  // Gate an den Container melden: blockiert, solange die Einwilligung
+  // nicht GESPEICHERT ist bzw. (bei kurzem Video) die Zusatz-Aufnahme
+  // aussteht. Der Upload der Aufnahme speichert die Einwilligung mit.
+  const blocked =
+    enabled && loaded && (needExtra ? !extraDone : !consentStored);
+  React.useEffect(() => {
+    onVoiceGateChange(blocked);
+  }, [blocked, onVoiceGateChange]);
+
+  async function saveConsent() {
+    setConsentSaving(true);
+    setConsentError(null);
+    try {
+      const res = await fetch("/api/voice-profile/consent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consentVoice: true, consentAi: true }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(data?.error ?? "Speichern fehlgeschlagen.");
+      }
+      setConsentStored(true);
+    } catch (err) {
+      setConsentError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Speichern fehlgeschlagen. Bitte erneut versuchen.",
+      );
+    } finally {
+      setConsentSaving(false);
+    }
+  }
+
+  async function uploadExtraAudio(blob: Blob) {
+    if (!webcamMediaId) throw new Error("Kein Video gewählt.");
+    const form = new FormData();
+    form.set(
+      "file",
+      new File([blob], "sprachprobe.webm", {
+        type: blob.type || "audio/webm",
+      }),
+    );
+    form.set("mediaItemId", webcamMediaId);
+    form.set("consentVoice", "true");
+    form.set("consentAi", "true");
+    const res = await fetch("/api/voice-profile/extra-audio", {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      throw new Error(data?.error ?? "Upload fehlgeschlagen.");
+    }
+    setExtraDone(true);
+    setConsentStored(true);
+  }
 
   const options = [
     {
@@ -160,6 +220,37 @@ export function WizardStepIntro({
       visual: <VisualPersonalized />,
     },
   ] as const;
+
+  const consentCheckboxes = !consentStored && (
+    <div className="space-y-3">
+      <label className="flex items-start gap-3 cursor-pointer">
+        <Checkbox
+          checked={consentVoice}
+          onCheckedChange={(v) => setConsentVoice(v === true)}
+          className="mt-0.5"
+          aria-label="Einwilligung Stimm-Klonen"
+        />
+        <span className="text-xs text-ink leading-relaxed">
+          {CONSENT_VOICE_TEXT}
+        </span>
+      </label>
+      <label className="flex items-start gap-3 cursor-pointer">
+        <Checkbox
+          checked={consentAi}
+          onCheckedChange={(v) => setConsentAi(v === true)}
+          className="mt-0.5"
+          aria-label="Einwilligung KI-Generierung"
+        />
+        <span className="text-xs text-ink leading-relaxed">
+          {CONSENT_AI_TEXT}
+        </span>
+      </label>
+      <p className="text-xs text-ink-muted">
+        Du bestätigst, dass Video und Aufnahme ausschließlich deine eigene
+        Stimme enthalten.
+      </p>
+    </div>
+  );
 
   return (
     <div className="space-y-5">
@@ -239,92 +330,93 @@ export function WizardStepIntro({
               Videos erzeugt.
             </span>
           </p>
-          {voiceStatus === "none" && webcamMediaId && (
+
+          {/* ── Stimmquelle ─────────────────────────────────────────── */}
+          {!loaded ? (
+            <div className="flex items-center gap-2 rounded-squircle-sm bg-surface-soft px-4 py-3 text-sm text-ink-muted">
+              <span className="inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              Stimm-Status wird geprüft ...
+            </div>
+          ) : !needExtra ? (
+            // Video ist lang genug — Stimme kommt komplett aus dem Video.
             <div className="rounded-squircle-sm bg-surface-soft px-4 py-4 space-y-3">
               <p className="flex items-start gap-2.5 text-sm text-ink leading-relaxed">
-                <Sparkles className="size-4 shrink-0 mt-0.5 text-brand" />
-                <span>
-                  <strong>Du hast noch keine KI-Stimme.</strong> VIDEOCOMET
-                  kann sie direkt aus der Tonspur deines gewählten Videos
-                  erstellen: gleiches Mikrofon, gleicher Raum und genau die
-                  Sprechweise, zu der die Begrüßung später passen muss.
-                </span>
-              </p>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <Checkbox
-                  checked={consentVoice}
-                  onCheckedChange={(v) => setConsentVoice(v === true)}
-                  className="mt-0.5"
-                  aria-label="Einwilligung Stimm-Klonen"
-                />
-                <span className="text-xs text-ink leading-relaxed">
-                  {CONSENT_VOICE_TEXT}
-                </span>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <Checkbox
-                  checked={consentAi}
-                  onCheckedChange={(v) => setConsentAi(v === true)}
-                  className="mt-0.5"
-                  aria-label="Einwilligung KI-Generierung"
-                />
-                <span className="text-xs text-ink leading-relaxed">
-                  {CONSENT_AI_TEXT}
-                </span>
-              </label>
-              <p className="text-xs text-ink-muted">
-                Du bestätigst, dass das gewählte Video ausschließlich deine
-                eigene Stimme enthält.
-              </p>
-              {submitError && (
-                <p className="text-sm text-danger leading-relaxed">
-                  {submitError} Alternativ kannst du deine Stimme unter{" "}
-                  <Link
-                    href="/ki-begruessung"
-                    target="_blank"
-                    className="font-medium underline underline-offset-2"
-                  >
-                    Setup → KI-Begrüßung
-                  </Link>{" "}
-                  einrichten.
-                </p>
-              )}
-              <Button
-                size="sm"
-                disabled={!consentVoice || !consentAi}
-                loading={submitting}
-                iconLeft={<Sparkles className="size-4" />}
-                onClick={() => void createVoiceFromVideo()}
-              >
-                KI-Stimme aus diesem Video erstellen
-              </Button>
-            </div>
-          )}
-          {voiceStatus === "none" && !webcamMediaId && (
-            <p className="flex items-start gap-2.5 rounded-squircle-sm bg-surface-soft px-4 py-3 text-sm text-ink-muted leading-relaxed">
-              <Sparkles className="size-4 shrink-0 mt-0.5 text-brand" />
-              <span>
-                Du hast noch keine KI-Stimme. Richte sie nach dem Erstellen
-                einmalig unter{" "}
-                <Link
-                  href="/ki-begruessung"
-                  target="_blank"
-                  className="font-medium text-ink underline underline-offset-2"
+                <span
+                  className={cn(
+                    "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-white",
+                    consentStored ? "bg-ok" : "bg-brand",
+                  )}
                 >
-                  Setup → KI-Begrüßung
-                </Link>{" "}
-                ein. Bis dahin werden Videos ohne Begrüßung erzeugt (1 Credit).
+                  {consentStored ? (
+                    <Check className="size-3.5" />
+                  ) : (
+                    <Mic className="size-3.5" />
+                  )}
+                </span>
+                <span>
+                  <strong>
+                    Deine KI-Stimme kommt direkt aus deinem Video
+                  </strong>
+                  {webcamDurationSec !== null && (
+                    <> ({fmtMin(webcamDurationSec)} Min. Ton — das reicht)</>
+                  )}
+                  . Gleiches Mikrofon, gleicher Raum, genau deine Sprechweise.
+                  {consentStored
+                    ? " Du musst nichts weiter tun."
+                    : " Bestätige nur noch die Einwilligungen unten."}
+                </span>
+              </p>
+              {consentCheckboxes}
+              {!consentStored && (
+                <>
+                  {consentError && (
+                    <p className="text-sm text-danger leading-relaxed">
+                      {consentError}
+                    </p>
+                  )}
+                  <Button
+                    size="sm"
+                    disabled={!consentVoice || !consentAi}
+                    loading={consentSaving}
+                    iconLeft={<Sparkles className="size-4" />}
+                    onClick={() => void saveConsent()}
+                  >
+                    Einwilligen &amp; Stimme aus dem Video verwenden
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : extraDone ? (
+            <div className="flex items-center gap-3 rounded-squircle-sm bg-ok-soft px-4 py-3.5">
+              <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-ok text-white">
+                <Check className="size-5" />
               </span>
-            </p>
-          )}
-          {voiceStatus === "processing" && (
-            <p className="flex items-start gap-2.5 rounded-squircle-sm bg-brand-soft px-4 py-3 text-sm text-brand-deep leading-relaxed">
-              <Sparkles className="size-4 shrink-0 mt-0.5" />
-              <span>
-                Deine KI-Stimme wird gerade trainiert. Das dauert nur wenige
-                Minuten und läuft im Hintergrund weiter.
-              </span>
-            </p>
+              <p className="text-sm text-ink leading-relaxed">
+                <strong>Stimmquelle steht:</strong> dein Video plus deine
+                Sprachprobe. Das Training läuft automatisch im Hintergrund.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-squircle-sm bg-surface-soft px-4 py-4 space-y-4">
+              <p className="flex items-start gap-2.5 text-sm text-ink leading-relaxed">
+                <Mic className="size-4 shrink-0 mt-0.5 text-brand" />
+                <span>
+                  <strong>
+                    Dein Video ist mit {fmtMin(webcamDurationSec ?? 0)} Min.
+                    zu kurz für eine perfekte KI-Stimme.
+                  </strong>{" "}
+                  Sprich hier noch kurz frei ins Mikrofon — wir kombinieren
+                  Video und Aufnahme, damit deine Stimme wirklich nach dir
+                  klingt.
+                </span>
+              </p>
+              {consentCheckboxes}
+              <VoiceExtraRecorder
+                videoDurationSec={webcamDurationSec ?? 0}
+                canRecord={consentOk}
+                onUpload={uploadExtraAudio}
+              />
+            </div>
           )}
         </div>
       )}

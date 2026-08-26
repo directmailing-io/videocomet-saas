@@ -5,7 +5,7 @@
  *
  * Voraussetzungs-Kette, jede Stufe mit genau EINER Aktion:
  *   1. Kein Webcam-Video          → Hinweis (Aktion liegt in der Webcam-Karte)
- *   2. Keine fertige KI-Stimme    → Link zu Einstellungen → KI-Stimme
+ *   2. Einwilligung fehlt         → Checkboxen + Button (Stimme kommt aus dem Video)
  *   3. Video nicht kalibriert     → Button "Video analysieren" + Polling
  *   4. Alles bereit               → Toggle + Begrüßungs-Vorlage editierbar
  *
@@ -14,7 +14,6 @@
  */
 
 import * as React from "react";
-import Link from "next/link";
 import {
   AlertCircle,
   Check,
@@ -24,6 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { RecordingHint } from "@/components/intro/recording-hint";
 import {
@@ -36,6 +36,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toaster";
 import {
+  CONSENT_AI_TEXT,
+  CONSENT_VOICE_TEXT,
   DEFAULT_TTS_TEMPLATE,
   GREETING_PREFIXES,
   type GreetingPrefix,
@@ -56,6 +58,8 @@ const DEFAULT_PICK = parseGreetingTemplate(DEFAULT_TTS_TEMPLATE) ?? {
 interface VoiceProfileDto {
   id: string;
   status: "pending_sample" | "processing" | "ready" | "failed";
+  consentVoiceAt: string | null;
+  consentAiAt: string | null;
 }
 
 interface CalibrationDto {
@@ -84,9 +88,14 @@ export function IntroSettingsCard({
 }) {
   const { toast } = useToast();
 
+  // "ready" = Einwilligungen liegen vor (oder Legacy-Konto-Stimme existiert).
+  // Die eigentliche Stimme wird pro Video bei der Kalibrierung trainiert.
   const [voiceStatus, setVoiceStatus] = React.useState<
-    "loading" | "none" | "processing" | "ready"
+    "loading" | "none" | "ready"
   >("loading");
+  const [consentVoice, setConsentVoice] = React.useState(false);
+  const [consentAi, setConsentAi] = React.useState(false);
+  const [consentSaving, setConsentSaving] = React.useState(false);
   const [calibration, setCalibration] = React.useState<CalibrationDto | null>(
     null,
   );
@@ -115,10 +124,13 @@ export function IntroSettingsCard({
         if (!res.ok) throw new Error();
         const data = (await res.json()) as { profile: VoiceProfileDto | null };
         if (cancelled) return;
-        if (data.profile?.status === "ready") setVoiceStatus("ready");
-        else if (data.profile?.status === "processing")
-          setVoiceStatus("processing");
-        else setVoiceStatus("none");
+        const p = data.profile;
+        const consented = Boolean(p?.consentVoiceAt && p?.consentAiAt);
+        setVoiceStatus(
+          consented || p?.status === "ready" || p?.status === "processing"
+            ? "ready"
+            : "none",
+        );
       } catch {
         if (!cancelled) setVoiceStatus("none");
       }
@@ -229,6 +241,35 @@ export function IntroSettingsCard({
       });
     } finally {
       setAnalyzeStarting(false);
+    }
+  }
+
+  async function saveConsent() {
+    setConsentSaving(true);
+    try {
+      const res = await fetch("/api/voice-profile/consent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consentVoice: true, consentAi: true }),
+      });
+      if (!res.ok) throw new Error();
+      setVoiceStatus("ready");
+      // Eine wegen fehlender Einwilligung fehlgeschlagene Kalibrierung
+      // direkt neu anstoßen — sonst müsste der User zweimal klicken.
+      if (calibration?.status === "failed") void startAnalysis();
+      toast({
+        title: "Einwilligung gespeichert",
+        description: "Deine KI-Stimme kommt automatisch aus deinem Video.",
+        variant: "success",
+      });
+    } catch {
+      toast({
+        title: "Speichern fehlgeschlagen",
+        description: "Bitte erneut versuchen.",
+        variant: "danger",
+      });
+    } finally {
+      setConsentSaving(false);
     }
   }
 
@@ -368,18 +409,43 @@ export function IntroSettingsCard({
         ) : !webcamMediaId ? (
           <PrereqHint text="Wähle zuerst oben ein Webcam-Video für diese Kampagne." />
         ) : voiceStatus === "none" ? (
-          <PrereqHint
-            text="Du brauchst einmalig eine KI-Stimme aus deiner Stimmprobe."
-            action={
-              <Button asChild variant="subtle" size="sm">
-                <Link href="/ki-begruessung">
-                  KI-Stimme einrichten
-                </Link>
-              </Button>
-            }
-          />
-        ) : voiceStatus === "processing" ? (
-          <PrereqHint text="Deine KI-Stimme wird gerade trainiert. Das dauert nur wenige Minuten." />
+          <div className="rounded-squircle-sm bg-surface-soft px-4 py-3 space-y-3">
+            <p className="text-sm text-ink leading-relaxed">
+              Deine KI-Stimme kommt automatisch aus deinem Kampagnen-Video —
+              du musst nichts aufnehmen. Wir brauchen nur einmalig deine
+              Einwilligung:
+            </p>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <Checkbox
+                checked={consentVoice}
+                onCheckedChange={(v) => setConsentVoice(v === true)}
+                className="mt-0.5"
+                aria-label="Einwilligung Stimm-Klonen"
+              />
+              <span className="text-xs text-ink leading-relaxed">
+                {CONSENT_VOICE_TEXT}
+              </span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <Checkbox
+                checked={consentAi}
+                onCheckedChange={(v) => setConsentAi(v === true)}
+                className="mt-0.5"
+                aria-label="Einwilligung KI-Generierung"
+              />
+              <span className="text-xs text-ink leading-relaxed">
+                {CONSENT_AI_TEXT}
+              </span>
+            </label>
+            <Button
+              size="sm"
+              disabled={!consentVoice || !consentAi}
+              loading={consentSaving}
+              onClick={() => void saveConsent()}
+            >
+              Einwilligen &amp; Stimme aus dem Video verwenden
+            </Button>
+          </div>
         ) : !calibration || calibration.status === "failed" ? (
           <div className="rounded-squircle-sm bg-surface-soft px-4 py-3 space-y-3">
             {calibration?.status === "failed" && (

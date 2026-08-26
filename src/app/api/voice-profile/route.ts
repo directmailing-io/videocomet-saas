@@ -70,6 +70,7 @@ export async function DELETE() {
   await deleteIntroFileByUrl(profile?.sampleUrl);
   for (const cal of calibrations) {
     await deleteIntroFileByUrl(cal.roomtoneUrl);
+    await deleteIntroFileByUrl(cal.extraAudioUrl);
   }
 
   await db

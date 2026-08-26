@@ -316,6 +316,9 @@ export function NewCampaignWizard({
   });
   const [step, setStep] = React.useState(resumed?.step ?? 0);
   const [submitting, setSubmitting] = React.useState(false);
+  // „Weiter" im KI-Begrüßungs-Step blockieren, bis die Stimmquelle
+  // geklärt ist (Einwilligung + ggf. Zusatz-Sprachprobe).
+  const [introVoiceBlocked, setIntroVoiceBlocked] = React.useState(false);
   // Webcam list lives in wizard state so newly recorded webcams that step 1
   // adds are still visible in the step 6 summary.
   const [webcams, setWebcams] = React.useState<WizardWebcam[]>(
@@ -540,7 +543,10 @@ export function NewCampaignWizard({
   // 4 Landingpage, 5 PDF-Brief, 6 Fertigstellen.
   const canProceed = (() => {
     if (step === 0) return Boolean(state.webcamMediaId);
-    if (step === 1) return true; // KI-Begrüßung ist immer optional
+    // KI-Begrüßung ist optional — aber wenn sie aktiviert ist, muss die
+    // Stimmquelle geklärt sein (Einwilligung + ggf. Zusatz-Sprachprobe
+    // bei kurzen Videos). Der Step meldet das über onVoiceGateChange.
+    if (step === 1) return !introVoiceBlocked;
     if (step === 2) return Boolean(state.mode);
     if (step === 3) return true; // Editor: keine Pflichtvalidierung
     if (step === 4)
@@ -593,11 +599,16 @@ export function NewCampaignWizard({
             enabled={state.introEnabled}
             onChange={(introEnabled) => update({ introEnabled })}
             webcamMediaId={state.webcamMediaId}
+            webcamDurationSec={
+              webcams.find((w) => w.id === state.webcamMediaId)?.durationSec ??
+              null
+            }
             greetingPrefix={state.introGreetingPrefix}
             namePattern={state.introNamePattern}
             onGreetingChange={(prefix, pattern) =>
               update({ introGreetingPrefix: prefix, introNamePattern: pattern })
             }
+            onVoiceGateChange={setIntroVoiceBlocked}
           />
         )}
         {step === 2 && !skipModeStep && (

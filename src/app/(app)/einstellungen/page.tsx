@@ -10,7 +10,6 @@ import { MailboxesTab } from "./mailboxes-tab";
 import { IntegrationsList } from "./integrationen/integrations-list";
 import { VerbindungenTab } from "./verbindungen/verbindungen-tab";
 import { BillingTab } from "./billing-tab";
-import { KiStimmeTab } from "./ki-stimme-tab";
 import { SetupTab } from "./setup-tab";
 import { getSetupStatus } from "@/lib/setup-status";
 import { buildAdminConsentUrl, isM365Configured } from "@/lib/msgraph/client";
@@ -23,7 +22,6 @@ const TAB_VALUES = new Set([
   "rechnung",
   "domains",
   "postfaecher",
-  "ki-stimme",
   "crm",
   "verbindungen",
 ]);
@@ -61,7 +59,6 @@ export default async function EinstellungenPage({
           <TabsTrigger value="rechnung">Rechnungsadresse</TabsTrigger>
           <TabsTrigger value="domains">Domains</TabsTrigger>
           <TabsTrigger value="postfaecher">E-Mail-Postfächer</TabsTrigger>
-          <TabsTrigger value="ki-stimme">KI-Stimme</TabsTrigger>
           <TabsTrigger value="crm">CRM-Integrationen</TabsTrigger>
           <TabsTrigger value="verbindungen">Zapier &amp; Webhooks</TabsTrigger>
         </TabsList>
@@ -132,10 +129,6 @@ export default async function EinstellungenPage({
             initialM365Error={m365Error}
             initialM365Connected={m365Connected}
           />
-        </TabsContent>
-
-        <TabsContent value="ki-stimme">
-          <KiStimmeTab />
         </TabsContent>
 
         <TabsContent value="crm">

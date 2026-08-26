@@ -82,6 +82,18 @@ export const DEFAULT_TTS_TEMPLATE = buildGreetingTemplate("Hi", "firstName");
 export const CONSENT_TEXT_VERSION = "v1-2026-08";
 
 /**
+ * Stimm-Training aus dem Kampagnen-Video: Ab dieser Video-Länge reicht der
+ * Ton allein für eine sauber klingende Fish-Stimme (Fish-Empfehlung 30-60s
+ * echtes Sprechen; Videos enthalten Pausen, daher Puffer). Kürzere Videos
+ * brauchen eine Zusatz-Sprachprobe im Wizard.
+ */
+export const VOICE_VIDEO_OK_SECONDS = 90;
+/** Ziel: Video + Zusatz-Aufnahme zusammen mindestens so viele Sekunden. */
+export const VOICE_TOTAL_TARGET_SECONDS = 90;
+/** Ab dieser Gesamtlänge zeigt der Ring „perfekt" (mehr bringt kaum noch was). */
+export const VOICE_TOTAL_PERFECT_SECONDS = 120;
+
+/**
  * Ziel-Anzahl Beispielvideos pro Run vor der Vollproduktion. Wird von
  * Worker (Rendering-Budget) UND Status-API/UI (Fortschritts-Anzeige)
  * geteilt, damit „X von N fertig" immer konsistent bleibt.
