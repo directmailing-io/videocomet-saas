@@ -9,10 +9,11 @@ const COLUMNS: ReadonlyArray<{ title: string; links: ReadonlyArray<FooterLink> }
   {
     title: "Produkt",
     links: [
-      { label: "Live-Demo", href: "#demo" },
-      { label: "Ablauf", href: "#how-it-works" },
-      { label: "Features", href: "#features" },
-      { label: "Preise", href: "#pricing" },
+      { label: "Live-Demo", href: "/#demo" },
+      { label: "Ablauf", href: "/#how-it-works" },
+      { label: "Features", href: "/#features" },
+      { label: "Preise", href: "/#pricing" },
+      { label: "Pitchlane Vergleich", href: "/vergleich-mit-pitchlane" },
     ],
   },
   {
