@@ -334,34 +334,25 @@ export default function VergleichMitPitchlanePage() {
           <Squircle radius={28} shadow="float" className="bg-white">
             <div className="p-5 sm:p-10">
               <span className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-brand-soft text-brand-deep text-[11px] font-semibold uppercase tracking-[0.18em]">
-                Und die Kosten?
+                Eine einfache Rechnung
               </span>
               <h2 className="mt-4 max-w-2xl text-[clamp(1.6rem,4vw,2.6rem)] font-light leading-[1.15] tracking-[-0.035em]">
-                Ein Credit pro Wunschkunde.{" "}
+                1 Wunschkunde = 1 Credit.{" "}
                 <span className="font-semibold text-brand-deep">
-                  Alles mit dabei.
+                  Mehr musst du dir nicht merken.
                 </span>
               </h2>
               <div className="mt-5 max-w-3xl flex flex-col gap-3 text-base text-ink-soft leading-relaxed">
                 <p>
-                  Bei VIDEOCOMET rechnest du in Credits, ganz ohne
-                  Rechen-Akrobatik: 1 Wunschkunde = 1 Credit. Dafür ist er
-                  komplett versorgt: persönliches Video, eigene Landingpage,
-                  fertiger Brief mit QR-Code und Umschlag.
-                </p>
-                <p>
-                  Extras buchst du einfach mit Credits dazu: 10 E-Mails kosten
-                  1 Credit, die KI-Begrüßung mit Namen 1 Credit pro Video. Du
-                  behältst immer den Überblick, was du ausgibst.
-                </p>
-                <p>
-                  Bei Pitchlane bekommst du Videos. Für den Versand brauchst du
-                  ein zweites Tool, das extra kostet und eingerichtet werden
-                  muss.²
+                  Ein Credit, und dein Wunschkunde bekommt das volle Paket:
+                  persönliches Video, eigene Landingpage, fertiger Brief mit
+                  QR-Code samt Umschlag. Aus einem Tool, ohne etwas
+                  zusammenzustückeln.
                 </p>
                 <p className="text-ink font-medium">
-                  Du musst nichts zusammenstückeln: keine Zusatz-Tools, keine
-                  versteckten Kosten. Ein Tool, ein Credit-System, fertig.
+                  Und jetzt rechne kurz selbst: Was bringt dir ein einziger
+                  neuer Kunde? Eben. Hier geht es nicht um den Preis eines
+                  Videos. Es geht um den Wert eines Auftrags.
                 </p>
               </div>
             </div>
