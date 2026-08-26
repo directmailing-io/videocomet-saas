@@ -247,9 +247,11 @@ export default function VergleichMitPitchlanePage() {
             </h1>
             <p className="mt-5 max-w-2xl text-base sm:text-lg text-ink-soft leading-relaxed">
               Beide Tools machen persönliche Videos für deine Kundengewinnung.
-              Trotzdem bekommen deine Wunschkunden sehr unterschiedliche Videos
-              zu sehen. Hier zeigen wir dir die fünf wichtigsten Unterschiede.
-              Und was jeder davon für dich bedeutet. Ohne Fachchinesisch.
+              Nicht wenige unserer Kunden sind vorher auf Pitchlane gestoßen
+              und haben es ausprobiert. Langfristig dabei geblieben ist dort
+              kaum jemand. Das hat nachvollziehbare Gründe. Die fünf
+              wichtigsten zeigen wir dir hier. Und was jeder davon für dich
+              bedeutet. Ohne Fachchinesisch.
             </p>
             <div className="mt-7">
               <Link
