@@ -264,7 +264,7 @@ export function VersandRunView({
   const [postExportIds, setPostExportIds] = React.useState<string[] | null>(null);
   const [sentDialogIds, setSentDialogIds] = React.useState<string[] | null>(null);
   const [planDialogOpen, setPlanDialogOpen] = React.useState(false);
-  const [historyLead, setHistoryLead] = React.useState<VersandLeadItem | null>(
+  const [detailLead, setDetailLead] = React.useState<VersandLeadItem | null>(
     null,
   );
 
@@ -510,7 +510,9 @@ export function VersandRunView({
     } catch {
       /* Storage voll/blockiert → Wizard startet ohne Vorauswahl */
     }
-    router.push(`/kampagnen/${campaignId}/email/neu?vorauswahl=1`);
+    router.push(
+      `/kampagnen/${campaignId}/email/neu?vorauswahl=1&zurueck=${encodeURIComponent(`/versand/${runId}`)}`,
+    );
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -574,10 +576,8 @@ export function VersandRunView({
         type="button"
         onClick={() => setStatusFilter(active ? "all" : c.key)}
         className={cn(
-          "h-full w-full rounded-squircle-lg bg-surface p-4 text-left shadow-card transition-all",
-          active
-            ? "ring-2 ring-brand/40"
-            : "hover:shadow-card-hover hover:-translate-y-0.5",
+          "w-48 rounded-squircle-lg bg-surface p-4 text-left shadow-card transition-all",
+          active ? "ring-2 ring-brand/40" : "hover:shadow-card-hover",
         )}
         aria-pressed={active}
       >
@@ -632,25 +632,25 @@ export function VersandRunView({
       )}
 
       {/* KPI-Karten = Status-Filter, klar nach Kanal gruppiert */}
-      <div className="mb-4 grid gap-x-4 gap-y-3 lg:grid-cols-4">
+      <div className="mb-6 flex flex-wrap items-start gap-x-8 gap-y-4">
         {hasLetters && (
-          <div className="lg:col-span-3">
-            <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+          <section>
+            <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
               <Mailbox className="size-3.5" />
               Briefe per Post
             </p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-wrap gap-3">
               {kpiCards.map((c) => renderKpiCard(c))}
             </div>
-          </div>
+          </section>
         )}
-        <div className={hasLetters ? undefined : "max-w-xs"}>
-          <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+        <section>
+          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
             <Mail className="size-3.5" />
             E-Mails
           </p>
           {renderKpiCard(emailKpiCard)}
-        </div>
+        </section>
       </div>
 
       {/* Werkzeugleiste */}
@@ -794,8 +794,20 @@ export function VersandRunView({
                         aria-label="Lead auswählen"
                       />
                     </td>
-                    <td className="px-3 py-3 font-medium text-ink">
-                      <span className="line-clamp-1">{displayName(l.data)}</span>
+                    <td
+                      className="px-3 py-3 font-medium text-ink"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setDetailLead(l)}
+                        className="text-left underline-offset-2 hover:underline"
+                        title="Lead-Details öffnen"
+                      >
+                        <span className="line-clamp-1">
+                          {displayName(l.data)}
+                        </span>
+                      </button>
                       {abActive && l.abVariant && (
                         <span className="ml-1.5 rounded bg-surface-muted px-1 text-[10px] font-semibold text-ink-muted">
                           {l.abVariant}
@@ -840,7 +852,7 @@ export function VersandRunView({
                       {l.emailHistory.length > 0 ? (
                         <button
                           type="button"
-                          onClick={() => setHistoryLead(l)}
+                          onClick={() => setDetailLead(l)}
                           className="group/email text-left"
                           title="E-Mail-Verlauf anzeigen"
                         >
@@ -1009,63 +1021,11 @@ export function VersandRunView({
         </div>
       )}
 
-      {/* E-Mail-Verlauf eines Leads: jede Mail mit Datum, Betreff, Status */}
-      <Dialog
-        open={historyLead != null}
-        onOpenChange={(o) => {
-          if (!o) setHistoryLead(null);
-        }}
-      >
-        <DialogContent size="sm">
-          <DialogHeader>
-            <DialogTitle>E-Mail-Verlauf</DialogTitle>
-            <DialogDescription>
-              {historyLead ? displayName(historyLead.data) : ""} — alle
-              E-Mails an diesen Lead mit Datum und Status.
-            </DialogDescription>
-          </DialogHeader>
-          <ol className="flex max-h-80 flex-col gap-2 overflow-y-auto">
-            {(historyLead?.emailHistory ?? [])
-              .slice()
-              .reverse()
-              .map((m, i) => (
-                <li
-                  key={i}
-                  className="rounded-squircle-md bg-surface-soft px-3.5 py-2.5"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs font-medium tabular-nums text-ink">
-                      {m.sentAt
-                        ? formatDateTime(m.sentAt)
-                        : "Wartet in der Warteschlange"}
-                    </span>
-                    <Badge
-                      variant={EMAIL_STATUS_BADGE[m.status] ?? "neutral"}
-                      dot
-                    >
-                      {EMAIL_STATUS_LABELS[m.status] ?? m.status}
-                    </Badge>
-                  </div>
-                  {m.subject && (
-                    <p className="mt-1 text-sm text-ink line-clamp-1">
-                      „{m.subject}“
-                    </p>
-                  )}
-                  {m.repliedAt && (
-                    <p className="mt-0.5 text-[11px] font-medium text-brand">
-                      Antwort erhalten am {formatDateTime(m.repliedAt)}
-                    </p>
-                  )}
-                </li>
-              ))}
-          </ol>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="ghost">Schließen</Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <LeadDetailDialog
+        lead={detailLead}
+        onClose={() => setDetailLead(null)}
+        abActive={abActive}
+      />
 
       <ExportDialog
         open={exportOpen}
@@ -1487,6 +1447,185 @@ function MarkSentDialog({
           >
             Als versendet markieren
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Lead-Detail-Dialog ─────────────────────────────────────────────────────
+
+function LeadDetailDialog({
+  lead,
+  onClose,
+  abActive,
+}: {
+  lead: VersandLeadItem | null;
+  onClose: () => void;
+  abActive: boolean;
+}) {
+  const sectionHeading =
+    "mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted";
+  return (
+    <Dialog open={lead !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>
+            {lead ? displayName(lead.data) : ""}
+            {abActive && lead?.abVariant && (
+              <span className="ml-2 rounded bg-surface-muted px-1.5 py-0.5 text-xs font-semibold text-ink-muted align-middle">
+                Brief {lead.abVariant}
+              </span>
+            )}
+          </DialogTitle>
+          <DialogDescription>
+            Alles zu diesem Lead in dieser Runde — Brief, E-Mails und Daten.
+          </DialogDescription>
+        </DialogHeader>
+
+        {lead && (
+          <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
+            {/* Brief */}
+            {lead.hasPdf && (
+              <section>
+                <p className={sectionHeading}>
+                  <Mailbox className="size-3.5" />
+                  Brief per Post
+                </p>
+                <div className="flex flex-wrap items-center gap-2 rounded-squircle-md bg-surface-soft px-3.5 py-2.5 text-sm">
+                  <Badge variant={LETTER_STATUS_META[lead.letterStatus].badge} dot>
+                    {LETTER_STATUS_META[lead.letterStatus].label}
+                  </Badge>
+                  {lead.letterSentAt && (
+                    <span className="text-ink-muted">
+                      Versendet am {formatDate(lead.letterSentAt)}
+                    </span>
+                  )}
+                  {lead.letterStatus !== "sent" && lead.letterExportedAt && (
+                    <span className="text-ink-muted">
+                      Exportiert am {formatDate(lead.letterExportedAt)}
+                    </span>
+                  )}
+                  {lead.letterStatus !== "sent" && lead.letterPlannedAt && (
+                    <span className="inline-flex items-center gap-1 text-brand">
+                      <CalendarClock className="size-3.5" />
+                      Geplant für {formatDate(lead.letterPlannedAt)}
+                    </span>
+                  )}
+                  {lead.letterReturnedAt && (
+                    <span className="inline-flex items-center gap-1 font-medium text-red-600">
+                      <Undo2 className="size-3.5" />
+                      Rückläufer seit {formatDate(lead.letterReturnedAt)}
+                    </span>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* E-Mails */}
+            <section>
+              <p className={sectionHeading}>
+                <Mail className="size-3.5" />
+                E-Mails
+              </p>
+              {lead.emailHistory.length === 0 ? (
+                <p className="rounded-squircle-md bg-surface-soft px-3.5 py-2.5 text-sm text-ink-muted">
+                  Noch keine E-Mail an diesen Lead versendet.
+                </p>
+              ) : (
+                <ol className="flex flex-col gap-2">
+                  {lead.emailHistory
+                    .slice()
+                    .reverse()
+                    .map((m, i) => (
+                      <li
+                        key={i}
+                        className="rounded-squircle-md bg-surface-soft px-3.5 py-2.5"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-medium tabular-nums text-ink">
+                            {m.sentAt
+                              ? formatDateTime(m.sentAt)
+                              : "Wartet in der Warteschlange"}
+                          </span>
+                          <Badge
+                            variant={EMAIL_STATUS_BADGE[m.status] ?? "neutral"}
+                            dot
+                          >
+                            {EMAIL_STATUS_LABELS[m.status] ?? m.status}
+                          </Badge>
+                        </div>
+                        {m.subject && (
+                          <p className="mt-1 text-sm text-ink line-clamp-1">
+                            „{m.subject}“
+                          </p>
+                        )}
+                        {m.repliedAt && (
+                          <p className="mt-0.5 text-[11px] font-medium text-brand">
+                            Antwort erhalten am {formatDateTime(m.repliedAt)}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                </ol>
+              )}
+            </section>
+
+            {/* Reaktion */}
+            <section>
+              <p className={sectionHeading}>
+                <CheckCircle2 className="size-3.5" />
+                Reaktion
+              </p>
+              <div className="rounded-squircle-md bg-surface-soft px-3.5 py-2.5 text-sm text-ink">
+                {lead.viewCount === 0 && lead.ctaClickCount === 0 ? (
+                  <span className="text-ink-muted">
+                    Landingpage bisher nicht aufgerufen.
+                  </span>
+                ) : (
+                  <>
+                    <p>
+                      Landingpage {lead.viewCount}× aufgerufen
+                      {lead.lastViewedAt
+                        ? ` · zuletzt am ${formatDate(lead.lastViewedAt)}`
+                        : ""}
+                    </p>
+                    {lead.ctaClickCount > 0 && (
+                      <p>
+                        Kontakt-Button {lead.ctaClickCount}× geklickt
+                        {lead.lastCtaAt
+                          ? ` · zuletzt am ${formatDate(lead.lastCtaAt)}`
+                          : ""}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </section>
+
+            {/* Daten aus der Lead-Liste */}
+            <section>
+              <p className={sectionHeading}>Daten aus deiner Lead-Liste</p>
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 rounded-squircle-md bg-surface-soft px-3.5 py-2.5 text-sm sm:grid-cols-2">
+                {Object.entries(lead.data ?? {}).map(([key, value]) => (
+                  <div key={key} className="min-w-0">
+                    <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                      {key}
+                    </dt>
+                    <dd className="truncate text-ink" title={value}>
+                      {value || "—"}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          </div>
+        )}
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="ghost">Schließen</Button>
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -2,7 +2,6 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { requireUser } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { campaigns, leads } from "@/lib/db/schema";
-import { listUserEmailBlasts } from "@/lib/db/queries/email-blasts";
 import { listVersandRuns } from "@/lib/db/queries/versand";
 import { VersandView } from "./versand-view";
 
@@ -10,15 +9,13 @@ export const dynamic = "force-dynamic";
 
 /**
  * Versandzentrale: EIN Ort für den kompletten Versand — eine Runden-Tabelle
- * mit beiden Kanälen (Brief + E-Mail) statt Tabs, darunter das Protokoll
- * aller E-Mail-Versände. (/email-versand leitet hierher um.)
+ * mit beiden Kanälen (Brief + E-Mail). (/email-versand leitet hierher um.)
  */
 export default async function VersandPage() {
   const { user } = await requireUser();
 
-  const [versandRuns, blasts, campaignRows] = await Promise.all([
+  const [versandRuns, campaignRows] = await Promise.all([
     listVersandRuns(user.id).catch(() => []),
-    listUserEmailBlasts(user.id).catch(() => []),
     // Kampagnen mit mindestens einem (nicht entfernten) Lead — nur für die
     // gibt es beim "Neuen Versand" überhaupt Empfänger.
     db
@@ -59,16 +56,6 @@ export default async function VersandPage() {
         emailSent: r.emailSent,
         emailScheduled: r.emailScheduled,
         emailReplied: r.emailReplied,
-      }))}
-      blasts={blasts.map((b) => ({
-        id: b.id,
-        campaignId: b.campaignId,
-        campaignName: b.campaignName,
-        status: b.status,
-        totalCount: b.totalCount,
-        sentCount: b.sentCount,
-        startedAt: b.startedAt ? b.startedAt.toISOString() : null,
-        createdAt: b.createdAt.toISOString(),
       }))}
       campaigns={campaignRows}
     />

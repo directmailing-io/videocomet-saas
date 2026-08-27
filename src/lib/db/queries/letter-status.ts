@@ -49,7 +49,7 @@ async function touchContacts(
   await tx
     .update(contacts)
     .set({
-      lastActivityAt: sql`GREATEST(COALESCE(${contacts.lastActivityAt}, 'epoch'::timestamptz), ${ts})`,
+      lastActivityAt: sql`GREATEST(COALESCE(${contacts.lastActivityAt}, 'epoch'::timestamptz), ${ts.toISOString()}::timestamptz)`,
     })
     .where(
       inArray(

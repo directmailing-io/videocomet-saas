@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Versandzentrale — EINE Runden-Tabelle statt Tabs: pro Runde die aktiven
- * Kanäle (Brief/E-Mail) mit eigenem Fortschritt. Klick auf eine Zeile →
+ * Versandzentrale — EINE Runden-Tabelle: pro Runde die aktiven Kanäle
+ * (Brief/E-Mail) mit eigenem Fortschritt. Klick auf eine Zeile →
  * Detailansicht mit Lead-Tabelle (Auswahl, PDF-Export, E-Mail-Versand).
- * Darunter das Protokoll aller E-Mail-Versände.
+ * Einziger weiterer Einstieg: „E-Mail-Versand starten" im Kopf.
  */
 
 import * as React from "react";
@@ -15,15 +15,16 @@ import {
   ChevronRight,
   Mail,
   Mailbox,
+  Send,
   Undo2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
-  EmailBlastsPanel,
-  type EmailVersandBlastRow,
+  StartBlastDialog,
   type EmailVersandCampaignOption,
-} from "./email-blasts-panel";
+} from "./start-blast-dialog";
 
 export interface VersandRunItem {
   runId: string;
@@ -121,20 +122,27 @@ function ProgressCell({
 
 export function VersandView({
   runs,
-  blasts,
   campaigns,
 }: {
   runs: VersandRunItem[];
-  blasts: EmailVersandBlastRow[];
   campaigns: EmailVersandCampaignOption[];
 }) {
   const router = useRouter();
+  const [startDialogOpen, setStartDialogOpen] = React.useState(false);
 
   return (
     <>
       <PageHeader
         title="Versand"
         subtitle="Briefe und E-Mails pro Runde verschicken und nachverfolgen — alles an einem Ort"
+        actions={
+          <Button
+            iconLeft={<Send className="size-4" />}
+            onClick={() => setStartDialogOpen(true)}
+          >
+            E-Mail-Versand starten
+          </Button>
+        }
       />
 
       {runs.length === 0 ? (
@@ -267,13 +275,11 @@ export function VersandView({
         </div>
       )}
 
-      {/* E-Mail-Versand-Protokoll: alle gestarteten Versände + Start-Button */}
-      <div className="mt-8">
-        <h2 className="mb-3 text-sm font-semibold text-ink">
-          E-Mail-Versände
-        </h2>
-        <EmailBlastsPanel blasts={blasts} campaigns={campaigns} />
-      </div>
+      <StartBlastDialog
+        open={startDialogOpen}
+        onOpenChange={setStartDialogOpen}
+        campaigns={campaigns}
+      />
     </>
   );
 }

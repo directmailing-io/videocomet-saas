@@ -179,6 +179,14 @@ export function EmailBlastWizard({
 
   // ① Empfänger: null = ganze Kampagne, sonst runId.
   const [runId, setRunId] = React.useState<string | null>(null);
+  // Rücksprungziel bei „Abbrechen" (?zurueck=/versand/…), z. B. Versandzentrale.
+  const [cancelHref, setCancelHref] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const back = new URLSearchParams(window.location.search).get("zurueck");
+    if (back && back.startsWith("/") && !back.startsWith("//")) {
+      setCancelHref(back);
+    }
+  }, []);
   // Vorauswahl aus der Versandzentrale (?vorauswahl=1 + sessionStorage).
   const [preselect, setPreselect] = React.useState<{
     runId: string | null;
@@ -1021,7 +1029,7 @@ export function EmailBlastWizard({
           variant="ghost"
           onClick={() =>
             step === 0
-              ? router.push(`/kampagnen/${campaignId}`)
+              ? router.push(cancelHref ?? `/kampagnen/${campaignId}`)
               : setStep(step - 1)
           }
           disabled={starting || gifSaving}
