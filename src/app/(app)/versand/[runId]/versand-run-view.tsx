@@ -24,7 +24,6 @@ import {
   MoreHorizontal,
   Search,
   Undo2,
-  XCircle,
 } from "lucide-react";
 import { ContactDetailSlideOver } from "../../kontakte/contact-detail-slideover";
 import { PageHeader } from "@/components/ui/page-header";
@@ -1065,30 +1064,35 @@ export function VersandRunView({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem
+                      className="font-medium text-emerald-700 focus:bg-emerald-500/10"
                       onSelect={() => setSentDialogIds(selectedVisible)}
                     >
-                      <CheckCircle2 className="size-4 text-emerald-600" />
+                      <span className="size-2 rounded-full bg-emerald-500" />
                       Versendet …
                     </DropdownMenuItem>
                     <DropdownMenuItem
+                      className="font-medium text-amber-700 focus:bg-amber-500/10"
                       onSelect={() =>
                         void markStatus(selectedVisible, "in_progress")
                       }
                     >
+                      <span className="size-2 rounded-full bg-amber-500" />
                       In Bearbeitung
                     </DropdownMenuItem>
                     <DropdownMenuItem
+                      className="font-medium"
                       onSelect={() => void markStatus(selectedVisible, "open")}
                     >
-                      Offen (zurücksetzen)
+                      <span className="size-2 rounded-full bg-ink-muted" />
+                      Offen
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      danger
+                      className="font-medium text-red-600 focus:bg-red-500/10"
                       onSelect={() =>
                         void markStatus(selectedVisible, "discarded")
                       }
                     >
-                      <XCircle className="size-4" />
+                      <span className="size-2 rounded-full bg-red-500" />
                       Aussortiert
                     </DropdownMenuItem>
                   </DropdownMenuContent>
