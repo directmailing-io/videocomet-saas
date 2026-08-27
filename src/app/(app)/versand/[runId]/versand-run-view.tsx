@@ -18,6 +18,7 @@ import {
   ArrowUp,
   CheckCircle2,
   ChevronDown,
+  Columns3,
   FileDown,
   Mail,
   Mailbox,
@@ -44,8 +45,10 @@ import {
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -377,28 +380,77 @@ export function VersandRunView({
     ) as unknown as VersandLeadItem[];
   }, [filtered, sortBy, sortDir]);
 
-  // Anzeige-Spalten: bekannte Info-Spalten (Firma/PLZ/Ort) sofern vorhanden;
-  // die aktive Sortier-Spalte wird immer mit angezeigt.
-  const infoColumns = React.useMemo(() => {
+  // ── Konfigurierbare Anzeige-Spalten ─────────────────────────────────────
+  // E-Mail-Spalten der CSV tauchen NICHT im Spalten-Wähler auf — die
+  // E-Mail-Adresse hat immer ihre eigene, feste Spalte in der Tabelle.
+  const pickableColumns = React.useMemo(
+    () => columns.filter((c) => !/e[-_ ]?mail/i.test(c)),
+    [columns],
+  );
+
+  // Standard: bekannte Spalten (Vorname/Nachname/Firma/Adresse/PLZ/Ort)
+  // automatisch erkennen; falls nichts passt, die ersten CSV-Spalten zeigen.
+  const defaultColumns = React.useMemo(() => {
     const found: string[] = [];
-    const lower = columns.map((c) => [c, c.toLowerCase()] as const);
+    const lower = pickableColumns.map((c) => [c, c.toLowerCase()] as const);
     for (const patterns of [
+      ["vorname", "first"],
+      ["nachname", "last"],
       ["firma", "company", "unternehmen"],
+      ["adresse", "straße", "strasse", "street"],
       ["plz", "zip", "postleitzahl"],
       ["ort", "city", "stadt"],
     ]) {
-      const hit = lower.find(([, lc]) => patterns.some((p) => lc.includes(p)));
+      const hit = lower.find(
+        ([c, lc]) => patterns.some((p) => lc.includes(p)) && !found.includes(c),
+      );
       if (hit) found.push(hit[0]);
     }
-    if (
-      sortBy !== SORT_ORIGINAL &&
-      !found.includes(sortBy) &&
-      !/name|vorname|nachname/i.test(sortBy)
-    ) {
-      found.unshift(sortBy);
+    if (found.length === 0) return pickableColumns.slice(0, 4);
+    // Fällt keine reine Namens-Spalte darunter, die beste ergänzen.
+    if (!found.some((c) => /name/i.test(c))) {
+      const nameCol = pickableColumns.find((c) => /name/i.test(c));
+      if (nameCol) found.unshift(nameCol);
     }
-    return found.slice(0, 3);
-  }, [columns, sortBy]);
+    return found;
+  }, [pickableColumns]);
+
+  // Auswahl pro Kampagne im Browser merken. Erst nach dem ersten Render aus
+  // localStorage laden, sonst passt das Server-HTML nicht zum Client
+  // (Hydration-Fehler).
+  const columnsStorageKey = `vc-versand-cols-${campaignId}`;
+  const [visibleColumns, setVisibleColumns] =
+    React.useState<string[]>(defaultColumns);
+  React.useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(columnsStorageKey);
+      if (raw) {
+        const saved = (JSON.parse(raw) as string[]).filter((c) =>
+          pickableColumns.includes(c),
+        );
+        if (saved.length > 0) setVisibleColumns(saved);
+      }
+    } catch {
+      // kaputter Speicher-Eintrag ⇒ Standard verwenden
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columnsStorageKey]);
+
+  function toggleColumn(col: string) {
+    setVisibleColumns((prev) => {
+      const next = prev.includes(col)
+        ? prev.filter((c) => c !== col)
+        : // Reihenfolge folgt immer der CSV, egal wann angehakt wurde
+          pickableColumns.filter((c) => prev.includes(c) || c === col);
+      if (next.length === 0) return prev;
+      try {
+        window.localStorage.setItem(columnsStorageKey, JSON.stringify(next));
+      } catch {
+        // Speichern fehlgeschlagen (z. B. privater Modus) — nicht schlimm
+      }
+      return next;
+    });
+  }
 
   // ── Kennzahlen ───────────────────────────────────────────────────────────
   // Kampagne ohne Brief-PDFs ⇒ komplette Brief-Steuerung ausblenden — der
@@ -596,14 +648,11 @@ export function VersandRunView({
     }
   }
 
-  /** Spalte, über die der Name-Header sortiert (beste Namens-Spalte der CSV). */
-  const nameSortColumn = React.useMemo(() => {
-    for (const re of [/nachname|last.?name/i, /^name$/i, /vorname|first.?name/i, /name/i]) {
-      const hit = columns.find((c) => re.test(c));
-      if (hit) return hit;
-    }
-    return null;
-  }, [columns]);
+  /** CSV-Spalte mit der E-Mail-Adresse — macht den E-Mail-Header sortierbar. */
+  const emailSortColumn = React.useMemo(
+    () => columns.find((c) => /e[-_ ]?mail/i.test(c)) ?? null,
+    [columns],
+  );
 
   function SortableTh({ col, label }: { col: string | null; label: string }) {
     const active = col !== null && sortBy === col;
@@ -827,6 +876,39 @@ export function VersandRunView({
           </Select>
         )}
 
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-full bg-surface px-3.5 py-2 text-sm text-ink shadow-card transition-colors hover:bg-surface-soft"
+              title="Auswählen, welche Spalten aus deiner Liste angezeigt werden"
+            >
+              <Columns3 className="size-4 text-ink-muted" />
+              Spalten
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
+            <DropdownMenuLabel>Angezeigte Spalten</DropdownMenuLabel>
+            {pickableColumns.map((col) => (
+              <DropdownMenuCheckboxItem
+                key={col}
+                checked={visibleColumns.includes(col)}
+                disabled={
+                  visibleColumns.length === 1 && visibleColumns.includes(col)
+                }
+                onSelect={(e) => {
+                  // Menü offen lassen, damit mehrere Spalten in einem
+                  // Rutsch an- und abgewählt werden können.
+                  e.preventDefault();
+                  toggleColumn(col);
+                }}
+              >
+                {col}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {sortBy !== SORT_ORIGINAL && (
           <button
             type="button"
@@ -869,14 +951,24 @@ export function VersandRunView({
                     aria-label="Alle sichtbaren Leads auswählen"
                   />
                 </th>
-                <SortableTh col={nameSortColumn} label="Name" />
-                {infoColumns.map((col) => (
+                <th
+                  className="px-3 py-2.5 font-semibold"
+                  title="Position in der importierten Liste"
+                >
+                  Nr.
+                </th>
+                {visibleColumns.map((col) => (
                   <SortableTh key={col} col={col} label={col} />
                 ))}
+                <SortableTh col={emailSortColumn} label="E-Mail-Adresse" />
                 {hasLetters && (
-                  <th className="px-3 py-2.5 font-semibold">Post</th>
+                  <th className="bg-emerald-500/[0.07] px-3 py-2.5 font-semibold text-emerald-800">
+                    Post-Status
+                  </th>
                 )}
-                <th className="px-3 py-2.5 font-semibold">E-Mail</th>
+                <th className="bg-brand/[0.07] px-3 py-2.5 font-semibold text-brand-deep">
+                  E-Mail-Status
+                </th>
                 <th className="w-12 px-4 py-2.5">
                   <span className="sr-only">Aktionen</span>
                 </th>
@@ -902,37 +994,58 @@ export function VersandRunView({
                         aria-label="Lead auswählen"
                       />
                     </td>
-                    <td
-                      className="px-3 py-3 font-medium text-ink"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          l.contactId
-                            ? setDetailContactId(l.contactId)
-                            : setDetailLead(l)
-                        }
-                        className="text-left underline-offset-2 hover:underline"
-                        title="Kontakt-Details öffnen"
-                      >
-                        <span className="line-clamp-1">
-                          {displayName(l.data)}
+                    <td className="px-3 py-3 text-xs tabular-nums text-ink-muted">
+                      {l.rowIndex + 1}
+                    </td>
+                    {visibleColumns.map((col, colIdx) =>
+                      colIdx === 0 ? (
+                        <td
+                          key={col}
+                          className="px-3 py-3 font-medium text-ink"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              l.contactId
+                                ? setDetailContactId(l.contactId)
+                                : setDetailLead(l)
+                            }
+                            className="text-left underline-offset-2 hover:underline"
+                            title="Kontakt-Details öffnen"
+                          >
+                            <span className="line-clamp-1">
+                              {l.data?.[col] || displayName(l.data)}
+                            </span>
+                          </button>
+                          {abActive && l.abVariant && (
+                            <span className="ml-1.5 rounded bg-surface-muted px-1 text-[10px] font-semibold text-ink-muted">
+                              {l.abVariant}
+                            </span>
+                          )}
+                        </td>
+                      ) : (
+                        <td key={col} className="px-3 py-3 text-ink-muted">
+                          <span className="line-clamp-1">
+                            {l.data?.[col] ?? "—"}
+                          </span>
+                        </td>
+                      ),
+                    )}
+                    <td className="px-3 py-3">
+                      {l.email ? (
+                        <span
+                          className="block max-w-48 truncate text-xs text-ink"
+                          title={l.email}
+                        >
+                          {l.email}
                         </span>
-                      </button>
-                      {abActive && l.abVariant && (
-                        <span className="ml-1.5 rounded bg-surface-muted px-1 text-[10px] font-semibold text-ink-muted">
-                          {l.abVariant}
-                        </span>
+                      ) : (
+                        <span className="text-xs text-ink-muted">—</span>
                       )}
                     </td>
-                    {infoColumns.map((col) => (
-                      <td key={col} className="px-3 py-3 text-ink-muted">
-                        <span className="line-clamp-1">{l.data?.[col] ?? "—"}</span>
-                      </td>
-                    ))}
                     {hasLetters && (
-                    <td className="px-3 py-3">
+                    <td className="bg-emerald-500/[0.04] px-3 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Badge variant={meta.badge} dot>
                           {meta.label}
@@ -952,22 +1065,14 @@ export function VersandRunView({
                     </td>
                     )}
                     <td
-                      className="px-3 py-3"
+                      className="bg-brand/[0.04] px-3 py-3"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {l.email && (
-                        <span
-                          className="block max-w-48 truncate text-xs text-ink"
-                          title={l.email}
-                        >
-                          {l.email}
-                        </span>
-                      )}
                       {l.emailHistory.length > 0 ? (
                         <button
                           type="button"
                           onClick={() => setDetailLead(l)}
-                          className="group/email mt-0.5 text-left"
+                          className="group/email text-left"
                           title={emailHistoryTitle(l.emailHistory)}
                         >
                           <Badge
@@ -996,11 +1101,9 @@ export function VersandRunView({
                           </span>
                         </button>
                       ) : l.email ? (
-                        <span className="mt-0.5 inline-block">
-                          <Badge variant="neutral" dot>
-                            Offen
-                          </Badge>
-                        </span>
+                        <Badge variant="neutral" dot>
+                          Offen
+                        </Badge>
                       ) : (
                         <span className="text-xs text-ink-muted">—</span>
                       )}

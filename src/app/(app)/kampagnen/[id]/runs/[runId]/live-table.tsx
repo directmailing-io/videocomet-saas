@@ -1019,23 +1019,6 @@ export function LiveTable({
                     {activeStageLabel}
                   </p>
                 )}
-                {isTerminal && counts.completed > 0 && (
-                  <div className="mt-3 flex flex-wrap items-center gap-3">
-                    <Button
-                      asChild
-                      size="sm"
-                      iconLeft={<Mailbox className="size-4" />}
-                    >
-                      <Link href={`/versand/${runId}`}>
-                        Zur Versandzentrale
-                      </Link>
-                    </Button>
-                    <span className="text-xs text-ink-muted">
-                      Briefe exportieren, als versendet markieren und E-Mails
-                      verschicken — alles an einem Ort.
-                    </span>
-                  </div>
-                )}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1079,6 +1062,30 @@ export function LiveTable({
               )}
             </div>
           </div>
+
+          {/* Runde fertig ⇒ deutlicher Wegweiser zum Versand */}
+          {isTerminal && counts.completed > 0 && (
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-squircle-lg bg-emerald-500/10 px-5 py-4">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/15">
+                  <Mailbox className="size-5 text-emerald-700" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-ink">
+                    Bereit für den Versand
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-muted">
+                    Alle fertigen Leads dieser Runde stehen in der
+                    Versandzentrale: Briefe herunterladen, als versendet
+                    markieren und E-Mails verschicken.
+                  </p>
+                </div>
+              </div>
+              <Button asChild iconLeft={<Mailbox className="size-4" />}>
+                <Link href={`/versand/${runId}`}>Jetzt Versand starten</Link>
+              </Button>
+            </div>
+          )}
 
           {!isTerminal && (
             <div className="mt-5 space-y-1.5" aria-live="polite">
