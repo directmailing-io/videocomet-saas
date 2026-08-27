@@ -30,7 +30,7 @@ import {
 } from "@/lib/db/schema";
 import {
   listOpenSentMessages,
-  reconcileEmailFailureRefunds,
+  maybeAutoPauseForBounces,
   skipScheduledMessagesToEmail,
   upsertSuppression,
   type OpenSentMessage,
@@ -97,7 +97,10 @@ async function handleBounce(target: OpenSentMessage): Promise<void> {
     reason: "bounce",
     sourceMessageId: target.id,
   });
-  await reconcileEmailFailureRefunds(target.blastId);
+  const paused = await maybeAutoPauseForBounces(target.blastId);
+  if (paused) {
+    log("warn", `bounce guard: blast ${target.blastId} automatisch pausiert`);
+  }
   log("info", `bounce: message ${target.id} (${target.toEmail})`);
 }
 

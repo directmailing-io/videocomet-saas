@@ -33,6 +33,10 @@ import {
 import type { StoredRunColumnMapping } from "@/lib/placeholders/types";
 import { todayInTimezone } from "@/lib/db/queries/mailboxes";
 import { maybeCompleteBlast } from "@/lib/db/queries/email-blasts";
+import {
+  ADDRESS_CHECK_MESSAGES,
+  checkEmailAddress,
+} from "@/lib/email/address-check";
 import { effectiveDailyLimit } from "@/lib/mailbox/presets";
 import { computeEmailGifHash } from "@/lib/email/gif-hash";
 import {
@@ -132,6 +136,7 @@ async function claimNextMessage(mailboxId: string): Promise<string | null> {
           WHERE em.mailbox_connection_id = ${mailboxId}
             AND em.status = 'scheduled'
             AND em.claimed_at IS NULL
+            AND (em.earliest_send_at IS NULL OR em.earliest_send_at <= now())
           ORDER BY em.created_at, em.id
           LIMIT 1
           FOR UPDATE OF em SKIP LOCKED
@@ -333,6 +338,21 @@ async function processMailbox(m: MailboxConnection): Promise<void> {
     .limit(1);
   if (!message) return;
 
+  // Adress-Check VOR dem Versand: kaputte Adressen erzeugen Bounces und
+  // ruinieren die Postfach-Reputation — lieber gar nicht erst senden.
+  const addrCheck = await checkEmailAddress(message.toEmail);
+  if (
+    addrCheck.status === "invalid_syntax" ||
+    addrCheck.status === "no_mailserver"
+  ) {
+    await markMessageFailed(
+      messageId,
+      message.blastId,
+      `${ADDRESS_CHECK_MESSAGES[addrCheck.status]} Nach der Korrektur am Kontakt wird automatisch neu versendet.`,
+    );
+    return;
+  }
+
   const ctx = await loadRenderContext(message);
   if (!ctx) {
     await markMessageFailed(messageId, message.blastId, "Render-Kontext fehlt (Lead/Blast gelöscht).");
@@ -472,6 +492,8 @@ async function tick(): Promise<void> {
     log("error", "stale claim recovery failed:", err),
   );
 
+  // Postfach-Rotation: aktive Postfächer sind alle, denen noch scheduled-
+  // Messages in laufenden Blasts zugewiesen sind (nicht das Blast-Feld).
   const mailboxes = await db
     .select()
     .from(mailboxConnections)
@@ -481,9 +503,15 @@ async function tick(): Promise<void> {
         inArray(
           mailboxConnections.id,
           db
-            .select({ id: emailBlasts.mailboxConnectionId })
-            .from(emailBlasts)
-            .where(eq(emailBlasts.status, "running")),
+            .selectDistinct({ id: emailMessages.mailboxConnectionId })
+            .from(emailMessages)
+            .innerJoin(emailBlasts, eq(emailBlasts.id, emailMessages.blastId))
+            .where(
+              and(
+                eq(emailMessages.status, "scheduled"),
+                eq(emailBlasts.status, "running"),
+              ),
+            ),
         ),
       ),
     );

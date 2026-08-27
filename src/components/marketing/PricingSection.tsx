@@ -55,7 +55,7 @@ const EXAMPLES: ReadonlyArray<{ count: number; label: string }> = [
 const CREDIT_KOSTEN: ReadonlyArray<{ label: string; credits: string }> = [
   { label: "1 Lead komplett: Video, Landingpage, Brief + Umschlag", credits: "1 Credit" },
   { label: "Extra: KI-Begrüßung mit Vornamen, in deiner Stimme", credits: "+1 Credit" },
-  { label: "10 E-Mails versenden", credits: "1 Credit" },
+  { label: "E-Mail-Versand über dein eigenes Postfach", credits: "Inklusive" },
 ];
 
 export function PricingSection() {
@@ -155,9 +155,9 @@ export function PricingSection() {
                     Dein Zugang zur Plattform
                   </h3>
                   <p className="text-[14.5px] leading-relaxed text-ink-soft">
-                    Alles offen: Editor, Landingpages, Briefe, Tracking,
-                    Integrationen. Deine Landingpages bleiben online, deine
-                    QR-Codes aktiv, deine Videos gehostet. Neue Features
+                    Alles offen: Editor, Landingpages, Briefe, E-Mail-Versand,
+                    Tracking, Integrationen. Deine Landingpages bleiben online,
+                    deine QR-Codes aktiv, deine Videos gehostet. Neue Features
                     kommen automatisch dazu.
                   </p>
                 </Squircle>

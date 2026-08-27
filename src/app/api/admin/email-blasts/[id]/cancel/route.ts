@@ -10,7 +10,7 @@ import {
 
 /**
  * POST /api/admin/email-blasts/[id]/cancel — Kill-Switch: bricht den
- * Blast eines beliebigen Users ab (gleiche Refund-Logik wie User-Cancel).
+ * Blast eines beliebigen Users ab.
  */
 export async function POST(
   _req: NextRequest,
@@ -34,6 +34,5 @@ export async function POST(
   return NextResponse.json({
     ok: true,
     cancelledMessages: result.cancelledMessages,
-    refunded: result.refunded,
   });
 }

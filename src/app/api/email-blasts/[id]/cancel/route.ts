@@ -7,7 +7,7 @@ import { cancelEmailBlast, serializeEmailBlast } from "@/lib/db/queries/email-bl
 
 /**
  * POST /api/email-blasts/[id]/cancel — scheduled ⇒ skipped(cancelled),
- * Refund floor(unversendet/10) als email_refund, Status cancelled.
+ * Status cancelled. E-Mail-Versand ist inklusive, kein Refund nötig.
  */
 export async function POST(
   _req: NextRequest,
@@ -30,6 +30,5 @@ export async function POST(
     ok: true,
     blast: serializeEmailBlast(result.blast),
     cancelledMessages: result.cancelledMessages,
-    refunded: result.refunded,
   });
 }

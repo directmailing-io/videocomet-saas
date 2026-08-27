@@ -40,7 +40,8 @@ export async function GET(
 
 const PostBody = z.object({
   templateId: z.string().uuid(),
-  mailboxConnectionId: z.string().uuid(),
+  /** Rotation: alle gewählten Postfächer; das erste ist das primäre. */
+  mailboxConnectionIds: z.array(z.string().uuid()).min(1).max(20),
   runId: z.string().uuid().nullish(),
 });
 
@@ -85,18 +86,20 @@ export async function POST(
     }
   }
 
-  const mailbox = await getMailboxConnection(
-    parsed.data.mailboxConnectionId,
-    auth.user.id,
-  );
-  if (!mailbox) {
-    return NextResponse.json({ error: "Postfach nicht gefunden." }, { status: 404 });
-  }
-  if (mailbox.status !== "connected") {
-    return NextResponse.json(
-      { error: "Das Postfach ist nicht verbunden. Bitte erst neu verbinden." },
-      { status: 400 },
-    );
+  const mailboxIds = Array.from(new Set(parsed.data.mailboxConnectionIds));
+  const mailboxes = [];
+  for (const id of mailboxIds) {
+    const mailbox = await getMailboxConnection(id, auth.user.id);
+    if (!mailbox) {
+      return NextResponse.json({ error: "Postfach nicht gefunden." }, { status: 404 });
+    }
+    if (mailbox.status !== "connected") {
+      return NextResponse.json(
+        { error: `Das Postfach ${mailbox.emailAddress} ist nicht verbunden. Bitte erst neu verbinden oder abwählen.` },
+        { status: 400 },
+      );
+    }
+    mailboxes.push(mailbox);
   }
 
   const template = await getEmailTemplate(parsed.data.templateId, auth.user.id);
@@ -116,7 +119,8 @@ export async function POST(
       userId: auth.user.id,
       campaignId: campaign.id,
       runId: parsed.data.runId ?? null,
-      mailboxConnectionId: mailbox.id,
+      mailboxConnectionId: mailboxes[0]!.id,
+      mailboxConnectionIds: mailboxes.map((m) => m.id),
       templateId: template.id,
       status: "draft",
       contentSnapshot: buildContentSnapshot(template, campaign.emailGifConfig ?? null),

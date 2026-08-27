@@ -3,17 +3,23 @@
  *
  * Kernstücke:
  *  - startEmailBlast: EINE Transaktion — Confirmation-Log, Snapshot,
- *    Empfänger-Materialisierung (Suppression + In-Blast-Dedupe), Charge.
- *  - cancelEmailBlast: scheduled ⇒ skipped(cancelled) + Refund.
- *  - reconcileEmailFailureRefunds: kumulativer, idempotenter Refund für
- *    failed/bounced (floor(n/10) minus bereits refundete Credits unter
- *    festem Reason-Key, Blast-Row gelockt).
+ *    Empfänger-Materialisierung (Suppression + In-Blast-Dedupe +
+ *    30-Tage-Schutzlimit) + Postfach-Rotation. E-Mail-Versand ist seit
+ *    Migration 0066 in der Grundgebühr inklusive — es werden KEINE
+ *    Credits mehr berechnet.
+ *  - Schutz-Limit: max. 4 gesendete Mails pro Empfänger-Adresse in 30
+ *    Tagen (userweit, blastübergreifend). Betroffene Messages werden
+ *    nicht übersprungen, sondern warten via earliestSendAt.
+ *  - maybeAutoPauseForBounces: Bounce-Schutz — Blast pausiert automatisch
+ *    mit Klartext-Grund, wenn zu viele Mails nicht ankommen.
+ *  - reviveMessagesForLead: korrigierte Lead-Adresse nimmt failed/
+ *    bounced/skipped-Messages in aktiven Blasts automatisch wieder auf.
  *  - performUnsubscribe / skipScheduledMessagesToEmail: Abmelde-/Reply-
  *    Pfad inkl. Counter-Pflege.
  */
 
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   campaigns,
@@ -32,12 +38,9 @@ import {
   type EmailSuppressionReason,
   type EmailTemplate,
 } from "@/lib/db/schema";
-import {
-  chargeForEmailBlast,
-  refundEmailCreditsUpTo,
-} from "@/lib/billing/credit-service";
 import { isEmailTemplateComplete } from "@/lib/db/queries/email-templates";
 import { insertLeadEvent } from "@/lib/db/queries/lead-events";
+import { effectiveDailyLimit } from "@/lib/mailbox/presets";
 import { computeEmailGifHash } from "@/lib/email/gif-hash";
 import { tiptapDocContainsNode } from "@/lib/email/render";
 import { sendBlastCompletedMail } from "@/lib/mail";
@@ -48,6 +51,85 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function isValidEmail(email: string | null | undefined): email is string {
   return typeof email === "string" && EMAIL_RE.test(email.trim());
+}
+
+// ── 30-Tage-Schutzlimit ────────────────────────────────────────────────────
+
+/** Max. Mails pro Empfänger-Adresse im rollierenden Fenster (userweit). */
+export const PER_ADDRESS_MAX_MAILS = 4;
+export const PER_ADDRESS_WINDOW_DAYS = 30;
+
+interface AddressWindowEntry {
+  /** sentAt der Mails im 30-Tage-Fenster, aufsteigend sortiert. */
+  sentAt: Date[];
+  /** Noch nicht versendete (scheduled) Messages in aktiven Blasts. */
+  scheduled: number;
+}
+
+/**
+ * Fenster-Zustand pro Adresse: gesendete Mails der letzten 30 Tage plus
+ * offene scheduled-Messages in running/paused-Blasts des Users.
+ */
+async function loadAddressWindowMap(
+  dbOrTx: Tx | typeof db,
+  userId: string,
+): Promise<Map<string, AddressWindowEntry>> {
+  const rows = await dbOrTx.execute<{
+    to_email: string;
+    status: string;
+    sent_at: string | null;
+  }>(
+    sql`SELECT em.to_email, em.status, em.sent_at::text
+        FROM email_messages em
+        JOIN email_blasts b ON b.id = em.blast_id
+        WHERE b.user_id = ${userId}
+          AND (
+            (em.status = 'sent'
+              AND em.sent_at > now() - interval '${sql.raw(String(PER_ADDRESS_WINDOW_DAYS))} days')
+            OR (em.status = 'scheduled' AND b.status IN ('running', 'paused'))
+          )`,
+  );
+  const map = new Map<string, AddressWindowEntry>();
+  for (const r of rows as unknown as Array<{
+    to_email: string;
+    status: string;
+    sent_at: string | null;
+  }>) {
+    const key = r.to_email.toLowerCase();
+    let entry = map.get(key);
+    if (!entry) {
+      entry = { sentAt: [], scheduled: 0 };
+      map.set(key, entry);
+    }
+    if (r.status === "sent" && r.sent_at) entry.sentAt.push(new Date(r.sent_at));
+    else entry.scheduled += 1;
+  }
+  for (const entry of Array.from(map.values())) {
+    entry.sentAt.sort((a, b) => a.getTime() - b.getTime());
+  }
+  return map;
+}
+
+/**
+ * Frühester Versandzeitpunkt für eine weitere Mail an diese Adresse.
+ * NULL = sofort erlaubt. Sonst: Zeitpunkt, zu dem genug alte Mails aus
+ * dem 30-Tage-Fenster herausgefallen sind.
+ */
+function computeEarliestSendAt(entry: AddressWindowEntry | undefined): Date | null {
+  if (!entry) return null;
+  const windowCount = entry.sentAt.length + entry.scheduled;
+  if (windowCount < PER_ADDRESS_MAX_MAILS) return null;
+  // Es müssen (windowCount - (MAX-1)) Sends aus dem Fenster fallen, damit
+  // die neue Mail wieder Platz hat.
+  const needed = windowCount - (PER_ADDRESS_MAX_MAILS - 1);
+  const windowMs = PER_ADDRESS_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const idx = needed - 1;
+  if (idx < entry.sentAt.length) {
+    return new Date(entry.sentAt[idx]!.getTime() + windowMs);
+  }
+  // Fenster ist durch scheduled-Messages ohne Zeitstempel belegt —
+  // konservativ volle Fensterlänge warten.
+  return new Date(Date.now() + windowMs);
 }
 
 export function serializeEmailBlast(b: EmailBlast) {
@@ -65,6 +147,8 @@ export function serializeEmailBlast(b: EmailBlast) {
     bouncedCount: b.bouncedCount ?? 0,
     repliedCount: b.repliedCount ?? 0,
     creditsCharged: b.creditsCharged,
+    mailboxConnectionIds: b.mailboxConnectionIds ?? [b.mailboxConnectionId],
+    pauseReason: b.pauseReason ?? null,
     startedAt: b.startedAt,
     completedAt: b.completedAt,
     createdAt: b.createdAt,
@@ -173,6 +257,13 @@ export interface BlastPreview {
   noEmail: number;
   suppressed: number;
   duplicates: number;
+  /**
+   * Teilmenge von sendable, die wegen des 30-Tage-Schutzlimits (max. 4
+   * Mails pro Adresse) erst später versendet wird.
+   */
+  waiting: number;
+  /** Frühestes Freiwerden unter den wartenden Adressen (ISO), sonst null. */
+  waitingFrom: string | null;
 }
 
 /**
@@ -196,11 +287,14 @@ export async function computeBlastPreview(input: {
     .where(and(...conditions));
 
   const suppressedSet = await loadSuppressionSet(db, input.userId);
+  const windowMap = await loadAddressWindowMap(db, input.userId);
 
   let noEmail = 0;
   let suppressed = 0;
   let duplicates = 0;
   let sendable = 0;
+  let waiting = 0;
+  let waitingFrom: Date | null = null;
   const seen = new Set<string>();
   for (const r of rows) {
     const email = (r.normalizedEmail ?? "").trim().toLowerCase();
@@ -213,9 +307,24 @@ export async function computeBlastPreview(input: {
     } else {
       seen.add(email);
       sendable += 1;
+      const earliest = computeEarliestSendAt(windowMap.get(email));
+      if (earliest) {
+        waiting += 1;
+        if (!waitingFrom || earliest.getTime() < waitingFrom.getTime()) {
+          waitingFrom = earliest;
+        }
+      }
     }
   }
-  return { total: rows.length, sendable, noEmail, suppressed, duplicates };
+  return {
+    total: rows.length,
+    sendable,
+    noEmail,
+    suppressed,
+    duplicates,
+    waiting,
+    waitingFrom: waitingFrom ? waitingFrom.toISOString() : null,
+  };
 }
 
 async function loadSuppressionSet(
@@ -240,14 +349,17 @@ export type StartBlastResult =
       blast: EmailBlast;
       scheduled: number;
       skipped: number;
-      creditsCharged: number;
+      waiting: number;
       gifLeads: StartBlastGifLead[];
     }
   | { ok: false; error: "not_found" | "wrong_status" | "mailbox_unavailable" | "template_incomplete" | "no_recipients" };
 
 /**
- * Startet einen Draft-Blast in EINER Transaktion. Wirft
- * InsufficientCreditsError bei zu wenig Guthaben (Rollback komplett).
+ * Startet einen Draft-Blast in EINER Transaktion. E-Mail-Versand ist
+ * inklusive — es werden keine Credits berechnet. Die Empfänger werden
+ * gewichtet nach Tageslimit auf die gewählten Postfächer verteilt
+ * (Rotation); Adressen über dem 30-Tage-Schutzlimit warten via
+ * earliestSendAt statt übersprungen zu werden.
  */
 export async function startEmailBlast(input: {
   blastId: string;
@@ -266,17 +378,24 @@ export async function startEmailBlast(input: {
     if (!blast) return { ok: false, error: "not_found" };
     if (blast.status !== "draft") return { ok: false, error: "wrong_status" };
 
-    const [mailbox] = await tx
+    // Rotation: alle gewählten Postfächer laden; nur verbundene senden.
+    const wantedMailboxIds = Array.from(
+      new Set([
+        blast.mailboxConnectionId,
+        ...(blast.mailboxConnectionIds ?? []),
+      ]),
+    );
+    const mailboxRows = await tx
       .select()
       .from(mailboxConnections)
       .where(
         and(
-          eq(mailboxConnections.id, blast.mailboxConnectionId),
+          inArray(mailboxConnections.id, wantedMailboxIds),
           eq(mailboxConnections.userId, input.userId),
         ),
-      )
-      .limit(1);
-    if (!mailbox || mailbox.status !== "connected") {
+      );
+    const sendMailboxes = mailboxRows.filter((m) => m.status === "connected");
+    if (sendMailboxes.length === 0) {
       return { ok: false, error: "mailbox_unavailable" };
     }
 
@@ -328,15 +447,34 @@ export async function startEmailBlast(input: {
       .orderBy(leads.rowIndex);
 
     const suppressedSet = await loadSuppressionSet(tx, input.userId);
+    const windowMap = await loadAddressWindowMap(tx, input.userId);
+
+    // Gewichtete Rotation: jede Message geht an das Postfach mit der
+    // aktuell geringsten Auslastung relativ zu seinem Tageslimit.
+    const rotation = sendMailboxes.map((m) => ({
+      id: m.id,
+      limit: Math.max(1, effectiveDailyLimit(m.warmupStage, m.dailyCap)),
+      assigned: 0,
+    }));
+    const nextMailboxId = (): string => {
+      let best = rotation[0]!;
+      for (const r of rotation) {
+        if (r.assigned / r.limit < best.assigned / best.limit) best = r;
+      }
+      best.assigned += 1;
+      return best.id;
+    };
 
     const seen = new Set<string>();
     const gifLeads: StartBlastGifLead[] = [];
     let scheduled = 0;
     let skipped = 0;
+    let waiting = 0;
     const values = leadRows.map((l) => {
       const email = (l.normalizedEmail ?? "").trim().toLowerCase();
       let status: "scheduled" | "skipped" = "scheduled";
       let skipReason: string | null = null;
+      let earliestSendAt: Date | null = null;
       if (!isValidEmail(email)) {
         status = "skipped";
         skipReason = "no_email";
@@ -348,9 +486,11 @@ export async function startEmailBlast(input: {
         skipReason = "duplicate";
       } else {
         seen.add(email);
+        earliestSendAt = computeEarliestSendAt(windowMap.get(email));
       }
       if (status === "scheduled") {
         scheduled += 1;
+        if (earliestSendAt) waiting += 1;
         const hasVideo = Boolean(l.videoMp4Url ?? l.videoUrl);
         if (
           gifConfig &&
@@ -366,23 +506,17 @@ export async function startEmailBlast(input: {
       return {
         blastId: blast.id,
         leadId: l.id,
-        mailboxConnectionId: blast.mailboxConnectionId,
+        mailboxConnectionId:
+          status === "scheduled" ? nextMailboxId() : blast.mailboxConnectionId,
         toEmail: email || "",
         status,
         skipReason,
+        earliestSendAt,
         unsubscribeToken: randomBytes(16).toString("hex"),
       };
     });
 
     if (scheduled === 0) return { ok: false, error: "no_recipients" };
-
-    const credits = Math.ceil(scheduled / 10);
-    // Wirft InsufficientCreditsError ⇒ komplette Tx rollt zurück.
-    await chargeForEmailBlast(tx, {
-      userId: input.userId,
-      blastId: blast.id,
-      amount: credits,
-    });
 
     for (let i = 0; i < values.length; i += 500) {
       await tx.insert(emailMessages).values(values.slice(i, i + 500));
@@ -403,7 +537,8 @@ export async function startEmailBlast(input: {
         },
         totalCount: scheduled,
         skippedCount: skipped,
-        creditsCharged: credits,
+        creditsCharged: 0,
+        mailboxConnectionIds: sendMailboxes.map((m) => m.id),
         startedAt: now,
         updatedAt: now,
       })
@@ -415,7 +550,7 @@ export async function startEmailBlast(input: {
       blast: updated!,
       scheduled,
       skipped,
-      creditsCharged: credits,
+      waiting,
       gifLeads,
     };
   });
@@ -451,7 +586,7 @@ export async function resumeEmailBlast(
 ): Promise<SimpleBlastActionResult> {
   const [row] = await db
     .update(emailBlasts)
-    .set({ status: "running", updatedAt: new Date() })
+    .set({ status: "running", pauseReason: null, updatedAt: new Date() })
     .where(
       and(
         eq(emailBlasts.id, id),
@@ -466,7 +601,7 @@ export async function resumeEmailBlast(
 }
 
 export type CancelBlastResult =
-  | { ok: true; blast: EmailBlast; cancelledMessages: number; refunded: number }
+  | { ok: true; blast: EmailBlast; cancelledMessages: number }
   | { ok: false; error: "not_found" | "wrong_status" };
 
 export async function cancelEmailBlast(
@@ -493,12 +628,6 @@ export async function cancelEmailBlast(
       )
       .returning({ id: emailMessages.id });
 
-    const refunded = await refundEmailCreditsUpTo(tx, {
-      userId,
-      reasonKey: `email_blast:${id}:cancel`,
-      targetTotal: Math.floor(cancelled.length / 10),
-    });
-
     const now = new Date();
     const [updated] = await tx
       .update(emailBlasts)
@@ -515,44 +644,54 @@ export async function cancelEmailBlast(
       ok: true,
       blast: updated!,
       cancelledMessages: cancelled.length,
-      refunded,
     };
   });
 }
 
-/**
- * Kumulativer Failed/Bounce-Refund: floor((failed+bounced)/10) minus
- * bereits refundete Credits. Läuft nur für abgeschlossene Blasts —
- * während `running` wird bis zur Completed-Transition gewartet.
- * Idempotent + race-sicher durch Blast-Lock + Ledger-Summe.
- */
-export async function reconcileEmailFailureRefunds(blastId: string): Promise<number> {
-  return db.transaction(async (tx) => {
-    const [blast] = await tx
-      .select()
-      .from(emailBlasts)
-      .where(eq(emailBlasts.id, blastId))
-      .for("update")
-      .limit(1);
-    if (!blast || blast.status !== "completed") return 0;
+/** Bounce-Schutz: ab diesem Anteil wird automatisch pausiert. */
+export const BOUNCE_AUTO_PAUSE_RATE = 0.05;
+/** Mindestanzahl Zustell-Versuche, bevor die Quote bewertet wird. */
+export const BOUNCE_AUTO_PAUSE_MIN_ATTEMPTS = 10;
 
-    const [counts] = await tx.execute<{ n: string }>(
-      sql`SELECT COUNT(*)::text AS n FROM email_messages
-          WHERE blast_id = ${blastId} AND status IN ('failed', 'bounced')`,
-    );
-    const failures = Number((counts as { n: string } | undefined)?.n ?? 0);
-    return refundEmailCreditsUpTo(tx, {
-      userId: blast.userId,
-      reasonKey: `email_blast:${blastId}:failures`,
-      targetTotal: Math.floor(failures / 10),
-    });
-  });
+/**
+ * Bounce-Schutz: pausiert einen laufenden Blast automatisch, wenn mehr
+ * als 5 % der zugestellten Mails bouncen (ab 10 Versuchen). Der Klartext-
+ * Grund landet in pauseReason und wird in der App angezeigt — der User
+ * kann nach Prüfung der Adressen jederzeit fortsetzen.
+ */
+export async function maybeAutoPauseForBounces(blastId: string): Promise<boolean> {
+  const [blast] = await db
+    .select({
+      status: emailBlasts.status,
+      sentCount: emailBlasts.sentCount,
+      bouncedCount: emailBlasts.bouncedCount,
+    })
+    .from(emailBlasts)
+    .where(eq(emailBlasts.id, blastId))
+    .limit(1);
+  if (!blast || blast.status !== "running") return false;
+  const bounced = blast.bouncedCount ?? 0;
+  const attempts = (blast.sentCount ?? 0) + bounced;
+  if (attempts < BOUNCE_AUTO_PAUSE_MIN_ATTEMPTS) return false;
+  if (bounced / attempts <= BOUNCE_AUTO_PAUSE_RATE) return false;
+
+  const reason =
+    `Automatisch pausiert zum Schutz Ihres Postfachs: ${bounced} von ${attempts} ` +
+    `E-Mails kamen nicht an (unzustellbar). Zu viele unzustellbare Mails schaden ` +
+    `dem Ruf Ihrer Absender-Adresse bei Google und Microsoft. Bitte prüfen und ` +
+    `korrigieren Sie die E-Mail-Adressen Ihrer Leads — danach können Sie den ` +
+    `Versand oben rechts fortsetzen.`;
+  const [updated] = await db
+    .update(emailBlasts)
+    .set({ status: "paused", pauseReason: reason, updatedAt: new Date() })
+    .where(and(eq(emailBlasts.id, blastId), eq(emailBlasts.status, "running")))
+    .returning({ id: emailBlasts.id });
+  return Boolean(updated);
 }
 
 /**
  * Completed-Transition: wenn keine scheduled-Messages mehr existieren,
- * running ⇒ completed. Refund passiert direkt danach (separater
- * idempotenter Reconcile), anschließend geht einmalig die
+ * running ⇒ completed, anschließend geht einmalig die
  * Abschluss-Systemmail raus (Transition-Guard = Idempotenz).
  * Liefert true bei Transition.
  */
@@ -570,7 +709,6 @@ export async function maybeCompleteBlast(blastId: string): Promise<boolean> {
     )
     .returning({ id: emailBlasts.id });
   if (!row) return false;
-  await reconcileEmailFailureRefunds(blastId);
   await notifyBlastCompleted(blastId).catch((err) => {
     // eslint-disable-next-line no-console
     console.warn("[email-blasts] completed mail failed:", err);
@@ -648,6 +786,108 @@ export async function skipScheduledMessagesToEmail(
   let total = 0;
   for (const n of Array.from(byBlast.values())) total += n;
   return total;
+}
+
+/**
+ * Korrigierte Lead-Adresse: nimmt failed/bounced- sowie wegen fehlender/
+ * gesperrter Adresse geskippte Messages des Leads in laufenden/pausierten
+ * Blasts automatisch wieder in den Versand auf (neue Adresse, Status
+ * scheduled, 30-Tage-Schutzlimit wird neu berechnet). Counter werden
+ * konsistent zurückgedreht. Liefert die Zahl reaktivierter Messages.
+ */
+export async function reviveMessagesForLead(
+  userId: string,
+  leadId: string,
+  newEmail: string,
+): Promise<number> {
+  const lower = newEmail.trim().toLowerCase();
+  if (!isValidEmail(lower)) return 0;
+
+  const suppressedSet = await loadSuppressionSet(db, userId);
+  if (suppressedSet.has(lower)) return 0;
+
+  const candidates = await db
+    .select({
+      id: emailMessages.id,
+      blastId: emailMessages.blastId,
+      status: emailMessages.status,
+      skipReason: emailMessages.skipReason,
+    })
+    .from(emailMessages)
+    .innerJoin(emailBlasts, eq(emailBlasts.id, emailMessages.blastId))
+    .where(
+      and(
+        eq(emailMessages.leadId, leadId),
+        eq(emailBlasts.userId, userId),
+        inArray(emailBlasts.status, ["running", "paused"]),
+        sql`(
+          ${emailMessages.status} IN ('failed', 'bounced')
+          OR (${emailMessages.status} = 'skipped'
+              AND ${emailMessages.skipReason} IN ('no_email', 'suppressed'))
+        )`,
+      ),
+    );
+  if (candidates.length === 0) return 0;
+
+  const windowMap = await loadAddressWindowMap(db, userId);
+  let entry = windowMap.get(lower);
+
+  let revived = 0;
+  for (const c of candidates) {
+    // Keine zweite scheduled/sent-Message an dieselbe Adresse im selben Blast.
+    const [dupe] = await db
+      .select({ id: emailMessages.id })
+      .from(emailMessages)
+      .where(
+        and(
+          eq(emailMessages.blastId, c.blastId),
+          eq(emailMessages.toEmail, lower),
+          inArray(emailMessages.status, ["scheduled", "sent"]),
+        ),
+      )
+      .limit(1);
+    if (dupe) continue;
+
+    const earliestSendAt = computeEarliestSendAt(entry);
+    const [updated] = await db
+      .update(emailMessages)
+      .set({
+        status: "scheduled",
+        toEmail: lower,
+        skipReason: null,
+        error: null,
+        claimedAt: null,
+        sentAt: null,
+        internetMessageId: null,
+        graphMessageId: null,
+        conversationId: null,
+        earliestSendAt,
+      })
+      .where(
+        and(eq(emailMessages.id, c.id), eq(emailMessages.status, c.status)),
+      )
+      .returning({ id: emailMessages.id });
+    if (!updated) continue;
+    revived += 1;
+
+    // Adresse zählt jetzt als geplant → Schutzlimit für weitere Revives.
+    entry = entry ?? { sentAt: [], scheduled: 0 };
+    entry.scheduled += 1;
+    windowMap.set(lower, entry);
+
+    const counterSet: Record<string, unknown> = { updatedAt: new Date() };
+    if (c.status === "failed") {
+      counterSet.failedCount = sql`GREATEST(COALESCE(${emailBlasts.failedCount}, 0) - 1, 0)`;
+    } else if (c.status === "bounced") {
+      counterSet.bouncedCount = sql`GREATEST(COALESCE(${emailBlasts.bouncedCount}, 0) - 1, 0)`;
+      counterSet.sentCount = sql`GREATEST(COALESCE(${emailBlasts.sentCount}, 0) - 1, 0)`;
+    } else {
+      counterSet.skippedCount = sql`GREATEST(COALESCE(${emailBlasts.skippedCount}, 0) - 1, 0)`;
+      counterSet.totalCount = sql`${emailBlasts.totalCount} + 1`;
+    }
+    await db.update(emailBlasts).set(counterSet).where(eq(emailBlasts.id, c.blastId));
+  }
+  return revived;
 }
 
 export async function upsertSuppression(input: {
@@ -797,6 +1037,8 @@ export interface BlastMessageRow {
   error: string | null;
   clicked: boolean;
   leadData: Record<string, string>;
+  mailboxEmail: string | null;
+  earliestSendAt: Date | null;
 }
 
 /** Message-Tabelle der Blast-Detailseite (paginiert, mit Lead-Daten). */
@@ -823,9 +1065,15 @@ export async function listBlastMessages(
         clicked: clickedSql,
         leadData: leads.data,
         rowIndex: leads.rowIndex,
+        mailboxEmail: mailboxConnections.emailAddress,
+        earliestSendAt: emailMessages.earliestSendAt,
       })
       .from(emailMessages)
       .innerJoin(leads, eq(leads.id, emailMessages.leadId))
+      .leftJoin(
+        mailboxConnections,
+        eq(mailboxConnections.id, emailMessages.mailboxConnectionId),
+      )
       .where(eq(emailMessages.blastId, blastId))
       .orderBy(leads.rowIndex)
       .offset(opts.offset)
@@ -848,6 +1096,8 @@ export async function listBlastMessages(
       error: r.error,
       clicked: Boolean(r.clicked),
       leadData: r.leadData ?? {},
+      mailboxEmail: r.mailboxEmail ?? null,
+      earliestSendAt: r.earliestSendAt ?? null,
     })),
     total: countRow?.n ?? 0,
   };

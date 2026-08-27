@@ -33,10 +33,13 @@ export default async function EmailBlastDetailPage({
   const blast = await getEmailBlastForUser(blastId, user.id);
   if (!blast || blast.campaignId !== campaign.id) notFound();
 
-  const [counts, engagement, mailbox, messagePage] = await Promise.all([
+  const mailboxIds = Array.from(
+    new Set([blast.mailboxConnectionId, ...(blast.mailboxConnectionIds ?? [])]),
+  );
+  const [counts, engagement, mailboxRows, messagePage] = await Promise.all([
     countBlastMessages(blast.id),
     getBlastEngagement(blast.id),
-    getMailboxConnection(blast.mailboxConnectionId, user.id),
+    Promise.all(mailboxIds.map((mid) => getMailboxConnection(mid, user.id))),
     listBlastMessages(blast.id, { offset: 0, limit: PAGE_SIZE }),
   ]);
 
@@ -52,9 +55,13 @@ export default async function EmailBlastDetailPage({
     error: r.error,
     clicked: r.clicked,
     leadData: r.leadData,
+    mailboxEmail: r.mailboxEmail,
+    earliestSendAt: r.earliestSendAt ? r.earliestSendAt.toISOString() : null,
   }));
 
-  const serializedMailbox = mailbox ? serializeMailbox(mailbox) : null;
+  const serializedMailboxes = mailboxRows
+    .filter((m): m is NonNullable<typeof m> => Boolean(m))
+    .map(serializeMailbox);
 
   return (
     <>
@@ -78,22 +85,18 @@ export default async function EmailBlastDetailPage({
           skippedCount: blast.skippedCount ?? 0,
           bouncedCount: blast.bouncedCount ?? 0,
           repliedCount: blast.repliedCount ?? 0,
-          creditsCharged: blast.creditsCharged,
+          pauseReason: blast.pauseReason ?? null,
           startedAt: blast.startedAt ? blast.startedAt.toISOString() : null,
           completedAt: blast.completedAt ? blast.completedAt.toISOString() : null,
           createdAt: blast.createdAt.toISOString(),
         }}
         initialCounts={counts}
         initialEngagement={engagement}
-        mailbox={
-          serializedMailbox
-            ? {
-                emailAddress: serializedMailbox.emailAddress,
-                status: serializedMailbox.status,
-                effectiveDailyLimit: serializedMailbox.effectiveDailyLimit,
-              }
-            : null
-        }
+        mailboxes={serializedMailboxes.map((m) => ({
+          emailAddress: m.emailAddress,
+          status: m.status,
+          effectiveDailyLimit: m.effectiveDailyLimit,
+        }))}
         initialMessages={initialMessages}
         initialTotalMessages={messagePage.total}
         pageSize={PAGE_SIZE}

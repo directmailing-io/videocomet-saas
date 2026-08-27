@@ -83,6 +83,31 @@ export function LeadEditDialog({
       onSaved({ id: lead.id, data: values });
       toast({ variant: "success", title: "Lead gespeichert" });
 
+      // Wurde die E-Mail-Adresse geändert, hat der Server sie sofort neu
+      // geprüft — das Ergebnis in Klartext anzeigen, damit der User weiss,
+      // ob die Korrektur funktioniert hat.
+      const checkStatus: string | undefined = json?.emailCheck?.status;
+      const revived: number = Number(json?.revivedMessages ?? 0);
+      if (checkStatus === "invalid_syntax" || checkStatus === "no_mailserver") {
+        toast({
+          variant: "danger",
+          title: "Neue E-Mail-Adresse nicht erreichbar",
+          description:
+            checkStatus === "invalid_syntax"
+              ? "Das ist keine gültige E-Mail-Adresse. Bitte prüfe die Schreibweise."
+              : "Diese Adresse kann keine E-Mails empfangen. Die Domain hinter dem @-Zeichen existiert nicht oder hat keinen Mailserver. Bitte prüfe die Schreibweise.",
+        });
+      } else if (checkStatus === "ok" || checkStatus === "unknown") {
+        toast({
+          variant: "success",
+          title: "E-Mail-Adresse geprüft",
+          description:
+            revived > 0
+              ? `Die neue Adresse sieht gut aus. ${revived} wartende E-Mail${revived === 1 ? " wurde" : "s wurden"} automatisch wieder in den Versand aufgenommen.`
+              : "Die neue Adresse sieht gut aus und kann E-Mails empfangen.",
+        });
+      }
+
       if (regenAfter) {
         const rr = await fetch(`/api/leads/${lead.id}/regenerate`, {
           method: "POST",

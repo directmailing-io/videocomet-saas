@@ -268,8 +268,8 @@ export function SignupForm() {
                 </li>
               </ul>
               <p className="text-[13px] sm:text-sm text-ink-soft leading-relaxed">
-                Versand per E-Mail über VIDEOCOMET:{" "}
-                <strong className="font-semibold text-ink">10 E-Mails = 1 Credit</strong>.
+                Versand per E-Mail über dein eigenes Postfach:{" "}
+                <strong className="font-semibold text-ink">inklusive, kostet keine Credits</strong>.
                 Deine Credits bleiben dir die gesamte Laufzeit erhalten, du
                 lädst nur auf, wenn du sie brauchst.
               </p>

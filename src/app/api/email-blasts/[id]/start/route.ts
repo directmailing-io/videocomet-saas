@@ -4,7 +4,6 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUserApi } from "@/lib/auth-guard";
-import { InsufficientCreditsError } from "@/lib/billing/credit-service";
 import { serializeEmailBlast, startEmailBlast } from "@/lib/db/queries/email-blasts";
 import { emailGifJobId, emailGifQueue } from "@/worker/email-gif-queue";
 
@@ -15,7 +14,8 @@ const PostBody = z.object({
 
 /**
  * POST /api/email-blasts/[id]/start — Draft ⇒ running in EINER Transaktion
- * (Confirmation-Log, Snapshot, Empfänger-Materialisierung, Credit-Charge).
+ * (Confirmation-Log, Snapshot, Empfänger-Materialisierung, Postfach-Rotation).
+ * E-Mail-Versand ist inklusive, es werden keine Credits berechnet.
  * Danach GIF-Encodes für Leads ohne aktuellen Hash enqueuen.
  */
 export async function POST(
@@ -34,27 +34,11 @@ export async function POST(
     );
   }
 
-  let result;
-  try {
-    result = await startEmailBlast({
-      blastId: params.id,
-      userId: auth.user.id,
-      confirmationTextVersion: parsed.data.confirmationTextVersion,
-    });
-  } catch (err) {
-    if (err instanceof InsufficientCreditsError) {
-      return NextResponse.json(
-        {
-          error: `Nicht genug Credits: benötigt ${err.required}, verfügbar ${err.available}.`,
-          errorKind: "insufficient_credits",
-          required: err.required,
-          available: err.available,
-        },
-        { status: 402 },
-      );
-    }
-    throw err;
-  }
+  const result = await startEmailBlast({
+    blastId: params.id,
+    userId: auth.user.id,
+    confirmationTextVersion: parsed.data.confirmationTextVersion,
+  });
 
   if (!result.ok) {
     const map: Record<string, { status: number; message: string }> = {
@@ -65,7 +49,7 @@ export async function POST(
       },
       mailbox_unavailable: {
         status: 400,
-        message: "Das Postfach ist nicht verbunden. Bitte erst neu verbinden.",
+        message: "Keines der gewählten Postfächer ist verbunden. Bitte erst neu verbinden.",
       },
       template_incomplete: {
         status: 400,
@@ -107,7 +91,7 @@ export async function POST(
     blast: serializeEmailBlast(result.blast),
     scheduled: result.scheduled,
     skipped: result.skipped,
-    creditsCharged: result.creditsCharged,
+    waiting: result.waiting,
     gifJobsEnqueued: result.gifLeads.length,
   });
 }

@@ -44,6 +44,20 @@ export default function AgbPage() {
         ergibt sich aus der Produktbeschreibung auf der Website des Anbieters
         zum Zeitpunkt des Vertragsschlusses.
       </p>
+      <p>
+        Der E-Mail-Versand erfolgt über ein vom Kunden angebundenes eigenes
+        E-Mail-Postfach und ist in der Vergütung für den Plattform-Zugang
+        enthalten; es fallen hierfür keine Credits an. Zum Schutz der
+        Zustellbarkeit und der Absender-Reputation des Kunden gelten
+        technische Versandgrenzen, insbesondere Tageslimits pro Postfach,
+        eine Begrenzung der Anzahl von E-Mails an denselben Empfänger
+        innerhalb eines gleitenden Zeitraums sowie eine automatische
+        Pausierung bei erhöhter Unzustellbarkeitsquote. Der Anbieter darf
+        diese Grenzen anpassen, soweit dies dem Schutz der Kunden und der
+        Zustellbarkeit dient. Für den Inhalt der versendeten E-Mails und die
+        Einhaltung der wettbewerbs- und datenschutzrechtlichen Vorgaben
+        (insb. § 7 UWG) ist der Kunde verantwortlich.
+      </p>
 
       <h2>§ 3 Vertragsschluss</h2>
       <p>

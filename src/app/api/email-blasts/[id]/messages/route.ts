@@ -42,6 +42,8 @@ export async function GET(
       error: r.error,
       clicked: r.clicked,
       leadData: r.leadData,
+      mailboxEmail: r.mailboxEmail,
+      earliestSendAt: r.earliestSendAt ? r.earliestSendAt.toISOString() : null,
     })),
   });
 }

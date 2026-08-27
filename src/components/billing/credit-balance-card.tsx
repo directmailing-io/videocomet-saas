@@ -5,7 +5,7 @@
  *
  * Komet-Himmel als fester Hintergrund (unabhaengig vom Guthaben) mit
  * Dark-Gradient-Overlay unten fuer Text-Kontrast. Balance, Verbrauchs-Zeilen
- * (1 Video / 10 E-Mails) und Aufladen-Button sitzen im unteren Bereich.
+ * (1 Video / E-Mail inklusive) und Aufladen-Button sitzen im unteren Bereich.
  *
  * State-Farbe wird als Border-Glow + Button-Farbe kommuniziert:
  *   - Normal: Brand-Purple
@@ -141,9 +141,9 @@ export function CreditBalanceCard() {
               </div>
               <div className="flex items-center justify-between gap-2 px-2 py-1 text-[10px] text-white/85 whitespace-nowrap">
                 <span className="flex items-center gap-1.5 min-w-0">
-                  <Mail className="size-3 shrink-0" /> 10 E-Mails
+                  <Mail className="size-3 shrink-0" /> E-Mail-Versand
                 </span>
-                <span className="font-semibold tabular-nums">1</span>
+                <span className="font-semibold">inklusive</span>
               </div>
             </div>
             <div className="border-t border-white/10 px-2 py-1 text-[9px] leading-snug text-white/60">

@@ -3,7 +3,7 @@ export type FAQItem = { q: string; a: string };
 export const FAQ: ReadonlyArray<FAQItem> = [
   {
     q: "Wie wird der Grundtarif abgerechnet?",
-    a: "Du startest mit dem Startquartal: 120 € netto für deine ersten 3 Monate, inklusive 20 Credits Startguthaben. Danach zahlst du 40 € netto pro Monat. Der Grundtarif hält deine Landingpages online, deine QR-Codes aktiv und deine Videos gehostet. Für jedes Video lädst du Credits nach, so zahlst du nur, was du wirklich versendest.",
+    a: "Du startest mit dem Startquartal: 120 € netto für deine ersten 3 Monate, inklusive 20 Credits Startguthaben. Danach zahlst du 40 € netto pro Monat. Der Grundtarif hält deine Landingpages online, deine QR-Codes aktiv und deine Videos gehostet. Für jedes Video lädst du Credits nach, so zahlst du nur, was du wirklich versendest. Der E-Mail-Versand über dein eigenes Postfach ist in der Grundgebühr enthalten und kostet keine Credits.",
   },
   {
     q: "Was passiert mit Credits, die ich nicht verbrauche?",

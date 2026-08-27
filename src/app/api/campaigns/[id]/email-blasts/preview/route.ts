@@ -10,10 +10,10 @@ import { computeBlastPreview } from "@/lib/db/queries/email-blasts";
 import { effectiveDailyLimit } from "@/lib/mailbox/presets";
 
 /**
- * GET /api/campaigns/[id]/email-blasts/preview?runId=&mailboxId=
+ * GET /api/campaigns/[id]/email-blasts/preview?runId=&mailboxIds=a,b,c
  *
- * Live-Zähler für den Blast-Wizard. Mit `mailboxId` zusätzlich
- * Credits + geschätzte Versanddauer (Werktage aus sendWindow.days).
+ * Live-Zähler für den Blast-Wizard. Mit `mailboxIds` zusätzlich die
+ * geschätzte Versanddauer über alle gewählten Postfächer (Rotation).
  */
 export async function GET(
   req: NextRequest,
@@ -50,28 +50,39 @@ export async function GET(
     runId: runId ?? null,
   });
 
-  const credits = Math.ceil(preview.sendable / 10);
-
   let schedule: {
     mailsPerDay: number;
     estimatedSendDays: number;
+    mailboxCount: number;
     sendWindow: unknown;
     timezone: string;
   } | null = null;
-  const mailboxId = req.nextUrl.searchParams.get("mailboxId");
-  if (mailboxId) {
-    const mailbox = await getMailboxConnection(mailboxId, auth.user.id);
-    if (mailbox) {
-      const mailsPerDay = effectiveDailyLimit(mailbox.warmupStage, mailbox.dailyCap);
+  const mailboxIdsParam =
+    req.nextUrl.searchParams.get("mailboxIds") ??
+    req.nextUrl.searchParams.get("mailboxId");
+  if (mailboxIdsParam) {
+    const ids = Array.from(
+      new Set(mailboxIdsParam.split(",").map((s) => s.trim()).filter(Boolean)),
+    );
+    let mailsPerDay = 0;
+    let first = null;
+    for (const id of ids) {
+      const mailbox = await getMailboxConnection(id, auth.user.id);
+      if (!mailbox) continue;
+      first = first ?? mailbox;
+      mailsPerDay += effectiveDailyLimit(mailbox.warmupStage, mailbox.dailyCap);
+    }
+    if (first && mailsPerDay > 0) {
       schedule = {
         mailsPerDay,
         estimatedSendDays:
           preview.sendable > 0 ? Math.ceil(preview.sendable / mailsPerDay) : 0,
-        sendWindow: mailbox.sendWindow,
-        timezone: mailbox.timezone,
+        mailboxCount: ids.length,
+        sendWindow: first.sendWindow,
+        timezone: first.timezone,
       };
     }
   }
 
-  return NextResponse.json({ ...preview, credits, schedule });
+  return NextResponse.json({ ...preview, schedule });
 }

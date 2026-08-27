@@ -1841,8 +1841,24 @@ export const emailBlasts = pgTable("email_blasts", {
   skippedCount: integer("skipped_count").default(0),
   bouncedCount: integer("bounced_count").default(0),
   repliedCount: integer("replied_count").default(0),
-  /** 1 Credit = 10 Mails, aufgerundet. Charge beim Start. */
+  /**
+   * Historisch (bis Migration 0066): 1 Credit = 10 Mails. Seit dem
+   * Inklusiv-Modell wird nichts mehr berechnet — neue Blasts haben 0,
+   * alte behalten ihren Wert fuer die Anzeige.
+   */
   creditsCharged: integer("credits_charged").notNull().default(0),
+  /**
+   * Alle Postfaecher dieses Blasts (Rotation, Migration 0066). Die Spalte
+   * mailboxConnectionId bleibt als "primaeres" Postfach (NOT NULL, Alt-Daten).
+   * NULL bei Alt-Blasts ⇒ nur das primaere Postfach.
+   */
+  mailboxConnectionIds: jsonb("mailbox_connection_ids").$type<string[] | null>(),
+  /**
+   * Klartext-Grund, wenn das System den Blast automatisch pausiert hat
+   * (z. B. Bounce-Schutz). NULL bei manueller Pause. Wird beim Fortsetzen
+   * geleert.
+   */
+  pauseReason: text("pause_reason"),
   confirmationLog: jsonb("confirmation_log").$type<EmailBlastConfirmationLog | null>(),
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -1883,6 +1899,12 @@ export const emailMessages = pgTable("email_messages", {
   unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
   skipReason: text("skip_reason"),
   error: text("error"),
+  /**
+   * Schutz-Limit (max. 4 Mails pro Adresse in 30 Tagen, Migration 0066):
+   * vor diesem Zeitpunkt darf die Message nicht versendet werden. Der
+   * Drip-Worker ueberspringt sie bis dahin, die UI zeigt das Datum an.
+   */
+  earliestSendAt: timestamp("earliest_send_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   blastLeadUq: unique("email_messages_blast_lead_uq").on(t.blastId, t.leadId),

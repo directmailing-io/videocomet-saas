@@ -242,7 +242,7 @@ export function CreditHistory() {
                         <>Versand wurde gelöscht · </>
                       )}
                       {tx.kind === "email_charge"
-                        ? "1 Credit = 10 E-Mails (aufgerundet)"
+                        ? "Alte Abrechnung: 1 Credit = 10 E-Mails. Heute ist der E-Mail-Versand inklusive."
                         : emailRefundLabel(tx.reason)}
                     </div>
                   )}

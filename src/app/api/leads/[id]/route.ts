@@ -7,6 +7,8 @@ import { and, eq } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
+import { reviveMessagesForLead } from "@/lib/db/queries/email-blasts";
+import { checkEmailAddress } from "@/lib/email/address-check";
 
 /**
  * PATCH /api/leads/[id]
@@ -67,6 +69,7 @@ export async function PATCH(
       leadId: leads.id,
       leadStatus: leads.status,
       runStatus: runs.status,
+      normalizedEmail: leads.normalizedEmail,
     })
     .from(leads)
     .innerJoin(runs, eq(runs.id, leads.runId))
@@ -110,5 +113,24 @@ export async function PATCH(
     .where(eq(leads.id, row.leadId))
     .returning();
 
-  return NextResponse.json({ lead: updated });
+  // Adress-Korrektur: hat sich die E-Mail geändert, wird sie sofort neu
+  // geprüft und ggf. werden fehlgeschlagene/übersprungene Messages in
+  // aktiven Blasts automatisch wieder in den Versand aufgenommen
+  // (Suppression hängt an der alten Adresse, nicht am Lead).
+  const oldEmail = (row.normalizedEmail ?? "").trim().toLowerCase();
+  const newEmail = (updated?.normalizedEmail ?? "").trim().toLowerCase();
+  let emailCheck: { status: string } | null = null;
+  let revivedMessages = 0;
+  if (newEmail && newEmail !== oldEmail) {
+    emailCheck = await checkEmailAddress(newEmail);
+    if (emailCheck.status === "ok" || emailCheck.status === "unknown") {
+      revivedMessages = await reviveMessagesForLead(
+        auth.user.id,
+        row.leadId,
+        newEmail,
+      );
+    }
+  }
+
+  return NextResponse.json({ lead: updated, emailCheck, revivedMessages });
 }

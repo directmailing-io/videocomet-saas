@@ -83,10 +83,13 @@ interface BlastPreview {
   noEmail: number;
   suppressed: number;
   duplicates: number;
-  credits: number;
+  /** Empfänger, die wegen des Schutz-Limits (max. 4 Mails in 30 Tagen) erst später drankommen. */
+  waiting: number;
+  waitingFrom: string | null;
   schedule: {
     mailsPerDay: number;
     estimatedSendDays: number;
+    mailboxCount: number;
     sendWindow: { days: number[]; startHour: number; endHour: number };
     timezone: string;
   } | null;
@@ -182,8 +185,8 @@ export function EmailBlastWizard({
     if (!q) return runs;
     return runs.filter((r) => r.name.toLowerCase().includes(q));
   }, [runs, runQuery]);
-  // ② Postfach / ③ Vorlage
-  const [mailboxId, setMailboxId] = React.useState<string | null>(null);
+  // ② Postfächer (Mehrfachauswahl = Rotation, Reihenfolge = Auswahl-Reihenfolge)
+  const [mailboxIds, setMailboxIds] = React.useState<string[]>([]);
   const [templateId, setTemplateId] = React.useState<string | null>(null);
   // ④ GIF
   // Default statt null: Ohne Config ging der Blast STILL ohne GIF raus,
@@ -241,7 +244,9 @@ export function EmailBlastWizard({
           window.location.origin,
         );
         if (runId) url.searchParams.set("runId", runId);
-        if (mailboxId) url.searchParams.set("mailboxId", mailboxId);
+        if (mailboxIds.length > 0) {
+          url.searchParams.set("mailboxIds", mailboxIds.join(","));
+        }
         const res = await fetch(url.toString());
         const json = await res.json().catch(() => null);
         if (!cancelled && res.ok) setPreview(json as BlastPreview);
@@ -252,9 +257,23 @@ export function EmailBlastWizard({
     return () => {
       cancelled = true;
     };
-  }, [campaignId, runId, mailboxId]);
+    // join: Array-Identität ändert sich bei jedem Toggle, Inhalt zählt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId, runId, mailboxIds.join(",")]);
 
-  const selectedMailbox = mailboxes?.find((m) => m.id === mailboxId) ?? null;
+  const selectedMailboxes = React.useMemo(
+    () =>
+      mailboxIds
+        .map((id) => mailboxes?.find((m) => m.id === id))
+        .filter((m): m is WizardMailbox => Boolean(m)),
+    [mailboxIds, mailboxes],
+  );
+
+  function toggleMailbox(id: string): void {
+    setMailboxIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
   const selectedTemplate = templates?.find((t) => t.id === templateId) ?? null;
 
   // GIF-Schritt nur relevant, wenn die Vorlage einen emailGif-Node enthält.
@@ -338,7 +357,7 @@ export function EmailBlastWizard({
 
   /** Schritt 6: Draft anlegen + sofort starten. */
   async function startBlast(): Promise<void> {
-    if (!mailboxId || !templateId) return;
+    if (mailboxIds.length === 0 || !templateId) return;
     setError(null);
     setStarting(true);
     try {
@@ -347,7 +366,7 @@ export function EmailBlastWizard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           templateId,
-          mailboxConnectionId: mailboxId,
+          mailboxConnectionIds: mailboxIds,
           runId,
         }),
       });
@@ -380,7 +399,7 @@ export function EmailBlastWizard({
     step === 0
       ? (preview?.sendable ?? 0) > 0
       : step === 1
-        ? Boolean(selectedMailbox)
+        ? selectedMailboxes.length > 0
         : step === 2
           ? Boolean(selectedTemplate?.isComplete)
           : true;
@@ -538,10 +557,16 @@ export function EmailBlastWizard({
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Inbox className="size-4 text-brand" /> Postfach wählen
+              <Inbox className="size-4 text-brand" /> Postfächer wählen
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-ink-soft">
+              Wählen Sie ein oder mehrere Postfächer. Bei mehreren Postfächern
+              verteilt VIDEOCOMET die E-Mails automatisch und der Versand geht
+              entsprechend schneller. In der Versand-Übersicht sehen Sie später
+              bei jeder E-Mail, über welches Postfach sie verschickt wurde.
+            </p>
             {mailboxes == null ? (
               <p className="text-sm text-ink-muted">Lade Postfächer…</p>
             ) : mailboxes.length === 0 ? (
@@ -556,22 +581,33 @@ export function EmailBlastWizard({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {mailboxes.map((m) => {
                   const connected = m.status === "connected";
+                  const selected = mailboxIds.includes(m.id);
                   return (
                     <button
                       key={m.id}
                       type="button"
                       disabled={!connected}
-                      onClick={() => setMailboxId(m.id)}
+                      onClick={() => toggleMailbox(m.id)}
                       className={cn(
                         "flex flex-col items-start gap-1.5 rounded-squircle-md p-4 text-left transition-all",
                         !connected && "cursor-not-allowed opacity-50",
-                        mailboxId === m.id
+                        selected
                           ? "ring-2 ring-brand bg-brand-soft/40"
                           : "bg-surface-soft hover:bg-surface-muted",
                       )}
                     >
                       <span className="flex w-full items-center justify-between gap-2">
-                        <span className="text-sm font-semibold text-ink">
+                        <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+                          <span
+                            className={cn(
+                              "inline-flex size-4 shrink-0 items-center justify-center rounded-full",
+                              selected
+                                ? "bg-brand text-white"
+                                : "bg-canvas-deep text-transparent",
+                            )}
+                          >
+                            <Check className="size-3" />
+                          </span>
                           {m.emailAddress}
                         </span>
                         <Badge
@@ -583,8 +619,7 @@ export function EmailBlastWizard({
                       </span>
                       <span className="text-xs text-ink-muted">
                         {m.provider === "m365" ? "Microsoft 365" : "SMTP/IMAP"} ·
-                        heute {m.sentToday}/{m.effectiveDailyLimit} · Warmup-Stufe{" "}
-                        {m.warmupStage}
+                        heute {m.sentToday}/{m.effectiveDailyLimit} Mails
                       </span>
                       <span className="text-xs text-ink-muted">
                         {formatSendWindow(m.sendWindow)}
@@ -594,6 +629,13 @@ export function EmailBlastWizard({
                 })}
               </div>
             )}
+            <p className="text-xs text-ink-muted">
+              Warum ein Tageslimit? E-Mail-Anbieter wie Google und Microsoft
+              erlauben nur eine begrenzte Zahl an Mails pro Tag und Postfach.
+              VIDEOCOMET hält sich automatisch daran, damit Ihr Postfach einen
+              guten Ruf behält und Ihre Mails ankommen. Neue Postfächer starten
+              mit 20 Mails pro Tag und steigern sich automatisch auf bis zu 50.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -753,7 +795,11 @@ export function EmailBlastWizard({
                     ? "Werktag"
                     : "Werktage"}
                   <span className="ml-2 text-sm font-normal text-ink-muted">
-                    bei {preview.schedule.mailsPerDay} Mails/Tag
+                    bei {preview.schedule.mailsPerDay} Mails/Tag über{" "}
+                    {preview.schedule.mailboxCount}{" "}
+                    {preview.schedule.mailboxCount === 1
+                      ? "Postfach"
+                      : "Postfächer"}
                   </span>
                 </p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -772,17 +818,47 @@ export function EmailBlastWizard({
                     <p className="text-[11px] text-ink-muted">Versandfähig</p>
                   </div>
                   <div className="rounded-squircle-sm bg-surface-soft px-4 py-3">
-                    <p className="text-sm font-medium text-ink">
-                      {preview.credits} Credits
-                    </p>
+                    <p className="text-sm font-medium text-ink">Inklusive</p>
                     <p className="text-[11px] text-ink-muted">
-                      1 Credit je 10 Mails
+                      Der E-Mail-Versand kostet keine Credits
                     </p>
                   </div>
                 </div>
+                {preview.schedule.estimatedSendDays > 5 &&
+                  preview.schedule.mailboxCount < 4 && (
+                    <div className="rounded-squircle-sm bg-brand-soft/50 px-4 py-3 text-sm text-ink">
+                      <p className="font-medium">Schneller versenden?</p>
+                      <p className="mt-1 text-xs text-ink-soft">
+                        Verbinden Sie weitere Postfächer und wählen Sie sie in
+                        Schritt 2 mit aus. Der Versand verteilt sich dann
+                        automatisch. Das Tageslimit pro Postfach kommt von den
+                        E-Mail-Anbietern und schützt Ihren Absender-Ruf.
+                      </p>
+                    </div>
+                  )}
+                {(preview.waiting ?? 0) > 0 && (
+                  <div className="rounded-squircle-sm bg-surface-soft px-4 py-3 text-sm text-ink">
+                    <p className="font-medium">
+                      {preview.waiting}{" "}
+                      {preview.waiting === 1 ? "Empfänger wartet" : "Empfänger warten"}{" "}
+                      kurz
+                    </p>
+                    <p className="mt-1 text-xs text-ink-soft">
+                      Zum Schutz Ihres Absender-Rufs verschickt VIDEOCOMET
+                      höchstens 4 E-Mails in 30 Tagen an dieselbe Adresse.
+                      Diese Empfänger haben das Limit schon erreicht. Ihre
+                      E-Mail wird automatisch verschickt, sobald es wieder
+                      möglich ist
+                      {preview.waitingFrom
+                        ? ` (frühestens ab ${new Date(preview.waitingFrom).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })})`
+                        : ""}
+                      . Sie müssen nichts tun.
+                    </p>
+                  </div>
+                )}
                 <p className="text-xs text-ink-muted">
-                  Der Versand läuft automatisch verteilt im Sendefenster des
-                  Postfachs — pausieren oder abbrechen ist jederzeit möglich.
+                  Der Versand läuft automatisch verteilt im Sendefenster.
+                  Pausieren oder abbrechen ist jederzeit möglich.
                 </p>
               </>
             ) : (
@@ -861,9 +937,9 @@ export function EmailBlastWizard({
                 </span>
               </label>
               <p className="text-xs text-ink-muted">
-                Beim Start werden {preview?.credits ?? "…"} Credits berechnet (
-                {preview?.sendable ?? "…"} Empfänger). Der Bestätigungstext wird
-                protokolliert.
+                Der E-Mail-Versand ist in Ihrer Grundgebühr enthalten und
+                kostet keine Credits ({preview?.sendable ?? "…"} Empfänger).
+                Der Bestätigungstext wird protokolliert.
               </p>
             </CardContent>
           </Card>
