@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   CalendarClock,
   ChevronRight,
+  Mail,
   Mailbox,
   Undo2,
 } from "lucide-react";
@@ -33,6 +34,7 @@ export interface VersandRunItem {
   campaignName: string;
   createdAt: string;
   completedTotal: number;
+  withPdf: number;
   letterOpen: number;
   letterInProgress: number;
   letterSent: number;
@@ -42,6 +44,10 @@ export interface VersandRunItem {
   earliestPlannedAt: string | null;
   returned: number;
   lastSentAt: string | null;
+  emailTotal: number;
+  emailSent: number;
+  emailScheduled: number;
+  emailReplied: number;
 }
 
 function formatDate(iso: string | null): string {
@@ -57,12 +63,49 @@ function formatDate(iso: string | null): string {
   }
 }
 
-function RunCard({ run }: { run: VersandRunItem }) {
-  const pct =
-    run.completedTotal > 0
-      ? Math.round((run.letterSent / run.completedTotal) * 100)
-      : 0;
+function ChannelProgress({
+  icon,
+  label,
+  sent,
+  total,
+  barClass,
+  info,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  sent: number;
+  total: number;
+  barClass: string;
+  info?: React.ReactNode;
+}) {
+  const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2 text-sm">
+        <span className="inline-flex items-center gap-1.5 font-medium text-ink">
+          {icon}
+          {label}
+        </span>
+        <span className="tabular-nums text-xs text-ink-muted">
+          {sent} von {total} versendet
+        </span>
+      </div>
+      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-surface-muted">
+        <div
+          className={`h-full rounded-full transition-all ${barClass}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {info && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
+          {info}
+        </div>
+      )}
+    </div>
+  );
+}
 
+function RunCard({ run }: { run: VersandRunItem }) {
   return (
     <Link
       href={`/versand/${run.runId}`}
@@ -80,38 +123,62 @@ function RunCard({ run }: { run: VersandRunItem }) {
         <ChevronRight className="mt-1 size-4 shrink-0 text-ink-muted transition-colors group-hover:text-ink" />
       </div>
 
-      <div className="mt-4">
-        <div className="flex items-baseline justify-between text-sm">
-          <span className="font-medium text-ink">
-            {run.letterSent} von {run.completedTotal} Briefen versendet
-          </span>
-          <span className="tabular-nums text-xs text-ink-muted">{pct} %</span>
-        </div>
-        <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-surface-muted">
-          <div
-            className="h-full rounded-full bg-emerald-500 transition-all"
-            style={{ width: `${pct}%` }}
+      <div className="mt-4 space-y-4">
+        {run.withPdf > 0 && (
+          <ChannelProgress
+            icon={<Mailbox className="size-3.5 text-ink-muted" />}
+            label="Per Post"
+            sent={run.letterSent}
+            total={run.withPdf}
+            barClass="bg-emerald-500"
+            info={
+              <>
+                <span className="inline-flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-ink-muted/50" />
+                  {run.letterOpen} offen
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-amber-500" />
+                  {run.letterInProgress} in Bearbeitung
+                </span>
+                {run.letterSent > 0 && (
+                  <span className="inline-flex items-center gap-1 font-medium text-brand">
+                    {run.reacted} Reaktion{run.reacted === 1 ? "" : "en"}
+                  </span>
+                )}
+              </>
+            }
           />
-        </div>
-      </div>
+        )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
-        <span className="inline-flex items-center gap-1">
-          <span className="size-1.5 rounded-full bg-ink-muted/50" />
-          {run.letterOpen} offen
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="size-1.5 rounded-full bg-amber-500" />
-          {run.letterInProgress} in Bearbeitung
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="size-1.5 rounded-full bg-emerald-500" />
-          {run.letterSent} versendet
-        </span>
-        {run.letterSent > 0 && (
-          <span className="inline-flex items-center gap-1 font-medium text-brand">
-            {run.reacted} Reaktion{run.reacted === 1 ? "" : "en"}
-          </span>
+        {run.emailTotal > 0 ? (
+          <ChannelProgress
+            icon={<Mail className="size-3.5 text-ink-muted" />}
+            label="Per E-Mail"
+            sent={run.emailSent}
+            total={run.emailTotal}
+            barClass="bg-brand"
+            info={
+              <>
+                {run.emailScheduled > 0 && (
+                  <span className="inline-flex items-center gap-1">
+                    <span className="size-1.5 rounded-full bg-amber-500" />
+                    {run.emailScheduled} in Warteschlange
+                  </span>
+                )}
+                {run.emailReplied > 0 && (
+                  <span className="inline-flex items-center gap-1 font-medium text-brand">
+                    {run.emailReplied} Antwort{run.emailReplied === 1 ? "" : "en"}
+                  </span>
+                )}
+              </>
+            }
+          />
+        ) : (
+          <p className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
+            <Mail className="size-3.5" />
+            Per E-Mail — noch nichts versendet
+          </p>
         )}
       </div>
 

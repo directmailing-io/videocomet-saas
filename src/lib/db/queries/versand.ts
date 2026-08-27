@@ -5,7 +5,7 @@
 
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { campaigns, leads, runs } from "@/lib/db/schema";
+import { campaigns, emailBlasts, emailMessages, leads, runs } from "@/lib/db/schema";
 
 export interface VersandRunRow {
   runId: string;
@@ -16,6 +16,8 @@ export interface VersandRunRow {
   createdAt: Date;
   /** Fertige (exportierbare) Leads. */
   completedTotal: number;
+  /** Fertige Leads mit Brief-PDF — 0 ⇒ Kampagne ohne Briefe, Brief-UI ausblenden. */
+  withPdf: number;
   letterOpen: number;
   letterInProgress: number;
   letterSent: number;
@@ -28,6 +30,14 @@ export interface VersandRunRow {
   earliestPlannedAt: Date | null;
   returned: number;
   lastSentAt: Date | null;
+  /** E-Mail-Kanal: Leads dieser Runde mit mind. einer Blast-Message. */
+  emailTotal: number;
+  /** Leads mit versendeter E-Mail (inkl. Antworten). */
+  emailSent: number;
+  /** Leads, deren E-Mail noch in der Warteschlange steht. */
+  emailScheduled: number;
+  /** Leads mit Antwort auf eine E-Mail. */
+  emailReplied: number;
 }
 
 export async function listVersandRuns(userId: string): Promise<VersandRunRow[]> {
@@ -42,6 +52,7 @@ export async function listVersandRuns(userId: string): Promise<VersandRunRow[]> 
       campaignName: campaigns.name,
       createdAt: runs.createdAt,
       completedTotal: sql<number>`COUNT(*) FILTER (WHERE ${completedCond})::int`,
+      withPdf: sql<number>`COUNT(*) FILTER (WHERE ${completedCond} AND ${leads.pdfUrl} IS NOT NULL)::int`,
       letterOpen: sql<number>`COUNT(*) FILTER (WHERE ${completedCond} AND ${leads.letterStatus} = 'open')::int`,
       letterInProgress: sql<number>`COUNT(*) FILTER (WHERE ${completedCond} AND ${leads.letterStatus} = 'in_progress')::int`,
       letterSent: sql<number>`COUNT(*) FILTER (WHERE ${completedCond} AND ${leads.letterStatus} = 'sent')::int`,
@@ -70,9 +81,36 @@ export async function listVersandRuns(userId: string): Promise<VersandRunRow[]> 
     .having(sql`COUNT(*) FILTER (WHERE ${completedCond}) > 0`)
     .orderBy(desc(runs.createdAt));
 
-  return rows.map((r) => ({
-    ...r,
-    earliestPlannedAt: r.earliestPlannedAt ? new Date(r.earliestPlannedAt) : null,
-    lastSentAt: r.lastSentAt ? new Date(r.lastSentAt) : null,
-  }));
+  // E-Mail-Kanal pro Runde: getrennt aggregiert (JOIN auf email_messages im
+  // Haupt-Query würde die COUNT(*)-FILTER-Werte vervielfachen). Ein Lead
+  // zählt als "versendet", sobald mindestens eine Mail raus ist oder
+  // beantwortet wurde (bounced/failed zählen nicht als Erfolg).
+  const emailRows = await db
+    .select({
+      runId: leads.runId,
+      emailTotal: sql<number>`COUNT(DISTINCT ${emailMessages.leadId})::int`,
+      emailSent: sql<number>`COUNT(DISTINCT ${emailMessages.leadId}) FILTER (WHERE ${emailMessages.status} = 'sent' OR ${emailMessages.repliedAt} IS NOT NULL)::int`,
+      emailScheduled: sql<number>`COUNT(DISTINCT ${emailMessages.leadId}) FILTER (WHERE ${emailMessages.status} = 'scheduled')::int`,
+      emailReplied: sql<number>`COUNT(DISTINCT ${emailMessages.leadId}) FILTER (WHERE ${emailMessages.repliedAt} IS NOT NULL)::int`,
+    })
+    .from(emailMessages)
+    .innerJoin(emailBlasts, eq(emailBlasts.id, emailMessages.blastId))
+    .innerJoin(leads, eq(leads.id, emailMessages.leadId))
+    .where(eq(emailBlasts.userId, userId))
+    .groupBy(leads.runId);
+
+  const emailByRun = new Map(emailRows.map((e) => [e.runId, e]));
+
+  return rows.map((r) => {
+    const email = emailByRun.get(r.runId);
+    return {
+      ...r,
+      earliestPlannedAt: r.earliestPlannedAt ? new Date(r.earliestPlannedAt) : null,
+      lastSentAt: r.lastSentAt ? new Date(r.lastSentAt) : null,
+      emailTotal: email?.emailTotal ?? 0,
+      emailSent: email?.emailSent ?? 0,
+      emailScheduled: email?.emailScheduled ?? 0,
+      emailReplied: email?.emailReplied ?? 0,
+    };
+  });
 }

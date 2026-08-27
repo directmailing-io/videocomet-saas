@@ -21,6 +21,7 @@ import {
   ChevronDown,
   FileDown,
   Mail,
+  Mailbox,
   Search,
   Undo2,
 } from "lucide-react";
@@ -80,7 +81,10 @@ export interface VersandLeadItem {
 }
 
 type LetterStatus = "open" | "in_progress" | "sent";
-type StatusFilter = "all" | LetterStatus;
+type StatusFilter = "all" | LetterStatus | "email_sent";
+
+/** E-Mail gilt als versendet, sobald sie raus ist (inkl. Klick/Antwort). */
+const EMAIL_SENT_STATUSES = new Set(["sent", "clicked", "replied"]);
 type ExtraFilter =
   | "all"
   | "sent_no_reaction"
@@ -232,7 +236,12 @@ export function VersandRunView({
     const sevenDaysAgo = Date.now() - 7 * 86_400_000;
 
     return leads.filter((l) => {
-      if (statusFilter !== "all" && l.letterStatus !== statusFilter) return false;
+      if (statusFilter === "email_sent") {
+        if (!l.emailStatus || !EMAIL_SENT_STATUSES.has(l.emailStatus))
+          return false;
+      } else if (statusFilter !== "all" && l.letterStatus !== statusFilter) {
+        return false;
+      }
       if (abFilter !== "all" && l.abVariant !== abFilter) return false;
       if (extraFilter === "sent_no_reaction") {
         if (l.letterStatus !== "sent" || reactedAfterSend(l)) return false;
@@ -292,6 +301,23 @@ export function VersandRunView({
   }, [columns, sortBy]);
 
   // ── KPIs ─────────────────────────────────────────────────────────────────
+  // Kampagne ohne Brief-PDFs ⇒ komplette Brief-Steuerung ausblenden — der
+  // User kann hier dann nur E-Mails verschicken.
+  const hasLetters = React.useMemo(() => leads.some((l) => l.hasPdf), [leads]);
+
+  const emailCounts = React.useMemo(() => {
+    let sent = 0,
+      scheduled = 0,
+      replied = 0;
+    for (const l of leads) {
+      if (!l.emailStatus) continue;
+      if (EMAIL_SENT_STATUSES.has(l.emailStatus)) sent++;
+      if (l.emailStatus === "scheduled") scheduled++;
+      if (l.emailStatus === "replied") replied++;
+    }
+    return { sent, scheduled, replied };
+  }, [leads]);
+
   const counts = React.useMemo(() => {
     let open = 0,
       inProgress = 0,
@@ -474,11 +500,65 @@ export function VersandRunView({
     },
   ];
 
+  const emailSubParts: string[] = [];
+  if (emailCounts.scheduled > 0)
+    emailSubParts.push(`${emailCounts.scheduled} in Warteschlange`);
+  if (emailCounts.replied > 0)
+    emailSubParts.push(
+      `${emailCounts.replied} Antwort${emailCounts.replied === 1 ? "" : "en"}`,
+    );
+  const emailKpiCard = {
+    key: "email_sent" as StatusFilter,
+    label: "Versendet",
+    value: emailCounts.sent,
+    sub:
+      emailSubParts.length > 0
+        ? emailSubParts.join(" · ")
+        : emailCounts.sent === 0
+          ? "Noch keine E-Mails versendet"
+          : undefined,
+    dot: "bg-brand",
+  };
+
+  function renderKpiCard(c: {
+    key: StatusFilter;
+    label: string;
+    value: number;
+    sub?: string;
+    dot: string;
+  }) {
+    const active = statusFilter === c.key;
+    return (
+      <button
+        key={c.key}
+        type="button"
+        onClick={() => setStatusFilter(active ? "all" : c.key)}
+        className={cn(
+          "h-full w-full rounded-squircle-lg bg-surface p-4 text-left shadow-card transition-all",
+          active
+            ? "ring-2 ring-brand/40"
+            : "hover:shadow-card-hover hover:-translate-y-0.5",
+        )}
+        aria-pressed={active}
+      >
+        <div className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+          <span className={cn("size-2 rounded-full", c.dot)} />
+          {c.label}
+          {active && <span className="text-brand">· Filter aktiv</span>}
+        </div>
+        <div className="mt-1 text-2xl font-bold tabular-nums text-ink">
+          {c.value}
+        </div>
+        {c.sub && <div className="text-xs text-ink-muted">{c.sub}</div>}
+      </button>
+    );
+  }
+
   return (
     <>
       <PageHeader
         title={runName}
-        subtitle={`Brief-Versand · Kampagne ${campaignName}`}
+        subtitle={`Versand · Kampagne ${campaignName}`}
         actions={
           <Button asChild variant="ghost" iconLeft={<ArrowLeft className="size-4" />}>
             <Link href="/versand">Zur Versandzentrale</Link>
@@ -511,35 +591,26 @@ export function VersandRunView({
         </p>
       )}
 
-      {/* KPI-Karten = Status-Filter */}
-      <div className="mb-4 grid grid-cols-3 gap-3">
-        {kpiCards.map((c) => {
-          const active = statusFilter === c.key;
-          return (
-            <button
-              key={c.key}
-              type="button"
-              onClick={() => setStatusFilter(active ? "all" : c.key)}
-              className={cn(
-                "rounded-squircle-lg bg-surface p-4 text-left shadow-card transition-all",
-                active
-                  ? "ring-2 ring-brand/40"
-                  : "hover:shadow-card-hover hover:-translate-y-0.5",
-              )}
-              aria-pressed={active}
-            >
-              <div className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
-                <span className={cn("size-2 rounded-full", c.dot)} />
-                {c.label}
-                {active && <span className="text-brand">· Filter aktiv</span>}
-              </div>
-              <div className="mt-1 text-2xl font-bold tabular-nums text-ink">
-                {c.value}
-              </div>
-              {c.sub && <div className="text-xs text-ink-muted">{c.sub}</div>}
-            </button>
-          );
-        })}
+      {/* KPI-Karten = Status-Filter, klar nach Kanal gruppiert */}
+      <div className="mb-4 grid gap-x-4 gap-y-3 lg:grid-cols-4">
+        {hasLetters && (
+          <div className="lg:col-span-3">
+            <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+              <Mailbox className="size-3.5" />
+              Briefe per Post
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              {kpiCards.map((c) => renderKpiCard(c))}
+            </div>
+          </div>
+        )}
+        <div className={hasLetters ? undefined : "max-w-xs"}>
+          <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+            <Mail className="size-3.5" />
+            E-Mails
+          </p>
+          {renderKpiCard(emailKpiCard)}
+        </div>
       </div>
 
       {/* Werkzeugleiste */}
@@ -587,21 +658,23 @@ export function VersandRunView({
           </Button>
         )}
 
-        <Select
-          value={extraFilter}
-          onValueChange={(v) => setExtraFilter(v as ExtraFilter)}
-        >
-          <SelectTrigger className="w-56">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {EXTRA_FILTER_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.value === "all" ? o.label : `Filter: ${o.label}`}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {hasLetters && (
+          <Select
+            value={extraFilter}
+            onValueChange={(v) => setExtraFilter(v as ExtraFilter)}
+          >
+            <SelectTrigger className="w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {EXTRA_FILTER_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.value === "all" ? o.label : `Filter: ${o.label}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         {abActive && (
           <Select
@@ -653,7 +726,9 @@ export function VersandRunView({
                     {col}
                   </th>
                 ))}
-                <th className="px-3 py-2.5 font-semibold">Brief</th>
+                {hasLetters && (
+                  <th className="px-3 py-2.5 font-semibold">Brief</th>
+                )}
                 <th className="px-3 py-2.5 font-semibold">E-Mail</th>
                 <th className="px-4 py-2.5 font-semibold">Reaktion</th>
               </tr>
@@ -692,6 +767,7 @@ export function VersandRunView({
                         <span className="line-clamp-1">{l.data?.[col] ?? "—"}</span>
                       </td>
                     ))}
+                    {hasLetters && (
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Badge variant={meta.badge} dot>
@@ -716,6 +792,7 @@ export function VersandRunView({
                         )}
                       </div>
                     </td>
+                    )}
                     <td className="px-3 py-3 text-xs text-ink-muted">
                       {l.emailStatus
                         ? (EMAIL_STATUS_LABELS[l.emailStatus] ?? l.emailStatus)
@@ -754,24 +831,28 @@ export function VersandRunView({
               Aufheben
             </button>
             <span className="mx-1 h-4 w-px bg-white/20" />
-            <button
-              type="button"
-              onClick={() => setExportOpen(true)}
-              disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-white/90 disabled:opacity-50"
-            >
-              <FileDown className="size-3.5" />
-              PDFs exportieren
-            </button>
-            <button
-              type="button"
-              onClick={() => setSentDialogIds(selectedVisible)}
-              disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
-            >
-              <CheckCircle2 className="size-3.5" />
-              Als versendet markieren
-            </button>
+            {hasLetters && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setExportOpen(true)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-white/90 disabled:opacity-50"
+                >
+                  <FileDown className="size-3.5" />
+                  PDFs exportieren
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSentDialogIds(selectedVisible)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="size-3.5" />
+                  Als versendet markieren
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={emailToSelection}
@@ -781,6 +862,7 @@ export function VersandRunView({
               <Mail className="size-3.5" />
               E-Mail an Auswahl
             </button>
+            {hasLetters && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -849,6 +931,7 @@ export function VersandRunView({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            )}
           </div>
         </div>
       )}

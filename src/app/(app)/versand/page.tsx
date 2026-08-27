@@ -43,13 +43,16 @@ export default async function VersandPage({
   return (
     <VersandView
       initialTab={tab === "emails" ? "emails" : "briefe"}
-      runs={versandRuns.map((r) => ({
+      // Kampagnen ohne Brief-PDFs haben nichts im Briefe-Tab verloren —
+      // deren E-Mail-Versand läuft komplett über den E-Mails-Tab.
+      runs={versandRuns.filter((r) => r.withPdf > 0).map((r) => ({
         runId: r.runId,
         runName: r.runName,
         campaignId: r.campaignId,
         campaignName: r.campaignName,
         createdAt: r.createdAt.toISOString(),
         completedTotal: r.completedTotal,
+        withPdf: r.withPdf,
         letterOpen: r.letterOpen,
         letterInProgress: r.letterInProgress,
         letterSent: r.letterSent,
@@ -61,6 +64,10 @@ export default async function VersandPage({
           : null,
         returned: r.returned,
         lastSentAt: r.lastSentAt ? r.lastSentAt.toISOString() : null,
+        emailTotal: r.emailTotal,
+        emailSent: r.emailSent,
+        emailScheduled: r.emailScheduled,
+        emailReplied: r.emailReplied,
       }))}
       blasts={blasts.map((b) => ({
         id: b.id,
