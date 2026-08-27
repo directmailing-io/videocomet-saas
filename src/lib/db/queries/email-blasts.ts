@@ -1180,6 +1180,8 @@ export interface LeadEmailHistoryEntry {
   status: EmailMessageStatus;
   repliedAt: Date | null;
   subject: string;
+  /** Absender-Postfach (Rotation!) — der User will sehen, von welcher Adresse die Mail rausging. */
+  fromAddress: string;
 }
 
 /**
@@ -1198,10 +1200,15 @@ export async function getLeadEmailHistoryForRun(
       status: emailMessages.status,
       repliedAt: emailMessages.repliedAt,
       subject: sql<string>`COALESCE(${emailBlasts.contentSnapshot}->>'subject', '')`,
+      fromAddress: sql<string>`COALESCE(${mailboxConnections.emailAddress}, '')`,
     })
     .from(emailMessages)
     .innerJoin(emailBlasts, eq(emailBlasts.id, emailMessages.blastId))
     .innerJoin(leads, eq(leads.id, emailMessages.leadId))
+    .leftJoin(
+      mailboxConnections,
+      eq(mailboxConnections.id, emailMessages.mailboxConnectionId),
+    )
     .where(and(eq(leads.runId, runId), eq(emailBlasts.userId, userId)))
     .orderBy(emailMessages.createdAt);
 
@@ -1213,6 +1220,7 @@ export async function getLeadEmailHistoryForRun(
       status: r.status,
       repliedAt: r.repliedAt,
       subject: r.subject,
+      fromAddress: r.fromAddress,
     });
   }
   return out;

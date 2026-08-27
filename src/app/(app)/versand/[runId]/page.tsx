@@ -91,6 +91,7 @@ export default async function VersandRunPage({
           status: m.status as string,
           repliedAt: m.repliedAt ? m.repliedAt.toISOString() : null,
           subject: m.subject,
+          fromAddress: m.fromAddress || null,
         })),
       }))}
     />

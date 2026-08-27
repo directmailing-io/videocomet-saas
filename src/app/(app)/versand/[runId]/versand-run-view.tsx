@@ -88,6 +88,7 @@ export interface LeadEmailHistoryItem {
   status: string;
   repliedAt: string | null;
   subject: string;
+  fromAddress: string | null;
 }
 
 type LetterStatus = "open" | "in_progress" | "sent" | "discarded";
@@ -125,8 +126,8 @@ const LETTER_STATUS_META: Record<
 };
 
 const EMAIL_STATUS_LABELS: Record<string, string> = {
-  scheduled: "Geplant",
-  sent: "Gesendet",
+  scheduled: "Versand geplant",
+  sent: "Versendet",
   clicked: "Geklickt",
   replied: "Antwort erhalten",
   bounced: "Unzustellbar",
@@ -200,14 +201,13 @@ function formatDateTime(iso: string | null): string {
  * Hover-Text für die E-Mail-Zelle: JEDE verschickte Mail mit Zeitpunkt,
  * Betreff (Vorlage), Status und ggf. Antwort-Datum — eine Zeile pro Mail.
  */
-function emailHistoryTitle(
-  history: { sentAt: string | null; status: string; repliedAt: string | null; subject: string | null }[],
-): string {
+function emailHistoryTitle(history: LeadEmailHistoryItem[]): string {
   return history
     .map((m) =>
       [
         m.sentAt ? formatDateTime(m.sentAt) : "Noch nicht gesendet",
         m.subject ? `„${m.subject}“` : null,
+        m.fromAddress ? `von ${m.fromAddress}` : null,
         EMAIL_STATUS_LABELS[m.status] ?? m.status,
         m.repliedAt ? `Antwort am ${formatDate(m.repliedAt)}` : null,
       ]
@@ -995,10 +995,14 @@ export function VersandRunView({
                             })()}
                           </span>
                         </button>
+                      ) : l.email ? (
+                        <span className="mt-0.5 inline-block">
+                          <Badge variant="neutral" dot>
+                            Offen
+                          </Badge>
+                        </span>
                       ) : (
-                        !l.email && (
-                          <span className="text-xs text-ink-muted">—</span>
-                        )
+                        <span className="text-xs text-ink-muted">—</span>
                       )}
                     </td>
                     <td
@@ -1762,6 +1766,11 @@ function LeadDetailDialog({
                         {m.subject && (
                           <p className="mt-1 text-sm text-ink line-clamp-1">
                             „{m.subject}“
+                          </p>
+                        )}
+                        {m.fromAddress && (
+                          <p className="mt-0.5 text-[11px] text-ink-muted">
+                            versendet von {m.fromAddress}
                           </p>
                         )}
                         {m.repliedAt && (

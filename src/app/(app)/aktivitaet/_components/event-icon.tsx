@@ -6,8 +6,11 @@ import {
   ChevronsDown,
   Clock,
   Eye,
+  FileDown,
   Link as LinkIcon,
   Mail,
+  Mailbox,
+  MailX,
   MousePointerClick,
   Play,
   Target,
@@ -60,6 +63,10 @@ const KIND_TO_ICON: Record<
   time_on_page: { Icon: Clock, category: "neutral", label: "Verweildauer" },
   link_click: { Icon: LinkIcon, category: "interact", label: "Link geklickt" },
   form_submit: { Icon: Mail, category: "milestone", label: "Formular-Anfrage" },
+  letter_exported: { Icon: FileDown, category: "neutral", label: "Brief-PDF heruntergeladen" },
+  letter_sent: { Icon: Mailbox, category: "milestone", label: "Brief per Post versendet" },
+  letter_status_changed: { Icon: Mailbox, category: "neutral", label: "Brief-Status geändert" },
+  email_unsubscribe: { Icon: MailX, category: "neutral", label: "Vom E-Mail-Verteiler abgemeldet" },
 };
 
 const categoryStyles: Record<IconCategory, { bg: string; fg: string }> = {
@@ -187,7 +194,54 @@ export function describeKind(kind: ActivityKind, payload?: Record<string, unknow
       if (name) return `Formular-Anfrage von ${name}`;
       return "Formular-Anfrage";
     }
+    case "letter_exported":
+      return payload?.partial === true
+        ? "Brief-PDF heruntergeladen (Teilexport)"
+        : "Brief-PDF heruntergeladen";
+    case "letter_sent": {
+      const sentAt =
+        payload && typeof payload.sentAt === "string" ? payload.sentAt : null;
+      if (sentAt) {
+        try {
+          const d = new Intl.DateTimeFormat("de-DE", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          }).format(new Date(sentAt));
+          return `Brief per Post versendet — Versanddatum ${d}`;
+        } catch {
+          // fällt auf das Label ohne Datum zurück
+        }
+      }
+      return "Brief per Post versendet";
+    }
+    case "letter_status_changed": {
+      if (payload?.returned === true)
+        return "Brief kam als Rückläufer zurück (unzustellbar)";
+      if (payload?.returned === false) return "Rückläufer-Markierung entfernt";
+      const from =
+        payload && typeof payload.from === "string"
+          ? LETTER_STATUS_DE[payload.from] ?? payload.from
+          : null;
+      const to =
+        payload && typeof payload.to === "string"
+          ? LETTER_STATUS_DE[payload.to] ?? payload.to
+          : null;
+      if (from && to) return `Brief-Status geändert: ${from} → ${to}`;
+      if (to) return `Brief-Status auf „${to}“ gesetzt`;
+      return "Brief-Status geändert";
+    }
+    case "email_unsubscribe":
+      return "Vom E-Mail-Verteiler abgemeldet";
     default:
-      return String(kind).replace(/_/g, " ");
+      // Unbekannte Kinds nie roh-englisch anzeigen — generisches Label.
+      return KIND_TO_ICON[kind]?.label ?? "Aktivität";
   }
 }
+
+const LETTER_STATUS_DE: Record<string, string> = {
+  open: "Offen",
+  in_progress: "In Bearbeitung",
+  sent: "Versendet",
+  discarded: "Aussortiert",
+};

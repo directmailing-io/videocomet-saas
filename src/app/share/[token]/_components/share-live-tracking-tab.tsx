@@ -75,8 +75,8 @@ function describeKind(
       return label ? `hat den CTA „${label}" geklickt` : "hat den CTA geklickt";
     }
     default:
-      // Sollte serverseitig schon herausgefiltert sein.
-      return `Aktivität: ${kind.replace(/_/g, " ")}`;
+      // Sollte serverseitig schon herausgefiltert sein — nie rohes Kind zeigen.
+      return "war aktiv";
   }
 }
 

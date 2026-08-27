@@ -1096,8 +1096,29 @@ function eventLabel(kind: string): string {
       return "CTA geklickt";
     case "form_submit":
       return "Formular-Anfrage";
+    case "cta_hover":
+      return "CTA überflogen";
+    case "scroll_depth":
+      return "Tief gescrollt";
+    case "time_on_page":
+      return "Verweildauer";
+    case "link_click":
+      return "Link geklickt";
+    case "video_mute":
+      return "Ton stumm geschaltet";
+    case "video_unmute":
+      return "Ton eingeschaltet";
+    case "letter_exported":
+      return "Brief-PDF heruntergeladen";
+    case "letter_sent":
+      return "Brief per Post versendet";
+    case "letter_status_changed":
+      return "Brief-Status geändert";
+    case "email_unsubscribe":
+      return "Vom E-Mail-Verteiler abgemeldet";
     default:
-      return kind;
+      // Nie rohe englische Event-Kinds anzeigen.
+      return "Aktivität";
   }
 }
 
