@@ -1179,7 +1179,7 @@ function ExportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="sm">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>
             {leadIds.length} Brief{leadIds.length === 1 ? "" : "e"} exportieren
@@ -1293,7 +1293,7 @@ function PostExportDialog({
 
   return (
     <Dialog open={ids !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent size="sm">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>ZIP heruntergeladen — wie geht es weiter?</DialogTitle>
           <DialogDescription>
@@ -1382,7 +1382,7 @@ function MarkSentDialog({
 
   return (
     <Dialog open={ids !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent size="sm">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>
             {n} Brief{n === 1 ? "" : "e"} als versendet markieren
@@ -1653,7 +1653,7 @@ function PlanDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="sm">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Versandtermin planen</DialogTitle>
           <DialogDescription>
