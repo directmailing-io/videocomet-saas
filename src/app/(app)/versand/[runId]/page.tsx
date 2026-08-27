@@ -67,9 +67,12 @@ export default async function VersandRunPage({
       leads={completed.map((l) => ({
         id: l.id,
         rowIndex: l.rowIndex,
+        contactId: l.contactId ?? null,
+        email: l.normalizedEmail ?? null,
         data: l.data as Record<string, string>,
         abVariant: l.abVariant ?? null,
         hasPdf: !!l.pdfUrl,
+        hasEnvelope: !!l.envelopePdfUrl,
         letterStatus: l.letterStatus,
         letterSentAt: l.letterSentAt ? l.letterSentAt.toISOString() : null,
         letterExportedAt: l.letterExportedAt

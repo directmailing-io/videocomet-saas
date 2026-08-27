@@ -162,13 +162,11 @@ export function VersandView({
                 <th className="px-4 py-2.5 font-semibold">Kanäle</th>
                 <th className="px-4 py-2.5 font-semibold">Briefe per Post</th>
                 <th className="px-4 py-2.5 font-semibold">E-Mails</th>
-                <th className="px-4 py-2.5 font-semibold">Reaktionen</th>
                 <th className="px-6 py-2.5" />
               </tr>
             </thead>
             <tbody>
               {runs.map((r) => {
-                const reactions = r.reacted + r.emailReplied;
                 return (
                   <tr
                     key={r.runId}
@@ -232,9 +230,7 @@ export function VersandView({
                           }
                         />
                       ) : (
-                        <span className="text-xs text-ink-muted">
-                          Keine Briefe in dieser Kampagne
-                        </span>
+                        <span className="text-ink-muted">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3.5">
@@ -253,15 +249,6 @@ export function VersandView({
                         <span className="text-xs text-ink-muted">
                           Noch keine versendet
                         </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      {reactions > 0 ? (
-                        <span className="font-medium tabular-nums text-brand">
-                          {reactions}
-                        </span>
-                      ) : (
-                        <span className="text-ink-muted">—</span>
                       )}
                     </td>
                     <td className="px-6 py-3.5 text-right">

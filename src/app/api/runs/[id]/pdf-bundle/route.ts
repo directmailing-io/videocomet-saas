@@ -64,6 +64,8 @@ const bodySchema = z.object({
   sortDir: sortDirSchema.optional(),
   /** Teilexport (Versandzentrale): nur diese Leads. Fehlt → alle. */
   leadIds: z.array(z.string().uuid()).min(1).max(5000).optional(),
+  /** Nur Umschläge (Versandzentrale): keine Briefe im ZIP, kein Export-Protokoll. */
+  envelopesOnly: z.boolean().optional(),
 });
 
 export async function POST(
@@ -80,6 +82,7 @@ export async function POST(
     sortBy?: string;
     sortDir?: BundleSortDir;
     leadIds?: string[];
+    envelopesOnly?: boolean;
   };
   try {
     const json = await req.json();
@@ -90,6 +93,8 @@ export async function POST(
       sortBy: typeof json.sortBy === "string" ? json.sortBy : undefined,
       sortDir: typeof json.sortDir === "string" ? json.sortDir : undefined,
       leadIds: Array.isArray(json.leadIds) ? json.leadIds : undefined,
+      envelopesOnly:
+        typeof json.envelopesOnly === "boolean" ? json.envelopesOnly : undefined,
     });
   } catch (err) {
     return NextResponse.json(
@@ -110,6 +115,7 @@ export async function POST(
     body.sortBy,
     body.sortDir ?? "asc",
     body.leadIds,
+    body.envelopesOnly ?? false,
   );
 }
 
@@ -263,6 +269,7 @@ async function buildBundle(
   sortBy: string | undefined,
   sortDir: BundleSortDir,
   leadIds?: string[],
+  envelopesOnly = false,
 ): Promise<Response> {
   let run;
   try {
@@ -315,7 +322,9 @@ async function buildBundle(
   }
 
   const baseName = sanitizeBaseName(baseNameInput, run.name);
-  const zipFilename = `${baseName}_pdf-bundle.zip`;
+  const zipFilename = envelopesOnly
+    ? `${baseName}_umschlaege.zip`
+    : `${baseName}_pdf-bundle.zip`;
 
   // Beide via dynamic import — Next-Webpack mangled sonst die Default-
   // Resolution (archiver-Bug). Dynamic import resolved at runtime.
@@ -329,6 +338,13 @@ async function buildBundle(
   const warnings: string[] = [];
   // Umschläge nur bauen, wenn die Runde überhaupt Umschläge hat.
   const hasEnvelopes = completed.some((l) => !!l.envelopePdfUrl);
+
+  if (envelopesOnly && !hasEnvelopes) {
+    return NextResponse.json(
+      { error: "Für diese Runde gibt es keine Umschläge." },
+      { status: 404 },
+    );
+  }
 
   async function appendPdf(merged: PDFDocumentType, url: string): Promise<void> {
     const res = await fetch(url);
@@ -353,22 +369,24 @@ async function buildBundle(
 
         // Briefe und Umschläge im SELBEN Loop über die SELBE Lead-Liste —
         // dadurch ist die Reihenfolge in beiden Dateien garantiert identisch.
-        const letterDoc = await PDFDocument.create();
+        const letterDoc = envelopesOnly ? null : await PDFDocument.create();
         const envelopeDoc = hasEnvelopes ? await PDFDocument.create() : null;
 
         for (const lead of batch) {
-          if (lead.pdfUrl) {
-            try {
-              await appendPdf(letterDoc, lead.pdfUrl);
-            } catch (err) {
+          if (letterDoc) {
+            if (lead.pdfUrl) {
+              try {
+                await appendPdf(letterDoc, lead.pdfUrl);
+              } catch (err) {
+                warnings.push(
+                  `${leadLabel(lead)}: Brief-PDF konnte nicht geladen werden (${err instanceof Error ? err.message : "Fehler"}) — fehlt in ${rangeName}. Umschlag-Reihenfolge weicht in diesem Batch ab!`,
+                );
+              }
+            } else {
               warnings.push(
-                `${leadLabel(lead)}: Brief-PDF konnte nicht geladen werden (${err instanceof Error ? err.message : "Fehler"}) — fehlt in ${rangeName}. Umschlag-Reihenfolge weicht in diesem Batch ab!`,
+                `${leadLabel(lead)}: kein Brief-PDF vorhanden — fehlt in ${rangeName}.`,
               );
             }
-          } else {
-            warnings.push(
-              `${leadLabel(lead)}: kein Brief-PDF vorhanden — fehlt in ${rangeName}.`,
-            );
           }
 
           if (envelopeDoc) {
@@ -388,11 +406,13 @@ async function buildBundle(
           }
         }
 
-        const letterBytes = await letterDoc.save();
-        const letterPath = group.letterDir
-          ? `${group.letterDir}/${rangeName}`
-          : rangeName;
-        zip.file(letterPath, letterBytes);
+        if (letterDoc) {
+          const letterBytes = await letterDoc.save();
+          const letterPath = group.letterDir
+            ? `${group.letterDir}/${rangeName}`
+            : rangeName;
+          zip.file(letterPath, letterBytes);
+        }
 
         if (envelopeDoc && envelopeDoc.getPageCount() > 0) {
           const envelopeBytes = await envelopeDoc.save();
@@ -407,9 +427,10 @@ async function buildBundle(
     // README: Manifest + Warnungen. Immer bei Varianten-Auswahl, Teilexport
     // oder wenn etwas schiefging — der Lettershop soll Abweichungen sehen,
     // nicht raten.
-    if (variant !== "mixed" || sortBy || isPartial || warnings.length > 0) {
+    if (variant !== "mixed" || sortBy || isPartial || envelopesOnly || warnings.length > 0) {
       const lines: string[] = [
         `PDF-Bundle "${baseName}" — Runde: ${run.name}`,
+        ...(envelopesOnly ? ["Nur Umschläge (keine Briefe in diesem ZIP)"] : []),
         ...(isPartial
           ? [`Teilexport: ${completed.length} von ${totalCompleted} Leads (Auswahl aus der Versandzentrale)`]
           : []),
@@ -462,12 +483,15 @@ async function buildBundle(
     // Export-Protokoll (Versandzentrale): letter_exported_at + lead_events.
     // Ändert NIE den letter_status — der User entscheidet nach dem Download
     // im Dialog. Fire-and-forget, darf den Download nicht verzögern.
-    const exportedIds = groups.flatMap((g) => g.leads.map((l) => l.id));
-    void markLeadsExported(exportedIds, {
-      runId,
-      total: totalCompleted,
-      partial: isPartial || exportedIds.length < totalCompleted,
-    });
+    // Nur-Umschläge-Downloads zählen nicht als Brief-Export.
+    if (!envelopesOnly) {
+      const exportedIds = groups.flatMap((g) => g.leads.map((l) => l.id));
+      void markLeadsExported(exportedIds, {
+        runId,
+        total: totalCompleted,
+        partial: isPartial || exportedIds.length < totalCompleted,
+      });
+    }
 
 
     return new Response(blob, {
