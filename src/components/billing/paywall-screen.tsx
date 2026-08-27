@@ -38,19 +38,19 @@ const REASON_COPY: Record<
   active: { title: "", desc: "", primaryLabel: "" },
   grace_period: { title: "", desc: "", primaryLabel: "" },
   no_subscription: {
-    title: "Willkommen — noch kein aktiver Zugang",
+    title: "Willkommen! Noch kein aktiver Zugang",
     desc:
-      "Um die Plattform zu nutzen, aktiviere deinen Zugang: 120 € für 3 Monate (3 × 40 €). Nach der Zahlung bist du sofort drin.",
-    primaryLabel: "Zugang aktivieren — 120 € / 3 Monate",
+      "Starte mit dem Startquartal: 120 € für deine ersten 3 Monate, inklusive 20 Credits Startguthaben. Danach 40 € im Monat, monatlich kündbar. Nach der Zahlung bist du sofort drin.",
+    primaryLabel: "Startquartal aktivieren: 120 € inkl. 20 Credits",
   },
   canceled: {
     title: "Dein Zugang ist pausiert",
     desc:
-      "Deine Subscription wurde gekündigt. Deine Daten sind sicher — reaktiviere jederzeit, dann bist du sofort wieder produktiv.",
+      "Deine Subscription wurde gekündigt. Deine Daten sind sicher. Reaktiviere jederzeit, dann bist du sofort wieder produktiv.",
     primaryLabel: "Zugang reaktivieren",
   },
   past_due_expired: {
-    title: "Zahlung überfällig — Zugang pausiert",
+    title: "Zahlung überfällig: Zugang pausiert",
     desc:
       "Die letzte Zahlung konnte nicht eingezogen werden. Aktualisiere deine Zahlungsmethode und alles läuft weiter.",
     primaryLabel: "Zahlungsmethode aktualisieren",
@@ -58,13 +58,13 @@ const REASON_COPY: Record<
   unpaid: {
     title: "Zahlung fehlgeschlagen",
     desc:
-      "Nach mehreren Versuchen konnten wir die Zahlung nicht einziehen. Starte den Plan neu — deine Daten bleiben erhalten.",
+      "Nach mehreren Versuchen konnten wir die Zahlung nicht einziehen. Starte den Plan neu, deine Daten bleiben erhalten.",
     primaryLabel: "Plan neu starten",
   },
   incomplete: {
     title: "Zahlung noch nicht abgeschlossen",
     desc:
-      "Der Checkout-Vorgang wurde noch nicht bestätigt. Wenn du gerade bezahlt hast, warte einen Moment — sonst starte den Vorgang neu.",
+      "Der Checkout-Vorgang wurde noch nicht bestätigt. Wenn du gerade bezahlt hast, warte einen Moment, sonst starte den Vorgang neu.",
     primaryLabel: "Checkout fortsetzen",
   },
 };
@@ -149,15 +149,15 @@ export function PaywallScreen({ reason, periodEnd }: Props) {
             <ul className="space-y-2 mb-6 text-sm">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Plattform-Zugang für <strong>120 € pro 3 Monate</strong> (3 × 40 €) netto zzgl. MwSt., abgebucht im Voraus</span>
+                <span>Startquartal: <strong>120 € für die ersten 3 Monate</strong> netto zzgl. MwSt., inklusive <strong>20 Credits Startguthaben</strong></span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span><strong>3 Monate Mindestlaufzeit</strong>, danach Verlängerung um jeweils 3 Monate</span>
+                <span>Danach <strong>40 € im Monat, monatlich kündbar</strong></span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Für jedes generierte Video wird <strong>1 Credit</strong> verbraucht — Credits separat, ab 1 € pro Stück</span>
+                <span>Für jedes generierte Video wird <strong>1 Credit</strong> verbraucht, weitere Credits lädst du ab 1 € pro Stück nach</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" />

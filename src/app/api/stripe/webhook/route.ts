@@ -8,10 +8,11 @@ import { db } from "@/lib/db";
 import { stripeWebhookEvents, users } from "@/lib/db/schema";
 import {
   getStripe,
+  getPriceIds,
   mapSubscriptionStatus,
   CREDIT_PACKAGES,
 } from "@/lib/billing/stripe-client";
-import { grantTopup } from "@/lib/billing/credit-service";
+import { grantTopup, grantWelcomeCredits } from "@/lib/billing/credit-service";
 import {
   sendSubscriptionStartedMail,
   sendTopupConfirmationMail,
@@ -223,6 +224,23 @@ async function handleCheckoutCompleted(event: Stripe.Event) {
       session.payment_status === "paid" ||
       session.payment_status === "no_payment_required"
     ) {
+      // Startquartal-Mechanik: Phase 1 = 120 € / 3 Monate (bereits bezahlt),
+      // Phase 2 = 40 € monatlich. Muss VOR processed_at laufen — wirft bei
+      // Fehler, damit Stripe retry't und kein Abo im Quartals-Preis haengt.
+      await ensureStartquartalSchedule(sub);
+
+      // 20 Credits Startguthaben — genau einmal pro User (idempotent).
+      const welcomeTx = await grantWelcomeCredits({
+        userId,
+        amount: 20,
+        stripeRef: sub.id,
+      });
+      if (welcomeTx) {
+        console.log(
+          `[stripe:webhook] Startguthaben 20 Credits fuer user ${userId} gutgeschrieben (balance ${welcomeTx.balanceAfter})`,
+        );
+      }
+
       await sendMailBestEffort("subscription-started", userId, (user) =>
         sendSubscriptionStartedMail({
           to: user.email,
@@ -372,6 +390,56 @@ async function syncSubscriptionToUser(userId: string, sub: Stripe.Subscription) 
       updatedAt: new Date(),
     })
     .where(eq(users.id, userId));
+}
+
+/**
+ * Startquartal: Die Checkout-Session laeuft auf dem Quartals-Preis
+ * (120 € / 3 Monate). Damit die Subscription danach NICHT quartalsweise
+ * weiterlaeuft, haengen wir eine Subscription-Schedule dran:
+ *   Phase 1: aktueller Quartals-Preis bis zum Ende der bezahlten Periode
+ *   Phase 2: 40 € monatlich (1 Iteration), danach `release` —
+ *            die Subscription laeuft als normales Monats-Abo weiter,
+ *            monatlich kuendbar ueber das Customer-Portal.
+ *
+ * Idempotent: hat die Subscription schon eine Schedule (Webhook-Replay),
+ * passiert nichts. Bestandskunden sind nicht betroffen — diese Funktion
+ * laeuft nur im Checkout-Completed-Pfad neuer Abschluesse.
+ */
+async function ensureStartquartalSchedule(sub: Stripe.Subscription) {
+  if (sub.schedule) return;
+  const stripe = getStripe();
+  const monthlyPrice = getPriceIds().subscriptionMonthly;
+
+  const schedule = await stripe.subscriptionSchedules.create({
+    from_subscription: sub.id,
+  });
+  const phase0 = schedule.phases[0];
+  if (!phase0) {
+    throw new Error(`Schedule ${schedule.id} ohne Phase — unerwartet`);
+  }
+  await stripe.subscriptionSchedules.update(schedule.id, {
+    end_behavior: "release",
+    proration_behavior: "none",
+    phases: [
+      {
+        items: phase0.items.map((it) => ({
+          price: typeof it.price === "string" ? it.price : it.price.id,
+          quantity: it.quantity ?? 1,
+        })),
+        start_date: phase0.start_date,
+        end_date: phase0.end_date,
+        automatic_tax: { enabled: true },
+      },
+      {
+        items: [{ price: monthlyPrice, quantity: 1 }],
+        duration: { interval: "month", interval_count: 1 },
+        automatic_tax: { enabled: true },
+      },
+    ],
+  });
+  console.log(
+    `[stripe:webhook] Startquartal-Schedule ${schedule.id} fuer sub ${sub.id} angelegt (danach 40 € monatlich)`,
+  );
 }
 
 /**

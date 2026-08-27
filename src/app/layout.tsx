@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     template: "%s · VIDEOCOMET",
   },
   description:
-    "Mit VIDEOCOMET verschickst du hunderte persönliche Videos an potenzielle Kunden. Mit Landingpage, Brief mit QR-Code und Live-Tracking. 120 € für 3 Monate, 1 € pro Video.",
+    "Mit VIDEOCOMET verschickst du hunderte persönliche Videos an potenzielle Kunden. Mit Landingpage, Brief mit QR-Code und Live-Tracking. Startquartal 120 € inkl. 20 Credits, danach monatlich kündbar.",
   applicationName: "VIDEOCOMET",
   openGraph: {
     type: "website",

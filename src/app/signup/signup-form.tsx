@@ -224,8 +224,9 @@ export function SignupForm() {
                 <span className="text-sm text-ink-muted">im Monat, netto</span>
               </div>
               <p className="text-[13px] sm:text-sm text-ink-soft leading-relaxed">
-                Heute zahlst du 120 € für deine ersten 3 Monate. Danach immer
-                3 Monate weiter, kündbar mit einem Monat Vorlauf. Zzgl. MwSt.
+                Heute zahlst du 120 € für dein Startquartal und bekommst
+                20 Credits als Startguthaben geschenkt. Danach 40 € im Monat,
+                monatlich kündbar. Zzgl. MwSt.
               </p>
             </Squircle>
 
@@ -458,7 +459,7 @@ export function SignupForm() {
                   >
                     AGB
                   </Link>{" "}
-                  (inklusive der 3 Monate Mindestlaufzeit) und die{" "}
+                  (inklusive des Startquartals von 3 Monaten) und die{" "}
                   <Link
                     href="/datenschutz"
                     target="_blank"
@@ -472,12 +473,13 @@ export function SignupForm() {
 
               {/* Deal-Reminder kurz */}
               <div className="rounded-xl bg-surface-soft border border-line p-4 text-[12px] text-ink-muted leading-relaxed">
-                Du bestellst jetzt den{" "}
+                Du bestellst jetzt das{" "}
                 <strong className="font-semibold text-ink">
-                  Plattform-Zugang für 120 €
+                  Startquartal für 120 €
                 </strong>{" "}
-                (3 × 40 €, deine ersten 3 Monate). Credits für Videos lädst du
-                später nach Bedarf auf.
+                (deine ersten 3 Monate, inklusive 20 Credits Startguthaben).
+                Danach 40 € im Monat, monatlich kündbar. Weitere Credits lädst
+                du später nach Bedarf auf.
               </div>
 
               {errorMessage && (

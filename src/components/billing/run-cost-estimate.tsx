@@ -104,8 +104,8 @@ export function RunCostEstimate({
               Keine aktive Subscription
             </div>
             <p className="text-xs text-amber-800 mt-1">
-              Aktiviere deinen Zugang (120 € / 3 Monate) um Runden zu starten. Bestehende
-              Daten bleiben sichtbar.
+              Aktiviere dein Startquartal (120 € inkl. 20 Credits) um Runden zu
+              starten. Bestehende Daten bleiben sichtbar.
             </p>
             <Button
               type="button"

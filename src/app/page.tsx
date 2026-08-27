@@ -47,7 +47,7 @@ const jsonLd = {
         price: "40.00",
         priceCurrency: "EUR",
         description:
-          "Plattform-Zugang 40 € netto pro Monat, abgerechnet als 120 € pro 3 Monate. Videos zusätzlich 1 € pro Stück.",
+          "Startquartal 120 € netto inkl. 20 Credits, danach 40 € netto pro Monat, monatlich kündbar. Videos zusätzlich 1 € pro Stück.",
       },
       provider: { "@id": "https://videocomet.de/#organization" },
     },

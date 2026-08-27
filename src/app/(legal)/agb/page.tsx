@@ -3,22 +3,24 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "AGB",
   description:
-    "Allgemeine Geschäftsbedingungen der VIDEOCOMET GmbH für den Plattform-Zugang und Credits. B2B, 3 Monate Mindestlaufzeit.",
+    "Allgemeine Geschäftsbedingungen der VIDEOCOMET GmbH für den Plattform-Zugang und Credits. B2B, Startquartal 3 Monate, danach monatlich kündbar.",
   alternates: { canonical: "/agb" },
 };
 
 /**
- * AGB fuer B2B-only SaaS mit 3-Monats-Abo (120 € netto im Voraus) + Credit-Verbrauch.
- * Diese Basis-Version ist als Template gedacht — vor Live-Rollout durch
- * einen Fachanwalt pruefen lassen (insb. §307 BGB Inhaltskontrolle bei
- * Klauseln zur Preisanpassung, Haftungsbegrenzung, Kuendigung).
+ * AGB fuer B2B-only SaaS: Startquartal (3 Monate, 120 € netto im Voraus,
+ * inkl. 20 Credits Startguthaben), danach monatliche Verlaengerung zu
+ * 40 € netto + Credit-Verbrauch. Diese Basis-Version ist als Template
+ * gedacht — vor Live-Rollout durch einen Fachanwalt pruefen lassen
+ * (insb. §307 BGB Inhaltskontrolle bei Klauseln zur Preisanpassung,
+ * Haftungsbegrenzung, Kuendigung).
  */
 
 export default function AgbPage() {
   return (
     <main className="max-w-3xl mx-auto px-4 py-16 prose prose-sm md:prose-base prose-headings:text-ink prose-p:text-ink-muted prose-li:text-ink-muted">
       <h1>Allgemeine Geschäftsbedingungen</h1>
-      <p className="text-ink-muted text-xs">Stand: Juli 2026</p>
+      <p className="text-ink-muted text-xs">Stand: August 2026</p>
 
       <h2>§ 1 Geltungsbereich</h2>
       <p>
@@ -54,9 +56,17 @@ export default function AgbPage() {
 
       <h2>§ 4 Vergütung und Zahlungsbedingungen</h2>
       <p>
-        Die Vergütung für den Plattform-Zugang beträgt{" "}
-        <strong>40,00 € netto pro Monat</strong> zzgl. der gesetzlichen
-        Umsatzsteuer.
+        Die Vergütung für den Plattform-Zugang beträgt für die Erstlaufzeit
+        von 3 (drei) Monaten („Startquartal") einmalig{" "}
+        <strong>120,00 € netto</strong>, danach{" "}
+        <strong>40,00 € netto pro Monat</strong>, jeweils zzgl. der
+        gesetzlichen Umsatzsteuer.
+      </p>
+      <p>
+        Mit der Zahlung des Startquartals erhält der Kunde einmalig{" "}
+        <strong>20 Credits als Startguthaben</strong> ohne zusätzliche
+        Vergütung. Das Startguthaben wird pro Kunde nur einmal gewährt, auch
+        bei einer späteren erneuten Aktivierung des Plattform-Zugangs.
       </p>
       <p>
         <strong>
@@ -72,25 +82,26 @@ export default function AgbPage() {
         voraus.
       </p>
       <p>
-        Die Abrechnung des Plattform-Zugangs erfolgt im Voraus für die
-        jeweilige Vertragslaufzeit von 3 (drei) Monaten (120,00 € netto,
-        entsprechend 3 × 40,00 € netto) über den Zahlungsdienstleister
-        Stripe, erstmals bei Vertragsschluss und danach jeweils zu Beginn
-        jeder Verlängerungsperiode. Credit-Käufe werden bei Bestellung sofort
-        in Rechnung gestellt.
+        Die Abrechnung des Plattform-Zugangs erfolgt im Voraus über den
+        Zahlungsdienstleister Stripe: bei Vertragsschluss 120,00 € netto für
+        das Startquartal, danach 40,00 € netto jeweils zu Beginn jedes
+        Verlängerungsmonats. Credit-Käufe werden bei Bestellung sofort in
+        Rechnung gestellt.
       </p>
 
       <h2>§ 5 Vertragslaufzeit und Kündigung</h2>
       <p>
         Der Vertrag über den Plattform-Zugang hat eine{" "}
-        <strong>Mindestlaufzeit von 3 (drei) Monaten</strong>, beginnend mit
-        dem Tag der ersten erfolgreichen Zahlung.
+        <strong>Erstlaufzeit von 3 (drei) Monaten</strong> („Startquartal"),
+        beginnend mit dem Tag der ersten erfolgreichen Zahlung.
       </p>
       <p>
-        Wird der Vertrag nicht mit einer Frist von <strong>einem Monat vor
-        Ende der jeweiligen Vertragslaufzeit</strong> in Textform gekündigt, so
-        verlängert er sich <strong>automatisch um jeweils weitere 3 (drei)
-        Monate</strong>.
+        Nach Ablauf des Startquartals verlängert sich der Vertrag{" "}
+        <strong>automatisch um jeweils einen (1) Monat</strong>. Der Kunde
+        kann den Vertrag nach dem Startquartal jederzeit in Textform mit
+        Wirkung zum Ende des jeweils laufenden Abrechnungsmonats kündigen;
+        eine Kündigung zum Ende des Startquartals ist ebenfalls jederzeit
+        bis zu dessen Ablauf möglich.
       </p>
       <p>
         Die Kündigung kann über die Kontoeinstellungen, das Stripe-

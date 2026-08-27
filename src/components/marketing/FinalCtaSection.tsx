@@ -31,7 +31,7 @@ export function FinalCtaSection() {
                 </h2>
                 <p className="mt-4 text-[15px] leading-relaxed text-ink-soft text-balance">
                   Nimm ein Video auf, den Rest übernimmt VIDEOCOMET. 40 € im
-                  Monat, 1 € pro Lead, alles inklusive.
+                  Monat, 1 € pro Lead, monatlich kündbar.
                 </p>
                 <div className="mt-6 flex justify-center">
                   <Link
@@ -58,8 +58,8 @@ export function FinalCtaSection() {
                   Kein Beratungsgespräch nötig. Du kannst direkt loslegen.
                 </p>
                 <p className="mt-3 text-[12px] text-ink-muted">
-                  3 Monate Mindestlaufzeit · nur für Unternehmen (B2B) · Kunden
-                  seit 2022
+                  Startquartal 120 € inkl. 20 Credits · nur für Unternehmen
+                  (B2B) · Kunden seit 2022
                 </p>
               </Squircle>
             </div>

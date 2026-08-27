@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   title: "Zugang erhalten",
   alternates: { canonical: "/signup" },
   description:
-    "Registriere dich für VIDEOCOMET. 120 € netto für 3 Monate (3 × 40 €) zzgl. MwSt., Mindestlaufzeit 3 Monate.",
+    "Registriere dich für VIDEOCOMET. Startquartal 120 € netto inkl. 20 Credits, danach 40 € netto im Monat, monatlich kündbar. Zzgl. MwSt.",
 };
 
 export default function SignupPage() {

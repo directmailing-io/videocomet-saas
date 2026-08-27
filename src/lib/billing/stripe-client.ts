@@ -29,6 +29,7 @@ export function getStripe(): Stripe {
  */
 export function getPriceIds(): {
   subscription: string;
+  subscriptionMonthly: string;
   credits50: string;
   credits100: string;
   credits250: string;
@@ -37,19 +38,21 @@ export function getPriceIds(): {
   credits5000: string;
 } {
   const sub = process.env.STRIPE_PRICE_SUBSCRIPTION;
+  const subMonthly = process.env.STRIPE_PRICE_SUBSCRIPTION_MONTHLY;
   const c50 = process.env.STRIPE_PRICE_CREDITS_50;
   const c100 = process.env.STRIPE_PRICE_CREDITS_100;
   const c250 = process.env.STRIPE_PRICE_CREDITS_250;
   const c500 = process.env.STRIPE_PRICE_CREDITS_500;
   const c1000 = process.env.STRIPE_PRICE_CREDITS_1000;
   const c5000 = process.env.STRIPE_PRICE_CREDITS_5000;
-  if (!sub || !c50 || !c100 || !c250 || !c500 || !c1000 || !c5000) {
+  if (!sub || !subMonthly || !c50 || !c100 || !c250 || !c500 || !c1000 || !c5000) {
     throw new Error(
-      "Stripe-Price-Env unvollstaendig — STRIPE_PRICE_SUBSCRIPTION + CREDITS_{50,100,250,500,1000,5000} pruefen",
+      "Stripe-Price-Env unvollstaendig — STRIPE_PRICE_SUBSCRIPTION + STRIPE_PRICE_SUBSCRIPTION_MONTHLY + CREDITS_{50,100,250,500,1000,5000} pruefen",
     );
   }
   return {
     subscription: sub,
+    subscriptionMonthly: subMonthly,
     credits50: c50,
     credits100: c100,
     credits250: c250,

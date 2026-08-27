@@ -190,7 +190,9 @@ export function BillingTab() {
           <div>
             <h3 className="text-base font-semibold">Plattform-Zugang</h3>
             <p className="text-xs text-ink-muted mt-1">
-              120 € / 3 Monate netto (3 × 40 €) — Voraussetzung für die Video-Generierung
+              Startquartal 120 € netto inkl. 20 Credits, danach 40 € netto im
+              Monat, monatlich kündbar. Hält deine Landingpages online, deine
+              QR-Codes aktiv und deine Videos gehostet.
             </p>
           </div>
           {status.subscription.status ? (

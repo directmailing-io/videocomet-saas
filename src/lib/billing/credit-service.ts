@@ -189,6 +189,65 @@ export async function grantTopup(input: {
   });
 }
 
+export const WELCOME_CREDITS_REASON = "startquartal-startguthaben";
+
+/**
+ * Startguthaben beim ersten Abo-Abschluss (Startquartal: 20 Credits).
+ *
+ * Idempotenz: genau EINMAL pro User, unabhaengig davon wie oft der
+ * Webhook replay't oder ob der User spaeter kuendigt und neu abschliesst.
+ * Guard: Existenz-Check auf promo_grant mit WELCOME_CREDITS_REASON
+ * innerhalb der Transaktion (User-Row ist via FOR UPDATE gelockt, damit
+ * koennen zwei parallele Webhooks nicht beide durchkommen).
+ */
+export async function grantWelcomeCredits(input: {
+  userId: string;
+  amount: number;
+  stripeRef?: string | null;
+}): Promise<CreditTransaction | null> {
+  if (input.amount < 1) {
+    throw new Error("grantWelcomeCredits amount must be >= 1");
+  }
+
+  return await db.transaction(async (tx) => {
+    const [row] = await tx.execute<{ credit_balance: number }>(
+      sql`SELECT credit_balance FROM users WHERE id = ${input.userId} FOR UPDATE`,
+    );
+    const currentBalance = (row as { credit_balance: number } | undefined)?.credit_balance ?? 0;
+
+    const [existing] = await tx
+      .select({ id: creditTransactions.id })
+      .from(creditTransactions)
+      .where(
+        sql`${creditTransactions.userId} = ${input.userId}
+          AND ${creditTransactions.kind} = 'promo_grant'
+          AND ${creditTransactions.reason} = ${WELCOME_CREDITS_REASON}`,
+      )
+      .limit(1);
+    if (existing) return null;
+
+    const newBalance = currentBalance + input.amount;
+    const [txRow] = await tx
+      .insert(creditTransactions)
+      .values({
+        userId: input.userId,
+        kind: "promo_grant",
+        delta: input.amount,
+        balanceAfter: newBalance,
+        stripeRef: input.stripeRef ?? null,
+        reason: WELCOME_CREDITS_REASON,
+      })
+      .returning();
+
+    await tx
+      .update(users)
+      .set({ creditBalance: newBalance, updatedAt: new Date() })
+      .where(eq(users.id, input.userId));
+
+    return txRow!;
+  });
+}
+
 /**
  * Manuelle Admin-Korrektur (Refund, Goodwill, etc.). Kann positiv ODER
  * negativ sein. KEIN Idempotenz-Guard hier — Admin trackt das selbst.

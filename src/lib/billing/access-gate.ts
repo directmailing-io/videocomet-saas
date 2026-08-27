@@ -1,7 +1,7 @@
 /**
  * Access-Gate — entscheidet ob ein User Zugriff auf die App-Features hat.
  *
- * Business-Regel: Ohne aktive Plattform-Subscription (120 € / 3 Monate) ist die App gesperrt.
+ * Business-Regel: Ohne aktive Plattform-Subscription ist die App gesperrt.
  *   - Aktive Subscription (status = 'active' oder 'trialing'): voller Zugriff
  *   - past_due mit noch nicht abgelaufener Periode: Gnadenfrist, voller Zugriff
  *   - Alle anderen Status (canceled, unpaid, incomplete, past_due-expired,

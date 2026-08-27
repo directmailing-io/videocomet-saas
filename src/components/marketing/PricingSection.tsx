@@ -93,8 +93,10 @@ export function PricingSection() {
           </RevealOnScroll>
           <RevealOnScroll delay={300}>
             <p className="text-ink-muted text-lg leading-relaxed text-balance max-w-xl mx-auto">
-              40 € Grundgebühr im Monat. Alles andere zahlst du mit
-              Credits — und{" "}
+              Du startest mit dem Startquartal: 120 € für deine ersten
+              3 Monate, inklusive 20 Credits Startguthaben. Danach 40 € im
+              Monat, monatlich kündbar. Alles andere zahlst du mit Credits,
+              und{" "}
               <strong className="font-semibold text-ink">
                 1 Credit kostet genau 1 €
               </strong>
@@ -154,7 +156,9 @@ export function PricingSection() {
                   </h3>
                   <p className="text-[14.5px] leading-relaxed text-ink-soft">
                     Alles offen: Editor, Landingpages, Briefe, Tracking,
-                    Integrationen. Neue Features kommen automatisch dazu.
+                    Integrationen. Deine Landingpages bleiben online, deine
+                    QR-Codes aktiv, deine Videos gehostet. Neue Features
+                    kommen automatisch dazu.
                   </p>
                 </Squircle>
               </div>
@@ -329,7 +333,8 @@ export function PricingSection() {
                 <ArrowRight className="size-4" />
               </Link>
               <div className="text-[12px] text-ink-muted mt-4">
-                3 Monate Mindestlaufzeit · nur für Unternehmen (B2B)
+                Startquartal 120 € inkl. 20 Credits · danach monatlich
+                kündbar · nur für Unternehmen (B2B)
               </div>
             </div>
             </Squircle>
