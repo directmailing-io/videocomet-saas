@@ -11,7 +11,6 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
-  CalendarClock,
   ChevronRight,
   Mail,
   Mailbox,
@@ -39,27 +38,12 @@ export interface VersandRunItem {
   letterSent: number;
   reacted: number;
   stuckInProgress: number;
-  planned: number;
-  earliestPlannedAt: string | null;
   returned: number;
   lastSentAt: string | null;
   emailTotal: number;
   emailSent: number;
   emailScheduled: number;
   emailReplied: number;
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Intl.DateTimeFormat("de-DE", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }).format(new Date(iso));
-  } catch {
-    return "—";
-  }
 }
 
 function ChannelBadge({
@@ -209,15 +193,6 @@ export function VersandView({
                                 <span className="inline-flex items-center gap-1 font-medium text-amber-700">
                                   <AlertTriangle className="size-3" />
                                   {r.stuckInProgress} schon versendet?
-                                </span>
-                              )}
-                              {r.planned > 0 && (
-                                <span className="inline-flex items-center gap-1 text-brand">
-                                  <CalendarClock className="size-3" />
-                                  {r.planned} geplant
-                                  {r.earliestPlannedAt
-                                    ? ` ab ${formatDate(r.earliestPlannedAt)}`
-                                    : ""}
                                 </span>
                               )}
                               {r.returned > 0 && (

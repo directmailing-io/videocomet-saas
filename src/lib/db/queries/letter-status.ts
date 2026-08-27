@@ -1,8 +1,8 @@
 /**
  * Brief-Versandstatus (Versandzentrale, Migration 0067).
  *
- * Statusmodell pro Lead: 'open' → 'in_progress' → 'sent' (beide Richtungen
- * erlaubt, jede Änderung protokolliert). Der Status ändert sich NIE
+ * Statusmodell pro Lead: 'open' → 'in_progress' → 'sent' | 'discarded'
+ * (alle Richtungen erlaubt, jede Änderung protokolliert). Der Status ändert sich NIE
  * automatisch — Exporte setzen nur `letter_exported_at`, der User
  * entscheidet danach im Dialog. So bleiben Test-Exporte statistik-neutral.
  *
@@ -18,11 +18,10 @@ import { contacts, leadEvents, leads, runs } from "@/lib/db/schema";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-export type LetterStatus = "open" | "in_progress" | "sent";
+export type LetterStatus = "open" | "in_progress" | "sent" | "discarded";
 
 export type LetterAction =
   | { action: "status"; status: LetterStatus; sentAt?: Date }
-  | { action: "plan"; plannedAt: Date | null }
   | { action: "returned"; returned: boolean };
 
 export interface BulkLetterResult {
@@ -63,7 +62,7 @@ async function touchContacts(
 }
 
 /**
- * Bulk-Statuswechsel / Planungs- / Rückläufer-Markierung für Leads einer
+ * Bulk-Statuswechsel / Rückläufer-Markierung für Leads einer
  * Runde. Nur completed-Leads werden angefasst (Race-Guard gegen laufende
  * Regeneration); alles andere zählt als `skipped`.
  */
@@ -130,15 +129,6 @@ export async function bulkApplyLetterAction(
 
       await touchContacts(tx, changedIds, now);
       return { updated: changed.length, skipped: skipped + eligible.length - changed.length };
-    }
-
-    if (action.action === "plan") {
-      await tx
-        .update(leads)
-        .set({ letterPlannedAt: action.plannedAt })
-        .where(inArray(leads.id, ids));
-      // Reine Erinnerung — kein CRM-Event, kein last_activity_at-Bump.
-      return { updated: ids.length, skipped };
     }
 
     // action === "returned"

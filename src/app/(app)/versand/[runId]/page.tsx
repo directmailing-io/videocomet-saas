@@ -78,9 +78,6 @@ export default async function VersandRunPage({
         letterExportedAt: l.letterExportedAt
           ? l.letterExportedAt.toISOString()
           : null,
-        letterPlannedAt: l.letterPlannedAt
-          ? l.letterPlannedAt.toISOString()
-          : null,
         letterReturnedAt: l.letterReturnedAt
           ? l.letterReturnedAt.toISOString()
           : null,

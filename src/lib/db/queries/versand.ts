@@ -26,8 +26,6 @@ export interface VersandRunRow {
   /** In Bearbeitung + Export älter als 7 Tage → "Schon versendet?"-Hinweis. */
   stuckInProgress: number;
   /** Noch nicht versendete Leads mit geplantem Versandtermin. */
-  planned: number;
-  earliestPlannedAt: Date | null;
   returned: number;
   lastSentAt: Date | null;
   /** E-Mail-Kanal: Leads dieser Runde mit mind. einer Blast-Message. */
@@ -60,8 +58,6 @@ export async function listVersandRuns(userId: string): Promise<VersandRunRow[]> 
         ${leads.lastViewedAt} > ${leads.letterSentAt} OR ${leads.lastCtaAt} > ${leads.letterSentAt}
       ))::int`,
       stuckInProgress: sql<number>`COUNT(*) FILTER (WHERE ${completedCond} AND ${leads.letterStatus} = 'in_progress' AND ${leads.letterExportedAt} < now() - interval '7 days')::int`,
-      planned: sql<number>`COUNT(*) FILTER (WHERE ${completedCond} AND ${leads.letterStatus} <> 'sent' AND ${leads.letterPlannedAt} IS NOT NULL)::int`,
-      earliestPlannedAt: sql<Date | null>`MIN(${leads.letterPlannedAt}) FILTER (WHERE ${completedCond} AND ${leads.letterStatus} <> 'sent')`,
       returned: sql<number>`COUNT(*) FILTER (WHERE ${completedCond} AND ${leads.letterReturnedAt} IS NOT NULL)::int`,
       lastSentAt: sql<Date | null>`MAX(${leads.letterSentAt}) FILTER (WHERE ${completedCond})`,
     })
@@ -105,7 +101,6 @@ export async function listVersandRuns(userId: string): Promise<VersandRunRow[]> 
     const email = emailByRun.get(r.runId);
     return {
       ...r,
-      earliestPlannedAt: r.earliestPlannedAt ? new Date(r.earliestPlannedAt) : null,
       lastSentAt: r.lastSentAt ? new Date(r.lastSentAt) : null,
       emailTotal: email?.emailTotal ?? 0,
       emailSent: email?.emailSent ?? 0,

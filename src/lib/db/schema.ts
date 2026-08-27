@@ -728,7 +728,8 @@ export const leads = pgTable("leads", {
   //   'open'        → noch nichts passiert (Default)
   //   'in_progress' → exportiert / beim Drucken / kuvertiert
   //   'sent'        → physisch versendet (letterSentAt Pflicht, rückdatierbar)
-  letterStatus: text("letter_status").$type<"open" | "in_progress" | "sent">().notNull().default("open"),
+  //   'discarded'   → aussortiert (wird nicht verschickt)
+  letterStatus: text("letter_status").$type<"open" | "in_progress" | "sent" | "discarded">().notNull().default("open"),
   /** Versanddatum (Pflicht bei 'sent', vom User rückdatierbar). */
   letterSentAt: timestamp("letter_sent_at", { withTimezone: true }),
   /** Letzter Bundle-Export der diesen Lead enthielt (rein informativ). */

@@ -770,7 +770,9 @@ function ActivityTab({ data }: { data: ContactDetailData }) {
                   )}
                 />
                 <div className="text-ink">
-                  <strong className="font-semibold">{eventLabel(e.kind)}</strong>
+                  <strong className="font-semibold">
+                    {eventLabel(e.kind, e.payload)}
+                  </strong>
                   {" · "}
                   <span className="text-ink-muted text-xs">
                     {e.campaignName} · {e.runName}
@@ -815,7 +817,17 @@ function StatTile({
   );
 }
 
-function eventLabel(kind: string): string {
+const LETTER_STATUS_DE: Record<string, string> = {
+  open: "Offen",
+  in_progress: "In Bearbeitung",
+  sent: "Versendet",
+  discarded: "Aussortiert",
+};
+
+function eventLabel(
+  kind: string,
+  payload?: Record<string, unknown> | null,
+): string {
   switch (kind) {
     case "page_view":
       return "Landingpage geöffnet";
@@ -826,9 +838,33 @@ function eventLabel(kind: string): string {
     case "video_ended":
       return "Video zu Ende gesehen";
     case "cta_click":
-      return "CTA geklickt";
+      return "Kontakt-Button geklickt";
     case "form_submit":
       return "Formular gesendet";
+    case "letter_exported":
+      return payload?.partial === true
+        ? "Brief-PDF heruntergeladen (Teilexport)"
+        : "Brief-PDF heruntergeladen";
+    case "letter_sent": {
+      const sentAt =
+        typeof payload?.sentAt === "string" ? new Date(payload.sentAt) : null;
+      return sentAt && !Number.isNaN(sentAt.getTime())
+        ? `Brief per Post versendet — Versanddatum ${sentAt.toLocaleDateString("de-DE")}`
+        : "Brief per Post versendet";
+    }
+    case "letter_status_changed": {
+      if (payload?.returned === true)
+        return "Brief kam als Rückläufer zurück (unzustellbar)";
+      if (payload?.returned === false)
+        return "Rückläufer-Markierung entfernt";
+      const from = LETTER_STATUS_DE[String(payload?.from ?? "")];
+      const to = LETTER_STATUS_DE[String(payload?.to ?? "")];
+      if (to)
+        return from
+          ? `Brief-Status geändert: ${from} → ${to}`
+          : `Brief-Status auf „${to}" gesetzt`;
+      return "Brief-Status geändert";
+    }
     default:
       return kind;
   }
@@ -846,6 +882,10 @@ function eventDotColor(kind: string): string {
       return "bg-brand-deep";
     case "form_submit":
       return "bg-brand";
+    case "letter_sent":
+      return "bg-ok";
+    case "letter_exported":
+      return "bg-info";
     default:
       return "bg-ink-muted";
   }

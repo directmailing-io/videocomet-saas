@@ -14,8 +14,7 @@ import {
  * Bulk-Aktion der Versandzentrale für Leads einer Runde.
  *
  * Body:
- *   { leadIds: string[], action: "status", status: "open"|"in_progress"|"sent", sentAt?: ISO }
- *   { leadIds: string[], action: "plan", plannedAt: ISO | null }
+ *   { leadIds: string[], action: "status", status: "open"|"in_progress"|"sent"|"discarded", sentAt?: ISO }
  *   { leadIds: string[], action: "returned", returned: boolean }
  *
  * Bei action=status + status=sent ist sentAt optional (Default: jetzt),
@@ -50,7 +49,12 @@ export async function POST(
   let action: LetterAction;
   if (b.action === "status") {
     const status = b.status;
-    if (status !== "open" && status !== "in_progress" && status !== "sent") {
+    if (
+      status !== "open" &&
+      status !== "in_progress" &&
+      status !== "sent" &&
+      status !== "discarded"
+    ) {
       return NextResponse.json({ error: "Ungültiger Status." }, { status: 400 });
     }
     let sentAt: Date | undefined;
@@ -65,19 +69,6 @@ export async function POST(
       sentAt = d;
     }
     action = { action: "status", status, sentAt };
-  } else if (b.action === "plan") {
-    let plannedAt: Date | null = null;
-    if (typeof b.plannedAt === "string") {
-      const d = new Date(b.plannedAt);
-      if (Number.isNaN(d.getTime())) {
-        return NextResponse.json(
-          { error: "Ungültiges Datum." },
-          { status: 400 },
-        );
-      }
-      plannedAt = d;
-    }
-    action = { action: "plan", plannedAt };
   } else if (b.action === "returned") {
     action = { action: "returned", returned: b.returned === true };
   } else {

@@ -16,14 +16,15 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
-  CalendarClock,
   CheckCircle2,
   ChevronDown,
   FileDown,
   Mail,
   Mailbox,
+  MoreHorizontal,
   Search,
   Undo2,
+  XCircle,
 } from "lucide-react";
 import { ContactDetailSlideOver } from "../../kontakte/contact-detail-slideover";
 import { PageHeader } from "@/components/ui/page-header";
@@ -46,7 +47,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -72,10 +72,9 @@ export interface VersandLeadItem {
   abVariant: "A" | "B" | null;
   hasPdf: boolean;
   hasEnvelope: boolean;
-  letterStatus: "open" | "in_progress" | "sent";
+  letterStatus: "open" | "in_progress" | "sent" | "discarded";
   letterSentAt: string | null;
   letterExportedAt: string | null;
-  letterPlannedAt: string | null;
   letterReturnedAt: string | null;
   viewCount: number;
   lastViewedAt: string | null;
@@ -92,7 +91,7 @@ export interface LeadEmailHistoryItem {
   subject: string;
 }
 
-type LetterStatus = "open" | "in_progress" | "sent";
+type LetterStatus = "open" | "in_progress" | "sent" | "discarded";
 
 /** E-Mail gilt als versendet, sobald sie raus ist (inkl. Klick/Antwort). */
 const EMAIL_SENT_STATUSES = new Set(["sent", "clicked", "replied"]);
@@ -103,11 +102,11 @@ type LeadFilter =
   | "letter_open"
   | "letter_in_progress"
   | "letter_sent"
+  | "letter_discarded"
   | "email_sent"
   | "sent_no_reaction"
   | "sent_today"
   | "sent_7d"
-  | "planned"
   | "returned";
 
 const SORT_ORIGINAL = "__original__";
@@ -115,11 +114,12 @@ const PDFS_PER_FILE = [10, 25, 50, 100, 200, 500];
 
 const LETTER_STATUS_META: Record<
   LetterStatus,
-  { label: string; badge: "neutral" | "warn" | "success" }
+  { label: string; badge: "neutral" | "warn" | "success" | "danger" }
 > = {
   open: { label: "Offen", badge: "neutral" },
   in_progress: { label: "In Bearbeitung", badge: "warn" },
   sent: { label: "Versendet", badge: "success" },
+  discarded: { label: "Aussortiert", badge: "danger" },
 };
 
 const EMAIL_STATUS_LABELS: Record<string, string> = {
@@ -156,11 +156,11 @@ const FILTER_OPTIONS: {
   { value: "letter_open", label: "Brief offen", letterOnly: true },
   { value: "letter_in_progress", label: "Brief in Bearbeitung", letterOnly: true },
   { value: "letter_sent", label: "Brief versendet", letterOnly: true },
+  { value: "letter_discarded", label: "Aussortiert", letterOnly: true },
   { value: "email_sent", label: "E-Mail versendet" },
   { value: "sent_no_reaction", label: "Versendet ohne Reaktion", letterOnly: true },
   { value: "sent_today", label: "Heute versendet", letterOnly: true },
   { value: "sent_7d", label: "Letzte 7 Tage versendet", letterOnly: true },
-  { value: "planned", label: "Mit geplantem Termin", letterOnly: true },
   { value: "returned", label: "Rückläufer", letterOnly: true },
 ];
 
@@ -282,7 +282,6 @@ export function VersandRunView({
   } | null>(null);
   const [postExportIds, setPostExportIds] = React.useState<string[] | null>(null);
   const [sentDialogIds, setSentDialogIds] = React.useState<string[] | null>(null);
-  const [planDialogOpen, setPlanDialogOpen] = React.useState(false);
   // Globale Kontakt-Ansicht (identisch zu Kontakte & Listen); Fallback-Dialog
   // nur für Alt-Leads ohne verknüpften Kontakt + für den E-Mail-Verlauf.
   const [detailContactId, setDetailContactId] = React.useState<string | null>(
@@ -310,6 +309,9 @@ export function VersandRunView({
         case "letter_sent":
           if (l.letterStatus !== "sent") return false;
           break;
+        case "letter_discarded":
+          if (l.letterStatus !== "discarded") return false;
+          break;
         case "email_sent":
           if (!l.emailStatus || !EMAIL_SENT_STATUSES.has(l.emailStatus))
             return false;
@@ -324,9 +326,6 @@ export function VersandRunView({
         case "sent_7d":
           if (!l.letterSentAt || new Date(l.letterSentAt).getTime() < sevenDaysAgo)
             return false;
-          break;
-        case "planned":
-          if (!l.letterPlannedAt || l.letterStatus === "sent") return false;
           break;
         case "returned":
           if (!l.letterReturnedAt) return false;
@@ -403,6 +402,11 @@ export function VersandRunView({
     [leads],
   );
 
+  const discardedCount = React.useMemo(
+    () => leads.filter((l) => l.letterStatus === "discarded").length,
+    [leads],
+  );
+
   const stuckLeads = React.useMemo(() => leads.filter(isStuckInProgress), [leads]);
 
   // ── Auswahl ──────────────────────────────────────────────────────────────
@@ -466,12 +470,15 @@ export function VersandRunView({
   }
 
   function markStatus(ids: string[], status: LetterStatus, sentAtIso?: string) {
+    const noun = `${ids.length} Brief${ids.length === 1 ? "" : "e"}`;
     const label =
       status === "sent"
-        ? `${ids.length} Brief${ids.length === 1 ? "" : "e"} als versendet markiert`
+        ? `${noun} als versendet markiert`
         : status === "in_progress"
-          ? `${ids.length} Brief${ids.length === 1 ? "" : "e"} auf „In Bearbeitung" gesetzt`
-          : `${ids.length} Brief${ids.length === 1 ? "" : "e"} auf „Offen" zurückgesetzt`;
+          ? `${noun} auf „In Bearbeitung" gesetzt`
+          : status === "discarded"
+            ? `${noun} aussortiert`
+            : `${noun} auf „Offen" zurückgesetzt`;
     return applyLetterAction(
       ids,
       { action: "status", status, ...(sentAtIso ? { sentAt: sentAtIso } : {}) },
@@ -545,7 +552,11 @@ export function VersandRunView({
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
-  const allLeadIds = React.useMemo(() => leads.map((l) => l.id), [leads]);
+  // Aussortierte Leads bleiben bei „an alle"-Aktionen außen vor.
+  const allLeadIds = React.useMemo(
+    () => leads.filter((l) => l.letterStatus !== "discarded").map((l) => l.id),
+    [leads],
+  );
 
   /** Header-Klick: 1. Klick aufsteigend, 2. absteigend, 3. wie importiert. */
   function headerSort(col: string) {
@@ -614,35 +625,52 @@ export function VersandRunView({
             >
               <Link href="/versand">Zur Versandzentrale</Link>
             </Button>
-            <Button
-              variant="subtle"
-              iconLeft={<Mail className="size-4" />}
-              onClick={() => emailTo(allLeadIds)}
-              disabled={busy || leads.length === 0}
-            >
-              E-Mail an alle
-            </Button>
-            {hasLetters && hasEnvelopes && (
+            {hasLetters ? (
+              <>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="subtle"
+                      iconRight={<ChevronDown className="size-4" />}
+                      disabled={busy || leads.length === 0}
+                    >
+                      Mehr
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => emailTo(allLeadIds)}>
+                      <Mail className="size-4" />
+                      E-Mail an alle
+                    </DropdownMenuItem>
+                    {hasEnvelopes && (
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          setExportMode({ ids: allLeadIds, envelopesOnly: true })
+                        }
+                      >
+                        <Mailbox className="size-4" />
+                        Nur Umschläge herunterladen
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  iconLeft={<FileDown className="size-4" />}
+                  onClick={() =>
+                    setExportMode({ ids: allLeadIds, envelopesOnly: false })
+                  }
+                  disabled={busy || leads.length === 0}
+                >
+                  PDF-Bundle herunterladen
+                </Button>
+              </>
+            ) : (
               <Button
-                variant="subtle"
-                iconLeft={<Mailbox className="size-4" />}
-                onClick={() =>
-                  setExportMode({ ids: allLeadIds, envelopesOnly: true })
-                }
+                iconLeft={<Mail className="size-4" />}
+                onClick={() => emailTo(allLeadIds)}
                 disabled={busy || leads.length === 0}
               >
-                Nur Umschläge
-              </Button>
-            )}
-            {hasLetters && (
-              <Button
-                iconLeft={<FileDown className="size-4" />}
-                onClick={() =>
-                  setExportMode({ ids: allLeadIds, envelopesOnly: false })
-                }
-                disabled={busy || leads.length === 0}
-              >
-                PDF-Bundle herunterladen
+                E-Mail an alle
               </Button>
             )}
           </>
@@ -683,6 +711,11 @@ export function VersandRunView({
           <p className="mt-1 text-2xl font-bold tabular-nums text-ink">
             {leads.length}
           </p>
+          {discardedCount > 0 && (
+            <p className="text-xs text-red-600">
+              davon {discardedCount} aussortiert
+            </p>
+          )}
         </div>
         {hasLetters && (
           <div className="w-48 rounded-squircle-lg bg-surface p-4 shadow-card">
@@ -826,14 +859,15 @@ export function VersandRunView({
                   <th className="px-3 py-2.5 font-semibold">Brief</th>
                 )}
                 <th className="px-3 py-2.5 font-semibold">E-Mail</th>
-                <th className="px-4 py-2.5 font-semibold">Reaktion</th>
+                <th className="w-12 px-4 py-2.5">
+                  <span className="sr-only">Aktionen</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {sorted.map((l) => {
                 const isSel = selected.has(l.id);
                 const meta = LETTER_STATUS_META[l.letterStatus];
-                const reacted = reactedAfterSend(l);
                 return (
                   <tr
                     key={l.id}
@@ -890,41 +924,11 @@ export function VersandRunView({
                             {formatDate(l.letterSentAt)}
                           </span>
                         )}
-                        {l.letterStatus !== "sent" && l.letterPlannedAt && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-brand">
-                            <CalendarClock className="size-3" />
-                            {formatDate(l.letterPlannedAt)}
-                          </span>
-                        )}
                         {l.letterReturnedAt && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-red-600">
                             <Undo2 className="size-3" />
                             Rückläufer
                           </span>
-                        )}
-                        {l.hasPdf && (
-                          <a
-                            href={`/api/leads/${l.id}/pdf`}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="rounded-full p-1 text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
-                            title="Diesen Brief als PDF herunterladen"
-                          >
-                            <FileDown className="size-3.5" />
-                          </a>
-                        )}
-                        {l.hasEnvelope && (
-                          <a
-                            href={`/api/leads/${l.id}/envelope-pdf`}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="rounded-full p-1 text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
-                            title="Diesen Umschlag als PDF herunterladen"
-                          >
-                            <Mailbox className="size-3.5" />
-                          </a>
                         )}
                       </div>
                     </td>
@@ -977,15 +981,51 @@ export function VersandRunView({
                         )
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs">
-                      {reacted ? (
-                        <span className="inline-flex items-center gap-1 font-medium text-emerald-600">
-                          <CheckCircle2 className="size-3.5" />
-                          Reagiert
-                        </span>
-                      ) : (
-                        <span className="text-ink-muted">—</span>
-                      )}
+                    <td
+                      className="px-4 py-3 text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="rounded-full p-1.5 text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
+                            title="Aktionen für diesen Lead"
+                          >
+                            <MoreHorizontal className="size-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => emailTo([l.id])}>
+                            <Mail className="size-4" />
+                            E-Mail verschicken
+                          </DropdownMenuItem>
+                          {l.hasPdf && (
+                            <DropdownMenuItem asChild>
+                              <a
+                                href={`/api/leads/${l.id}/pdf`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <FileDown className="size-4" />
+                                Brief herunterladen
+                              </a>
+                            </DropdownMenuItem>
+                          )}
+                          {l.hasEnvelope && (
+                            <DropdownMenuItem asChild>
+                              <a
+                                href={`/api/leads/${l.id}/envelope-pdf`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <Mailbox className="size-4" />
+                                Umschlag herunterladen
+                              </a>
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 );
@@ -1012,6 +1052,47 @@ export function VersandRunView({
             <span className="mx-1 h-4 w-px bg-white/20" />
             {hasLetters && (
               <>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20 disabled:opacity-50"
+                    >
+                      Status setzen
+                      <ChevronDown className="size-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onSelect={() => setSentDialogIds(selectedVisible)}
+                    >
+                      <CheckCircle2 className="size-4 text-emerald-600" />
+                      Versendet …
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() =>
+                        void markStatus(selectedVisible, "in_progress")
+                      }
+                    >
+                      In Bearbeitung
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => void markStatus(selectedVisible, "open")}
+                    >
+                      Offen (zurücksetzen)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      danger
+                      onSelect={() =>
+                        void markStatus(selectedVisible, "discarded")
+                      }
+                    >
+                      <XCircle className="size-4" />
+                      Aussortiert
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <button
                   type="button"
                   onClick={() =>
@@ -1023,25 +1104,16 @@ export function VersandRunView({
                   <FileDown className="size-3.5" />
                   PDFs exportieren
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setSentDialogIds(selectedVisible)}
-                  disabled={busy}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
-                >
-                  <CheckCircle2 className="size-3.5" />
-                  Als versendet markieren
-                </button>
               </>
             )}
             <button
               type="button"
               onClick={() => emailTo(selectedVisible)}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-white/90 disabled:opacity-50"
             >
               <Mail className="size-3.5" />
-              E-Mail an Auswahl
+              E-Mail versenden
             </button>
             {hasLetters && (
             <DropdownMenu>
@@ -1056,33 +1128,6 @@ export function VersandRunView({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onSelect={() => void markStatus(selectedVisible, "in_progress")}
-                >
-                  Status: In Bearbeitung
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => void markStatus(selectedVisible, "open")}
-                >
-                  Status: Offen (zurücksetzen)
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setPlanDialogOpen(true)}>
-                  Versandtermin planen …
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() =>
-                    void applyLetterAction(
-                      selectedVisible,
-                      { action: "plan", plannedAt: null },
-                      "Geplante Termine entfernt",
-                      (l) => ({ ...l, letterPlannedAt: null }),
-                    )
-                  }
-                >
-                  Geplanten Termin entfernen
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onSelect={() =>
                     void applyLetterAction(
@@ -1179,23 +1224,6 @@ export function VersandRunView({
             dateInputToIso(dateValue),
           );
           if (ok) setSentDialogIds(null);
-        }}
-      />
-
-      <PlanDialog
-        open={planDialogOpen}
-        onOpenChange={setPlanDialogOpen}
-        busy={busy}
-        onApply={async (dateValue) => {
-          const ids = selectedVisible;
-          const iso = dateInputToIso(dateValue);
-          const ok = await applyLetterAction(
-            ids,
-            { action: "plan", plannedAt: iso },
-            `Versandtermin für ${ids.length} Brief${ids.length === 1 ? "" : "e"} geplant`,
-            (l) => ({ ...l, letterPlannedAt: iso }),
-          );
-          if (ok) setPlanDialogOpen(false);
         }}
       />
     </>
@@ -1636,12 +1664,6 @@ function LeadDetailDialog({
                       Exportiert am {formatDate(lead.letterExportedAt)}
                     </span>
                   )}
-                  {lead.letterStatus !== "sent" && lead.letterPlannedAt && (
-                    <span className="inline-flex items-center gap-1 text-brand">
-                      <CalendarClock className="size-3.5" />
-                      Geplant für {formatDate(lead.letterPlannedAt)}
-                    </span>
-                  )}
                   {lead.letterReturnedAt && (
                     <span className="inline-flex items-center gap-1 font-medium text-red-600">
                       <Undo2 className="size-3.5" />
@@ -1766,68 +1788,6 @@ function LeadDetailDialog({
           <DialogClose asChild>
             <Button variant="ghost">Schließen</Button>
           </DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── Versandtermin-Dialog ───────────────────────────────────────────────────
-
-function PlanDialog({
-  open,
-  onOpenChange,
-  busy,
-  onApply,
-}: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  busy: boolean;
-  onApply: (dateValue: string) => void | Promise<void>;
-}) {
-  const [dateValue, setDateValue] = React.useState("");
-
-  React.useEffect(() => {
-    if (open) setDateValue("");
-  }, [open]);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md">
-        <DialogHeader>
-          <DialogTitle>Versandtermin planen</DialogTitle>
-          <DialogDescription>
-            Reine Erinnerung für dich — es wird nichts automatisch versendet.
-            Der Termin erscheint in der Übersicht und an den Leads.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="py-2">
-          <Label htmlFor="vz-plan-date">Geplantes Versanddatum</Label>
-          <Input
-            id="vz-plan-date"
-            type="date"
-            value={dateValue}
-            min={todayInputValue()}
-            onChange={(e) => setDateValue(e.target.value)}
-            className="mt-1 w-44"
-          />
-        </div>
-
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="ghost" disabled={busy}>
-              Abbrechen
-            </Button>
-          </DialogClose>
-          <Button
-            onClick={() => void onApply(dateValue)}
-            loading={busy}
-            disabled={busy || !dateValue}
-            iconLeft={<CalendarClock className="size-4" />}
-          >
-            Termin speichern
-          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

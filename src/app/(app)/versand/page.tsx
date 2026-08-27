@@ -46,10 +46,6 @@ export default async function VersandPage() {
         letterSent: r.letterSent,
         reacted: r.reacted,
         stuckInProgress: r.stuckInProgress,
-        planned: r.planned,
-        earliestPlannedAt: r.earliestPlannedAt
-          ? r.earliestPlannedAt.toISOString()
-          : null,
         returned: r.returned,
         lastSentAt: r.lastSentAt ? r.lastSentAt.toISOString() : null,
         emailTotal: r.emailTotal,
