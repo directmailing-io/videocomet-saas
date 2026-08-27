@@ -66,6 +66,8 @@ const bodySchema = z.object({
   leadIds: z.array(z.string().uuid()).min(1).max(5000).optional(),
   /** Nur Umschläge (Versandzentrale): keine Briefe im ZIP, kein Export-Protokoll. */
   envelopesOnly: z.boolean().optional(),
+  /** Nur Briefe (Versandzentrale): keine Umschläge im ZIP, Export-Protokoll läuft normal. */
+  lettersOnly: z.boolean().optional(),
 });
 
 export async function POST(
@@ -83,6 +85,7 @@ export async function POST(
     sortDir?: BundleSortDir;
     leadIds?: string[];
     envelopesOnly?: boolean;
+    lettersOnly?: boolean;
   };
   try {
     const json = await req.json();
@@ -95,6 +98,8 @@ export async function POST(
       leadIds: Array.isArray(json.leadIds) ? json.leadIds : undefined,
       envelopesOnly:
         typeof json.envelopesOnly === "boolean" ? json.envelopesOnly : undefined,
+      lettersOnly:
+        typeof json.lettersOnly === "boolean" ? json.lettersOnly : undefined,
     });
   } catch (err) {
     return NextResponse.json(
@@ -116,6 +121,7 @@ export async function POST(
     body.sortDir ?? "asc",
     body.leadIds,
     body.envelopesOnly ?? false,
+    body.lettersOnly ?? false,
   );
 }
 
@@ -270,6 +276,7 @@ async function buildBundle(
   sortDir: BundleSortDir,
   leadIds?: string[],
   envelopesOnly = false,
+  lettersOnly = false,
 ): Promise<Response> {
   let run;
   try {
@@ -324,7 +331,9 @@ async function buildBundle(
   const baseName = sanitizeBaseName(baseNameInput, run.name);
   const zipFilename = envelopesOnly
     ? `${baseName}_umschlaege.zip`
-    : `${baseName}_pdf-bundle.zip`;
+    : lettersOnly
+      ? `${baseName}_briefe.zip`
+      : `${baseName}_pdf-bundle.zip`;
 
   // Beide via dynamic import — Next-Webpack mangled sonst die Default-
   // Resolution (archiver-Bug). Dynamic import resolved at runtime.
@@ -370,7 +379,8 @@ async function buildBundle(
         // Briefe und Umschläge im SELBEN Loop über die SELBE Lead-Liste —
         // dadurch ist die Reihenfolge in beiden Dateien garantiert identisch.
         const letterDoc = envelopesOnly ? null : await PDFDocument.create();
-        const envelopeDoc = hasEnvelopes ? await PDFDocument.create() : null;
+        const envelopeDoc =
+          hasEnvelopes && !lettersOnly ? await PDFDocument.create() : null;
 
         for (const lead of batch) {
           if (letterDoc) {
@@ -427,10 +437,11 @@ async function buildBundle(
     // README: Manifest + Warnungen. Immer bei Varianten-Auswahl, Teilexport
     // oder wenn etwas schiefging — der Lettershop soll Abweichungen sehen,
     // nicht raten.
-    if (variant !== "mixed" || sortBy || isPartial || envelopesOnly || warnings.length > 0) {
+    if (variant !== "mixed" || sortBy || isPartial || envelopesOnly || lettersOnly || warnings.length > 0) {
       const lines: string[] = [
         `PDF-Bundle "${baseName}" — Runde: ${run.name}`,
         ...(envelopesOnly ? ["Nur Umschläge (keine Briefe in diesem ZIP)"] : []),
+        ...(lettersOnly ? ["Nur Briefe (keine Umschläge in diesem ZIP)"] : []),
         ...(isPartial
           ? [`Teilexport: ${completed.length} von ${totalCompleted} Leads (Auswahl aus der Versandzentrale)`]
           : []),
@@ -448,9 +459,13 @@ async function buildBundle(
         }`,
         "",
         ...groups.map((g) => `${g.label}: ${g.leads.length} Leads`),
-        "",
-        "Brief- und Umschlag-Dateien mit gleichem Nummernbereich enthalten",
-        "dieselben Leads in derselben Reihenfolge (Kuvertier-Reihenfolge).",
+        ...(envelopesOnly || lettersOnly
+          ? []
+          : [
+              "",
+              "Brief- und Umschlag-Dateien mit gleichem Nummernbereich enthalten",
+              "dieselben Leads in derselben Reihenfolge (Kuvertier-Reihenfolge).",
+            ]),
       ];
       if (warnings.length > 0) {
         lines.push(

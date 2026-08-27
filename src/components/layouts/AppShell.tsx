@@ -103,8 +103,8 @@ const NAV_GROUPS: Array<{ label: string | null; items: NavItem[] }> = [
     label: "Setup",
     items: [
       { key: "media", label: "Mediathek", href: "/mediathek", icon: Library },
-      { key: "landingpages", label: "Landingpages", href: "/landingpages", icon: LayoutTemplate },
-      { key: "envelopes", label: "Umschläge", href: "/umschlaege", icon: MailIcon },
+      { key: "landingpages", label: "Landingpage-Vorlagen", href: "/landingpages", icon: LayoutTemplate },
+      { key: "envelopes", label: "Umschlag-Vorlagen", href: "/umschlaege", icon: MailIcon },
       { key: "emailTemplates", label: "E-Mail-Vorlagen", href: "/email-vorlagen", icon: AtSign },
       { key: "settings", label: "Einstellungen", href: "/einstellungen", icon: Settings },
     ],

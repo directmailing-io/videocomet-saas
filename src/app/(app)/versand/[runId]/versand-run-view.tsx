@@ -96,6 +96,9 @@ type LetterStatus = "open" | "in_progress" | "sent" | "discarded";
 const EMAIL_SENT_STATUSES = new Set(["sent", "clicked", "replied"]);
 
 /** EIN Filter für alles — Brief-Status, E-Mail-Status und Spezialfälle. */
+/** Export-Varianten: komplettes Bundle, nur Briefe oder nur Umschläge. */
+type ExportVariant = "bundle" | "letters" | "envelopes";
+
 type LeadFilter =
   | "all"
   | "letter_open"
@@ -193,6 +196,27 @@ function formatDateTime(iso: string | null): string {
   }
 }
 
+/**
+ * Hover-Text für die E-Mail-Zelle: JEDE verschickte Mail mit Zeitpunkt,
+ * Betreff (Vorlage), Status und ggf. Antwort-Datum — eine Zeile pro Mail.
+ */
+function emailHistoryTitle(
+  history: { sentAt: string | null; status: string; repliedAt: string | null; subject: string | null }[],
+): string {
+  return history
+    .map((m) =>
+      [
+        m.sentAt ? formatDateTime(m.sentAt) : "Noch nicht gesendet",
+        m.subject ? `„${m.subject}“` : null,
+        EMAIL_STATUS_LABELS[m.status] ?? m.status,
+        m.repliedAt ? `Antwort am ${formatDate(m.repliedAt)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    )
+    .join("\n");
+}
+
 function displayName(d: Record<string, string>): string {
   const first = d.firstName || d.Vorname || "";
   const last = d.lastName || d.Nachname || "";
@@ -277,7 +301,7 @@ export function VersandRunView({
   // Dialoge
   const [exportMode, setExportMode] = React.useState<{
     ids: string[];
-    envelopesOnly: boolean;
+    variant: ExportVariant;
   } | null>(null);
   const [postExportIds, setPostExportIds] = React.useState<string[] | null>(null);
   const [sentDialogIds, setSentDialogIds] = React.useState<string[] | null>(null);
@@ -624,54 +648,49 @@ export function VersandRunView({
             >
               <Link href="/versand">Zur Versandzentrale</Link>
             </Button>
-            {hasLetters ? (
-              <>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="subtle"
-                      iconRight={<ChevronDown className="size-4" />}
-                      disabled={busy || leads.length === 0}
-                    >
-                      Mehr
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => emailTo(allLeadIds)}>
-                      <Mail className="size-4" />
-                      E-Mail an alle
-                    </DropdownMenuItem>
-                    {hasEnvelopes && (
-                      <DropdownMenuItem
-                        onSelect={() =>
-                          setExportMode({ ids: allLeadIds, envelopesOnly: true })
-                        }
-                      >
-                        <Mailbox className="size-4" />
-                        Nur Umschläge herunterladen
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button
-                  iconLeft={<FileDown className="size-4" />}
-                  onClick={() =>
-                    setExportMode({ ids: allLeadIds, envelopesOnly: false })
-                  }
+                  iconRight={<ChevronDown className="size-4" />}
                   disabled={busy || leads.length === 0}
                 >
-                  PDF-Bundle herunterladen
+                  Aktion
                 </Button>
-              </>
-            ) : (
-              <Button
-                iconLeft={<Mail className="size-4" />}
-                onClick={() => emailTo(allLeadIds)}
-                disabled={busy || leads.length === 0}
-              >
-                E-Mail an alle
-              </Button>
-            )}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={!hasLetters}
+                  onSelect={() =>
+                    setExportMode({ ids: allLeadIds, variant: "bundle" })
+                  }
+                >
+                  <FileDown className="size-4" />
+                  PDF-Bundle herunterladen
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!hasLetters}
+                  onSelect={() =>
+                    setExportMode({ ids: allLeadIds, variant: "letters" })
+                  }
+                >
+                  <FileDown className="size-4" />
+                  Nur Briefe herunterladen
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!hasEnvelopes}
+                  onSelect={() =>
+                    setExportMode({ ids: allLeadIds, variant: "envelopes" })
+                  }
+                >
+                  <Mailbox className="size-4" />
+                  Nur Umschläge herunterladen
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => emailTo(allLeadIds)}>
+                  <Mail className="size-4" />
+                  E-Mail versenden
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         }
       />
@@ -855,7 +874,7 @@ export function VersandRunView({
                   <SortableTh key={col} col={col} label={col} />
                 ))}
                 {hasLetters && (
-                  <th className="px-3 py-2.5 font-semibold">Brief</th>
+                  <th className="px-3 py-2.5 font-semibold">Post</th>
                 )}
                 <th className="px-3 py-2.5 font-semibold">E-Mail</th>
                 <th className="w-12 px-4 py-2.5">
@@ -949,7 +968,7 @@ export function VersandRunView({
                           type="button"
                           onClick={() => setDetailLead(l)}
                           className="group/email mt-0.5 text-left"
-                          title="E-Mail-Verlauf anzeigen"
+                          title={emailHistoryTitle(l.emailHistory)}
                         >
                           <Badge
                             variant={
@@ -961,7 +980,7 @@ export function VersandRunView({
                             {EMAIL_STATUS_LABELS[l.emailStatus ?? ""] ??
                               l.emailStatus}
                           </Badge>
-                          <span className="mt-0.5 block text-[11px] text-ink-muted underline-offset-2 group-hover/email:underline">
+                          <span className="mt-0.5 block text-[11px] tabular-nums text-ink-muted underline-offset-2 group-hover/email:underline">
                             {(() => {
                               const sentMails = l.emailHistory.filter(
                                 (m) => m.sentAt,
@@ -970,7 +989,9 @@ export function VersandRunView({
                                 return "Noch keine gesendet";
                               const last =
                                 sentMails[sentMails.length - 1].sentAt;
-                              return `${sentMails.length}× gesendet · zuletzt ${formatDate(last)}`;
+                              return sentMails.length === 1
+                                ? formatDateTime(last)
+                                : `${sentMails.length}× gesendet · zuletzt ${formatDateTime(last)}`;
                             })()}
                           </span>
                         </button>
@@ -999,7 +1020,7 @@ export function VersandRunView({
                             <Mail className="size-4" />
                             E-Mail verschicken
                           </DropdownMenuItem>
-                          {l.hasPdf && (
+                          {l.hasPdf ? (
                             <DropdownMenuItem asChild>
                               <a
                                 href={`/api/leads/${l.id}/pdf`}
@@ -1010,8 +1031,13 @@ export function VersandRunView({
                                 Brief herunterladen
                               </a>
                             </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem disabled>
+                              <FileDown className="size-4" />
+                              Brief herunterladen
+                            </DropdownMenuItem>
                           )}
-                          {l.hasEnvelope && (
+                          {l.hasEnvelope ? (
                             <DropdownMenuItem asChild>
                               <a
                                 href={`/api/leads/${l.id}/envelope-pdf`}
@@ -1021,6 +1047,11 @@ export function VersandRunView({
                                 <Mailbox className="size-4" />
                                 Umschlag herunterladen
                               </a>
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem disabled>
+                              <Mailbox className="size-4" />
+                              Umschlag herunterladen
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
@@ -1100,7 +1131,7 @@ export function VersandRunView({
                 <button
                   type="button"
                   onClick={() =>
-                    setExportMode({ ids: selectedVisible, envelopesOnly: false })
+                    setExportMode({ ids: selectedVisible, variant: "bundle" })
                   }
                   disabled={busy}
                   className="inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-white/90 disabled:opacity-50"
@@ -1246,7 +1277,7 @@ function ExportDialog({
   sortDir,
   onExported,
 }: {
-  mode: { ids: string[]; envelopesOnly: boolean } | null;
+  mode: { ids: string[]; variant: ExportVariant } | null;
   onClose: () => void;
   runId: string;
   runName: string;
@@ -1261,7 +1292,9 @@ function ExportDialog({
   const [pdfsPerFile, setPdfsPerFile] = React.useState("100");
   const [downloading, setDownloading] = React.useState(false);
   const leadIds = mode?.ids ?? [];
-  const envelopesOnly = mode?.envelopesOnly ?? false;
+  const variant = mode?.variant ?? "bundle";
+  const envelopesOnly = variant === "envelopes";
+  const lettersOnly = variant === "letters";
   const isPartial = leadIds.length < totalCompleted;
 
   async function handleDownload() {
@@ -1271,7 +1304,9 @@ function ExportDialog({
       variant: "default",
       title: envelopesOnly
         ? "Umschläge werden vorbereitet …"
-        : "Bundle wird vorbereitet …",
+        : lettersOnly
+          ? "Briefe werden vorbereitet …"
+          : "Bundle wird vorbereitet …",
       description:
         "Der Download startet automatisch. Kann bei vielen Leads einige Sekunden dauern.",
     });
@@ -1284,6 +1319,7 @@ function ExportDialog({
           baseName: baseName.trim() || defaultBase,
           leadIds,
           ...(envelopesOnly ? { envelopesOnly: true } : {}),
+          ...(lettersOnly ? { lettersOnly: true } : {}),
           ...(sortBy ? { sortBy, sortDir } : {}),
         }),
       });
@@ -1338,8 +1374,10 @@ function ExportDialog({
               ? `Teilexport: ${leadIds.length} von ${totalCompleted} Leads. `
               : envelopesOnly
                 ? "Alle Umschläge dieser Runde — ohne Briefe. "
-                : "Alle Briefe dieser Runde. "}
-            {envelopesOnly
+                : lettersOnly
+                  ? "Alle Briefe dieser Runde — ohne Umschläge. "
+                  : "Alle Briefe dieser Runde. "}
+            {envelopesOnly || lettersOnly
               ? "Die Reihenfolge ist exakt die der Tabelle (so wie sie gerade sortiert ist)."
               : "Umschläge kommen automatisch mit — in exakt derselben Reihenfolge wie die Briefe (so wie die Tabelle gerade sortiert ist)."}
           </DialogDescription>
@@ -1394,7 +1432,9 @@ function ExportDialog({
               ? "Wird erstellt …"
               : envelopesOnly
                 ? "Umschläge herunterladen"
-                : "ZIP herunterladen"}
+                : lettersOnly
+                  ? "Briefe herunterladen"
+                  : "ZIP herunterladen"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1499,7 +1539,6 @@ function PostExportDialog({
                 id="vz-post-export-date"
                 type="date"
                 value={dateValue}
-                max={todayInputValue()}
                 onChange={(e) => setDateValue(e.target.value)}
                 className="mt-1 w-44"
               />
@@ -1551,8 +1590,8 @@ function MarkSentDialog({
           </DialogTitle>
           <DialogDescription>
             Ab diesem Datum zählen Aufrufe der Landingpage als echte Reaktion.
-            Das Datum darf in der Vergangenheit liegen, falls die Briefe schon
-            früher rausgegangen sind.
+            Das Datum darf auch in der Vergangenheit oder Zukunft liegen —
+            je nachdem, wann die Briefe rausgehen.
           </DialogDescription>
         </DialogHeader>
 
@@ -1563,7 +1602,6 @@ function MarkSentDialog({
               id="vz-sent-date"
               type="date"
               value={dateValue}
-              max={todayInputValue()}
               onChange={(e) => setDateValue(e.target.value)}
               className="w-44"
             />

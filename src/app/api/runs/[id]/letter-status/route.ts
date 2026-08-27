@@ -18,7 +18,7 @@ import {
  *   { leadIds: string[], action: "returned", returned: boolean }
  *
  * Bei action=status + status=sent ist sentAt optional (Default: jetzt),
- * darf aber rückdatiert werden. Nur completed-Leads werden angefasst
+ * darf aber rück- oder vordatiert werden (max. 1 Jahr voraus). Nur completed-Leads werden angefasst
  * (Race-Guard gegen laufende Regeneration) — Rest zählt als `skipped`.
  */
 export async function POST(
@@ -60,7 +60,12 @@ export async function POST(
     let sentAt: Date | undefined;
     if (status === "sent" && typeof b.sentAt === "string") {
       const d = new Date(b.sentAt);
-      if (Number.isNaN(d.getTime()) || d.getTime() > Date.now() + 86_400_000) {
+      // Zukunft ist erlaubt (Briefe gehen z.B. erst nächste Woche raus) —
+      // nur Tippfehler-Jahre über 1 Jahr voraus werden abgefangen.
+      if (
+        Number.isNaN(d.getTime()) ||
+        d.getTime() > Date.now() + 366 * 86_400_000
+      ) {
         return NextResponse.json(
           { error: "Ungültiges Versanddatum." },
           { status: 400 },
