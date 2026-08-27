@@ -9,18 +9,12 @@ import { VersandView } from "./versand-view";
 export const dynamic = "force-dynamic";
 
 /**
- * Versandzentrale: EIN Ort für den kompletten Versand — Tab „Briefe"
- * (Runden mit fertigen PDFs, Status-Steuerung, Teilexport) + Tab „E-Mails"
- * (bestehende Blast-Übersicht). Ersetzt den alten Nav-Punkt
- * „E-Mail-Versand" (/email-versand leitet hierher um).
+ * Versandzentrale: EIN Ort für den kompletten Versand — eine Runden-Tabelle
+ * mit beiden Kanälen (Brief + E-Mail) statt Tabs, darunter das Protokoll
+ * aller E-Mail-Versände. (/email-versand leitet hierher um.)
  */
-export default async function VersandPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ tab?: string }>;
-}) {
+export default async function VersandPage() {
   const { user } = await requireUser();
-  const { tab } = await searchParams;
 
   const [versandRuns, blasts, campaignRows] = await Promise.all([
     listVersandRuns(user.id).catch(() => []),
@@ -42,10 +36,7 @@ export default async function VersandPage({
 
   return (
     <VersandView
-      initialTab={tab === "emails" ? "emails" : "briefe"}
-      // Kampagnen ohne Brief-PDFs haben nichts im Briefe-Tab verloren —
-      // deren E-Mail-Versand läuft komplett über den E-Mails-Tab.
-      runs={versandRuns.filter((r) => r.withPdf > 0).map((r) => ({
+      runs={versandRuns.map((r) => ({
         runId: r.runId,
         runName: r.runName,
         campaignId: r.campaignId,

@@ -78,6 +78,14 @@ export interface VersandLeadItem {
   ctaClickCount: number;
   lastCtaAt: string | null;
   emailStatus: string | null;
+  emailHistory: LeadEmailHistoryItem[];
+}
+
+export interface LeadEmailHistoryItem {
+  sentAt: string | null;
+  status: string;
+  repliedAt: string | null;
+  subject: string;
 }
 
 type LetterStatus = "open" | "in_progress" | "sent";
@@ -116,6 +124,20 @@ const EMAIL_STATUS_LABELS: Record<string, string> = {
   unsubscribed: "Abgemeldet",
 };
 
+const EMAIL_STATUS_BADGE: Record<
+  string,
+  "brand" | "success" | "warn" | "danger" | "neutral"
+> = {
+  scheduled: "neutral",
+  sent: "success",
+  clicked: "brand",
+  replied: "brand",
+  bounced: "danger",
+  failed: "danger",
+  skipped: "neutral",
+  unsubscribed: "warn",
+};
+
 const EXTRA_FILTER_OPTIONS: { value: ExtraFilter; label: string }[] = [
   { value: "all", label: "Alle anzeigen" },
   { value: "sent_no_reaction", label: "Versendet ohne Reaktion" },
@@ -135,6 +157,21 @@ function formatDate(iso: string | null): string {
       month: "2-digit",
       year: "numeric",
     }).format(new Date(iso));
+  } catch {
+    return "—";
+  }
+}
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return `${new Intl.DateTimeFormat("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(iso))} Uhr`;
   } catch {
     return "—";
   }
@@ -227,6 +264,9 @@ export function VersandRunView({
   const [postExportIds, setPostExportIds] = React.useState<string[] | null>(null);
   const [sentDialogIds, setSentDialogIds] = React.useState<string[] | null>(null);
   const [planDialogOpen, setPlanDialogOpen] = React.useState(false);
+  const [historyLead, setHistoryLead] = React.useState<VersandLeadItem | null>(
+    null,
+  );
 
   // ── Filter + Sortierung ──────────────────────────────────────────────────
   const filtered = React.useMemo(() => {
@@ -793,10 +833,43 @@ export function VersandRunView({
                       </div>
                     </td>
                     )}
-                    <td className="px-3 py-3 text-xs text-ink-muted">
-                      {l.emailStatus
-                        ? (EMAIL_STATUS_LABELS[l.emailStatus] ?? l.emailStatus)
-                        : "—"}
+                    <td
+                      className="px-3 py-3"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {l.emailHistory.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setHistoryLead(l)}
+                          className="group/email text-left"
+                          title="E-Mail-Verlauf anzeigen"
+                        >
+                          <Badge
+                            variant={
+                              EMAIL_STATUS_BADGE[l.emailStatus ?? ""] ??
+                              "neutral"
+                            }
+                            dot
+                          >
+                            {EMAIL_STATUS_LABELS[l.emailStatus ?? ""] ??
+                              l.emailStatus}
+                          </Badge>
+                          <span className="mt-0.5 block text-[11px] text-ink-muted underline-offset-2 group-hover/email:underline">
+                            {(() => {
+                              const sentMails = l.emailHistory.filter(
+                                (m) => m.sentAt,
+                              );
+                              if (sentMails.length === 0)
+                                return "Noch keine gesendet";
+                              const last =
+                                sentMails[sentMails.length - 1].sentAt;
+                              return `${sentMails.length}× gesendet · zuletzt ${formatDate(last)}`;
+                            })()}
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="text-xs text-ink-muted">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-xs">
                       {reacted ? (
@@ -935,6 +1008,64 @@ export function VersandRunView({
           </div>
         </div>
       )}
+
+      {/* E-Mail-Verlauf eines Leads: jede Mail mit Datum, Betreff, Status */}
+      <Dialog
+        open={historyLead != null}
+        onOpenChange={(o) => {
+          if (!o) setHistoryLead(null);
+        }}
+      >
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>E-Mail-Verlauf</DialogTitle>
+            <DialogDescription>
+              {historyLead ? displayName(historyLead.data) : ""} — alle
+              E-Mails an diesen Lead mit Datum und Status.
+            </DialogDescription>
+          </DialogHeader>
+          <ol className="flex max-h-80 flex-col gap-2 overflow-y-auto">
+            {(historyLead?.emailHistory ?? [])
+              .slice()
+              .reverse()
+              .map((m, i) => (
+                <li
+                  key={i}
+                  className="rounded-squircle-md bg-surface-soft px-3.5 py-2.5"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-medium tabular-nums text-ink">
+                      {m.sentAt
+                        ? formatDateTime(m.sentAt)
+                        : "Wartet in der Warteschlange"}
+                    </span>
+                    <Badge
+                      variant={EMAIL_STATUS_BADGE[m.status] ?? "neutral"}
+                      dot
+                    >
+                      {EMAIL_STATUS_LABELS[m.status] ?? m.status}
+                    </Badge>
+                  </div>
+                  {m.subject && (
+                    <p className="mt-1 text-sm text-ink line-clamp-1">
+                      „{m.subject}“
+                    </p>
+                  )}
+                  {m.repliedAt && (
+                    <p className="mt-0.5 text-[11px] font-medium text-brand">
+                      Antwort erhalten am {formatDateTime(m.repliedAt)}
+                    </p>
+                  )}
+                </li>
+              ))}
+          </ol>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="ghost">Schließen</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ExportDialog
         open={exportOpen}
@@ -1305,14 +1436,41 @@ function MarkSentDialog({
 
         <div className="py-2">
           <Label htmlFor="vz-sent-date">Versanddatum</Label>
-          <Input
-            id="vz-sent-date"
-            type="date"
-            value={dateValue}
-            max={todayInputValue()}
-            onChange={(e) => setDateValue(e.target.value)}
-            className="mt-1 w-44"
-          />
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <Input
+              id="vz-sent-date"
+              type="date"
+              value={dateValue}
+              max={todayInputValue()}
+              onChange={(e) => setDateValue(e.target.value)}
+              className="w-44"
+            />
+            {(
+              [
+                ["Heute", 0],
+                ["Gestern", 1],
+              ] as const
+            ).map(([label, daysAgo]) => {
+              const d = new Date();
+              d.setDate(d.getDate() - daysAgo);
+              const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setDateValue(value)}
+                  className={cn(
+                    "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                    dateValue === value
+                      ? "bg-ink text-white"
+                      : "bg-surface-muted text-ink-muted hover:text-ink",
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <DialogFooter>

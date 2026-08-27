@@ -6,7 +6,11 @@ import {
   listLeadsByRun,
   getLeadDataColumns,
 } from "@/lib/db/queries/leads";
-import { getLeadEmailStatusMapForRun } from "@/lib/db/queries/email-blasts";
+import {
+  getLeadEmailStatusMapForRun,
+  getLeadEmailHistoryForRun,
+  type LeadEmailHistoryEntry,
+} from "@/lib/db/queries/email-blasts";
 import { VersandRunView } from "./versand-run-view";
 
 export const dynamic = "force-dynamic";
@@ -31,14 +35,18 @@ export default async function VersandRunPage({
     notFound();
   }
 
-  const [campaign, allLeads, columns, emailStatusMap] = await Promise.all([
-    getCampaign(run.campaignId, user.id).catch(() => null),
-    listLeadsByRun(runId, user.id),
-    getLeadDataColumns([runId], user.id).catch(() => [] as string[]),
-    getLeadEmailStatusMapForRun(runId, user.id).catch(
-      () => ({}) as Record<string, string>,
-    ),
-  ]);
+  const [campaign, allLeads, columns, emailStatusMap, emailHistory] =
+    await Promise.all([
+      getCampaign(run.campaignId, user.id).catch(() => null),
+      listLeadsByRun(runId, user.id),
+      getLeadDataColumns([runId], user.id).catch(() => [] as string[]),
+      getLeadEmailStatusMapForRun(runId, user.id).catch(
+        () => ({}) as Record<string, string>,
+      ),
+      getLeadEmailHistoryForRun(runId, user.id).catch(
+        () => ({}) as Record<string, LeadEmailHistoryEntry[]>,
+      ),
+    ]);
   if (!campaign) notFound();
 
   // Nur fertige Leads sind versandfähig — der Rest wird gezählt und als
@@ -78,6 +86,12 @@ export default async function VersandRunPage({
         ctaClickCount: l.ctaClickCount ?? 0,
         lastCtaAt: l.lastCtaAt ? l.lastCtaAt.toISOString() : null,
         emailStatus: emailStatusMap[l.id] ?? null,
+        emailHistory: (emailHistory[l.id] ?? []).map((m) => ({
+          sentAt: m.sentAt ? m.sentAt.toISOString() : null,
+          status: m.status as string,
+          repliedAt: m.repliedAt ? m.repliedAt.toISOString() : null,
+          subject: m.subject,
+        })),
       }))}
     />
   );

@@ -1,15 +1,14 @@
 "use client";
 
 /**
- * Versandzentrale — Tabs „Briefe" + „E-Mails".
- *
- * Briefe: alle Runden mit fertigen PDFs als Karten mit Versand-Fortschritt.
- * Klick auf eine Karte → Detailansicht mit Lead-Tabelle (Auswahl, Export,
- * Versendet-Markierung). E-Mails: bestehende Blast-Übersicht.
+ * Versandzentrale — EINE Runden-Tabelle statt Tabs: pro Runde die aktiven
+ * Kanäle (Brief/E-Mail) mit eigenem Fortschritt. Klick auf eine Zeile →
+ * Detailansicht mit Lead-Tabelle (Auswahl, PDF-Export, E-Mail-Versand).
+ * Darunter das Protokoll aller E-Mail-Versände.
  */
 
 import * as React from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CalendarClock,
@@ -20,7 +19,6 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   EmailBlastsPanel,
   type EmailVersandBlastRow,
@@ -63,210 +61,219 @@ function formatDate(iso: string | null): string {
   }
 }
 
-function ChannelProgress({
+function ChannelBadge({
   icon,
   label,
-  sent,
-  total,
-  barClass,
-  info,
+  active,
 }: {
   icon: React.ReactNode;
   label: string;
+  active: boolean;
+}) {
+  return (
+    <span
+      className={
+        active
+          ? "inline-flex items-center gap-1 rounded-full bg-ink px-2 py-0.5 text-[11px] font-semibold text-white"
+          : "inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-ink-muted"
+      }
+    >
+      {icon}
+      {label}
+    </span>
+  );
+}
+
+function ProgressCell({
+  sent,
+  total,
+  barClass,
+  extra,
+}: {
   sent: number;
   total: number;
   barClass: string;
-  info?: React.ReactNode;
+  extra?: React.ReactNode;
 }) {
   const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
   return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2 text-sm">
-        <span className="inline-flex items-center gap-1.5 font-medium text-ink">
-          {icon}
-          {label}
+    <div className="min-w-36">
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="tabular-nums font-medium text-ink">
+          {sent} von {total}
         </span>
-        <span className="tabular-nums text-xs text-ink-muted">
-          {sent} von {total} versendet
-        </span>
+        <span className="tabular-nums text-ink-muted">{pct} %</span>
       </div>
-      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-surface-muted">
+      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-muted">
         <div
           className={`h-full rounded-full transition-all ${barClass}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      {info && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
-          {info}
+      {extra && (
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-ink-muted">
+          {extra}
         </div>
       )}
     </div>
   );
 }
 
-function RunCard({ run }: { run: VersandRunItem }) {
-  return (
-    <Link
-      href={`/versand/${run.runId}`}
-      className="group block rounded-squircle-lg bg-surface p-5 shadow-card transition-all hover:shadow-card-hover hover:-translate-y-0.5"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted line-clamp-1">
-            {run.campaignName}
-          </p>
-          <h3 className="mt-0.5 text-base font-semibold text-ink line-clamp-1">
-            {run.runName}
-          </h3>
-        </div>
-        <ChevronRight className="mt-1 size-4 shrink-0 text-ink-muted transition-colors group-hover:text-ink" />
-      </div>
-
-      <div className="mt-4 space-y-4">
-        {run.withPdf > 0 && (
-          <ChannelProgress
-            icon={<Mailbox className="size-3.5 text-ink-muted" />}
-            label="Per Post"
-            sent={run.letterSent}
-            total={run.withPdf}
-            barClass="bg-emerald-500"
-            info={
-              <>
-                <span className="inline-flex items-center gap-1">
-                  <span className="size-1.5 rounded-full bg-ink-muted/50" />
-                  {run.letterOpen} offen
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="size-1.5 rounded-full bg-amber-500" />
-                  {run.letterInProgress} in Bearbeitung
-                </span>
-                {run.letterSent > 0 && (
-                  <span className="inline-flex items-center gap-1 font-medium text-brand">
-                    {run.reacted} Reaktion{run.reacted === 1 ? "" : "en"}
-                  </span>
-                )}
-              </>
-            }
-          />
-        )}
-
-        {run.emailTotal > 0 ? (
-          <ChannelProgress
-            icon={<Mail className="size-3.5 text-ink-muted" />}
-            label="Per E-Mail"
-            sent={run.emailSent}
-            total={run.emailTotal}
-            barClass="bg-brand"
-            info={
-              <>
-                {run.emailScheduled > 0 && (
-                  <span className="inline-flex items-center gap-1">
-                    <span className="size-1.5 rounded-full bg-amber-500" />
-                    {run.emailScheduled} in Warteschlange
-                  </span>
-                )}
-                {run.emailReplied > 0 && (
-                  <span className="inline-flex items-center gap-1 font-medium text-brand">
-                    {run.emailReplied} Antwort{run.emailReplied === 1 ? "" : "en"}
-                  </span>
-                )}
-              </>
-            }
-          />
-        ) : (
-          <p className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
-            <Mail className="size-3.5" />
-            Per E-Mail — noch nichts versendet
-          </p>
-        )}
-      </div>
-
-      {(run.stuckInProgress > 0 || run.planned > 0 || run.returned > 0) && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {run.stuckInProgress > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-              <AlertTriangle className="size-3" />
-              {run.stuckInProgress} seit über 7 Tagen in Bearbeitung — schon
-              versendet?
-            </span>
-          )}
-          {run.planned > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium text-brand">
-              <CalendarClock className="size-3" />
-              {run.planned} geplant
-              {run.earliestPlannedAt
-                ? ` · ab ${formatDate(run.earliestPlannedAt)}`
-                : ""}
-            </span>
-          )}
-          {run.returned > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-700">
-              <Undo2 className="size-3" />
-              {run.returned} Rückläufer
-            </span>
-          )}
-        </div>
-      )}
-    </Link>
-  );
-}
-
 export function VersandView({
-  initialTab,
   runs,
   blasts,
   campaigns,
 }: {
-  initialTab: "briefe" | "emails";
   runs: VersandRunItem[];
   blasts: EmailVersandBlastRow[];
   campaigns: EmailVersandCampaignOption[];
 }) {
-  const [tab, setTab] = React.useState<string>(initialTab);
-
-  function handleTabChange(next: string) {
-    setTab(next);
-    // URL synchron halten (Bookmark/Reload), ohne Server-Roundtrip.
-    const url = next === "emails" ? "/versand?tab=emails" : "/versand";
-    window.history.replaceState(null, "", url);
-  }
+  const router = useRouter();
 
   return (
     <>
       <PageHeader
         title="Versand"
-        subtitle="Briefe exportieren, als versendet markieren und E-Mails steuern — alles an einem Ort"
+        subtitle="Briefe und E-Mails pro Runde verschicken und nachverfolgen — alles an einem Ort"
       />
 
-      <Tabs value={tab} onValueChange={handleTabChange}>
-        <TabsList>
-          <TabsTrigger value="briefe">Briefe</TabsTrigger>
-          <TabsTrigger value="emails">E-Mails</TabsTrigger>
-        </TabsList>
+      {runs.length === 0 ? (
+        <div className="bg-surface rounded-squircle-lg shadow-card">
+          <EmptyState
+            icon={<Mailbox />}
+            title="Noch nichts zu versenden"
+            subtitle="Sobald eine Runde fertig generiert ist, steuerst du hier den kompletten Versand: Briefe exportieren, E-Mails verschicken, alles nachverfolgen."
+          />
+        </div>
+      ) : (
+        <div className="bg-surface rounded-squircle-lg shadow-card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-ink-muted">
+                <th className="px-6 py-2.5 font-semibold">Runde</th>
+                <th className="px-4 py-2.5 font-semibold">Kanäle</th>
+                <th className="px-4 py-2.5 font-semibold">Briefe per Post</th>
+                <th className="px-4 py-2.5 font-semibold">E-Mails</th>
+                <th className="px-4 py-2.5 font-semibold">Reaktionen</th>
+                <th className="px-6 py-2.5" />
+              </tr>
+            </thead>
+            <tbody>
+              {runs.map((r) => {
+                const reactions = r.reacted + r.emailReplied;
+                return (
+                  <tr
+                    key={r.runId}
+                    onClick={() => router.push(`/versand/${r.runId}`)}
+                    className="cursor-pointer border-b border-line-soft last:border-0 transition-colors hover:bg-surface-soft"
+                  >
+                    <td className="px-6 py-3.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted line-clamp-1">
+                        {r.campaignName}
+                      </p>
+                      <p className="font-medium text-ink line-clamp-1">
+                        {r.runName}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex flex-wrap gap-1.5">
+                        {r.withPdf > 0 && (
+                          <ChannelBadge
+                            icon={<Mailbox className="size-3" />}
+                            label="Brief"
+                            active={r.letterSent > 0}
+                          />
+                        )}
+                        <ChannelBadge
+                          icon={<Mail className="size-3" />}
+                          label="E-Mail"
+                          active={r.emailSent > 0}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {r.withPdf > 0 ? (
+                        <ProgressCell
+                          sent={r.letterSent}
+                          total={r.withPdf}
+                          barClass="bg-emerald-500"
+                          extra={
+                            <>
+                              {r.stuckInProgress > 0 && (
+                                <span className="inline-flex items-center gap-1 font-medium text-amber-700">
+                                  <AlertTriangle className="size-3" />
+                                  {r.stuckInProgress} schon versendet?
+                                </span>
+                              )}
+                              {r.planned > 0 && (
+                                <span className="inline-flex items-center gap-1 text-brand">
+                                  <CalendarClock className="size-3" />
+                                  {r.planned} geplant
+                                  {r.earliestPlannedAt
+                                    ? ` ab ${formatDate(r.earliestPlannedAt)}`
+                                    : ""}
+                                </span>
+                              )}
+                              {r.returned > 0 && (
+                                <span className="inline-flex items-center gap-1 font-medium text-red-600">
+                                  <Undo2 className="size-3" />
+                                  {r.returned} Rückläufer
+                                </span>
+                              )}
+                            </>
+                          }
+                        />
+                      ) : (
+                        <span className="text-xs text-ink-muted">
+                          Keine Briefe in dieser Kampagne
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {r.emailTotal > 0 ? (
+                        <ProgressCell
+                          sent={r.emailSent}
+                          total={r.emailTotal}
+                          barClass="bg-brand"
+                          extra={
+                            r.emailScheduled > 0 ? (
+                              <span>{r.emailScheduled} in Warteschlange</span>
+                            ) : undefined
+                          }
+                        />
+                      ) : (
+                        <span className="text-xs text-ink-muted">
+                          Noch keine versendet
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {reactions > 0 ? (
+                        <span className="font-medium tabular-nums text-brand">
+                          {reactions}
+                        </span>
+                      ) : (
+                        <span className="text-ink-muted">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-3.5 text-right">
+                      <ChevronRight className="inline size-4 text-ink-muted" />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-        <TabsContent value="briefe">
-          {runs.length === 0 ? (
-            <div className="bg-surface rounded-squircle-lg shadow-card">
-              <EmptyState
-                icon={<Mailbox />}
-                title="Noch keine versandfertigen Briefe"
-                subtitle="Sobald eine Runde fertig generiert ist, steuerst du hier den kompletten Brief-Versand: exportieren, als versendet markieren, nachverfolgen."
-              />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {runs.map((r) => (
-                <RunCard key={r.runId} run={r} />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="emails">
-          <EmailBlastsPanel blasts={blasts} campaigns={campaigns} />
-        </TabsContent>
-      </Tabs>
+      {/* E-Mail-Versand-Protokoll: alle gestarteten Versände + Start-Button */}
+      <div className="mt-8">
+        <h2 className="mb-3 text-sm font-semibold text-ink">
+          E-Mail-Versände
+        </h2>
+        <EmailBlastsPanel blasts={blasts} campaigns={campaigns} />
+      </div>
     </>
   );
 }

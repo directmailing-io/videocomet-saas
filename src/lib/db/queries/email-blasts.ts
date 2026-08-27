@@ -1174,6 +1174,50 @@ export async function getLeadEmailStatusMapForRun(
   return out;
 }
 
+export interface LeadEmailHistoryEntry {
+  sentAt: Date | null;
+  createdAt: Date;
+  status: EmailMessageStatus;
+  repliedAt: Date | null;
+  subject: string;
+}
+
+/**
+ * Kompletter E-Mail-Verlauf pro Lead einer Runde (bis zu 4 Mails pro
+ * Adresse in 30 Tagen — der User muss sehen, WANN welche Mail raus ist).
+ */
+export async function getLeadEmailHistoryForRun(
+  runId: string,
+  userId: string,
+): Promise<Record<string, LeadEmailHistoryEntry[]>> {
+  const rows = await db
+    .select({
+      leadId: emailMessages.leadId,
+      sentAt: emailMessages.sentAt,
+      createdAt: emailMessages.createdAt,
+      status: emailMessages.status,
+      repliedAt: emailMessages.repliedAt,
+      subject: sql<string>`COALESCE(${emailBlasts.contentSnapshot}->>'subject', '')`,
+    })
+    .from(emailMessages)
+    .innerJoin(emailBlasts, eq(emailBlasts.id, emailMessages.blastId))
+    .innerJoin(leads, eq(leads.id, emailMessages.leadId))
+    .where(and(eq(leads.runId, runId), eq(emailBlasts.userId, userId)))
+    .orderBy(emailMessages.createdAt);
+
+  const out: Record<string, LeadEmailHistoryEntry[]> = {};
+  for (const r of rows) {
+    (out[r.leadId] ??= []).push({
+      sentAt: r.sentAt,
+      createdAt: r.createdAt,
+      status: r.status,
+      repliedAt: r.repliedAt,
+      subject: r.subject,
+    });
+  }
+  return out;
+}
+
 // ── Admin ──────────────────────────────────────────────────────────────────
 
 export interface AdminEmailBlastRow {
