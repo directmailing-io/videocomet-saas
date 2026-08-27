@@ -179,6 +179,33 @@ export function EmailBlastWizard({
 
   // ① Empfänger: null = ganze Kampagne, sonst runId.
   const [runId, setRunId] = React.useState<string | null>(null);
+  // Vorauswahl aus der Versandzentrale (?vorauswahl=1 + sessionStorage).
+  const [preselect, setPreselect] = React.useState<{
+    runId: string | null;
+    leadIds: string[];
+  } | null>(null);
+  React.useEffect(() => {
+    if (!window.location.search.includes("vorauswahl=1")) return;
+    try {
+      const raw = sessionStorage.getItem("vc-email-preselect");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        campaignId?: string;
+        runId?: string;
+        leadIds?: string[];
+      };
+      if (
+        parsed.campaignId === campaignId &&
+        Array.isArray(parsed.leadIds) &&
+        parsed.leadIds.length > 0
+      ) {
+        setPreselect({ runId: parsed.runId ?? null, leadIds: parsed.leadIds });
+        setRunId(parsed.runId ?? null);
+      }
+    } catch {
+      // defekter Storage-Eintrag — normal weiter ohne Vorauswahl
+    }
+  }, [campaignId]);
   const [runQuery, setRunQuery] = React.useState("");
   const filteredRuns = React.useMemo(() => {
     const q = runQuery.trim().toLowerCase();
@@ -239,15 +266,29 @@ export function EmailBlastWizard({
     setPreviewLoading(true);
     void (async () => {
       try {
-        const url = new URL(
-          `/api/campaigns/${campaignId}/email-blasts/preview`,
-          window.location.origin,
-        );
-        if (runId) url.searchParams.set("runId", runId);
-        if (mailboxIds.length > 0) {
-          url.searchParams.set("mailboxIds", mailboxIds.join(","));
+        let res: Response;
+        if (preselect) {
+          // Lead-Auswahl passt nicht in eine URL → POST-Variante.
+          res = await fetch(`/api/campaigns/${campaignId}/email-blasts/preview`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              runId: preselect.runId,
+              mailboxIds,
+              leadIds: preselect.leadIds,
+            }),
+          });
+        } else {
+          const url = new URL(
+            `/api/campaigns/${campaignId}/email-blasts/preview`,
+            window.location.origin,
+          );
+          if (runId) url.searchParams.set("runId", runId);
+          if (mailboxIds.length > 0) {
+            url.searchParams.set("mailboxIds", mailboxIds.join(","));
+          }
+          res = await fetch(url.toString());
         }
-        const res = await fetch(url.toString());
         const json = await res.json().catch(() => null);
         if (!cancelled && res.ok) setPreview(json as BlastPreview);
       } finally {
@@ -259,7 +300,7 @@ export function EmailBlastWizard({
     };
     // join: Array-Identität ändert sich bei jedem Toggle, Inhalt zählt.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, runId, mailboxIds.join(",")]);
+  }, [campaignId, runId, preselect, mailboxIds.join(",")]);
 
   const selectedMailboxes = React.useMemo(
     () =>
@@ -367,7 +408,8 @@ export function EmailBlastWizard({
         body: JSON.stringify({
           templateId,
           mailboxConnectionIds: mailboxIds,
-          runId,
+          runId: preselect ? preselect.runId : runId,
+          leadIds: preselect ? preselect.leadIds : undefined,
         }),
       });
       const createJson = await createRes.json().catch(() => null);
@@ -389,6 +431,7 @@ export function EmailBlastWizard({
         setError(startJson?.error ?? "Der Blast konnte nicht gestartet werden.");
         return;
       }
+      sessionStorage.removeItem("vc-email-preselect");
       router.push(`/kampagnen/${campaignId}/email/${blastId}`);
     } finally {
       setStarting(false);
@@ -459,6 +502,32 @@ export function EmailBlastWizard({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+            {preselect ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-squircle-md bg-brand-soft/40 p-4 ring-2 ring-brand">
+                <div>
+                  <p className="text-sm font-semibold text-ink">
+                    Ihre Auswahl aus der Versandzentrale
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-muted">
+                    {preselect.leadIds.length}{" "}
+                    {preselect.leadIds.length === 1
+                      ? "ausgewählter Lead"
+                      : "ausgewählte Leads"}{" "}
+                    — nur diese erhalten die E-Mail.
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setPreselect(null);
+                    sessionStorage.removeItem("vc-email-preselect");
+                  }}
+                >
+                  Auswahl verwerfen
+                </Button>
+              </div>
+            ) : (
             <div className="space-y-3">
               <button
                 type="button"
@@ -524,6 +593,7 @@ export function EmailBlastWizard({
                 </div>
               )}
             </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[

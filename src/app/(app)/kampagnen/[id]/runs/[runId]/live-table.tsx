@@ -7,7 +7,6 @@ import {
   ArrowUp,
   CheckCircle2,
   ChevronsUpDown,
-  Send,
   ChevronDown,
   ChevronRight,
   Download,
@@ -18,6 +17,7 @@ import {
   RotateCcw,
   Loader2,
   Mail as MailIcon,
+  Mailbox,
   MailCheck,
   MailWarning,
   MailX,
@@ -52,7 +52,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { BundleDialog } from "./bundle-dialog";
 import { LeadEditDialog } from "./lead-edit-dialog";
 import { formatRunEta, type RunEtaEntry } from "@/lib/run-eta-format";
 import { formatPersonName } from "@/lib/format-name";
@@ -150,11 +149,6 @@ export interface LiveTableProps {
    * Blast-Messages für diese Runde ⇒ Spalte wird nicht gerendert.
    */
   emailStatusMap?: Record<string, string>;
-  /**
-   * True, wenn mindestens ein Lead dieser Runde eine E-Mail-Adresse hat —
-   * steuert den "E-Mails versenden"-CTA in der Erfolgskarte.
-   */
-  hasEmailLeads?: boolean;
 }
 
 const EMAIL_STATUS_META: Record<
@@ -268,7 +262,6 @@ export function LiveTable({
   initialCounts,
   initialLeads,
   emailStatusMap,
-  hasEmailLeads,
 }: LiveTableProps) {
   const emailColumnActive =
     !!emailStatusMap && Object.keys(emailStatusMap).length > 0;
@@ -974,13 +967,6 @@ export function LiveTable({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              {pdfEnabled && (
-                <BundleDialog
-                  runId={runId}
-                  runName={initialRun.name}
-                  abActive={abActive}
-                />
-              )}
             </div>
           </div>
 
@@ -1033,27 +1019,23 @@ export function LiveTable({
                     {activeStageLabel}
                   </p>
                 )}
-                {runStatus === "completed" &&
-                  counts.failed === 0 &&
-                  hasEmailLeads && (
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <Button
-                        asChild
-                        size="sm"
-                        iconLeft={<Send className="size-4" />}
-                      >
-                        <Link href={`/kampagnen/${campaignId}/email/neu`}>
-                          E-Mails versenden
-                        </Link>
-                      </Button>
-                      <Link
-                        href={`/kampagnen/${campaignId}?tab=email`}
-                        className="text-xs font-medium text-ink-muted underline-offset-2 hover:text-ink hover:underline"
-                      >
-                        Zum E-Mail-Tab
+                {isTerminal && counts.completed > 0 && (
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <Button
+                      asChild
+                      size="sm"
+                      iconLeft={<Mailbox className="size-4" />}
+                    >
+                      <Link href={`/versand/${runId}`}>
+                        Zur Versandzentrale
                       </Link>
-                    </div>
-                  )}
+                    </Button>
+                    <span className="text-xs text-ink-muted">
+                      Briefe exportieren, als versendet markieren und E-Mails
+                      verschicken — alles an einem Ort.
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">

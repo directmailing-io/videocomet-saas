@@ -274,12 +274,17 @@ export async function computeBlastPreview(input: {
   userId: string;
   campaignId: string;
   runId?: string | null;
+  /** Explizite Lead-Auswahl (Versandzentrale) — null/leer = alle. */
+  leadIds?: string[] | null;
 }): Promise<BlastPreview> {
   const conditions = [
     eq(leads.campaignId, input.campaignId),
     isNull(leads.removedAt),
   ];
   if (input.runId) conditions.push(eq(leads.runId, input.runId));
+  if (input.leadIds && input.leadIds.length > 0) {
+    conditions.push(inArray(leads.id, input.leadIds));
+  }
 
   const rows = await db
     .select({ normalizedEmail: leads.normalizedEmail })
@@ -431,6 +436,9 @@ export async function startEmailBlast(input: {
       isNull(leads.removedAt),
     ];
     if (blast.runId) leadConditions.push(eq(leads.runId, blast.runId));
+    if (blast.leadIds && blast.leadIds.length > 0) {
+      leadConditions.push(inArray(leads.id, blast.leadIds));
+    }
     const leadRows = await tx
       .select({
         id: leads.id,

@@ -796,12 +796,18 @@ export async function resetRunTracking(
 
   return db.transaction(async (tx) => {
     // 1. lead_events löschen (alle Events für Leads dieses Runs).
+    //    AUSNAHME: letter_*-Events (Versandprotokoll der Versandzentrale)
+    //    bleiben — ein Tracking-Reset darf nicht die Historie physisch
+    //    versendeter Briefe löschen.
     const leadEventsDeleted = await tx
       .delete(leadEvents)
       .where(
-        inArray(
-          leadEvents.leadId,
-          tx.select({ id: leads.id }).from(leads).where(eq(leads.runId, runId)),
+        and(
+          inArray(
+            leadEvents.leadId,
+            tx.select({ id: leads.id }).from(leads).where(eq(leads.runId, runId)),
+          ),
+          sql`${leadEvents.kind} NOT LIKE 'letter_%'`,
         ),
       )
       .returning({ id: leadEvents.id });

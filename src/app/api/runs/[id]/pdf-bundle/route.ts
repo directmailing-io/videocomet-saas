@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireUserApi } from "@/lib/auth-guard";
 import { getRun } from "@/lib/db/queries/runs";
 import { getCompletedLeadsForBundle } from "@/lib/db/queries/leads";
+import { markLeadsExported } from "@/lib/db/queries/letter-status";
 import {
   sortLeadsForBundle,
   type BundleSortDir,
@@ -61,6 +62,8 @@ const bodySchema = z.object({
   variant: variantSchema.optional(),
   sortBy: sortSchema.optional(),
   sortDir: sortDirSchema.optional(),
+  /** Teilexport (Versandzentrale): nur diese Leads. Fehlt → alle. */
+  leadIds: z.array(z.string().uuid()).min(1).max(5000).optional(),
 });
 
 export async function POST(
@@ -76,6 +79,7 @@ export async function POST(
     variant?: BundleVariant;
     sortBy?: string;
     sortDir?: BundleSortDir;
+    leadIds?: string[];
   };
   try {
     const json = await req.json();
@@ -85,6 +89,7 @@ export async function POST(
       variant: typeof json.variant === "string" ? json.variant : undefined,
       sortBy: typeof json.sortBy === "string" ? json.sortBy : undefined,
       sortDir: typeof json.sortDir === "string" ? json.sortDir : undefined,
+      leadIds: Array.isArray(json.leadIds) ? json.leadIds : undefined,
     });
   } catch (err) {
     return NextResponse.json(
@@ -104,6 +109,7 @@ export async function POST(
     body.variant ?? "mixed",
     body.sortBy,
     body.sortDir ?? "asc",
+    body.leadIds,
   );
 }
 
@@ -256,6 +262,7 @@ async function buildBundle(
   variant: BundleVariant,
   sortBy: string | undefined,
   sortDir: BundleSortDir,
+  leadIds?: string[],
 ): Promise<Response> {
   let run;
   try {
@@ -267,8 +274,17 @@ async function buildBundle(
   // Geteilter Ordering-Helper — identisch zur Reihenfolge des Bulk-Export-
   // Endpoints, damit die Excel-Spalten 1:1 zur PDF-Seite passen. Sortierung
   // VOR buildGroups, damit A/B-Gruppen und Batches sortiert entstehen.
+  // Teilexport (Versandzentrale): Auswahl-Filter VOR der Sortierung —
+  // Briefe und Umschläge laufen danach über dieselbe gefilterte, sortierte
+  // Liste, der 1:1-Kuvertier-Kontrakt bleibt erhalten.
+  const allCompleted = await getCompletedLeadsForBundle(runId, userId);
+  const totalCompleted = allCompleted.length;
+  const selectedSet = leadIds ? new Set(leadIds) : null;
+  const isPartial =
+    selectedSet !== null &&
+    allCompleted.some((l) => !selectedSet.has(l.id));
   const completed = sortLeadsForBundle(
-    await getCompletedLeadsForBundle(runId, userId),
+    selectedSet ? allCompleted.filter((l) => selectedSet.has(l.id)) : allCompleted,
     sortBy,
     sortDir,
   );
@@ -388,11 +404,15 @@ async function buildBundle(
       }
     }
 
-    // README: Manifest + Warnungen. Immer bei Varianten-Auswahl oder wenn
-    // etwas schiefging — der Lettershop soll Abweichungen sehen, nicht raten.
-    if (variant !== "mixed" || sortBy || warnings.length > 0) {
+    // README: Manifest + Warnungen. Immer bei Varianten-Auswahl, Teilexport
+    // oder wenn etwas schiefging — der Lettershop soll Abweichungen sehen,
+    // nicht raten.
+    if (variant !== "mixed" || sortBy || isPartial || warnings.length > 0) {
       const lines: string[] = [
         `PDF-Bundle "${baseName}" — Runde: ${run.name}`,
+        ...(isPartial
+          ? [`Teilexport: ${completed.length} von ${totalCompleted} Leads (Auswahl aus der Versandzentrale)`]
+          : []),
         `Zusammenstellung: ${
           variant === "mixed"
             ? "Alle Briefe (gemischt)"
@@ -438,6 +458,18 @@ async function buildBundle(
       zipBuffer.byteOffset + zipBuffer.byteLength,
     ) as ArrayBuffer;
     const blob = new Blob([ab], { type: "application/zip" });
+
+    // Export-Protokoll (Versandzentrale): letter_exported_at + lead_events.
+    // Ändert NIE den letter_status — der User entscheidet nach dem Download
+    // im Dialog. Fire-and-forget, darf den Download nicht verzögern.
+    const exportedIds = groups.flatMap((g) => g.leads.map((l) => l.id));
+    void markLeadsExported(exportedIds, {
+      runId,
+      total: totalCompleted,
+      partial: isPartial || exportedIds.length < totalCompleted,
+    });
+
+
     return new Response(blob, {
       status: 200,
       headers: {

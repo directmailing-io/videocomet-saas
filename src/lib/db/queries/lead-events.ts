@@ -42,7 +42,13 @@ export type LeadEventKind =
   // ── Formular-CTA der Landingpage v3 (nur serverseitig über /api/lp/form
   //    nach Validierung erzeugt — bewusst NICHT in der öffentlichen
   //    LEAD_EVENT_KINDS-Whitelist des track-Endpoints). ──
-  | "form_submit";
+  | "form_submit"
+  // ── Brief-Versand / Versandzentrale (Migration 0067, nur serverseitig
+  //    über die Bulk-Status-API erzeugt — NICHT in der öffentlichen
+  //    Whitelist; überleben den Tracking-Reset bewusst). ──
+  | "letter_exported"
+  | "letter_sent"
+  | "letter_status_changed";
 
 export const LEAD_EVENT_KINDS: readonly LeadEventKind[] = [
   "page_view",

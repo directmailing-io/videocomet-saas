@@ -721,6 +721,23 @@ export const leads = pgTable("leads", {
   ctaClickCount: integer("cta_click_count").notNull().default(0),
   lastCtaAt: timestamp("last_cta_at", { withTimezone: true }),
 
+  // ── Brief-Versand / Versandzentrale (Migration 0067) ──────────────────
+  // Status ändert sich NIE automatisch — nur durch explizite User-Aktion
+  // (Post-Download-Dialog oder Bulk-Markierung). Test-Exporte bleiben so
+  // statistik-neutral.
+  //   'open'        → noch nichts passiert (Default)
+  //   'in_progress' → exportiert / beim Drucken / kuvertiert
+  //   'sent'        → physisch versendet (letterSentAt Pflicht, rückdatierbar)
+  letterStatus: text("letter_status").$type<"open" | "in_progress" | "sent">().notNull().default("open"),
+  /** Versanddatum (Pflicht bei 'sent', vom User rückdatierbar). */
+  letterSentAt: timestamp("letter_sent_at", { withTimezone: true }),
+  /** Letzter Bundle-Export der diesen Lead enthielt (rein informativ). */
+  letterExportedAt: timestamp("letter_exported_at", { withTimezone: true }),
+  /** Geplanter Versandtermin (Etappe 3) — reine Erinnerung, kein Automatismus. */
+  letterPlannedAt: timestamp("letter_planned_at", { withTimezone: true }),
+  /** Rückläufer-Marker (Etappe 3). Kein 4. Status: 'sent' + Datum bleibt. */
+  letterReturnedAt: timestamp("letter_returned_at", { withTimezone: true }),
+
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -742,6 +759,7 @@ export const leads = pgTable("leads", {
   campaignIdx: index("leads_campaign_idx").on(t.campaignId),
   domainIdx: index("leads_domain_idx").on(t.domainId),
   statusIdx: index("leads_status_idx").on(t.status),
+  letterStatusIdx: index("leads_letter_status_idx").on(t.runId, t.letterStatus),
   contactIdx: index("leads_contact_idx").on(t.contactId).where(sql`${t.contactId} IS NOT NULL`),
   // Campaign-scoped Slug-Eindeutigkeit (Migration 0014).
   // Default-LP: slug pro Kampagne eindeutig.
@@ -1853,6 +1871,11 @@ export const emailBlasts = pgTable("email_blasts", {
    * NULL bei Alt-Blasts ⇒ nur das primaere Postfach.
    */
   mailboxConnectionIds: jsonb("mailbox_connection_ids").$type<string[] | null>(),
+  /**
+   * Explizite Lead-Auswahl (Versandzentrale „E-Mail an Auswahl",
+   * Migration 0067). NULL ⇒ ganze Kampagne bzw. ganze Runde (runId).
+   */
+  leadIds: jsonb("lead_ids").$type<string[] | null>(),
   /**
    * Klartext-Grund, wenn das System den Blast automatisch pausiert hat
    * (z. B. Bounce-Schutz). NULL bei manueller Pause. Wird beim Fortsetzen

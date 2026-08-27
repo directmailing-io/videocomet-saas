@@ -92,9 +92,10 @@ const NAV_GROUPS: Array<{ label: string | null; items: NavItem[] }> = [
       },
       {
         key: "emailBlasts",
-        label: "E-Mail-Versand",
-        href: "/email-versand",
+        label: "Versand",
+        href: "/versand",
         icon: Send,
+        matchPrefixes: ["/email-versand"],
       },
     ],
   },

@@ -1,16 +1,15 @@
 "use client";
 
 /**
- * Übersicht „E-Mail-Versand": alle Blasts des Users über alle Kampagnen in
- * einer Tabelle + Dialog „Neuen Versand starten" mit Kampagnen-Auswahl.
- * Status-Labels/-Farben identisch zur Blast-Liste im Kampagnen-Tab.
+ * Tab „E-Mails" der Versandzentrale: alle Blasts des Users über alle
+ * Kampagnen in einer Tabelle + Dialog „Neuen Versand starten" mit
+ * Kampagnen-Auswahl. (Vorher eigenständige Seite /email-versand.)
  */
 
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Mail, Search, Send } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -153,7 +152,7 @@ function StartBlastDialog({
   );
 }
 
-export function EmailVersandView({
+export function EmailBlastsPanel({
   blasts,
   campaigns,
 }: {
@@ -174,12 +173,6 @@ export function EmailVersandView({
 
   return (
     <>
-      <PageHeader
-        title="E-Mail-Versand"
-        subtitle="Alle E-Mail-Versände über Ihre Kampagnen im Überblick"
-        actions={startButton}
-      />
-
       {blasts.length === 0 ? (
         <div className="bg-surface rounded-squircle-lg shadow-card">
           <EmptyState
@@ -190,63 +183,66 @@ export function EmailVersandView({
           />
         </div>
       ) : (
-        <div className="bg-surface rounded-squircle-lg shadow-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-ink-muted">
-                <th className="px-6 py-2.5 font-semibold">Kampagne</th>
-                <th className="px-4 py-2.5 font-semibold">Status</th>
-                <th className="px-4 py-2.5 font-semibold">Fortschritt</th>
-                <th className="px-4 py-2.5 font-semibold">Gestartet am</th>
-                <th className="px-6 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {blasts.map((b) => {
-                const pct =
-                  b.totalCount > 0
-                    ? Math.round((b.sentCount / b.totalCount) * 100)
-                    : 0;
-                const href = `/kampagnen/${b.campaignId}/email/${b.id}`;
-                return (
-                  <tr
-                    key={b.id}
-                    onClick={() => router.push(href)}
-                    className="cursor-pointer border-b border-line-soft last:border-0 hover:bg-surface-soft transition-colors"
-                  >
-                    <td className="px-6 py-3.5 font-medium text-ink">
-                      <span className="line-clamp-1">{b.campaignName}</span>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <Badge variant={blastBadgeVariant(b.status)} dot>
-                        {STATUS_LABELS[b.status] ?? b.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span className="tabular-nums font-medium text-ink">
-                        {b.sentCount} / {b.totalCount}
-                      </span>
-                      <span className="text-ink-muted"> ({pct} %)</span>
-                    </td>
-                    <td className="px-4 py-3.5 text-ink-muted">
-                      {formatDate(b.startedAt)}
-                    </td>
-                    <td className="px-6 py-3.5 text-right">
-                      <Link
-                        href={href}
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex text-ink-muted hover:text-ink"
-                        aria-label="Details öffnen"
-                      >
-                        <ChevronRight className="size-4" />
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="mb-3 flex justify-end">{startButton}</div>
+          <div className="bg-surface rounded-squircle-lg shadow-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-ink-muted">
+                  <th className="px-6 py-2.5 font-semibold">Kampagne</th>
+                  <th className="px-4 py-2.5 font-semibold">Status</th>
+                  <th className="px-4 py-2.5 font-semibold">Fortschritt</th>
+                  <th className="px-4 py-2.5 font-semibold">Gestartet am</th>
+                  <th className="px-6 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {blasts.map((b) => {
+                  const pct =
+                    b.totalCount > 0
+                      ? Math.round((b.sentCount / b.totalCount) * 100)
+                      : 0;
+                  const href = `/kampagnen/${b.campaignId}/email/${b.id}`;
+                  return (
+                    <tr
+                      key={b.id}
+                      onClick={() => router.push(href)}
+                      className="cursor-pointer border-b border-line-soft last:border-0 hover:bg-surface-soft transition-colors"
+                    >
+                      <td className="px-6 py-3.5 font-medium text-ink">
+                        <span className="line-clamp-1">{b.campaignName}</span>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <Badge variant={blastBadgeVariant(b.status)} dot>
+                          {STATUS_LABELS[b.status] ?? b.status}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className="tabular-nums font-medium text-ink">
+                          {b.sentCount} / {b.totalCount}
+                        </span>
+                        <span className="text-ink-muted"> ({pct} %)</span>
+                      </td>
+                      <td className="px-4 py-3.5 text-ink-muted">
+                        {formatDate(b.startedAt)}
+                      </td>
+                      <td className="px-6 py-3.5 text-right">
+                        <Link
+                          href={href}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex text-ink-muted hover:text-ink"
+                          aria-label="Details öffnen"
+                        >
+                          <ChevronRight className="size-4" />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       <StartBlastDialog

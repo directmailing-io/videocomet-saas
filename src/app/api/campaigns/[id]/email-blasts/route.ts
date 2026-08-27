@@ -43,6 +43,8 @@ const PostBody = z.object({
   /** Rotation: alle gewählten Postfächer; das erste ist das primäre. */
   mailboxConnectionIds: z.array(z.string().uuid()).min(1).max(20),
   runId: z.string().uuid().nullish(),
+  /** Explizite Lead-Auswahl aus der Versandzentrale — fehlt ⇒ alle. */
+  leadIds: z.array(z.string().uuid()).min(1).max(5000).nullish(),
 });
 
 /**
@@ -119,6 +121,7 @@ export async function POST(
       userId: auth.user.id,
       campaignId: campaign.id,
       runId: parsed.data.runId ?? null,
+      leadIds: parsed.data.leadIds ?? null,
       mailboxConnectionId: mailboxes[0]!.id,
       mailboxConnectionIds: mailboxes.map((m) => m.id),
       templateId: template.id,
