@@ -37,8 +37,4 @@ export const FAQ: ReadonlyArray<FAQItem> = [
     q: "Wie schnell bin ich startklar?",
     a: "Innerhalb weniger Minuten. Account anlegen, erstes Video aufnehmen, Leads importieren, versenden. Eine Onboarding-Begleitung ist im Tarif inklusive, damit du auch wirklich startest.",
   },
-  {
-    q: "Kann ich VIDEOCOMET vor dem Start ausprobieren?",
-    a: "Ja. Buche dir eine Live-Demo, in der wir dir das Tool zeigen und gemeinsam einen Beispiel-Versand für deinen Use Case durchgehen. Erst dann musst du dich entscheiden.",
-  },
 ];
