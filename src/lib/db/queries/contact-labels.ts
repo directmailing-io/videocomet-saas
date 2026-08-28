@@ -123,6 +123,44 @@ export async function getOrCreateContactLabel(input: {
   }
 }
 
+/** Label umbenennen und/oder umfärben (Name bleibt pro User case-insensitiv eindeutig). */
+export async function updateContactLabel(input: {
+  userId: string;
+  labelId: string;
+  name?: string;
+  color?: string;
+}): Promise<ContactLabel> {
+  const patch: Partial<{ name: string; color: string }> = {};
+  if (input.name !== undefined) {
+    const name = input.name.trim().slice(0, 60);
+    if (!name) throw new Error("Label-Name darf nicht leer sein.");
+    const [conflict] = await db
+      .select({ id: contactLabels.id })
+      .from(contactLabels)
+      .where(
+        and(
+          eq(contactLabels.userId, input.userId),
+          sql`LOWER(${contactLabels.name}) = LOWER(${name})`,
+          sql`${contactLabels.id} <> ${input.labelId}::uuid`,
+        ),
+      )
+      .limit(1);
+    if (conflict) throw new Error("Ein Label mit diesem Namen gibt es schon.");
+    patch.name = name;
+  }
+  if (input.color !== undefined) patch.color = input.color;
+  if (Object.keys(patch).length === 0)
+    throw new Error("Nichts zu ändern.");
+
+  const [row] = await db
+    .update(contactLabels)
+    .set(patch)
+    .where(and(eq(contactLabels.id, input.labelId), eq(contactLabels.userId, input.userId)))
+    .returning();
+  if (!row) throw new Error("Dieses Label gibt es nicht mehr.");
+  return row;
+}
+
 /**
  * Label an Kontakte vergeben. Prüft Ownership beider Seiten;
  * ON CONFLICT DO NOTHING macht Doppel-Vergabe idempotent.

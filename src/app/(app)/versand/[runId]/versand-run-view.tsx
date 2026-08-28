@@ -593,9 +593,15 @@ export function VersandRunView({
   function handleSelectClick(id: string, shiftKey: boolean) {
     const range = shiftKey ? getRange(id, visibleIds) : null;
     if (range) {
+      // Bereich bekommt den neuen Zustand der geklickten Zeile —
+      // Shift-Klick kann also auch einen Bereich ENTmarkieren.
+      const target = !selected.has(id);
       setSelected((prev) => {
         const next = new Set(prev);
-        for (const rid of range) next.add(rid);
+        for (const rid of range) {
+          if (target) next.add(rid);
+          else next.delete(rid);
+        }
         return next;
       });
     } else {

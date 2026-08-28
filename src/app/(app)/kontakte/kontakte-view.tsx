@@ -20,6 +20,7 @@ import {
   Download,
   Loader2,
   MoreHorizontal,
+  Pencil,
   Plus,
   Search,
   SlidersHorizontal,
@@ -90,20 +91,21 @@ const LABEL_COLORS = [
   "#A3A3A3",
 ];
 
-/** Zufällige, noch unbenutzte Farbe aus der Palette. */
-function pickUnusedColor(labels: ContactLabelInfo[]): string {
-  const used = new Set(labels.map((l) => l.color.toLowerCase()));
-  const free = LABEL_COLORS.filter((c) => !used.has(c.toLowerCase()));
-  const pool = free.length > 0 ? free : LABEL_COLORS;
-  return pool[Math.floor(Math.random() * pool.length)];
-}
-
-/** Lesbare Textfarbe (dunkel/hell) je nach Hintergrund-Helligkeit. */
+/** Lesbare Textfarbe: weiß oder dunkel — je nachdem, was auf der
+ * Hintergrundfarbe den höheren WCAG-Kontrast hat. */
 function labelTextColor(hex: string): string {
+  const lin = (v: number) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
   const r = parseInt(hex.slice(1, 3), 16) || 0;
   const g = parseInt(hex.slice(3, 5), 16) || 0;
   const b = parseInt(hex.slice(5, 7), 16) || 0;
-  return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? "#1f2328" : "#ffffff";
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  const contrastWhite = 1.05 / (L + 0.05);
+  // 0.0157 = relative Luminanz von #1f2328
+  const contrastDark = (L + 0.05) / (0.0157 + 0.05);
+  return contrastWhite >= contrastDark ? "#ffffff" : "#1f2328";
 }
 
 /** Vollfarbiger Label-Chip — bewusst klein, damit viele/lange Labels
@@ -171,8 +173,9 @@ export function KontakteView(_props: KontakteViewProps) {
   const [showLabelFilterMenu, setShowLabelFilterMenu] = React.useState(false);
   const [showLabelMenu, setShowLabelMenu] = React.useState(false);
   const [newLabelName, setNewLabelName] = React.useState("");
-  const [newLabelColor, setNewLabelColor] = React.useState(LABEL_COLORS[0]);
   const [labelBusy, setLabelBusy] = React.useState(false);
+  // Label bearbeiten (Umbenennen + Farbe): welches Label ist im Edit-Dialog?
+  const [editLabel, setEditLabel] = React.useState<ContactLabelInfo | null>(null);
   // Detail-Slide-Over (Etappe 3): welchen Contact anzeigen?
   const [detailContactId, setDetailContactId] = React.useState<string | null>(null);
   const [filter, setFilter] = React.useState<FilterDefinition>(EMPTY_FILTER);
@@ -192,7 +195,8 @@ export function KontakteView(_props: KontakteViewProps) {
         showNewListModal ||
         showImportModal ||
         showStartRunModal ||
-        showFieldsModal
+        showFieldsModal ||
+        editLabel
       )
         return;
       setSelectedContactIds(new Set());
@@ -209,6 +213,7 @@ export function KontakteView(_props: KontakteViewProps) {
     showImportModal,
     showStartRunModal,
     showFieldsModal,
+    editLabel,
   ]);
 
   const detailIndex = React.useMemo(() => {
@@ -333,9 +338,15 @@ export function KontakteView(_props: KontakteViewProps) {
   function handleCheckboxClick(id: string, shiftKey: boolean) {
     const range = shiftKey ? getRange(id, contacts.map((c) => c.id)) : null;
     if (range) {
+      // Bereich bekommt den neuen Zustand der geklickten Zeile —
+      // Shift-Klick kann also auch einen Bereich ENTmarkieren.
+      const target = !selectedContactIds.has(id);
       setSelectedContactIds((prev) => {
         const next = new Set(prev);
-        for (const rid of range) next.add(rid);
+        for (const rid of range) {
+          if (target) next.add(rid);
+          else next.delete(rid);
+        }
         return next;
       });
     } else {
@@ -393,7 +404,7 @@ export function KontakteView(_props: KontakteViewProps) {
           action,
           labelId: input.labelId,
           create: input.createName
-            ? { name: input.createName, color: newLabelColor }
+            ? { name: input.createName }
             : undefined,
         }),
       });
@@ -709,6 +720,17 @@ export function KontakteView(_props: KontakteViewProps) {
                           </button>
                           <button
                             type="button"
+                            onClick={() => {
+                              setShowLabelFilterMenu(false);
+                              setEditLabel(l);
+                            }}
+                            className="hidden group-hover:block text-ink-muted hover:text-ink p-1 rounded"
+                            title="Label umbenennen oder Farbe ändern"
+                          >
+                            <Pencil className="size-3" />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDeleteLabel(l)}
                             className="hidden group-hover:block text-ink-muted hover:text-danger p-1 mr-1 rounded"
                             title="Label löschen"
@@ -875,12 +897,7 @@ export function KontakteView(_props: KontakteViewProps) {
                   <button
                     type="button"
                     disabled={labelBusy}
-                    onClick={() => {
-                      setShowLabelMenu((v) => {
-                        if (!v) setNewLabelColor(pickUnusedColor(labels));
-                        return !v;
-                      });
-                    }}
+                    onClick={() => setShowLabelMenu((v) => !v)}
                     title="Ausgewählte Kontakte mit einem Label markieren — z. B. „Versand 28.08.2026“ oder „Rückläufer“"
                     className="px-3 py-1.5 rounded-lg bg-white text-ink text-xs font-semibold shadow-sm hover:bg-canvas flex items-center gap-1 disabled:opacity-60"
                   >
@@ -925,22 +942,10 @@ export function KontakteView(_props: KontakteViewProps) {
                           OK
                         </button>
                       </div>
-                      <div className="px-3 pb-2 flex flex-wrap gap-1.5">
-                        {LABEL_COLORS.map((color) => (
-                          <button
-                            key={color}
-                            type="button"
-                            onClick={() => setNewLabelColor(color)}
-                            title="Farbe für das neue Label"
-                            className={cn(
-                              "size-4 rounded-full",
-                              newLabelColor === color &&
-                                "ring-2 ring-ink ring-offset-1",
-                            )}
-                            style={{ backgroundColor: color }}
-                          />
-                        ))}
-                      </div>
+                      <p className="px-3 pb-2 text-[11px] text-ink-muted">
+                        Neue Labels bekommen automatisch eine Farbe — änderbar
+                        über das Stift-Symbol im Label-Filter.
+                      </p>
                       {labels.length > 0 && (
                         <div className="max-h-40 overflow-y-auto border-t border-line pt-1">
                           {labels.map((l) => (
@@ -1176,6 +1181,18 @@ export function KontakteView(_props: KontakteViewProps) {
         />
       )}
 
+      {editLabel && (
+        <EditLabelModal
+          label={editLabel}
+          onClose={() => setEditLabel(null)}
+          onSaved={() => {
+            setEditLabel(null);
+            void loadLabels();
+            void loadContacts();
+          }}
+        />
+      )}
+
       {detailContactId && (
         <ContactDetailSlideOver
           contactId={detailContactId}
@@ -1313,6 +1330,109 @@ function NewListModal({
             className="px-4 py-2 rounded-lg bg-ink text-white text-sm font-semibold disabled:opacity-50 hover:bg-brand-deep"
           >
             {busy ? "Anlegen…" : "Liste anlegen"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/** Modal zum Bearbeiten eines Labels: Umbenennen + Farbe im 4×4-Grid. */
+function EditLabelModal({
+  label,
+  onClose,
+  onSaved,
+}: {
+  label: ContactLabelInfo;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const [name, setName] = React.useState(label.name);
+  const [color, setColor] = React.useState(label.color);
+  const [busy, setBusy] = React.useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/contact-labels/${label.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), color }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "Das hat gerade nicht geklappt.");
+      toast({ title: "Label gespeichert" });
+      onSaved();
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : String(err),
+        variant: "danger",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-surface rounded-2xl p-6 w-full max-w-sm shadow-xl"
+      >
+        <h3 className="text-lg font-semibold text-ink mb-2">Label bearbeiten</h3>
+        <p className="text-xs text-ink-muted mb-4">
+          Name und Farbe gelten überall, wo dieses Label vergeben ist.
+        </p>
+        <label className="block text-xs font-semibold text-ink mb-1">Name</label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={60}
+          autoFocus
+          className="w-full px-3 py-2 rounded-lg border border-line bg-canvas text-sm mb-3 focus:outline-none focus:border-brand"
+        />
+        <label className="block text-xs font-semibold text-ink mb-1">Farbe</label>
+        <div className="grid grid-cols-4 gap-2 mb-4 w-fit">
+          {LABEL_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setColor(c)}
+              aria-label={`Farbe ${c} wählen`}
+              className={cn(
+                "size-7 rounded-full transition-transform hover:scale-110",
+                color === c && "ring-2 ring-ink ring-offset-2",
+              )}
+              style={{ backgroundColor: c }}
+            />
+          ))}
+        </div>
+        <div className="mb-4 flex items-center gap-2 text-xs text-ink-muted">
+          Vorschau:
+          <LabelChip name={name.trim() || label.name} color={color} />
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm text-ink-muted hover:bg-canvas"
+          >
+            Abbrechen
+          </button>
+          <button
+            type="submit"
+            disabled={!name.trim() || busy}
+            className="px-4 py-2 rounded-lg bg-ink text-white text-sm font-semibold disabled:opacity-50 hover:bg-brand-deep"
+          >
+            {busy ? "Speichern…" : "Speichern"}
           </button>
         </div>
       </form>
