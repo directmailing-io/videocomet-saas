@@ -51,6 +51,38 @@ export async function listContactLabels(userId: string): Promise<ContactLabelUi[
   }));
 }
 
+/** Farbpalette für Labels — bei Anlage ohne Wunschfarbe wird eine noch
+ * unbenutzte Farbe zufällig gewählt (Daniels Feedback 2026-08-28). */
+export const LABEL_COLOR_PALETTE = [
+  "#AA8CF5",
+  "#5EC26A",
+  "#F59E0B",
+  "#3B82F6",
+  "#EC4899",
+  "#14B8A6",
+  "#EF4444",
+  "#8B5CF6",
+  "#F97316",
+  "#06B6D4",
+  "#84CC16",
+  "#E11D48",
+  "#6366F1",
+  "#D97706",
+  "#0EA5E9",
+  "#A3A3A3",
+];
+
+async function pickUnusedColor(userId: string): Promise<string> {
+  const rows = await db
+    .select({ color: contactLabels.color })
+    .from(contactLabels)
+    .where(eq(contactLabels.userId, userId));
+  const used = new Set(rows.map((r) => r.color.toLowerCase()));
+  const free = LABEL_COLOR_PALETTE.filter((c) => !used.has(c.toLowerCase()));
+  const pool = free.length > 0 ? free : LABEL_COLOR_PALETTE;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 /** Label per Name holen oder anlegen (case-insensitiv, race-sicher). */
 export async function getOrCreateContactLabel(input: {
   userId: string;
@@ -59,7 +91,6 @@ export async function getOrCreateContactLabel(input: {
 }): Promise<ContactLabel> {
   const name = input.name.trim().slice(0, 60);
   if (!name) throw new Error("Label-Name darf nicht leer sein.");
-  const color = input.color ?? "#AA8CF5";
 
   const findByName = () =>
     db
@@ -75,6 +106,8 @@ export async function getOrCreateContactLabel(input: {
 
   const [existing] = await findByName();
   if (existing) return existing;
+
+  const color = input.color ?? (await pickUnusedColor(input.userId));
 
   try {
     const [row] = await db

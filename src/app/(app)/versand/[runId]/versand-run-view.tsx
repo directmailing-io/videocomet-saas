@@ -61,6 +61,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatPersonName } from "@/lib/format-name";
 import { sortLeadsForBundle } from "@/lib/bundle-helpers";
+import { useShiftSelect } from "@/lib/use-shift-select";
 import { cn } from "@/lib/utils";
 
 // ── Typen ──────────────────────────────────────────────────────────────────
@@ -370,6 +371,33 @@ export function VersandRunView({
   const [detailLead, setDetailLead] = React.useState<VersandLeadItem | null>(
     null,
   );
+  const { setAnchor, getRange } = useShiftSelect();
+
+  // Escape hebt die Auswahl auf — aber nicht, wenn gerade ein Dialog offen ist.
+  React.useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (
+        exportMode ||
+        postExportIds ||
+        returnedDialogIds ||
+        sentDialogIds ||
+        detailContactId ||
+        detailLead
+      )
+        return;
+      setSelected(new Set());
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    exportMode,
+    postExportIds,
+    returnedDialogIds,
+    sentDialogIds,
+    detailContactId,
+    detailLead,
+  ]);
 
   // ── Filter + Sortierung ──────────────────────────────────────────────────
   const filtered = React.useMemo(() => {
@@ -560,6 +588,20 @@ export function VersandRunView({
       else next.add(id);
       return next;
     });
+  }
+
+  function handleSelectClick(id: string, shiftKey: boolean) {
+    const range = shiftKey ? getRange(id, visibleIds) : null;
+    if (range) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const rid of range) next.add(rid);
+        return next;
+      });
+    } else {
+      toggleOne(id);
+    }
+    setAnchor(id);
   }
 
   // ── API-Aktionen ─────────────────────────────────────────────────────────
@@ -1078,7 +1120,10 @@ export function VersandRunView({
                 return (
                   <tr
                     key={l.id}
-                    onClick={() => toggleOne(l.id)}
+                    onClick={(e) => handleSelectClick(l.id, e.shiftKey)}
+                    onMouseDown={(e) => {
+                      if (e.shiftKey) e.preventDefault();
+                    }}
                     className={cn(
                       "cursor-pointer border-b border-line-soft last:border-0 transition-colors",
                       isSel ? "bg-brand-soft/40" : "hover:bg-surface-soft",
@@ -1087,7 +1132,11 @@ export function VersandRunView({
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={isSel}
-                        onCheckedChange={() => toggleOne(l.id)}
+                        onCheckedChange={() => {}}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectClick(l.id, e.shiftKey);
+                        }}
                         aria-label="Lead auswählen"
                       />
                     </td>
@@ -1283,8 +1332,9 @@ export function VersandRunView({
               type="button"
               onClick={() => setSelected(new Set())}
               className="text-xs text-white/60 hover:text-white transition-colors"
+              title="Shift-Klick wählt einen Bereich · Esc hebt die Auswahl auf"
             >
-              Aufheben
+              Aufheben (Esc)
             </button>
             <span className="mx-1 h-4 w-px bg-white/20" />
             {hasLetters && (

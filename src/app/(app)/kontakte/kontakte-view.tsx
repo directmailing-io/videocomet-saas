@@ -36,6 +36,7 @@ import { ImportModal } from "./import-modal";
 import { StartRunModal } from "./start-run-modal";
 import { FieldsModal } from "./fields-modal";
 import { EMPTY_FILTER, type FilterDefinition } from "@/lib/contacts/filter";
+import { useShiftSelect } from "@/lib/use-shift-select";
 
 interface ContactRow {
   id: string;
@@ -66,7 +67,8 @@ interface ContactLabelInfo {
   contactCount: number;
 }
 
-/** Farb-Rotation für neue Labels, damit sie unterscheidbar sind. */
+/** Farbpalette für neue Labels — gleiche Liste wie serverseitig
+ * (LABEL_COLOR_PALETTE in contact-labels.ts). */
 const LABEL_COLORS = [
   "#AA8CF5",
   "#5EC26A",
@@ -76,7 +78,45 @@ const LABEL_COLORS = [
   "#14B8A6",
   "#EF4444",
   "#8B5CF6",
+  "#F97316",
+  "#06B6D4",
+  "#84CC16",
+  "#E11D48",
+  "#6366F1",
+  "#D97706",
+  "#0EA5E9",
+  "#A3A3A3",
 ];
+
+/** Zufällige, noch unbenutzte Farbe aus der Palette. */
+function pickUnusedColor(labels: ContactLabelInfo[]): string {
+  const used = new Set(labels.map((l) => l.color.toLowerCase()));
+  const free = LABEL_COLORS.filter((c) => !used.has(c.toLowerCase()));
+  const pool = free.length > 0 ? free : LABEL_COLORS;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/** Lesbare Textfarbe (dunkel/hell) je nach Hintergrund-Helligkeit. */
+function labelTextColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16) || 0;
+  const g = parseInt(hex.slice(3, 5), 16) || 0;
+  const b = parseInt(hex.slice(5, 7), 16) || 0;
+  return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? "#1f2328" : "#ffffff";
+}
+
+/** Vollfarbiger Label-Chip — bewusst klein, damit viele/lange Labels
+ * nicht überladen wirken (Daniels Feedback 2026-08-28). */
+function LabelChip({ name, color }: { name: string; color: string }) {
+  return (
+    <span
+      className="inline-flex max-w-[140px] items-center truncate rounded-full px-1.5 py-[1px] text-[10px] font-medium leading-4"
+      style={{ backgroundColor: color, color: labelTextColor(color) }}
+      title={name}
+    >
+      {name}
+    </span>
+  );
+}
 
 interface ContactList {
   id: string;
@@ -129,6 +169,7 @@ export function KontakteView(_props: KontakteViewProps) {
   const [showLabelFilterMenu, setShowLabelFilterMenu] = React.useState(false);
   const [showLabelMenu, setShowLabelMenu] = React.useState(false);
   const [newLabelName, setNewLabelName] = React.useState("");
+  const [newLabelColor, setNewLabelColor] = React.useState(LABEL_COLORS[0]);
   const [labelBusy, setLabelBusy] = React.useState(false);
   // Detail-Slide-Over (Etappe 3): welchen Contact anzeigen?
   const [detailContactId, setDetailContactId] = React.useState<string | null>(null);
@@ -136,6 +177,35 @@ export function KontakteView(_props: KontakteViewProps) {
   const [showImportModal, setShowImportModal] = React.useState(false);
   const [showStartRunModal, setShowStartRunModal] = React.useState(false);
   const [showFieldsModal, setShowFieldsModal] = React.useState(false);
+  const { setAnchor, getRange } = useShiftSelect();
+
+  // Escape hebt die Auswahl auf — aber nicht, wenn gerade ein Dialog offen ist.
+  React.useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (
+        detailContactId ||
+        showNewListModal ||
+        showImportModal ||
+        showStartRunModal ||
+        showFieldsModal
+      )
+        return;
+      setSelectedContactIds(new Set());
+      setShowLabelMenu(false);
+      setShowLabelFilterMenu(false);
+      setShowAddToListMenu(false);
+      setShowExportMenu(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    detailContactId,
+    showNewListModal,
+    showImportModal,
+    showStartRunModal,
+    showFieldsModal,
+  ]);
 
   const detailIndex = React.useMemo(() => {
     if (!detailContactId) return -1;
@@ -256,6 +326,20 @@ export function KontakteView(_props: KontakteViewProps) {
     });
   }
 
+  function handleCheckboxClick(id: string, shiftKey: boolean) {
+    const range = shiftKey ? getRange(id, contacts.map((c) => c.id)) : null;
+    if (range) {
+      setSelectedContactIds((prev) => {
+        const next = new Set(prev);
+        for (const rid of range) next.add(rid);
+        return next;
+      });
+    } else {
+      toggleOne(id);
+    }
+    setAnchor(id);
+  }
+
   async function handleExport(format: "csv" | "xlsx") {
     const ids = Array.from(selectedContactIds);
     if (ids.length === 0) return;
@@ -305,10 +389,7 @@ export function KontakteView(_props: KontakteViewProps) {
           action,
           labelId: input.labelId,
           create: input.createName
-            ? {
-                name: input.createName,
-                color: LABEL_COLORS[labels.length % LABEL_COLORS.length],
-              }
+            ? { name: input.createName, color: newLabelColor }
             : undefined,
         }),
       });
@@ -630,11 +711,7 @@ export function KontakteView(_props: KontakteViewProps) {
                               labelFilterId === l.id && "font-semibold",
                             )}
                           >
-                            <span
-                              className="size-2 rounded-full shrink-0"
-                              style={{ backgroundColor: l.color }}
-                            />
-                            <span className="truncate">{l.name}</span>
+                            <LabelChip name={l.name} color={l.color} />
                             <span className="ml-auto text-ink-muted shrink-0">
                               {l.contactCount}
                             </span>
@@ -700,6 +777,9 @@ export function KontakteView(_props: KontakteViewProps) {
               <span className="text-sm text-brand-deep font-semibold">
                 {selectedContactIds.size} ausgewählt
               </span>
+              <span className="text-[11px] text-brand-deep/70 hidden md:inline">
+                Shift-Klick wählt einen Bereich · Esc hebt die Auswahl auf
+              </span>
               <div className="relative ml-auto flex gap-2">
                 <button
                   type="button"
@@ -739,7 +819,12 @@ export function KontakteView(_props: KontakteViewProps) {
                   <button
                     type="button"
                     disabled={labelBusy}
-                    onClick={() => setShowLabelMenu((v) => !v)}
+                    onClick={() => {
+                      setShowLabelMenu((v) => {
+                        if (!v) setNewLabelColor(pickUnusedColor(labels));
+                        return !v;
+                      });
+                    }}
                     title="Ausgewählte Kontakte mit einem Label markieren — z. B. „Versand 28.08.2026“ oder „Rückläufer“"
                     className="px-3 py-1.5 rounded-lg bg-white text-ink text-xs font-semibold shadow-sm hover:bg-canvas flex items-center gap-1 disabled:opacity-60"
                   >
@@ -784,6 +869,22 @@ export function KontakteView(_props: KontakteViewProps) {
                           OK
                         </button>
                       </div>
+                      <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+                        {LABEL_COLORS.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            onClick={() => setNewLabelColor(color)}
+                            title="Farbe für das neue Label"
+                            className={cn(
+                              "size-4 rounded-full",
+                              newLabelColor === color &&
+                                "ring-2 ring-ink ring-offset-1",
+                            )}
+                            style={{ backgroundColor: color }}
+                          />
+                        ))}
+                      </div>
                       {labels.length > 0 && (
                         <div className="max-h-40 overflow-y-auto border-t border-line pt-1">
                           {labels.map((l) => (
@@ -794,11 +895,7 @@ export function KontakteView(_props: KontakteViewProps) {
                               onClick={() => handleLabelAction({ labelId: l.id }, "add")}
                               className="w-full text-left px-3 py-1.5 text-xs hover:bg-canvas flex items-center gap-2"
                             >
-                              <span
-                                className="size-2 rounded-full shrink-0"
-                                style={{ backgroundColor: l.color }}
-                              />
-                              <span className="truncate">{l.name}</span>
+                              <LabelChip name={l.name} color={l.color} />
                             </button>
                           ))}
                         </div>
@@ -965,8 +1062,14 @@ export function KontakteView(_props: KontakteViewProps) {
                           <input
                             type="checkbox"
                             checked={selectedContactIds.has(c.id)}
-                            onChange={() => toggleOne(c.id)}
-                            onClick={(e) => e.stopPropagation()}
+                            onChange={() => {}}
+                            onMouseDown={(e) => {
+                              if (e.shiftKey) e.preventDefault();
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCheckboxClick(c.id, e.shiftKey);
+                            }}
                           />
                         </td>
                         <td className="px-3 py-2 font-medium text-ink whitespace-nowrap">
@@ -987,16 +1090,7 @@ export function KontakteView(_props: KontakteViewProps) {
                         <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-1 max-w-[240px]">
                             {(c.labels ?? []).map((l) => (
-                              <span
-                                key={l.id}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-canvas-deep text-[11px] text-ink whitespace-nowrap"
-                              >
-                                <span
-                                  className="size-1.5 rounded-full"
-                                  style={{ backgroundColor: l.color }}
-                                />
-                                {l.name}
-                              </span>
+                              <LabelChip key={l.id} name={l.name} color={l.color} />
                             ))}
                           </div>
                         </td>
