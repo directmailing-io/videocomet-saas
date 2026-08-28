@@ -19,8 +19,10 @@ import {
   ChevronDown,
   Download,
   Loader2,
+  MoreHorizontal,
   Plus,
   Search,
+  SlidersHorizontal,
   Tag,
   Trash2,
   Users2,
@@ -177,6 +179,8 @@ export function KontakteView(_props: KontakteViewProps) {
   const [showImportModal, setShowImportModal] = React.useState(false);
   const [showStartRunModal, setShowStartRunModal] = React.useState(false);
   const [showFieldsModal, setShowFieldsModal] = React.useState(false);
+  const [showFilterBar, setShowFilterBar] = React.useState(false);
+  const [showMoreMenu, setShowMoreMenu] = React.useState(false);
   const { setAnchor, getRange } = useShiftSelect();
 
   // Escape hebt die Auswahl auf — aber nicht, wenn gerade ein Dialog offen ist.
@@ -340,8 +344,8 @@ export function KontakteView(_props: KontakteViewProps) {
     setAnchor(id);
   }
 
-  async function handleExport(format: "csv" | "xlsx") {
-    const ids = Array.from(selectedContactIds);
+  async function handleExport(format: "csv" | "xlsx", idsOverride?: string[]) {
+    const ids = idsOverride ?? Array.from(selectedContactIds);
     if (ids.length === 0) return;
     setShowExportMenu(false);
     setExporting(true);
@@ -506,10 +510,7 @@ export function KontakteView(_props: KontakteViewProps) {
 
   return (
     <div className="min-h-full">
-      <PageHeader
-        title="Kontakte & Listen"
-        subtitle="Deine Kontakte an einem Ort — sortiere sie in Listen und starte daraus neue Kampagnen."
-      />
+      <PageHeader title="Kontakte & Listen" />
 
       <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-4 mt-4">
         {/* Sidebar mit Listen */}
@@ -609,16 +610,6 @@ export function KontakteView(_props: KontakteViewProps) {
             Neue Liste
           </button>
 
-          <div className="mt-4 pt-3 border-t border-line">
-            <button
-              type="button"
-              onClick={() => setShowFieldsModal(true)}
-              className="w-full text-left px-2 py-1.5 rounded-lg text-xs text-ink-muted hover:bg-canvas flex items-center gap-1.5"
-              title="Eigene Felder wie Priorität oder Praxis-Größe anlegen — gilt für alle Kontakte"
-            >
-              ⚙ Eigene Felder verwalten
-            </button>
-          </div>
         </aside>
 
         {/* Haupt-Bereich */}
@@ -741,10 +732,74 @@ export function KontakteView(_props: KontakteViewProps) {
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={() => setShowFilterBar((v) => !v)}
+                title="Kontakte nach Bedingungen filtern — z. B. „hat E-Mail-Adresse“ oder „war in Kampagne X“"
+                className={cn(
+                  "px-2.5 py-1.5 rounded-lg border text-sm flex items-center gap-1.5",
+                  showFilterBar || filter.conditions.length > 0
+                    ? "border-brand bg-brand-soft text-brand-deep font-semibold"
+                    : "border-line bg-canvas text-ink-muted",
+                )}
+              >
+                <SlidersHorizontal className="size-3.5" />
+                Filter
+                {filter.conditions.length > 0 && ` (${filter.conditions.length})`}
+              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowMoreMenu((v) => !v)}
+                  title="Weitere Aktionen"
+                  className="px-2 py-1.5 rounded-lg border border-line bg-canvas text-ink-muted hover:bg-canvas-deep"
+                >
+                  <MoreHorizontal className="size-4" />
+                </button>
+                {showMoreMenu && (
+                  <div
+                    className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-line py-1 min-w-[260px] z-20"
+                    onMouseLeave={() => setShowMoreMenu(false)}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        setShowFieldsModal(true);
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-canvas"
+                    >
+                      <span className="font-semibold block">⚙ Eigene Felder verwalten</span>
+                      <span className="text-ink-muted block">
+                        Eigene Felder wie Priorität oder Praxis-Größe anlegen —
+                        gilt für alle Kontakte
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={exporting || contacts.length === 0}
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        void handleExport("xlsx", contacts.map((c) => c.id));
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-canvas disabled:opacity-50"
+                    >
+                      <span className="font-semibold block">
+                        Angezeigte Kontakte exportieren (Excel)
+                      </span>
+                      <span className="text-ink-muted block">
+                        Lädt alle {contacts.length} gerade angezeigten Kontakte
+                        als Excel-Datei herunter
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Filter-Bar (Etappe 4) */}
+          {/* Filter-Bar — nur sichtbar nach Klick auf „Filter" oder mit aktiven Bedingungen */}
+          {(showFilterBar || filter.conditions.length > 0) && (
           <FilterBar
             value={filter}
             onChange={setFilter}
@@ -770,6 +825,7 @@ export function KontakteView(_props: KontakteViewProps) {
               await Promise.all([loadLists(), loadContacts()]);
             }}
           />
+          )}
 
           {/* Bulk-Aktion-Bar */}
           {selectedContactIds.size > 0 && (
@@ -1014,20 +1070,16 @@ export function KontakteView(_props: KontakteViewProps) {
                     />
                   </th>
                   <th className="px-3 py-2 text-left">Name</th>
-                  <th className="px-3 py-2 text-left">Firma</th>
                   <th className="px-3 py-2 text-left">E-Mail</th>
-                  <th className="px-3 py-2 text-left">Telefon</th>
                   <th className="px-3 py-2 text-left">Status</th>
                   <th className="px-3 py-2 text-left">Labels</th>
-                  <th className="px-3 py-2 text-right">Öffnungen</th>
-                  <th className="px-3 py-2 text-right">CTA</th>
                   <th className="px-3 py-2 text-left">Letzte Aktivität</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={10} className="px-3 py-10 text-center text-ink-muted">
+                    <td colSpan={6} className="px-3 py-10 text-center text-ink-muted">
                       <Loader2 className="size-4 inline animate-spin mr-2" />
                       Lade Kontakte…
                     </td>
@@ -1035,7 +1087,7 @@ export function KontakteView(_props: KontakteViewProps) {
                 )}
                 {!loading && contacts.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-3 py-10 text-center text-ink-muted text-sm">
+                    <td colSpan={6} className="px-3 py-10 text-center text-ink-muted text-sm">
                       {selectedListId
                         ? 'Diese Liste ist noch leer. Wähle links "Alle Kontakte", markiere ein paar und stecke sie in diese Liste.'
                         : "Noch keine Kontakte. Erstelle eine Kampagne mit CSV-Upload — deine Kontakte landen dann automatisch hier."}
@@ -1072,17 +1124,18 @@ export function KontakteView(_props: KontakteViewProps) {
                             }}
                           />
                         </td>
-                        <td className="px-3 py-2 font-medium text-ink whitespace-nowrap">
-                          {c.displayName}
-                        </td>
-                        <td className="px-3 py-2 text-ink-muted whitespace-nowrap max-w-[200px] truncate">
-                          {c.companyDisplay ?? c.company ?? ""}
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className="block font-medium text-ink">
+                            {c.displayName}
+                          </span>
+                          {(c.companyDisplay ?? c.company) && (
+                            <span className="block text-xs text-ink-muted max-w-[200px] truncate">
+                              {c.companyDisplay ?? c.company}
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-ink-muted whitespace-nowrap max-w-[200px] truncate">
                           {c.email ?? ""}
-                        </td>
-                        <td className="px-3 py-2 text-ink-muted whitespace-nowrap">
-                          {c.phone ?? ""}
                         </td>
                         <td className="px-3 py-2">
                           <StatusPill status={status} />
@@ -1093,12 +1146,6 @@ export function KontakteView(_props: KontakteViewProps) {
                               <LabelChip key={l.id} name={l.name} color={l.color} />
                             ))}
                           </div>
-                        </td>
-                        <td className="px-3 py-2 text-right text-ink-muted tabular-nums">
-                          {c.totalOpens}
-                        </td>
-                        <td className="px-3 py-2 text-right text-ink-muted tabular-nums">
-                          {c.totalCta}
                         </td>
                         <td className="px-3 py-2 text-ink-muted text-xs whitespace-nowrap">
                           {c.lastActivityAt

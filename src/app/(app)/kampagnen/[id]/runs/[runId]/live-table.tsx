@@ -1228,49 +1228,31 @@ export function LiveTable({
         </div>
       </section>
 
-      {/* Tracking-Filter (clientseitig, URL-sync'd) */}
+      {/* Tracking-Filter (clientseitig, URL-sync'd) — als Auswahlfeld statt Pill-Reihe */}
       <div className="flex flex-wrap items-center gap-2">
-        <FilterPill
-          active={filter === "all"}
-          onClick={() => updateFilter("all")}
+        <select
+          value={filter}
+          onChange={(e) => updateFilter(e.target.value as FilterKey)}
+          aria-label="Leads nach Aktivität filtern"
+          title="Nur Leads mit einer bestimmten Aktivität anzeigen"
+          className={cn(
+            "h-9 rounded-lg border bg-canvas px-2.5 text-sm",
+            filter !== "all"
+              ? "border-brand bg-brand-soft font-semibold text-brand-deep"
+              : "border-line text-ink",
+          )}
         >
-          Alle <FilterPillCount>{leads.length}</FilterPillCount>
-        </FilterPill>
-        <FilterPill
-          active={filter === "opened"}
-          onClick={() => updateFilter("opened")}
-        >
-          Geöffnet <FilterPillCount>{trackingCounts.opened}</FilterPillCount>
-        </FilterPill>
-        <FilterPill
-          active={filter === "played"}
-          onClick={() => updateFilter("played")}
-        >
-          Video gesehen <FilterPillCount>{trackingCounts.played}</FilterPillCount>
-        </FilterPill>
-        <FilterPill
-          active={filter === "cta"}
-          onClick={() => updateFilter("cta")}
-        >
-          CTA geklickt <FilterPillCount>{trackingCounts.clicked}</FilterPillCount>
-        </FilterPill>
-        {abActive && (
-          <>
-            <span className="mx-1 h-4 w-px bg-line" aria-hidden />
-            <FilterPill
-              active={filter === "briefA"}
-              onClick={() => updateFilter("briefA")}
-            >
-              Brief A <FilterPillCount>{trackingCounts.briefA}</FilterPillCount>
-            </FilterPill>
-            <FilterPill
-              active={filter === "briefB"}
-              onClick={() => updateFilter("briefB")}
-            >
-              Brief B <FilterPillCount>{trackingCounts.briefB}</FilterPillCount>
-            </FilterPill>
-          </>
-        )}
+          <option value="all">Alle ({leads.length})</option>
+          <option value="opened">Geöffnet ({trackingCounts.opened})</option>
+          <option value="played">Video gesehen ({trackingCounts.played})</option>
+          <option value="cta">CTA geklickt ({trackingCounts.clicked})</option>
+          {abActive && (
+            <option value="briefA">Brief A ({trackingCounts.briefA})</option>
+          )}
+          {abActive && (
+            <option value="briefB">Brief B ({trackingCounts.briefB})</option>
+          )}
+        </select>
         <div className="relative ml-auto w-full sm:w-64">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
@@ -1640,39 +1622,6 @@ function StatPill({
         className={cn("size-1.5 rounded-full bg-current", pulse && "animate-pulse")}
       />
       {label} {value}
-    </span>
-  );
-}
-
-function FilterPill({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-        active
-          ? "bg-brand text-white shadow-brand"
-          : "bg-surface text-ink-muted shadow-card hover:bg-surface-soft hover:text-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function FilterPillCount({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return (
-    <span className="rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] tabular-nums">
-      {children}
     </span>
   );
 }
