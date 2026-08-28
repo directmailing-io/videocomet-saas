@@ -91,8 +91,8 @@ const LABEL_COLORS = [
   "#A3A3A3",
 ];
 
-/** Lesbare Textfarbe: weiß oder dunkel — je nachdem, was auf der
- * Hintergrundfarbe den höheren WCAG-Kontrast hat. */
+/** Textfarbe auf Label-Chips: immer weiß (Daniels Feedback 2026-08-28,
+ * bessere Lesbarkeit) — nur auf wirklich sehr hellen Hintergründen dunkel. */
 function labelTextColor(hex: string): string {
   const lin = (v: number) => {
     const s = v / 255;
@@ -102,10 +102,7 @@ function labelTextColor(hex: string): string {
   const g = parseInt(hex.slice(3, 5), 16) || 0;
   const b = parseInt(hex.slice(5, 7), 16) || 0;
   const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  const contrastWhite = 1.05 / (L + 0.05);
-  // 0.0157 = relative Luminanz von #1f2328
-  const contrastDark = (L + 0.05) / (0.0157 + 0.05);
-  return contrastWhite >= contrastDark ? "#ffffff" : "#1f2328";
+  return L > 0.7 ? "#1f2328" : "#ffffff";
 }
 
 /** Vollfarbiger Label-Chip — bewusst klein, damit viele/lange Labels
