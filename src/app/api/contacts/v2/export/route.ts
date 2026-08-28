@@ -22,13 +22,14 @@ import { buildLeadPublicUrl } from "@/lib/lead-public-url";
 /**
  * POST /api/contacts/v2/export
  *
- * Exportiert ausgewählte Kontakte als Excel (3 Blätter) oder CSV.
+ * Exportiert ausgewählte Kontakte als Excel (2 Blätter) oder CSV.
  *
- *   Excel:  „Kontakte"           — Stammdaten + Custom-Felder + Listen
- *           „Kampagnen & Links"  — eine Zeile pro Kampagnen-Teilnahme
- *                                  (Lead) inkl. Brief-/E-Mail-Status und
- *                                  Landingpage-Links MIT und OHNE Vorschau
- *           „Aktivitäten"        — komplettes Ereignis-Protokoll (deutsch)
+ *   Excel:  „Kontakte & Kampagnen" — eine Tabelle: Stammdaten + Custom-
+ *                                    Felder + Listen + pro Kampagnen-
+ *                                    Teilnahme (Lead) Brief-/E-Mail-Status
+ *                                    und Landingpage-Links MIT und OHNE
+ *                                    Vorschau
+ *           „Aktivitäten"          — komplettes Ereignis-Protokoll (deutsch)
  *
  *   CSV:    flach — eine Zeile pro Kampagnen-Teilnahme, Kontaktdaten
  *           wiederholt; Kontakte ohne Kampagne bekommen eine Zeile mit
@@ -360,7 +361,10 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // ── Excel: 3 Blätter ─────────────────────────────────────────────────
+  // ── Excel: 2 Blätter ─────────────────────────────────────────────────
+  // Blatt 1 vereint Kontakte + Kampagnen + Links: eine Zeile pro
+  // Kampagnen-Teilnahme, Kontaktdaten wiederholt; Kontakte ohne Kampagne
+  // bekommen eine Zeile mit leeren Kampagnen-Spalten.
   const wb = XLSX.utils.book_new();
 
   const sheet1Rows: Array<Array<string | number>> = [
@@ -368,43 +372,31 @@ export async function POST(req: NextRequest) {
       "Nr.",
       ...contactBaseHeaders,
       ...customCols,
-      "Kampagnen-Teilnahmen",
+      ...occHeaders,
       "Kontakt angelegt am",
       "Letzte Aktivität am",
     ],
-    ...contactRows.map((c, i) => [
+  ];
+  contactRows.forEach((c, i) => {
+    const base = [
       i + 1,
       ...contactBase(c),
       ...customCols.map((k) => c.data?.[k] ?? ""),
-      (occByContact.get(c.id) ?? []).length,
-      fmtDate(c.created_at),
-      fmtDate(c.last_activity_at),
-    ]),
-  ];
+    ];
+    const tail = [fmtDate(c.created_at), fmtDate(c.last_activity_at)];
+    const occs = occByContact.get(c.id) ?? [];
+    if (occs.length === 0) {
+      sheet1Rows.push([...base, ...occHeaders.map(() => ""), ...tail]);
+    } else {
+      for (const o of occs) {
+        sheet1Rows.push([...base, ...occCells(o), ...tail]);
+      }
+    }
+  });
   XLSX.utils.book_append_sheet(
     wb,
     XLSX.utils.aoa_to_sheet(sheet1Rows),
-    "Kontakte",
-  );
-
-  const sheet2Rows: Array<Array<string | number>> = [
-    ["Vorname", "Nachname", "Firma", "E-Mail", ...occHeaders],
-  ];
-  for (const c of contactRows) {
-    for (const o of occByContact.get(c.id) ?? []) {
-      sheet2Rows.push([
-        c.first_name ?? "",
-        c.last_name ?? "",
-        c.company_display || c.company || "",
-        c.email ?? "",
-        ...occCells(o),
-      ]);
-    }
-  }
-  XLSX.utils.book_append_sheet(
-    wb,
-    XLSX.utils.aoa_to_sheet(sheet2Rows),
-    "Kampagnen & Links",
+    "Kontakte & Kampagnen",
   );
 
   const contactById = new Map(contactRows.map((c) => [c.id, c]));

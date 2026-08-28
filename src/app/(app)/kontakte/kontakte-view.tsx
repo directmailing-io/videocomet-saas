@@ -576,8 +576,8 @@ export function KontakteView(_props: KontakteViewProps) {
                       >
                         <span className="font-semibold block">Als Excel (.xlsx) — empfohlen</span>
                         <span className="text-ink-muted block">
-                          3 Blätter: Kontakte, Kampagnen &amp; Links, komplettes
-                          Aktivitäten-Protokoll
+                          Kontakte, Kampagnen &amp; Links in einer Tabelle +
+                          Aktivitäten-Protokoll als eigenes Blatt
                         </span>
                       </button>
                       <button
