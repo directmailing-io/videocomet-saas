@@ -6,17 +6,11 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Megaphone,
-  Library,
-  LayoutTemplate,
   Settings,
   LogOut,
   Menu,
   User as UserIcon,
-  BarChart3,
   Users2,
-  Mail as MailIcon,
-  AtSign,
-  Send,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -42,12 +36,6 @@ export type AppNavKey =
   | "dashboard"
   | "campaigns"
   | "contacts"
-  | "analytics"
-  | "emailBlasts"
-  | "media"
-  | "landingpages"
-  | "envelopes"
-  | "emailTemplates"
   | "settings";
 
 export interface AppShellUser {
@@ -73,45 +61,53 @@ interface NavItem {
   matchPrefixes?: string[];
 }
 
-// "Aktivität" und "Analytics" sind als ein Nav-Punkt zusammengeführt — beide
-// Routen highlighten denselben Eintrag, die Sub-Navigation innerhalb der Seite
-// schaltet zwischen Übersicht und Live-Feed.
+// Nav-Diät 2026-08-28 (Etappe C): 4 Punkte. Die alten Routen bleiben alle
+// erreichbar (Versand über Dashboard-Cockpit + Runden-Seite, Analytics über
+// Dashboard, Vorlagen/Mediathek über Einstellungen) und highlighten via
+// matchPrefixes den passenden Nav-Punkt.
 const NAV_GROUPS: Array<{ label: string | null; items: NavItem[] }> = [
   {
     label: null,
     items: [
-      { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { key: "campaigns", label: "Kampagnen", href: "/kampagnen", icon: Megaphone },
+      {
+        key: "dashboard",
+        label: "Dashboard",
+        href: "/dashboard",
+        icon: LayoutDashboard,
+        matchPrefixes: ["/aktivitaet", "/analytics"],
+      },
+      {
+        key: "campaigns",
+        label: "Kampagnen",
+        href: "/kampagnen",
+        icon: Megaphone,
+        matchPrefixes: ["/versand", "/email-versand"],
+      },
       { key: "contacts", label: "Kontakte & Listen", href: "/kontakte", icon: Users2 },
       {
-        key: "analytics",
-        label: "Analytics",
-        href: "/analytics",
-        icon: BarChart3,
-        matchPrefixes: ["/aktivitaet"],
+        key: "settings",
+        label: "Einstellungen",
+        href: "/einstellungen",
+        icon: Settings,
+        matchPrefixes: ["/mediathek", "/landingpages", "/umschlaege", "/email-vorlagen"],
       },
-      {
-        key: "emailBlasts",
-        label: "Versand",
-        href: "/versand",
-        icon: Send,
-        matchPrefixes: ["/email-versand"],
-      },
-    ],
-  },
-  {
-    label: "Setup",
-    items: [
-      { key: "media", label: "Mediathek", href: "/mediathek", icon: Library },
-      { key: "landingpages", label: "Landingpage-Vorlagen", href: "/landingpages", icon: LayoutTemplate },
-      { key: "envelopes", label: "Umschlag-Vorlagen", href: "/umschlaege", icon: MailIcon },
-      { key: "emailTemplates", label: "E-Mail-Vorlagen", href: "/email-vorlagen", icon: AtSign },
-      { key: "settings", label: "Einstellungen", href: "/einstellungen", icon: Settings },
     ],
   },
 ];
 
 const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
+
+// Kopfzeilen-Titel für Bereiche, die keinen eigenen Nav-Punkt mehr haben.
+const SECTION_LABELS: Array<{ prefix: string; label: string }> = [
+  { prefix: "/versand", label: "Versand" },
+  { prefix: "/email-versand", label: "Versand" },
+  { prefix: "/aktivitaet", label: "Aktivität" },
+  { prefix: "/analytics", label: "Analytics" },
+  { prefix: "/mediathek", label: "Mediathek" },
+  { prefix: "/landingpages", label: "Landingpage-Vorlagen" },
+  { prefix: "/umschlaege", label: "Umschlag-Vorlagen" },
+  { prefix: "/email-vorlagen", label: "E-Mail-Vorlagen" },
+];
 
 function isNavActive(item: NavItem, pathname: string): boolean {
   if (pathname === item.href || pathname.startsWith(item.href + "/")) return true;
@@ -251,7 +247,11 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const pathname = usePathname() ?? "/dashboard";
   const currentLabel =
-    NAV.find((n) => isNavActive(n, pathname))?.label ?? "";
+    SECTION_LABELS.find(
+      (s) => pathname === s.prefix || pathname.startsWith(s.prefix + "/"),
+    )?.label ??
+    NAV.find((n) => isNavActive(n, pathname))?.label ??
+    "";
 
   return (
     <div className="flex min-h-screen bg-canvas">

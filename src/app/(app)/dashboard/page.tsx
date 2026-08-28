@@ -7,6 +7,7 @@ import {
   Plus,
   PencilLine,
   ChevronRight,
+  Send,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { runs, leads } from "@/lib/db/schema";
@@ -18,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { listUserCampaigns } from "@/lib/db/queries/campaigns";
+import { listVersandRuns } from "@/lib/db/queries/versand";
 import { getActivityFeed } from "@/lib/db/queries/activity";
 import { runStatusLabel, runStatusVariant } from "@/lib/run-status";
 import { getRunEtas } from "@/lib/run-eta-read";
@@ -89,6 +91,13 @@ export default async function DashboardPage() {
       .limit(5),
     getActivityFeed(userId, { scope: { kind: "global" }, limit: 6 }),
   ]);
+
+  // Versand-Mini-Cockpit (Etappe C): Versand hat keinen eigenen Nav-Punkt
+  // mehr — Runden mit offenen Briefen tauchen hier auf.
+  const versandRuns = await listVersandRuns(userId).catch(() => []);
+  const pendingVersand = versandRuns
+    .filter((r) => r.withPdf > r.letterSent)
+    .slice(0, 4);
 
   // Server-ETA (W3) für laufende Runden — reiner Redis-Read, Momentaufnahme
   // beim Seitenaufbau (kein Live-Countdown nötig auf dem Dashboard).
@@ -186,6 +195,58 @@ export default async function DashboardPage() {
             <ChevronRight className="size-4 transition-transform group-hover:translate-x-0.5" />
           </span>
         </Link>
+      )}
+
+      {versandRuns.length > 0 && (
+        <div className="mb-6 rounded-squircle-md bg-surface px-5 py-4 shadow-card">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <Send className="size-4 text-brand-deep" />
+              Versand
+              {pendingVersand.length > 0 && (
+                <span className="text-ink-muted font-normal">
+                  · {pendingVersand.length}{" "}
+                  {pendingVersand.length === 1 ? "Runde wartet" : "Runden warten"}
+                </span>
+              )}
+            </h2>
+            <Link
+              href="/versand"
+              className="text-sm font-semibold text-brand-deep hover:underline"
+            >
+              Versandzentrale
+            </Link>
+          </div>
+          {pendingVersand.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-muted">
+              Alles versendet — gerade nichts zu tun.
+            </p>
+          ) : (
+            <ul className="mt-2 divide-y divide-line-soft">
+              {pendingVersand.map((r) => (
+                <li key={r.runId}>
+                  <Link
+                    href={`/versand/${r.runId}`}
+                    className="group flex items-center gap-4 py-2.5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-ink group-hover:text-brand-deep">
+                        {r.runName}
+                      </p>
+                      <p className="truncate text-xs text-ink-muted">
+                        {r.campaignName}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs tabular-nums text-ink-muted">
+                      {r.letterSent} von {r.withPdf} Briefen versendet
+                    </span>
+                    <ChevronRight className="size-4 shrink-0 text-ink-muted transition-transform group-hover:translate-x-0.5" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {userCampaigns.length === 0 ? (
