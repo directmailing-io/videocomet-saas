@@ -17,6 +17,7 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ChevronDown,
+  Download,
   Loader2,
   Plus,
   Search,
@@ -99,6 +100,8 @@ export function KontakteView(_props: KontakteViewProps) {
   const [selectedContactIds, setSelectedContactIds] = React.useState<Set<string>>(new Set());
   const [showNewListModal, setShowNewListModal] = React.useState(false);
   const [showAddToListMenu, setShowAddToListMenu] = React.useState(false);
+  const [showExportMenu, setShowExportMenu] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
   // Detail-Slide-Over (Etappe 3): welchen Contact anzeigen?
   const [detailContactId, setDetailContactId] = React.useState<string | null>(null);
   const [filter, setFilter] = React.useState<FilterDefinition>(EMPTY_FILTER);
@@ -199,6 +202,39 @@ export function KontakteView(_props: KontakteViewProps) {
       else next.add(id);
       return next;
     });
+  }
+
+  async function handleExport(format: "csv" | "xlsx") {
+    const ids = Array.from(selectedContactIds);
+    if (ids.length === 0) return;
+    setShowExportMenu(false);
+    setExporting(true);
+    try {
+      const res = await fetch("/api/contacts/v2/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactIds: ids, format }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Fehler beim Export");
+      }
+      const blob = await res.blob();
+      const stamp = new Date().toISOString().slice(0, 10);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `videocomet-kontakte-${stamp}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: `${ids.length} Kontakt(e) exportiert` });
+    } catch (err) {
+      toastError(toast, err);
+    } finally {
+      setExporting(false);
+    }
   }
 
   async function handleAddToList(listId: string) {
@@ -511,6 +547,53 @@ export function KontakteView(_props: KontakteViewProps) {
                     ))}
                   </div>
                 )}
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    disabled={exporting}
+                    onClick={() => setShowExportMenu((v) => !v)}
+                    title="Ausgewählte Kontakte als Datei herunterladen — mit allen Daten, Kampagnen, Aktivitäten und Links"
+                    className="px-3 py-1.5 rounded-lg bg-white text-ink text-xs font-semibold shadow-sm hover:bg-canvas flex items-center gap-1 disabled:opacity-60"
+                  >
+                    {exporting ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : (
+                      <Download className="size-3" />
+                    )}
+                    Exportieren
+                    <ChevronDown className="size-3" />
+                  </button>
+                  {showExportMenu && (
+                    <div
+                      className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-line py-1 min-w-[280px] z-10"
+                      onMouseLeave={() => setShowExportMenu(false)}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleExport("xlsx")}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-canvas"
+                      >
+                        <span className="font-semibold block">Als Excel (.xlsx) — empfohlen</span>
+                        <span className="text-ink-muted block">
+                          3 Blätter: Kontakte, Kampagnen &amp; Links, komplettes
+                          Aktivitäten-Protokoll
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleExport("csv")}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-canvas"
+                      >
+                        <span className="font-semibold block">Als CSV (.csv)</span>
+                        <span className="text-ink-muted block">
+                          Eine Tabelle für andere Programme — eine Zeile pro
+                          Kampagnen-Teilnahme
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 {selectedListId && (
                   <button
