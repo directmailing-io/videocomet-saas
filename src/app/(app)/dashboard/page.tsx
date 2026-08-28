@@ -92,8 +92,8 @@ export default async function DashboardPage() {
     getActivityFeed(userId, { scope: { kind: "global" }, limit: 6 }),
   ]);
 
-  // Versand-Mini-Cockpit (Etappe C): Versand hat keinen eigenen Nav-Punkt
-  // mehr — Runden mit offenen Briefen tauchen hier auf.
+  // Versand-Mini-Cockpit: Versand lebt im Versand-Tab der Runden-Seite —
+  // Runden mit offenen Briefen tauchen hier auf und verlinken direkt dorthin.
   const versandRuns = await listVersandRuns(userId).catch(() => []);
   const pendingVersand = versandRuns
     .filter((r) => r.withPdf > r.letterSent)
@@ -210,12 +210,6 @@ export default async function DashboardPage() {
                 </span>
               )}
             </h2>
-            <Link
-              href="/versand"
-              className="text-sm font-semibold text-brand-deep hover:underline"
-            >
-              Versandzentrale
-            </Link>
           </div>
           {pendingVersand.length === 0 ? (
             <p className="mt-2 text-sm text-ink-muted">
@@ -226,7 +220,7 @@ export default async function DashboardPage() {
               {pendingVersand.map((r) => (
                 <li key={r.runId}>
                   <Link
-                    href={`/versand/${r.runId}`}
+                    href={`/kampagnen/${r.campaignId}/runs/${r.runId}?tab=versand`}
                     className="group flex items-center gap-4 py-2.5"
                   >
                     <div className="min-w-0 flex-1">

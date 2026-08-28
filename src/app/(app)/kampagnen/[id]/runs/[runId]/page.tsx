@@ -1,22 +1,26 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth-guard";
 import { getCampaign } from "@/lib/db/queries/campaigns";
 import { getRun } from "@/lib/db/queries/runs";
-import { listLeadsByRun, countByStatus } from "@/lib/db/queries/leads";
-import { getLeadEmailStatusMapForRun } from "@/lib/db/queries/email-blasts";
+import {
+  listLeadsByRun,
+  countByStatus,
+  getLeadDataColumns,
+} from "@/lib/db/queries/leads";
+import {
+  getLeadEmailStatusMapForRun,
+  getLeadEmailHistoryForRun,
+  type LeadEmailHistoryEntry,
+} from "@/lib/db/queries/email-blasts";
 import { getUserDomain } from "@/lib/db/queries/user-domains";
-import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { LiveTable } from "./live-table";
-import { ActivityCenter } from "@/app/(app)/aktivitaet/activity-center";
+import { RunPageShell, type RunTab } from "./run-page-shell";
 
 export default async function RunDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; runId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id, runId } = await params;
   const { user } = await requireUser();
@@ -44,13 +48,18 @@ export default async function RunDetailPage({
     redirect(`/kampagnen/${id}/runs/neu?resume=${runId}`);
   }
 
-  const [leads, counts, emailStatusMap] = await Promise.all([
-    listLeadsByRun(runId, user.id),
-    countByStatus(runId, user.id),
-    getLeadEmailStatusMapForRun(runId, user.id).catch(
-      () => ({}) as Record<string, string>,
-    ),
-  ]);
+  const [leads, counts, columns, emailStatusMap, emailHistory] =
+    await Promise.all([
+      listLeadsByRun(runId, user.id),
+      countByStatus(runId, user.id),
+      getLeadDataColumns([runId], user.id).catch(() => [] as string[]),
+      getLeadEmailStatusMapForRun(runId, user.id).catch(
+        () => ({}) as Record<string, string>,
+      ),
+      getLeadEmailHistoryForRun(runId, user.id).catch(
+        () => ({}) as Record<string, LeadEmailHistoryEntry[]>,
+      ),
+    ]);
 
   // Custom-Domain-Hostname holen (alle Leads in einer Runde erben dieselbe
   // Domain über die Kampagne — wir machen einen Lookup statt eines JOINs).
@@ -90,54 +99,117 @@ export default async function RunDetailPage({
     lastCtaAt: l.lastCtaAt ? l.lastCtaAt.toISOString() : null,
   }));
 
+  // Nur fertige Leads sind versandfähig — der Rest wird im Versand-Tab
+  // gezählt und als Hinweis angezeigt statt still zu verschwinden.
+  const completed = leads.filter((l) => l.status === "completed");
+  const notCompletedCount = leads.length - completed.length;
+
+  const versandLeads = completed.map((l) => ({
+    id: l.id,
+    rowIndex: l.rowIndex,
+    contactId: l.contactId ?? null,
+    email: l.normalizedEmail ?? null,
+    data: l.data as Record<string, string>,
+    abVariant: l.abVariant ?? null,
+    hasPdf: !!l.pdfUrl,
+    hasEnvelope: !!l.envelopePdfUrl,
+    letterStatus: l.letterStatus,
+    letterSentAt: l.letterSentAt ? l.letterSentAt.toISOString() : null,
+    letterExportedAt: l.letterExportedAt
+      ? l.letterExportedAt.toISOString()
+      : null,
+    letterReturnedAt: l.letterReturnedAt
+      ? l.letterReturnedAt.toISOString()
+      : null,
+    viewCount: l.viewCount ?? 0,
+    lastViewedAt: l.lastViewedAt ? l.lastViewedAt.toISOString() : null,
+    ctaClickCount: l.ctaClickCount ?? 0,
+    lastCtaAt: l.lastCtaAt ? l.lastCtaAt.toISOString() : null,
+    emailStatus: emailStatusMap[l.id] ?? null,
+    emailHistory: (emailHistory[l.id] ?? []).map((m) => ({
+      sentAt: m.sentAt ? m.sentAt.toISOString() : null,
+      status: m.status as string,
+      repliedAt: m.repliedAt ? m.repliedAt.toISOString() : null,
+      subject: m.subject,
+      fromAddress: m.fromAddress || null,
+    })),
+  }));
+
+  // Status-Zeile + genau EIN Phasen-Primary für den Seitenkopf.
+  const generating = run.status === "generating";
+  const withPdf = versandLeads.filter((l) => l.hasPdf).length;
+  const letterSent = versandLeads.filter(
+    (l) => l.letterStatus === "sent",
+  ).length;
+  const emailSent = versandLeads.filter((l) =>
+    ["sent", "clicked", "replied"].includes(l.emailStatus ?? ""),
+  ).length;
+
+  const statusParts = [`Kampagne ${campaign.name}`];
+  if (generating) {
+    statusParts.push(`${completed.length} von ${leads.length} Videos fertig`);
+  } else if (withPdf > 0) {
+    statusParts.push(`${letterSent} von ${withPdf} Briefen versendet`);
+  }
+  if (emailSent > 0) {
+    statusParts.push(`${emailSent} E-Mails versendet`);
+  }
+  const statusLine = statusParts.join(" · ");
+
+  let primaryLabel: string | null = null;
+  if (!generating && completed.length > 0) {
+    const readyLetters = withPdf - letterSent;
+    if (withPdf > 0 && readyLetters === 0) {
+      primaryLabel = "Follow-up starten";
+    } else if (letterSent > 0) {
+      primaryLabel = `Weiter versenden (${readyLetters} offen)`;
+    } else {
+      primaryLabel = `Jetzt versenden (${withPdf > 0 ? readyLetters : completed.length} bereit)`;
+    }
+  }
+
+  const sp = await searchParams;
+  const tabParam = typeof sp.tab === "string" ? sp.tab : "";
+  const defaultTab: RunTab =
+    tabParam === "versand" || tabParam === "aktivitaet"
+      ? tabParam
+      : "videos";
+
   return (
-    <>
-      <PageHeader
-        title={run.name}
-        subtitle={`Kampagne ${campaign.name}`}
-        actions={
-          <Button asChild variant="ghost" iconLeft={<ArrowLeft className="size-4" />}>
-            <Link href={`/kampagnen/${campaign.id}`}>Zur Kampagne</Link>
-          </Button>
-        }
-      />
-
-      <Tabs defaultValue="übersicht">
-        <TabsList>
-          <TabsTrigger value="übersicht">Übersicht</TabsTrigger>
-          <TabsTrigger value="aktivität">Aktivität</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="übersicht">
-          <LiveTable
-            runId={runId}
-            campaignId={campaign.id}
-            abActive={run.abConfig != null}
-            initialRun={{
-              id: run.id,
-              name: run.name,
-              status: run.status,
-              totalLeads: run.totalLeads,
-              startedAt: run.startedAt ? run.startedAt.toISOString() : null,
-              completedAt: run.completedAt ? run.completedAt.toISOString() : null,
-            }}
-            initialCounts={counts}
-            initialLeads={initialLeads}
-            emailStatusMap={emailStatusMap}
-          />
-        </TabsContent>
-
-        <TabsContent value="aktivität">
-          <ActivityCenter
-            scope="run"
-            campaignId={campaign.id}
-            campaignName={campaign.name}
-            runId={run.id}
-            runName={run.name}
-            embedded
-          />
-        </TabsContent>
-      </Tabs>
-    </>
+    <RunPageShell
+      runName={run.name}
+      campaignId={campaign.id}
+      campaignName={campaign.name}
+      defaultTab={defaultTab}
+      statusLine={statusLine}
+      primaryLabel={primaryLabel}
+      liveTable={{
+        runId,
+        campaignId: campaign.id,
+        abActive: run.abConfig != null,
+        initialRun: {
+          id: run.id,
+          name: run.name,
+          status: run.status,
+          totalLeads: run.totalLeads,
+          startedAt: run.startedAt ? run.startedAt.toISOString() : null,
+          completedAt: run.completedAt ? run.completedAt.toISOString() : null,
+        },
+        initialCounts: counts,
+        initialLeads,
+        emailStatusMap,
+      }}
+      versand={{
+        runId: run.id,
+        runName: run.name,
+        runStatus: run.status,
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        abActive: run.abConfig != null,
+        columns,
+        notCompletedCount,
+        leads: versandLeads,
+      }}
+    />
   );
 }

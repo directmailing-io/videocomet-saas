@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import {
   ArrowDown,
   ArrowUp,
@@ -147,6 +146,8 @@ export interface LiveTableProps {
    * Blast-Messages für diese Runde ⇒ Spalte wird nicht gerendert.
    */
   emailStatusMap?: Record<string, string>;
+  /** Wechselt auf der Runden-Seite in den Tab „Versand". */
+  onOpenVersand: () => void;
 }
 
 const EMAIL_STATUS_META: Record<
@@ -259,6 +260,7 @@ export function LiveTable({
   initialCounts,
   initialLeads,
   emailStatusMap,
+  onOpenVersand,
 }: LiveTableProps) {
   const emailColumnActive =
     !!emailStatusMap && Object.keys(emailStatusMap).length > 0;
@@ -1049,14 +1051,17 @@ export function LiveTable({
                     Bereit für den Versand
                   </p>
                   <p className="mt-0.5 text-xs text-ink-muted">
-                    Alle fertigen Leads dieser Runde stehen in der
-                    Versandzentrale: Briefe herunterladen, als versendet
-                    markieren und E-Mails verschicken.
+                    Alle fertigen Leads stehen im Tab „Versand": Briefe
+                    herunterladen, als versendet markieren und E-Mails
+                    verschicken.
                   </p>
                 </div>
               </div>
-              <Button asChild iconLeft={<Mailbox className="size-4" />}>
-                <Link href={`/versand/${runId}`}>Jetzt Versand starten</Link>
+              <Button
+                iconLeft={<Mailbox className="size-4" />}
+                onClick={onOpenVersand}
+              >
+                Jetzt Versand starten
               </Button>
             </div>
           )}

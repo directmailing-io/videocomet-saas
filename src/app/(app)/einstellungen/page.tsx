@@ -11,13 +11,11 @@ import { IntegrationsList } from "./integrationen/integrations-list";
 import { VerbindungenTab } from "./verbindungen/verbindungen-tab";
 import { BillingTab } from "./billing-tab";
 import { SetupTab } from "./setup-tab";
-import { VorlagenTab } from "./vorlagen-tab";
 import { getSetupStatus } from "@/lib/setup-status";
 import { buildAdminConsentUrl, isM365Configured } from "@/lib/msgraph/client";
 
 const TAB_VALUES = new Set([
   "setup",
-  "vorlagen",
   "profil",
   "passwort",
   "abrechnung",
@@ -49,13 +47,12 @@ export default async function EinstellungenPage({
     <>
       <PageHeader
         title="Einstellungen"
-        subtitle="Hier verwaltest du dein Konto — und findest Mediathek und alle Vorlagen."
+        subtitle="Hier verwaltest du Profil, Passwort, Rechnungsadresse, Domains und E-Mail-Postfächer."
       />
 
       <Tabs defaultValue={defaultTab}>
         <TabsList>
           <TabsTrigger value="setup">Setup</TabsTrigger>
-          <TabsTrigger value="vorlagen">Vorlagen &amp; Medien</TabsTrigger>
           <TabsTrigger value="profil">Profil</TabsTrigger>
           <TabsTrigger value="passwort">Passwort</TabsTrigger>
           <TabsTrigger value="abrechnung">Abrechnung</TabsTrigger>
@@ -68,10 +65,6 @@ export default async function EinstellungenPage({
 
         <TabsContent value="setup">
           <SetupTab status={setupStatus} />
-        </TabsContent>
-
-        <TabsContent value="vorlagen">
-          <VorlagenTab />
         </TabsContent>
 
         <TabsContent value="profil">

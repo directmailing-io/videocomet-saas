@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  LayoutTemplate,
+  Library,
   Megaphone,
   Settings,
   LogOut,
@@ -36,6 +38,8 @@ export type AppNavKey =
   | "dashboard"
   | "campaigns"
   | "contacts"
+  | "media"
+  | "templates"
   | "settings";
 
 export interface AppShellUser {
@@ -61,10 +65,9 @@ interface NavItem {
   matchPrefixes?: string[];
 }
 
-// Nav-Diät 2026-08-28 (Etappe C): 4 Punkte. Die alten Routen bleiben alle
-// erreichbar (Versand über Dashboard-Cockpit + Runden-Seite, Analytics über
-// Dashboard, Vorlagen/Mediathek über Einstellungen) und highlighten via
-// matchPrefixes den passenden Nav-Punkt.
+// Nav-Neuordnung 2026-08-28: 6 Punkte. „Vorlagen" bündelt die drei
+// Vorlagen-Bereiche (Landingpages, Umschläge, E-Mail), Versand lebt in der
+// Runden-Ansicht und highlightet via matchPrefixes den Kampagnen-Punkt.
 const NAV_GROUPS: Array<{ label: string | null; items: NavItem[] }> = [
   {
     label: null,
@@ -84,13 +87,15 @@ const NAV_GROUPS: Array<{ label: string | null; items: NavItem[] }> = [
         matchPrefixes: ["/versand", "/email-versand"],
       },
       { key: "contacts", label: "Kontakte & Listen", href: "/kontakte", icon: Users2 },
+      { key: "media", label: "Mediathek", href: "/mediathek", icon: Library },
       {
-        key: "settings",
-        label: "Einstellungen",
-        href: "/einstellungen",
-        icon: Settings,
-        matchPrefixes: ["/mediathek", "/landingpages", "/umschlaege", "/email-vorlagen"],
+        key: "templates",
+        label: "Vorlagen",
+        href: "/vorlagen",
+        icon: LayoutTemplate,
+        matchPrefixes: ["/landingpages", "/umschlaege", "/email-vorlagen"],
       },
+      { key: "settings", label: "Einstellungen", href: "/einstellungen", icon: Settings },
     ],
   },
 ];
@@ -103,7 +108,6 @@ const SECTION_LABELS: Array<{ prefix: string; label: string }> = [
   { prefix: "/email-versand", label: "Versand" },
   { prefix: "/aktivitaet", label: "Aktivität" },
   { prefix: "/analytics", label: "Analytics" },
-  { prefix: "/mediathek", label: "Mediathek" },
   { prefix: "/landingpages", label: "Landingpage-Vorlagen" },
   { prefix: "/umschlaege", label: "Umschlag-Vorlagen" },
   { prefix: "/email-vorlagen", label: "E-Mail-Vorlagen" },

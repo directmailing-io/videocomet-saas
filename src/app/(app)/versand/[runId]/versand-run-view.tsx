@@ -1,20 +1,19 @@
 "use client";
 
 /**
- * Versandzentrale — Runden-Detail: Lead-Tabelle mit Bulk-Auswahl,
+ * Versand-Tab der Runden-Seite: Lead-Tabelle mit Bulk-Auswahl,
  * Sortierung per Klick auf Tabellen-Header (Export übernimmt EXAKT diese
  * Reihenfolge für Briefe UND Umschläge), Filtern, Teilexport mit
  * anschließendem Status-Dialog und E-Mail-Anbindung. Kontakt-Details
  * öffnen die GLOBALE Kontakt-Ansicht (identisch zu Kontakte & Listen).
+ * Rendert ohne eigenen Seitenkopf — den liefert die Runden-Seite.
  */
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowDown,
-  ArrowLeft,
   ArrowUp,
   CheckCircle2,
   ChevronDown,
@@ -28,7 +27,6 @@ import {
   Undo2,
 } from "lucide-react";
 import { ContactDetailSlideOver } from "../../kontakte/contact-detail-slideover";
-import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -904,65 +902,6 @@ export function VersandRunView({
 
   return (
     <>
-      <PageHeader
-        title={runName}
-        subtitle={`Versand · Kampagne ${campaignName}`}
-        actions={
-          <>
-            <Button
-              asChild
-              variant="ghost"
-              iconLeft={<ArrowLeft className="size-4" />}
-            >
-              <Link href="/versand">Zur Versandzentrale</Link>
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  iconRight={<ChevronDown className="size-4" />}
-                  disabled={busy || leads.length === 0}
-                >
-                  Aktion
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  disabled={!hasLetters}
-                  onSelect={() =>
-                    setExportMode({ ids: allLeadIds, variant: "bundle" })
-                  }
-                >
-                  <FileDown className="size-4" />
-                  PDF-Bundle herunterladen
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!hasLetters}
-                  onSelect={() =>
-                    setExportMode({ ids: allLeadIds, variant: "letters" })
-                  }
-                >
-                  <FileDown className="size-4" />
-                  Nur Briefe herunterladen
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!hasEnvelopes}
-                  onSelect={() =>
-                    setExportMode({ ids: allLeadIds, variant: "envelopes" })
-                  }
-                >
-                  <Mailbox className="size-4" />
-                  Nur Umschläge herunterladen
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => emailTo(allLeadIds)}>
-                  <Mail className="size-4" />
-                  E-Mail versenden
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        }
-      />
-
       {/* 7-Tage-Hinweis */}
       {stuckLeads.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-squircle-lg bg-amber-500/10 px-4 py-3">
@@ -1141,6 +1080,52 @@ export function VersandRunView({
             Sortiert nach „{sortBy}" · zurücksetzen
           </button>
         )}
+
+        <div className="ml-auto">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                iconRight={<ChevronDown className="size-4" />}
+                disabled={busy || leads.length === 0}
+              >
+                Aktion
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                disabled={!hasLetters}
+                onSelect={() =>
+                  setExportMode({ ids: allLeadIds, variant: "bundle" })
+                }
+              >
+                <FileDown className="size-4" />
+                PDF-Bundle herunterladen
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!hasLetters}
+                onSelect={() =>
+                  setExportMode({ ids: allLeadIds, variant: "letters" })
+                }
+              >
+                <FileDown className="size-4" />
+                Nur Briefe herunterladen
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!hasEnvelopes}
+                onSelect={() =>
+                  setExportMode({ ids: allLeadIds, variant: "envelopes" })
+                }
+              >
+                <Mailbox className="size-4" />
+                Nur Umschläge herunterladen
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => emailTo(allLeadIds)}>
+                <Mail className="size-4" />
+                E-Mail versenden
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* Schnellfilter-Chips: „Der Filter schlägt vor — du entscheidest."
