@@ -176,6 +176,8 @@ export function KontakteView(_props: KontakteViewProps) {
   // Detail-Slide-Over (Etappe 3): welchen Contact anzeigen?
   const [detailContactId, setDetailContactId] = React.useState<string | null>(null);
   const [filter, setFilter] = React.useState<FilterDefinition>(EMPTY_FILTER);
+  // Schnellfilter-Chips (Follow-up-Paket): filtern nur, wählen nie aus.
+  const [quickFilter, setQuickFilter] = React.useState<"never_contacted" | "returned" | null>(null);
   const [showImportModal, setShowImportModal] = React.useState(false);
   const [showStartRunModal, setShowStartRunModal] = React.useState(false);
   const [showFieldsModal, setShowFieldsModal] = React.useState(false);
@@ -259,6 +261,7 @@ export function KontakteView(_props: KontakteViewProps) {
             search: search.trim().length >= 2 ? search.trim() : undefined,
             sort,
             limit: 500,
+            ...(quickFilter ? { quick: quickFilter } : {}),
           }),
         });
         const body = await res.json();
@@ -271,6 +274,7 @@ export function KontakteView(_props: KontakteViewProps) {
         if (selectedListId) params.set("listId", selectedListId);
         if (labelFilterId) params.set("labelId", labelFilterId);
         if (search.trim().length >= 2) params.set("search", search.trim());
+        if (quickFilter) params.set("quick", quickFilter);
         params.set("sort", sort);
         params.set("limit", "500");
         const res = await fetch(`/api/contacts/v2?${params.toString()}`);
@@ -285,7 +289,7 @@ export function KontakteView(_props: KontakteViewProps) {
     } finally {
       setLoading(false);
     }
-  }, [selectedListId, labelFilterId, search, sort, filter, toast]);
+  }, [selectedListId, labelFilterId, search, sort, filter, quickFilter, toast]);
 
   React.useEffect(() => {
     void loadLists();
@@ -632,24 +636,28 @@ export function KontakteView(_props: KontakteViewProps) {
             </div>
 
             <div className="ml-auto flex gap-2 items-center flex-wrap">
-              {selectedListId && contactsTotal > 0 && (
+              {/* UI-Diät: genau EIN Primary — „Runde starten" wenn eine Liste
+                  gewählt ist, sonst „Kontakte importieren". Der jeweils andere
+                  Einstieg liegt im ⋯-Menü. */}
+              {selectedListId && contactsTotal > 0 ? (
                 <button
                   type="button"
                   onClick={() => setShowStartRunModal(true)}
-                  className="px-3 py-1.5 rounded-lg bg-brand-deep text-white text-xs font-semibold hover:bg-brand flex items-center gap-1.5"
-                  title="Aus dieser Liste eine Kampagne-Runde starten"
+                  className="px-3 py-1.5 rounded-lg bg-ink text-white text-xs font-semibold hover:bg-brand-deep flex items-center gap-1.5"
+                  title="Aus dieser Liste eine Kampagnen-Runde starten"
                 >
                   Runde starten →
                 </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(true)}
+                  className="px-3 py-1.5 rounded-lg bg-ink text-white text-xs font-semibold hover:bg-brand-deep flex items-center gap-1.5"
+                >
+                  <Plus className="size-3.5" />
+                  Kontakte importieren
+                </button>
               )}
-              <button
-                type="button"
-                onClick={() => setShowImportModal(true)}
-                className="px-3 py-1.5 rounded-lg bg-ink text-white text-xs font-semibold hover:bg-brand-deep flex items-center gap-1.5"
-              >
-                <Plus className="size-3.5" />
-                Kontakte importieren
-              </button>
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-ink-muted" />
                 <input
@@ -660,97 +668,6 @@ export function KontakteView(_props: KontakteViewProps) {
                   className="pl-7 pr-2 py-1.5 rounded-lg border border-line bg-canvas text-sm w-48 focus:outline-none focus:border-brand"
                 />
               </div>
-              {labels.length > 0 && (
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowLabelFilterMenu((v) => !v)}
-                    title="Nur Kontakte mit einem bestimmten Label anzeigen"
-                    className={cn(
-                      "px-2.5 py-1.5 rounded-lg border text-sm flex items-center gap-1.5",
-                      labelFilterId
-                        ? "border-brand bg-brand-soft text-brand-deep font-semibold"
-                        : "border-line bg-canvas text-ink-muted",
-                    )}
-                  >
-                    <Tag className="size-3.5" />
-                    {labelFilterId
-                      ? labels.find((l) => l.id === labelFilterId)?.name ?? "Label"
-                      : "Label"}
-                    <ChevronDown className="size-3" />
-                  </button>
-                  {showLabelFilterMenu && (
-                    <div
-                      className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-line py-1 min-w-[230px] z-20 max-h-72 overflow-y-auto"
-                      onMouseLeave={() => setShowLabelFilterMenu(false)}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLabelFilterId(null);
-                          setShowLabelFilterMenu(false);
-                        }}
-                        className={cn(
-                          "w-full text-left px-3 py-1.5 text-xs hover:bg-canvas",
-                          !labelFilterId && "font-semibold",
-                        )}
-                      >
-                        Alle Kontakte (kein Label-Filter)
-                      </button>
-                      {labels.map((l) => (
-                        <div key={l.id} className="group flex items-center">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setLabelFilterId(l.id);
-                              setShowLabelFilterMenu(false);
-                            }}
-                            className={cn(
-                              "flex-1 text-left px-3 py-1.5 text-xs hover:bg-canvas flex items-center gap-2 min-w-0",
-                              labelFilterId === l.id && "font-semibold",
-                            )}
-                          >
-                            <LabelChip name={l.name} color={l.color} />
-                            <span className="ml-auto text-ink-muted shrink-0">
-                              {l.contactCount}
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowLabelFilterMenu(false);
-                              setEditLabel(l);
-                            }}
-                            className="hidden group-hover:block text-ink-muted hover:text-ink p-1 rounded"
-                            title="Label umbenennen oder Farbe ändern"
-                          >
-                            <Pencil className="size-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteLabel(l)}
-                            className="hidden group-hover:block text-ink-muted hover:text-danger p-1 mr-1 rounded"
-                            title="Label löschen"
-                          >
-                            <Trash2 className="size-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
-                className="px-2 py-1.5 rounded-lg border border-line bg-canvas text-sm"
-              >
-                {(Object.keys(AKTIV_LABEL) as SortKey[]).map((k) => (
-                  <option key={k} value={k}>
-                    {AKTIV_LABEL[k]}
-                  </option>
-                ))}
-              </select>
               <button
                 type="button"
                 onClick={() => setShowFilterBar((v) => !v)}
@@ -777,22 +694,50 @@ export function KontakteView(_props: KontakteViewProps) {
                 </button>
                 {showMoreMenu && (
                   <div
-                    className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-line py-1 min-w-[260px] z-20"
+                    className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-line py-1 min-w-[240px] z-20"
                     onMouseLeave={() => setShowMoreMenu(false)}
                   >
+                    {selectedListId && contactsTotal > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowMoreMenu(false);
+                          setShowImportModal(true);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-canvas font-semibold"
+                      >
+                        Kontakte importieren
+                      </button>
+                    )}
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+                      Sortierung
+                    </div>
+                    {(Object.keys(AKTIV_LABEL) as SortKey[]).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => {
+                          setSort(k);
+                          setShowMoreMenu(false);
+                        }}
+                        className={cn(
+                          "w-full text-left px-3 py-1.5 text-xs hover:bg-canvas",
+                          sort === k && "font-semibold text-brand-deep",
+                        )}
+                      >
+                        {AKTIV_LABEL[k]}
+                      </button>
+                    ))}
+                    <div className="my-1 border-t border-line" />
                     <button
                       type="button"
                       onClick={() => {
                         setShowMoreMenu(false);
                         setShowFieldsModal(true);
                       }}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-canvas"
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-canvas font-semibold"
                     >
-                      <span className="font-semibold block">⚙ Eigene Felder verwalten</span>
-                      <span className="text-ink-muted block">
-                        Eigene Felder wie Priorität oder Praxis-Größe anlegen —
-                        gilt für alle Kontakte
-                      </span>
+                      Eigene Felder verwalten
                     </button>
                     <button
                       type="button"
@@ -801,20 +746,135 @@ export function KontakteView(_props: KontakteViewProps) {
                         setShowMoreMenu(false);
                         void handleExport("xlsx", contacts.map((c) => c.id));
                       }}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-canvas disabled:opacity-50"
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-canvas disabled:opacity-50 font-semibold"
                     >
-                      <span className="font-semibold block">
-                        Angezeigte Kontakte exportieren (Excel)
-                      </span>
-                      <span className="text-ink-muted block">
-                        Lädt alle {contacts.length} gerade angezeigten Kontakte
-                        als Excel-Datei herunter
-                      </span>
+                      Angezeigte Kontakte exportieren (Excel)
                     </button>
                   </div>
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Schnellfilter-Chips: filtern nur die Ansicht, wählen nie automatisch aus */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-line overflow-x-auto">
+            {(
+              [
+                {
+                  value: "never_contacted" as const,
+                  label: "Noch nie angeschrieben",
+                  hint: "Zeigt nur Kontakte, die noch keinen Brief und keine E-Mail von dir bekommen haben.",
+                },
+                {
+                  value: "returned" as const,
+                  label: "Rückläufer",
+                  hint: "Zeigt nur Kontakte, bei denen ein Brief als Rückläufer zurückkam.",
+                },
+              ]
+            ).map((c) => {
+              const active = quickFilter === c.value;
+              return (
+                <button
+                  key={c.value}
+                  type="button"
+                  title={c.hint}
+                  onClick={() => setQuickFilter(active ? null : c.value)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors",
+                    active
+                      ? "bg-ink text-white"
+                      : "bg-canvas text-ink-muted hover:bg-canvas-deep",
+                  )}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+            {labels.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowLabelFilterMenu((v) => !v)}
+                  title="Nur Kontakte mit einem bestimmten Label anzeigen"
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5",
+                    labelFilterId
+                      ? "bg-ink text-white"
+                      : "bg-canvas text-ink-muted hover:bg-canvas-deep",
+                  )}
+                >
+                  <Tag className="size-3" />
+                  {labelFilterId
+                    ? labels.find((l) => l.id === labelFilterId)?.name ?? "Label"
+                    : "Label"}
+                  <ChevronDown className="size-3" />
+                </button>
+                {showLabelFilterMenu && (
+                  <div
+                    className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-line py-1 min-w-[230px] z-20 max-h-72 overflow-y-auto"
+                    onMouseLeave={() => setShowLabelFilterMenu(false)}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLabelFilterId(null);
+                        setShowLabelFilterMenu(false);
+                      }}
+                      className={cn(
+                        "w-full text-left px-3 py-1.5 text-xs hover:bg-canvas",
+                        !labelFilterId && "font-semibold",
+                      )}
+                    >
+                      Alle Kontakte (kein Label-Filter)
+                    </button>
+                    {labels.map((l) => (
+                      <div key={l.id} className="group flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLabelFilterId(l.id);
+                            setShowLabelFilterMenu(false);
+                          }}
+                          className={cn(
+                            "flex-1 text-left px-3 py-1.5 text-xs hover:bg-canvas flex items-center gap-2 min-w-0",
+                            labelFilterId === l.id && "font-semibold",
+                          )}
+                        >
+                          <LabelChip name={l.name} color={l.color} />
+                          <span className="ml-auto text-ink-muted shrink-0">
+                            {l.contactCount}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowLabelFilterMenu(false);
+                            setEditLabel(l);
+                          }}
+                          className="hidden group-hover:block text-ink-muted hover:text-ink p-1 rounded"
+                          title="Label umbenennen oder Farbe ändern"
+                        >
+                          <Pencil className="size-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLabel(l)}
+                          className="hidden group-hover:block text-ink-muted hover:text-danger p-1 mr-1 rounded"
+                          title="Label löschen"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {quickFilter && (
+              <span className="text-[11px] text-ink-muted">
+                {contactsTotal} Treffer · Klick auf den Chip hebt den Filter wieder auf
+              </span>
+            )}
           </div>
 
           {/* Filter-Bar — nur sichtbar nach Klick auf „Filter" oder mit aktiven Bedingungen */}

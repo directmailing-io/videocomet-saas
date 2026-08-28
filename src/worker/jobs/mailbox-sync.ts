@@ -22,6 +22,7 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
+  contacts,
   emailBlasts,
   emailMessages,
   mailboxConnections,
@@ -97,6 +98,17 @@ async function handleBounce(target: OpenSentMessage): Promise<void> {
     reason: "bounce",
     sourceMessageId: target.id,
   });
+  // Kontakt-Status auf „Unzustellbar" — aber nur wenn noch active
+  // (eine Abmeldung/do_not_contact wird nie überschrieben).
+  await db
+    .update(contacts)
+    .set({ status: "undeliverable", updatedAt: new Date() })
+    .where(
+      sql`${contacts.userId} = ${target.userId}
+        AND ${contacts.deletedAt} IS NULL
+        AND LOWER(${contacts.email}) = ${target.toEmail.toLowerCase()}
+        AND ${contacts.status} = 'active'`,
+    );
   const paused = await maybeAutoPauseForBounces(target.blastId);
   if (paused) {
     log("warn", `bounce guard: blast ${target.blastId} automatisch pausiert`);

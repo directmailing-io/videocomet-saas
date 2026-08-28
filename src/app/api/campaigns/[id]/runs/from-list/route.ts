@@ -7,6 +7,8 @@
  *
  * Body:
  *   { listId: uuid, name?: string, skipPreflight?: boolean }
+ *   ODER (Follow-up-Modus, ohne Liste):
+ *   { contactIds: uuid[], name?: string, ... }
  *
  * Response:
  *   { runId: uuid, leadCount: number }
@@ -16,7 +18,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { campaigns, contactLists, contacts, leads, listMemberships, runs } from "@/lib/db/schema";
@@ -58,6 +60,11 @@ export async function POST(
   }
   const b = (body ?? {}) as Record<string, unknown>;
   const listId = typeof b.listId === "string" ? b.listId : "";
+  // Follow-up-Modus: frei ausgewählte Kontakte statt einer Liste
+  // (bewusst keine Auto-Listen — Pitch 2026-08-28).
+  const directContactIds = Array.isArray(b.contactIds)
+    ? b.contactIds.filter((v): v is string => typeof v === "string")
+    : [];
   const runName =
     typeof b.name === "string" && b.name.trim()
       ? b.name.trim()
@@ -88,7 +95,7 @@ export async function POST(
       ? b.autoLabel.trim()
       : null;
 
-  if (!listId) {
+  if (!listId && directContactIds.length === 0) {
     return NextResponse.json({ error: "Bitte wähl eine Liste aus." }, { status: 400 });
   }
 
@@ -111,57 +118,85 @@ export async function POST(
   if (!campaign) {
     return NextResponse.json({ error: "Diese Kampagne gibt es nicht mehr." }, { status: 404 });
   }
-  const [list] = await db
-    .select({ id: contactLists.id })
-    .from(contactLists)
-    .where(and(eq(contactLists.id, listId), eq(contactLists.userId, auth.user.id)))
-    .limit(1);
-  if (!list) {
-    return NextResponse.json({ error: "Diese Liste gibt es nicht mehr." }, { status: 404 });
+  const contactColumns = {
+    id: contacts.id,
+    email: contacts.email,
+    firstName: contacts.firstName,
+    lastName: contacts.lastName,
+    company: contacts.company,
+    companyDisplay: contacts.companyDisplay,
+    phone: contacts.phone,
+    linkedinUrl: contacts.linkedinUrl,
+    salutation: contacts.salutation,
+    title: contacts.title,
+    externalId: contacts.externalId,
+    street: contacts.street,
+    postalCode: contacts.postalCode,
+    city: contacts.city,
+    country: contacts.country,
+    position: contacts.position,
+    website: contacts.website,
+    gender: contacts.gender,
+    status: contacts.status,
+    data: contacts.data,
+  };
+
+  let memberContacts;
+  if (directContactIds.length > 0) {
+    // Follow-up: Kontakte direkt per ID laden. Ownership über userId im
+    // WHERE — fremde IDs fallen einfach still raus.
+    memberContacts = await db
+      .select(contactColumns)
+      .from(contacts)
+      .where(
+        and(
+          inArray(contacts.id, directContactIds),
+          eq(contacts.userId, auth.user.id),
+          isNull(contacts.deletedAt),
+        ),
+      );
+  } else {
+    const [list] = await db
+      .select({ id: contactLists.id })
+      .from(contactLists)
+      .where(and(eq(contactLists.id, listId), eq(contactLists.userId, auth.user.id)))
+      .limit(1);
+    if (!list) {
+      return NextResponse.json({ error: "Diese Liste gibt es nicht mehr." }, { status: 404 });
+    }
+
+    // Alle Kontakte der Liste holen — Smart-Listen werden hier NOCH nicht
+    // ausgewertet, nur statische Memberships. (Smart-Listen als Runden-
+    // Quelle kommt später, wenn Wert-Beleg gebraucht wird.)
+    memberContacts = await db
+      .select(contactColumns)
+      .from(listMemberships)
+      .innerJoin(
+        contacts,
+        and(eq(contacts.id, listMemberships.contactId), isNull(contacts.deletedAt)),
+      )
+      .where(eq(listMemberships.listId, listId));
   }
 
-  // Alle Kontakte der Liste holen — Smart-Listen werden hier NOCH nicht
-  // ausgewertet, nur statische Memberships. (Smart-Listen als Runden-
-  // Quelle kommt später, wenn Wert-Beleg gebraucht wird.)
-  const memberContacts = await db
-    .select({
-      id: contacts.id,
-      email: contacts.email,
-      firstName: contacts.firstName,
-      lastName: contacts.lastName,
-      company: contacts.company,
-      companyDisplay: contacts.companyDisplay,
-      phone: contacts.phone,
-      linkedinUrl: contacts.linkedinUrl,
-      salutation: contacts.salutation,
-      title: contacts.title,
-      externalId: contacts.externalId,
-      street: contacts.street,
-      postalCode: contacts.postalCode,
-      city: contacts.city,
-      country: contacts.country,
-      position: contacts.position,
-      website: contacts.website,
-      gender: contacts.gender,
-      data: contacts.data,
-    })
-    .from(listMemberships)
-    .innerJoin(
-      contacts,
-      and(eq(contacts.id, listMemberships.contactId), isNull(contacts.deletedAt)),
-    )
-    .where(eq(listMemberships.listId, listId));
+  // Harter Status-Filter: Kontakte mit „Nicht kontaktieren" oder
+  // „Unzustellbar" fliegen IMMER raus — kein Opt-out möglich.
+  const blockedCount = memberContacts.filter((c) => c.status !== "active").length;
+  const activeContacts = memberContacts.filter((c) => c.status === "active");
 
   // Skip-Liste aus dem Duplikat-Screen anwenden
   const effectiveContacts = skipContactIds.size > 0
-    ? memberContacts.filter((c) => !skipContactIds.has(c.id))
-    : memberContacts;
+    ? activeContacts.filter((c) => !skipContactIds.has(c.id))
+    : activeContacts;
 
   if (effectiveContacts.length === 0) {
     return NextResponse.json(
-      { error: skipContactIds.size > 0
-          ? "Nach dem Überspringen bleibt kein Kontakt übrig."
-          : "Die Liste ist leer. Bitte erst Kontakte hinzufügen." },
+      { error: blockedCount > 0 && activeContacts.length === 0
+          ? "Alle Kontakte dieser Liste stehen auf „Nicht kontaktieren“ oder „Unzustellbar“."
+          : skipContactIds.size > 0
+            ? "Nach dem Überspringen bleibt kein Kontakt übrig."
+            : directContactIds.length > 0
+              ? "Keiner der ausgewählten Kontakte ist mehr verfügbar."
+              : "Die Liste ist leer. Bitte erst Kontakte hinzufügen." },
       { status: 400 },
     );
   }
@@ -360,5 +395,9 @@ export async function POST(
     });
   }
 
-  return NextResponse.json({ runId: run.id, leadCount: inserted.length });
+  return NextResponse.json({
+    runId: run.id,
+    leadCount: inserted.length,
+    ...(blockedCount > 0 ? { skippedBlockedCount: blockedCount } : {}),
+  });
 }

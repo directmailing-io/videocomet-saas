@@ -19,10 +19,11 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   campaigns,
+  contacts,
   emailBlasts,
   emailMessages,
   emailSuppressions,
@@ -340,7 +341,25 @@ async function loadSuppressionSet(
     .select({ email: emailSuppressions.email })
     .from(emailSuppressions)
     .where(eq(emailSuppressions.userId, userId));
-  return new Set(rows.map((r) => r.email.toLowerCase()));
+  const set = new Set(rows.map((r) => r.email.toLowerCase()));
+  // Kontakt-Status ist der zweite harte Sperr-Grund (Migration 0070):
+  // „Nicht kontaktieren"/„Unzustellbar" blockt genauso wie eine Suppression —
+  // dieser eine Chokepoint deckt Preview, Start und Adress-Checks ab.
+  const blocked = await dbOrTx
+    .select({ email: contacts.email })
+    .from(contacts)
+    .where(
+      and(
+        eq(contacts.userId, userId),
+        isNull(contacts.deletedAt),
+        ne(contacts.status, "active"),
+        isNotNull(contacts.email),
+      ),
+    );
+  for (const r of blocked) {
+    if (r.email) set.add(r.email.toLowerCase());
+  }
+  return set;
 }
 
 export interface StartBlastGifLead {
@@ -957,6 +976,19 @@ export async function performUnsubscribe(token: string): Promise<UnsubscribeResu
     .where(eq(emailMessages.id, row.messageId));
   await insertLeadEvent({ leadId: row.leadId, kind: "email_unsubscribe" });
   await skipScheduledMessagesToEmail(row.userId, row.toEmail, "unsubscribed");
+  // Kontakt-Status hart auf „Nicht kontaktieren" — Abmeldung gewinnt immer
+  // (auch über einen früheren undeliverable-Status).
+  await db
+    .update(contacts)
+    .set({ status: "do_not_contact", updatedAt: new Date() })
+    .where(
+      and(
+        eq(contacts.userId, row.userId),
+        isNull(contacts.deletedAt),
+        sql`LOWER(${contacts.email}) = ${row.toEmail.toLowerCase()}`,
+        ne(contacts.status, "do_not_contact"),
+      ),
+    );
   return { ok: true };
 }
 

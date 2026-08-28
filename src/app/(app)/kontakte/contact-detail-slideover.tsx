@@ -85,6 +85,7 @@ interface ContactDetailData {
     position: string | null;
     website: string | null;
     gender: string | null;
+    status: "active" | "do_not_contact" | "undeliverable";
     data: Record<string, string>;
     createdAt: string;
     lastActivityAt: string | null;
@@ -251,7 +252,16 @@ function ContactHeader({ data }: { data: ContactDetailData }) {
         {initials(data)}
       </div>
       <div className="min-w-0 flex-1">
-        <h2 className="text-xl font-semibold text-ink truncate">{displayName(data)}</h2>
+        <h2 className="text-xl font-semibold text-ink truncate flex items-center gap-2">
+          <span className="truncate">{displayName(data)}</span>
+          {data.contact.status !== "active" && (
+            <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-danger-soft text-danger">
+              {data.contact.status === "do_not_contact"
+                ? "Nicht kontaktieren"
+                : "Unzustellbar"}
+            </span>
+          )}
+        </h2>
         <p className="text-sm text-ink-muted truncate">
           {data.contact.companyDisplay ?? data.contact.company ?? "—"}
           {" · Kontakt seit "}
@@ -323,6 +333,11 @@ function OverviewTab({
   };
   return (
     <div className="p-5 space-y-6">
+      <StatusControl
+        contactId={c.id}
+        status={c.status}
+        onSaved={onSaved}
+      />
       <FieldGroup title="Person">
         <EditableField contactId={c.id} field="salutation" label="Anrede" value={c.salutation ?? ""} onSaved={onSaved} />
         <EditableField contactId={c.id} field="title" label="Titel" value={c.title ?? ""} onSaved={onSaved} />
@@ -398,6 +413,95 @@ function OverviewTab({
         )}
       </section>
     </div>
+  );
+}
+
+/* ── Kontakt-Status (echtes Feld, kein Label) ─────────────────────────
+ * active → normal anschreibbar; do_not_contact/undeliverable → wird bei
+ * jedem Versand automatisch übersprungen (harter Filter im Backend). */
+const STATUS_OPTIONS: Array<{
+  value: "active" | "do_not_contact" | "undeliverable";
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "active",
+    label: "Aktiv",
+    hint: "Dieser Kontakt kann normal angeschrieben werden.",
+  },
+  {
+    value: "do_not_contact",
+    label: "Nicht kontaktieren",
+    hint: "Dieser Kontakt wird bei jedem Versand automatisch übersprungen.",
+  },
+  {
+    value: "undeliverable",
+    label: "Unzustellbar",
+    hint: "Post oder E-Mails kamen zurück — dieser Kontakt wird beim Versand übersprungen.",
+  },
+];
+
+function StatusControl({
+  contactId,
+  status,
+  onSaved,
+}: {
+  contactId: string;
+  status: "active" | "do_not_contact" | "undeliverable";
+  onSaved?: () => void;
+}) {
+  const { toast } = useToast();
+  const [busy, setBusy] = React.useState(false);
+  const current = STATUS_OPTIONS.find((o) => o.value === status) ?? STATUS_OPTIONS[0];
+
+  async function setStatus(next: "active" | "do_not_contact" | "undeliverable") {
+    if (next === status || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/contacts/v2/${contactId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "Fehler beim Speichern");
+      onSaved?.();
+    } catch (err) {
+      toastError(toast, err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section>
+      <h4 className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-2">
+        Status
+      </h4>
+      <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+        <div className="flex gap-1">
+          {STATUS_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              disabled={busy}
+              onClick={() => setStatus(o.value)}
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs font-semibold transition-colors",
+                o.value === status
+                  ? o.value === "active"
+                    ? "bg-ok-soft text-ok"
+                    : "bg-danger-soft text-danger"
+                  : "bg-canvas text-ink-muted hover:text-ink",
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-ink-muted mt-1.5">{current.hint}</p>
+      </div>
+    </section>
   );
 }
 

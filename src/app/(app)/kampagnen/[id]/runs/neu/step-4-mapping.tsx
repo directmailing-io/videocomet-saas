@@ -175,7 +175,7 @@ export function Step4Mapping({
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
-          <div className="rounded-2xl border border-line overflow-hidden bg-surface">
+          <div className="rounded-2xl shadow-card overflow-hidden bg-surface">
             {placeholders.map((p) => {
               const entry = state.contactMapping[p.key];
               const groups = groupSources(p.sources);

@@ -54,6 +54,10 @@ export interface WizardState {
   // Bei existing-list:
   selectedListId: string | null;
 
+  // Follow-up-Modus (aus der Versand-Ansicht): Runde direkt aus frei
+  // ausgewählten Kontakten, OHNE Liste (bewusst keine Auto-Listen).
+  followUpContactIds: string[] | null;
+
   // Bei new-upload:
   parseId: string | null;
   headers: string[];
@@ -117,6 +121,7 @@ export function makeInitialState(): WizardState {
     step: "source",
     source: null,
     selectedListId: null,
+    followUpContactIds: null,
     parseId: null,
     headers: [],
     previewRows: [],

@@ -43,6 +43,10 @@ export async function POST(req: NextRequest) {
     2000,
   );
   const offset = Math.max(Number(body.offset ?? 0) || 0, 0);
+  const quickFilter =
+    body.quick === "never_contacted" || body.quick === "returned"
+      ? (body.quick as "never_contacted" | "returned")
+      : null;
 
   try {
     const [result, totalAll] = await Promise.all([
@@ -54,6 +58,7 @@ export async function POST(req: NextRequest) {
         limit,
         offset,
         filter,
+        quickFilter,
       }),
       countContacts(auth.user.id),
     ]);

@@ -104,6 +104,16 @@ export async function PATCH(
   if (website !== undefined) patch.website = website;
   const gender = asStrOrNull(b.gender);
   if (gender !== undefined) patch.gender = gender;
+  if (b.status !== undefined) {
+    if (
+      b.status !== "active" &&
+      b.status !== "do_not_contact" &&
+      b.status !== "undeliverable"
+    ) {
+      return NextResponse.json({ error: "Ungültiger Status." }, { status: 400 });
+    }
+    patch.status = b.status;
+  }
   if (b.data && typeof b.data === "object" && !Array.isArray(b.data)) {
     const clean: Record<string, string> = {};
     for (const [k, v] of Object.entries(b.data)) {

@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Versandzentrale — EINE Runden-Tabelle: pro Runde die aktiven Kanäle
- * (Brief/E-Mail) mit eigenem Fortschritt. Klick auf eine Zeile →
- * Detailansicht mit Lead-Tabelle (Auswahl, PDF-Export, E-Mail-Versand).
+ * Versandzentrale — EINE Runden-Tabelle: pro Runde Brief- und E-Mail-
+ * Fortschritt. Klick auf eine Zeile → Detailansicht mit Lead-Tabelle
+ * (Auswahl, PDF-Export, E-Mail-Versand).
  * Einziger weiterer Einstieg: „E-Mail-Versand starten" im Kopf.
  */
 
@@ -12,7 +12,6 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ChevronRight,
-  Mail,
   Mailbox,
   Send,
   Undo2,
@@ -44,29 +43,6 @@ export interface VersandRunItem {
   emailSent: number;
   emailScheduled: number;
   emailReplied: number;
-}
-
-function ChannelBadge({
-  icon,
-  label,
-  active,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active: boolean;
-}) {
-  return (
-    <span
-      className={
-        active
-          ? "inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white"
-          : "inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-ink-muted"
-      }
-    >
-      {icon}
-      {label}
-    </span>
-  );
 }
 
 function ProgressCell({
@@ -143,7 +119,6 @@ export function VersandView({
             <thead>
               <tr className="border-b border-line text-left text-xs uppercase tracking-wider text-ink-muted">
                 <th className="px-6 py-2.5 font-semibold">Runde</th>
-                <th className="px-4 py-2.5 font-semibold">Kanäle</th>
                 <th className="px-4 py-2.5 font-semibold">Briefe per Post</th>
                 <th className="px-4 py-2.5 font-semibold">E-Mails</th>
                 <th className="px-6 py-2.5" />
@@ -164,22 +139,6 @@ export function VersandView({
                       <p className="font-medium text-ink line-clamp-1">
                         {r.runName}
                       </p>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <div className="flex flex-wrap gap-1.5">
-                        {r.withPdf > 0 && (
-                          <ChannelBadge
-                            icon={<Mailbox className="size-3" />}
-                            label="Brief"
-                            active={r.letterSent > 0}
-                          />
-                        )}
-                        <ChannelBadge
-                          icon={<Mail className="size-3" />}
-                          label="E-Mail"
-                          active={r.emailSent > 0}
-                        />
-                      </div>
                     </td>
                     <td className="px-4 py-3.5">
                       {r.withPdf > 0 ? (

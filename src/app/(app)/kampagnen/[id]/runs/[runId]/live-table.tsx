@@ -5,11 +5,9 @@ import Link from "next/link";
 import {
   ArrowDown,
   ArrowUp,
-  CheckCircle2,
   ChevronsUpDown,
   ChevronDown,
   ChevronRight,
-  Download,
   ExternalLink,
   FileDown,
   Play,
@@ -50,6 +48,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LeadEditDialog } from "./lead-edit-dialog";
@@ -131,7 +130,6 @@ const MAX_EVENTS_IN_MEMORY = 1000;
 export interface LiveTableProps {
   runId: string;
   campaignId: string;
-  pdfEnabled: boolean;
   /** True wenn die Runde mit A/B-Brief-Test gestartet wurde (runs.ab_config gesetzt). */
   abActive: boolean;
   initialRun: {
@@ -256,7 +254,6 @@ type LeadSortKey = "row" | "name" | "status";
 export function LiveTable({
   runId,
   campaignId,
-  pdfEnabled,
   abActive,
   initialRun,
   initialCounts,
@@ -602,7 +599,6 @@ export function LiveTable({
 
   const total =
     counts.pending + counts.rendering + counts.uploading + counts.completed + counts.failed;
-  const done = counts.completed + counts.failed;
   // Stage-aware Progress: rendert = 40 %, uploaded = 80 %, fertig = 100 %.
   // Sonst zeigt der Balken 0 % obwohl alle Leads schon in Arbeit sind — was
   // sich für den User wie ein hängender Job anfühlt.
@@ -903,53 +899,54 @@ export function LiveTable({
                   </Button>
                 </>
               )}
-              {isTerminal && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      disabled={regenerating}
-                      iconLeft={
-                        regenerating ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <RotateCcw className="size-4" />
-                        )
-                      }
-                    >
-                      {regenerating ? "Wird gestartet…" : "Neu generieren"}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => void regenerate("all")}>
-                      Alles neu generieren
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => void regenerate("video")}>
-                      Nur Video neu generieren
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => void regenerate("pdf")}>
-                      Nur Brief neu generieren
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={counts.failed === 0}
-                      onSelect={() => {
-                        if (counts.failed === 0) return;
-                        void regenerate("failed");
-                      }}
-                    >
-                      Nur Fehlgeschlagene neu versuchen
-                      {counts.failed > 0 ? ` (${counts.failed})` : ""}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" iconLeft={<Download className="size-4" />}>
-                    Export
-                  </Button>
+                  <button
+                    type="button"
+                    aria-label="Weitere Aktionen"
+                    className="inline-flex size-9 items-center justify-center rounded-full text-ink-muted hover:text-ink hover:bg-line-soft transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                  >
+                    {regenerating ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <MoreHorizontal className="size-4" />
+                    )}
+                  </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="w-64">
+                  {isTerminal && (
+                    <>
+                      <DropdownMenuItem
+                        disabled={regenerating}
+                        onSelect={() => void regenerate("all")}
+                      >
+                        Alles neu generieren
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={regenerating}
+                        onSelect={() => void regenerate("video")}
+                      >
+                        Nur Video neu generieren
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={regenerating}
+                        onSelect={() => void regenerate("pdf")}
+                      >
+                        Nur Brief neu generieren
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={regenerating || counts.failed === 0}
+                        onSelect={() => {
+                          if (counts.failed === 0) return;
+                          void regenerate("failed");
+                        }}
+                      >
+                        Nur Fehlgeschlagene neu versuchen
+                        {counts.failed > 0 ? ` (${counts.failed})` : ""}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuItem asChild>
                     <a href={`/api/runs/${runId}/export?format=xlsx`} download>
                       XLSX herunterladen
@@ -987,52 +984,29 @@ export function LiveTable({
           )}
 
           <div className="mt-6 flex flex-wrap items-end justify-between gap-6">
-            <div className="flex items-center gap-5">
-              {runStatus === "completed" && counts.failed === 0 ? (
-                <span className="inline-flex size-16 shrink-0 items-center justify-center rounded-full bg-ok-soft animate-pop">
-                  <CheckCircle2 className="size-8 text-ok" />
-                </span>
-              ) : (
-                <span className="text-5xl font-bold tabular-nums tracking-tight text-ink">
-                  {pct}
-                  <span className="text-2xl font-semibold text-ink-muted">%</span>
-                </span>
+            <div>
+              <p className="text-sm font-semibold text-ink">
+                {runStatus === "completed" && counts.failed === 0
+                  ? `Alle ${counts.completed} Leads fertig`
+                  : `${counts.completed} von ${total || initialRun.totalLeads} Leads fertig`}
+              </p>
+              <p className="mt-0.5 text-xs text-ink-muted">
+                {isTerminal
+                  ? counts.failed > 0
+                    ? `${counts.failed} fehlgeschlagen — über das ⋯-Menü erneut versuchen.`
+                    : "Videos, Landingpages und Briefe sind bereit."
+                  : etaLabel
+                    ? `${etaLabel} — Deine persönlichen Videos und Briefe entstehen gerade.`
+                    : "Deine persönlichen Videos und Briefe entstehen gerade."}
+              </p>
+              {activeStageLabel && !isTerminal && (
+                <p className="mt-0.5 text-[11px] text-ink-muted flex items-center gap-1.5">
+                  <span className="inline-block size-1.5 rounded-full bg-brand animate-pulse" />
+                  {activeStageLabel}
+                </p>
               )}
-              <div>
-                <p className="text-sm font-semibold text-ink">
-                  {runStatus === "completed" && counts.failed === 0
-                    ? `Alle ${counts.completed} Leads fertig`
-                    : `${counts.completed} von ${total || initialRun.totalLeads} Leads fertig`}
-                </p>
-                <p className="mt-0.5 text-xs text-ink-muted">
-                  {isTerminal
-                    ? counts.failed > 0
-                      ? `${counts.failed} fehlgeschlagen — über „Neu generieren" erneut versuchen.`
-                      : "Videos, Landingpages und Briefe sind bereit."
-                    : etaLabel
-                      ? `${etaLabel} — Deine persönlichen Videos und Briefe entstehen gerade.`
-                      : "Deine persönlichen Videos und Briefe entstehen gerade."}
-                </p>
-                {activeStageLabel && !isTerminal && (
-                  <p className="mt-0.5 text-[11px] text-ink-muted flex items-center gap-1.5">
-                    <span className="inline-block size-1.5 rounded-full bg-brand animate-pulse" />
-                    {activeStageLabel}
-                  </p>
-                )}
-              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <StatPill tone="ok" label="Fertig" value={counts.completed} />
-              <StatPill
-                tone="brand"
-                label="Rendert"
-                value={counts.rendering + counts.uploading}
-                pulse={!isTerminal && counts.rendering + counts.uploading > 0}
-              />
-              <StatPill tone="neutral" label="Wartet" value={counts.pending} />
-              {counts.failed > 0 && (
-                <StatPill tone="danger" label="Fehler" value={counts.failed} />
-              )}
               {!isTerminal && workerStatsLabel && (
                 <span
                   className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-3 py-1 text-xs text-ink-muted"
@@ -1365,7 +1339,7 @@ export function LiveTable({
                   )}
                   <TableCell onClick={stopRowClick}>
                     <div className="flex items-center gap-1">
-                      {l.slug ? (
+                      {l.slug && (
                         <a
                           href={
                             buildLeadPublicUrl(
@@ -1388,10 +1362,8 @@ export function LiveTable({
                         >
                           <ExternalLink className="size-3.5" />
                         </a>
-                      ) : (
-                        <DocPlaceholder icon={<ExternalLink className="size-3.5" />} />
                       )}
-                      {l.pdfUrl ? (
+                      {l.pdfUrl && (
                         <a
                           href={`/api/leads/${l.id}/pdf`}
                           target="_blank"
@@ -1402,25 +1374,9 @@ export function LiveTable({
                         >
                           <FileDown className="size-3.5" />
                         </a>
-                      ) : (
-                        <DocPlaceholder
-                          icon={<FileDown className="size-3.5" />}
-                          title={pdfEnabled ? undefined : "Brief-PDF ist deaktiviert"}
-                        />
                       )}
-                      {l.envelopePdfUrl ? (
-                        <a
-                          href={`/api/leads/${l.id}/envelope-pdf`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex size-7 items-center justify-center rounded-full text-brand-deep hover:bg-brand-soft/60 transition-colors"
-                          title="Umschlag-PDF herunterladen"
-                          aria-label="Umschlag-PDF herunterladen"
-                        >
-                          <MailIcon className="size-3.5" />
-                        </a>
-                      ) : (
-                        <DocPlaceholder icon={<MailIcon className="size-3.5" />} />
+                      {!l.slug && !l.pdfUrl && (
+                        <span className="text-ink-muted text-xs">—</span>
                       )}
                     </div>
                   </TableCell>
@@ -1572,6 +1528,18 @@ function LeadRowActions({
           <Pencil className="size-3.5 text-ink-muted" />
           Lead-Daten bearbeiten
         </DropdownMenuItem>
+        {lead.envelopePdfUrl && (
+          <DropdownMenuItem asChild>
+            <a
+              href={`/api/leads/${lead.id}/envelope-pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <MailIcon className="size-3.5 text-ink-muted" />
+              Umschlag-PDF herunterladen
+            </a>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onClick={() => void regenerate("all")}>
           <RotateCcw className="size-3.5 text-ink-muted" />
           Alles neu erstellen
@@ -1590,39 +1558,6 @@ function LeadRowActions({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-function StatPill({
-  tone,
-  label,
-  value,
-  pulse,
-}: {
-  tone: "ok" | "brand" | "neutral" | "danger";
-  label: string;
-  value: number;
-  pulse?: boolean;
-}): React.JSX.Element {
-  const toneClass = {
-    ok: "bg-ok-soft text-ok",
-    brand: "bg-brand-soft text-brand-deep",
-    neutral: "bg-surface-muted text-ink-muted",
-    danger: "bg-danger-soft text-danger",
-  }[tone];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold tabular-nums",
-        toneClass,
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn("size-1.5 rounded-full bg-current", pulse && "animate-pulse")}
-      />
-      {label} {value}
-    </span>
   );
 }
 
@@ -1667,24 +1602,6 @@ function SortableHead({
         )}
       </button>
     </TableHead>
-  );
-}
-
-function DocPlaceholder({
-  icon,
-  title,
-}: {
-  icon: React.ReactNode;
-  title?: string;
-}): React.JSX.Element {
-  return (
-    <span
-      aria-hidden={title ? undefined : true}
-      title={title}
-      className="inline-flex size-7 items-center justify-center rounded-full text-ink-muted/30"
-    >
-      {icon}
-    </span>
   );
 }
 

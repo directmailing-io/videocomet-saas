@@ -52,19 +52,6 @@ function pickBackground(id: string): string {
   return `/campaign-bgs/bg${idx}.jpg`;
 }
 
-function formatDate(d: Date | string | null): string {
-  if (!d) return "";
-  try {
-    return new Intl.DateTimeFormat("de-DE", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }).format(new Date(d));
-  } catch {
-    return "";
-  }
-}
-
 type DeleteStage = "closed" | "stage1" | "stage2";
 
 export function KampagnenList({ items }: { items: KampagnenListItem[] }) {
@@ -394,22 +381,6 @@ export function KampagnenList({ items }: { items: KampagnenListItem[] }) {
   );
 }
 
-function PlusIcon() {
-  // Perfekt zentriertes „+" via SVG — Font-Baseline würde hier immer leicht daneben sitzen.
-  return (
-    <span className="inline-flex size-[15px] shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-ink/[0.08]">
-      <svg viewBox="0 0 12 12" width="8" height="8" fill="none" aria-hidden>
-        <path
-          d="M6 1v10M1 6h10"
-          stroke="#1c1633"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-      </svg>
-    </span>
-  );
-}
-
 function CampaignCard({
   item,
   pending,
@@ -422,9 +393,6 @@ function CampaignCard({
   onDelete: () => void;
 }) {
   const bg = React.useMemo(() => pickBackground(item.id), [item.id]);
-  const hasPresentation = item.mode === "with-presentation";
-  const hasIntro = item.introEnabled;
-  const hasBrief = item.pdfEnabled;
   const isDraft = item.status === "draft";
   // Entwürfe führen zurück in den Wizard, aktive Kampagnen in die Detailseite.
   const href = isDraft
@@ -520,7 +488,7 @@ function CampaignCard({
 
       {/* Metadaten — nicht-interaktiv. */}
       <div className="pointer-events-none relative mt-[14px] px-1 text-center">
-        <div className="mb-3 flex items-center justify-center gap-2.5">
+        <div className="flex items-center justify-center gap-2.5">
           <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
             <span
               className={
@@ -532,53 +500,12 @@ function CampaignCard({
             />
             {isDraft ? "Entwurf" : "Aktiv"}
           </span>
-          {isDraft ? (
-            <span className="text-[12px] font-medium text-ink-muted">
-              <span className="mr-2 text-ink-muted">·</span>
-              Weiter bearbeiten
-            </span>
-          ) : (
+          {!isDraft && (
             <span className="text-[12px] font-medium text-ink-muted">
               <span className="mr-2 text-ink-muted">·</span>
               {item.runCount} {item.runCount === 1 ? "Runde" : "Runden"}
             </span>
           )}
-        </div>
-        <div className="flex flex-nowrap items-center justify-center gap-[5px] overflow-hidden">
-          <span className="inline-flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-brand-soft px-2.5 py-[3px] text-[10.5px] font-semibold leading-[1.3] text-brand-deep">
-            <span>Video</span>
-            {hasIntro ? (
-              <>
-                <PlusIcon />
-                <span
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(92deg, #7C5CE8 0%, #B14AE0 45%, #EC4899 100%)",
-                    WebkitBackgroundClip: "text",
-                    backgroundClip: "text",
-                    color: "transparent",
-                  }}
-                  className="font-bold"
-                >
-                  KI-Begrüßung
-                </span>
-              </>
-            ) : null}
-            {hasPresentation ? (
-              <>
-                <PlusIcon />
-                <span>Präsentation</span>
-              </>
-            ) : null}
-          </span>
-          {hasBrief ? (
-            <span className="inline-flex flex-shrink-0 items-center rounded-full bg-ink/[0.06] px-2.5 py-[3px] text-[10.5px] font-semibold text-ink-soft">
-              Brief
-            </span>
-          ) : null}
-        </div>
-        <div className="mt-2 text-[11px] text-ink-muted">
-          Erstellt am {formatDate(item.createdAt)}
         </div>
       </div>
     </div>

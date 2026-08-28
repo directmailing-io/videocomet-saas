@@ -31,6 +31,9 @@ export default async function NewRunPage({
   if (!campaign) notFound();
 
   const preselectedListId = typeof sp.listId === "string" ? sp.listId : null;
+  // ?followUp=1: Kontakt-IDs kommen aus sessionStorage (Versand-Ansicht),
+  // bewusst nicht über die URL (Längen-Limit) und ohne Auto-Liste.
+  const followUpMode = sp.followUp === "1";
 
   return (
     <WizardV4
@@ -41,6 +44,7 @@ export default async function NewRunPage({
       }
       pdfEnabled={campaign.pdfEnabled}
       preselectedListId={preselectedListId}
+      followUpMode={followUpMode}
     />
   );
 }

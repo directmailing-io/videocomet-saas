@@ -38,6 +38,9 @@ export async function GET(req: NextRequest) {
     500,
   );
   const offset = Math.max(Number(req.nextUrl.searchParams.get("offset") ?? "0") || 0, 0);
+  const quickParam = req.nextUrl.searchParams.get("quick");
+  const quickFilter =
+    quickParam === "never_contacted" || quickParam === "returned" ? quickParam : null;
 
   // Smart-Listen: wenn listId auf eine type=smart-Liste zeigt, verwenden
   // wir statt der Membership-Prüfung den gespeicherten Filter.
@@ -65,6 +68,7 @@ export async function GET(req: NextRequest) {
       limit,
       offset,
       filter: smartFilter,
+      quickFilter,
     }),
     countContacts(auth.user.id),
   ]);

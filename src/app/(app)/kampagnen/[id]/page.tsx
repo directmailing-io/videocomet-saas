@@ -1,7 +1,7 @@
 import type * as React from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { BarChart3, Mail, Plus, Send } from "lucide-react";
+import { Mail, Plus, Send } from "lucide-react";
 import { eq } from "drizzle-orm";
 import { requireUser } from "@/lib/auth-guard";
 import { getCampaign } from "@/lib/db/queries/campaigns";
@@ -194,7 +194,6 @@ export default async function CampaignDetailPage({
   };
   const leadsCount = summary.leadsCount;
   const uniqueViewedCount = allLeads.filter((l) => l.viewCount > 0).length;
-  const uniquePlayedCount = allLeads.filter((l) => l.playCount > 0).length;
   const uniqueCtaCount = allLeads.filter((l) => l.ctaClickCount > 0).length;
 
   const initialLeadRows: CampaignLeadRowSerialized[] = allLeads.map((l) => ({
@@ -263,29 +262,9 @@ export default async function CampaignDetailPage({
             value={fmtPercent(uniqueViewedCount, leadsCount)}
           />
           <QuickStat
-            label="Play-Rate"
-            value={fmtPercent(uniquePlayedCount, leadsCount)}
-          />
-          <QuickStat
-            label="Watch-Time"
-            value={fmtDuration(summary.watchTimeSec)}
-          />
-          <QuickStat
             label="CTA-Rate"
             value={fmtPercent(uniqueCtaCount, leadsCount)}
           />
-          <div className="ml-auto">
-            <Button
-              asChild
-              variant="subtle"
-              size="sm"
-              iconLeft={<BarChart3 className="size-4" />}
-            >
-              <Link href={`/analytics/kampagnen/${campaign.id}`}>
-                Analytics
-              </Link>
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -311,7 +290,11 @@ export default async function CampaignDetailPage({
               title="Noch keine Leads"
               subtitle="Sobald Sie eine Runde mit einer Lead-Liste starten, erscheinen die Empfänger hier."
               action={
-                <Button asChild iconLeft={<Plus className="size-4" />}>
+                <Button
+                  asChild
+                  variant="subtle"
+                  iconLeft={<Plus className="size-4" />}
+                >
                   <Link href={`/kampagnen/${campaign.id}/runs/neu`}>
                     Neue Runde
                   </Link>
@@ -328,19 +311,16 @@ export default async function CampaignDetailPage({
 
         {/* ── Runden ─────────────────────────────────────────────── */}
         <TabsContent value="runden">
-          <div className="flex justify-end mb-4">
-            <Button asChild iconLeft={<Plus className="size-4" />}>
-              <Link href={`/kampagnen/${campaign.id}/runs/neu`}>
-                Neue Runde
-              </Link>
-            </Button>
-          </div>
           {initialRuns.length === 0 ? (
             <EmptyState
               title="Noch keine Runden"
               subtitle="Starten Sie eine Runde, um diese Kampagne an Ihre Lead-Liste zu schicken."
               action={
-                <Button asChild iconLeft={<Plus className="size-4" />}>
+                <Button
+                  asChild
+                  variant="subtle"
+                  iconLeft={<Plus className="size-4" />}
+                >
                   <Link href={`/kampagnen/${campaign.id}/runs/neu`}>
                     Neue Runde
                   </Link>
@@ -587,7 +567,11 @@ function EmailBlastsTab({
         }
         action={
           hasConnectedMailbox ? (
-            <Button asChild iconLeft={<Send className="size-4" />}>
+            <Button
+              asChild
+              variant="subtle"
+              iconLeft={<Send className="size-4" />}
+            >
               <Link href={`/kampagnen/${campaignId}/email/neu`}>
                 E-Mail-Versand starten
               </Link>
@@ -607,7 +591,7 @@ function EmailBlastsTab({
   return (
     <>
       <div className="flex justify-end mb-4">
-        <Button asChild iconLeft={<Send className="size-4" />}>
+        <Button asChild variant="subtle" iconLeft={<Send className="size-4" />}>
           <Link href={`/kampagnen/${campaignId}/email/neu`}>
             E-Mail-Versand starten
           </Link>

@@ -83,6 +83,8 @@ export async function listContacts(input: {
   filter?: FilterDefinition | null;
   /** Nur Kontakte mit diesem Label (Migration 0069). */
   labelId?: string | null;
+  /** Schnellfilter-Chips (Follow-up-Paket 2026-08-28). */
+  quickFilter?: "never_contacted" | "returned" | null;
 }): Promise<{ contacts: ContactRowUi[]; total: number }> {
   const {
     userId,
@@ -93,6 +95,7 @@ export async function listContacts(input: {
     sort = "activity",
     filter,
     labelId = null,
+    quickFilter = null,
   } = input;
 
   // Alle WHERE-Bedingungen als raw SQL mit "c."-Alias, damit sie mit der
@@ -116,6 +119,27 @@ export async function listContacts(input: {
   }
   if (filter && filter.conditions.length > 0) {
     whereFragments.push(sql`(${buildFilterSql(filter, userId)})`);
+  }
+  if (quickFilter === "never_contacted") {
+    // „Angeschrieben" = Brief physisch raus ODER E-Mail versendet.
+    whereFragments.push(sql`NOT EXISTS (
+      SELECT 1 FROM leads l
+      WHERE l.contact_id = c.id AND l.removed_at IS NULL
+        AND (
+          l.letter_status = 'sent'
+          OR EXISTS (
+            SELECT 1 FROM email_messages em
+            WHERE em.lead_id = l.id AND em.sent_at IS NOT NULL
+          )
+        )
+    )`);
+  }
+  if (quickFilter === "returned") {
+    whereFragments.push(sql`EXISTS (
+      SELECT 1 FROM leads l
+      WHERE l.contact_id = c.id AND l.removed_at IS NULL
+        AND l.letter_returned_at IS NOT NULL
+    )`);
   }
   if (search && search.length >= 2) {
     const term = `%${search.toLowerCase()}%`;
@@ -615,6 +639,7 @@ export async function updateContact(input: {
     position: string | null;
     website: string | null;
     gender: string | null;
+    status: "active" | "do_not_contact" | "undeliverable";
     data: Record<string, string>;
   }>;
 }): Promise<ContactRow | null> {
@@ -637,6 +662,7 @@ export async function updateContact(input: {
   if (p.position !== undefined) cleaned.position = p.position;
   if (p.website !== undefined) cleaned.website = p.website;
   if (p.gender !== undefined) cleaned.gender = p.gender;
+  if (p.status !== undefined) cleaned.status = p.status;
   if (p.data !== undefined) cleaned.data = p.data;
 
   const [row] = await db

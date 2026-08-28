@@ -23,6 +23,7 @@ import {
   Mail,
   Mailbox,
   MoreHorizontal,
+  Repeat2,
   Search,
   Undo2,
 } from "lucide-react";
@@ -112,9 +113,22 @@ type LeadFilter =
   | "letter_discarded"
   | "email_sent"
   | "sent_no_reaction"
+  | "opened_no_cta"
+  | "cta_clicked"
   | "sent_today"
   | "sent_7d"
   | "returned";
+
+const QUICK_FILTERS: Array<{
+  value: "sent_no_reaction" | "opened_no_cta" | "cta_clicked" | "returned";
+  label: string;
+  letterOnly?: boolean;
+}> = [
+  { value: "sent_no_reaction", label: "Keine Reaktion" },
+  { value: "opened_no_cta", label: "Geöffnet, nicht geklickt" },
+  { value: "cta_clicked", label: "Kontakt-Button geklickt" },
+  { value: "returned", label: "Rückläufer", letterOnly: true },
+];
 
 const SORT_ORIGINAL = "__original__";
 const PDFS_PER_FILE = [10, 25, 50, 100, 200, 500];
@@ -165,7 +179,9 @@ const FILTER_OPTIONS: {
   { value: "letter_sent", label: "Brief versendet", letterOnly: true },
   { value: "letter_discarded", label: "Aussortiert", letterOnly: true },
   { value: "email_sent", label: "E-Mail versendet" },
-  { value: "sent_no_reaction", label: "Versendet ohne Reaktion", letterOnly: true },
+  { value: "sent_no_reaction", label: "Keine Reaktion" },
+  { value: "opened_no_cta", label: "Geöffnet, nicht geklickt" },
+  { value: "cta_clicked", label: "Kontakt-Button geklickt" },
   { value: "sent_today", label: "Heute versendet", letterOnly: true },
   { value: "sent_7d", label: "Letzte 7 Tage versendet", letterOnly: true },
   { value: "returned", label: "Rückläufer", letterOnly: true },
@@ -229,13 +245,47 @@ function displayName(d: Record<string, string>): string {
   return composed ? formatPersonName(composed) : `Zeile ?`;
 }
 
-/** Reaktion NACH Versanddatum (davor = eigene Tests, zählt nicht). */
-function reactedAfterSend(l: VersandLeadItem): boolean {
-  if (l.letterStatus !== "sent" || !l.letterSentAt) return false;
-  const sent = new Date(l.letterSentAt).getTime();
-  const viewed = l.lastViewedAt ? new Date(l.lastViewedAt).getTime() : 0;
-  const cta = l.lastCtaAt ? new Date(l.lastCtaAt).getTime() : 0;
-  return viewed > sent || cta > sent;
+/* ── Schnellfilter-Grundlagen (Follow-up-Paket) ───────────────────────────
+ * „Versendet" = Brief raus ODER E-Mail raus. Reaktionen vor dem Brief-
+ * Versanddatum zählen nicht (eigene Tests); ohne Briefdatum zählt jede. */
+function wasSentAny(l: VersandLeadItem): boolean {
+  return (
+    l.letterStatus === "sent" ||
+    (l.emailStatus != null && EMAIL_SENT_STATUSES.has(l.emailStatus))
+  );
+}
+
+function viewedAfterSend(l: VersandLeadItem): boolean {
+  if (!l.lastViewedAt) return false;
+  if (l.letterStatus === "sent" && l.letterSentAt) {
+    return new Date(l.lastViewedAt).getTime() > new Date(l.letterSentAt).getTime();
+  }
+  return true;
+}
+
+function ctaAfterSend(l: VersandLeadItem): boolean {
+  if (!l.lastCtaAt) return false;
+  if (l.letterStatus === "sent" && l.letterSentAt) {
+    return new Date(l.lastCtaAt).getTime() > new Date(l.letterSentAt).getTime();
+  }
+  return true;
+}
+
+/** Passt der Lead zum Schnellfilter-Wert? Eine Quelle für Filter UND Zähler. */
+function matchesQuickFilter(
+  l: VersandLeadItem,
+  f: "sent_no_reaction" | "opened_no_cta" | "cta_clicked" | "returned",
+): boolean {
+  switch (f) {
+    case "sent_no_reaction":
+      return wasSentAny(l) && !viewedAfterSend(l) && !ctaAfterSend(l);
+    case "opened_no_cta":
+      return wasSentAny(l) && viewedAfterSend(l) && !ctaAfterSend(l);
+    case "cta_clicked":
+      return wasSentAny(l) && ctaAfterSend(l);
+    case "returned":
+      return l.letterReturnedAt != null;
+  }
 }
 
 function isStuckInProgress(l: VersandLeadItem): boolean {
@@ -363,6 +413,7 @@ export function VersandRunView({
   const [postExportIds, setPostExportIds] = React.useState<string[] | null>(null);
   const [returnedDialogIds, setReturnedDialogIds] = React.useState<string[] | null>(null);
   const [sentDialogIds, setSentDialogIds] = React.useState<string[] | null>(null);
+  const [followUpOpen, setFollowUpOpen] = React.useState(false);
   // Globale Kontakt-Ansicht (identisch zu Kontakte & Listen); Fallback-Dialog
   // nur für Alt-Leads ohne verknüpften Kontakt + für den E-Mail-Verlauf.
   const [detailContactId, setDetailContactId] = React.useState<string | null>(
@@ -382,6 +433,7 @@ export function VersandRunView({
         postExportIds ||
         returnedDialogIds ||
         sentDialogIds ||
+        followUpOpen ||
         detailContactId ||
         detailLead
       )
@@ -395,6 +447,7 @@ export function VersandRunView({
     postExportIds,
     returnedDialogIds,
     sentDialogIds,
+    followUpOpen,
     detailContactId,
     detailLead,
   ]);
@@ -425,7 +478,9 @@ export function VersandRunView({
             return false;
           break;
         case "sent_no_reaction":
-          if (l.letterStatus !== "sent" || reactedAfterSend(l)) return false;
+        case "opened_no_cta":
+        case "cta_clicked":
+          if (!matchesQuickFilter(l, filter)) return false;
           break;
         case "sent_today":
           if (!l.letterSentAt || new Date(l.letterSentAt) < todayStart)
@@ -470,8 +525,8 @@ export function VersandRunView({
     [columns],
   );
 
-  // Standard: bekannte Spalten (Vorname/Nachname/Firma/Adresse/PLZ/Ort)
-  // automatisch erkennen; falls nichts passt, die ersten CSV-Spalten zeigen.
+  // Standard bewusst schlank (UI-Diät 2026-08-28): Vorname/Nachname/Firma.
+  // Adresse/PLZ/Ort holt man sich bei Bedarf über den Spalten-Wähler.
   const defaultColumns = React.useMemo(() => {
     const found: string[] = [];
     const lower = pickableColumns.map((c) => [c, c.toLowerCase()] as const);
@@ -479,9 +534,6 @@ export function VersandRunView({
       ["vorname", "first"],
       ["nachname", "last"],
       ["firma", "company", "unternehmen"],
-      ["adresse", "straße", "strasse", "street"],
-      ["plz", "zip", "postleitzahl"],
-      ["ort", "city", "stadt"],
     ]) {
       const hit = lower.find(
         ([c, lc]) => patterns.some((p) => lc.includes(p)) && !found.includes(c),
@@ -566,11 +618,43 @@ export function VersandRunView({
 
   const stuckLeads = React.useMemo(() => leads.filter(isStuckInProgress), [leads]);
 
+  // ── Schnellfilter-Zähler (live, über ALLE Leads der Runde) ──────────────
+  const quickCounts = React.useMemo(() => {
+    const counts = {
+      sent_no_reaction: 0,
+      opened_no_cta: 0,
+      cta_clicked: 0,
+      returned: 0,
+    };
+    for (const l of leads) {
+      for (const key of Object.keys(counts) as Array<keyof typeof counts>) {
+        if (matchesQuickFilter(l, key)) counts[key] += 1;
+      }
+    }
+    return counts;
+  }, [leads]);
+
   // ── Auswahl ──────────────────────────────────────────────────────────────
   const visibleIds = React.useMemo(() => sorted.map((l) => l.id), [sorted]);
   const selectedVisible = visibleIds.filter((id) => selected.has(id));
   const allVisibleSelected =
     visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
+  // Die Auswahl überlebt Filterwechsel — so lassen sich Gruppen kombinieren
+  // (z. B. „Keine Reaktion" + „Rückläufer"). Aktionen wirken auf ALLE
+  // ausgewählten Leads, die Leiste weist auf gerade ausgeblendete hin.
+  const selectedIds = React.useMemo(
+    () => leads.filter((l) => selected.has(l.id)).map((l) => l.id),
+    [leads, selected],
+  );
+  const hiddenSelectedCount = selectedIds.length - selectedVisible.length;
+
+  function selectAllVisible() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      visibleIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
 
   function toggleAll() {
     setSelected((prev) => {
@@ -1059,6 +1143,40 @@ export function VersandRunView({
         )}
       </div>
 
+      {/* Schnellfilter-Chips: „Der Filter schlägt vor — du entscheidest."
+          Ein Chip filtert NUR die Tabelle, markiert wird nichts automatisch. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {QUICK_FILTERS.filter((c) => hasLetters || !c.letterOnly).map((c) => {
+          const count = quickCounts[c.value];
+          const active = filter === c.value;
+          return (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setFilter(active ? "all" : c.value)}
+              className={cn(
+                "rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-card transition-colors tabular-nums",
+                active
+                  ? "bg-ink text-white"
+                  : "bg-surface text-ink hover:bg-surface-soft",
+                count === 0 && !active && "opacity-50",
+              )}
+            >
+              {c.label} ({count})
+            </button>
+          );
+        })}
+        {filter !== "all" && visibleIds.length > 0 && !allVisibleSelected && (
+          <button
+            type="button"
+            onClick={selectAllVisible}
+            className="text-xs font-semibold text-brand-deep hover:underline"
+          >
+            Alle {visibleIds.length} auswählen
+          </button>
+        )}
+      </div>
+
       {/* Tabelle */}
       {sorted.length === 0 ? (
         <div className="bg-surface rounded-squircle-lg shadow-card">
@@ -1102,13 +1220,13 @@ export function VersandRunView({
                     passen (0 + 3rem + 12rem), sonst entstehen Lücken zwischen
                     den fixierten Spalten. */}
                 {hasLetters && (
-                  <th className="sticky right-60 z-[1] w-40 min-w-40 max-w-40 whitespace-nowrap border-l border-line bg-[#eefaf6] px-3 py-2.5 font-semibold text-emerald-800">
+                  <th className="sticky right-60 z-[1] w-40 min-w-40 max-w-40 whitespace-nowrap border-l border-line bg-surface px-3 py-2.5 font-semibold">
                     Post-Status
                   </th>
                 )}
                 <th
                   className={cn(
-                    "sticky right-12 z-[1] w-48 min-w-48 max-w-48 whitespace-nowrap bg-[#f9f7fe] px-3 py-2.5 font-semibold text-brand-deep",
+                    "sticky right-12 z-[1] w-48 min-w-48 max-w-48 whitespace-nowrap bg-surface px-3 py-2.5 font-semibold",
                     !hasLetters && "border-l border-line",
                   )}
                 >
@@ -1197,7 +1315,7 @@ export function VersandRunView({
                       )}
                     </td>
                     {hasLetters && (
-                    <td className="sticky right-60 z-[1] border-l border-line bg-[#f5fcfa] px-3 py-3">
+                    <td className="sticky right-60 z-[1] border-l border-line bg-surface px-3 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Badge variant={meta.badge} dot>
                           {meta.label}
@@ -1218,7 +1336,7 @@ export function VersandRunView({
                     )}
                     <td
                       className={cn(
-                        "sticky right-12 z-[1] bg-[#fcfaff] px-3 py-3",
+                        "sticky right-12 z-[1] bg-surface px-3 py-3",
                         !hasLetters && "border-l border-line",
                       )}
                       onClick={(e) => e.stopPropagation()}
@@ -1328,11 +1446,16 @@ export function VersandRunView({
       )}
 
       {/* Sticky Auswahl-Leiste */}
-      {selectedVisible.length > 0 && (
+      {selectedIds.length > 0 && (
         <div className="sticky bottom-4 z-20 mt-4 flex justify-center">
           <div className="flex flex-wrap items-center gap-2 rounded-full bg-ink px-4 py-2.5 text-white shadow-ink">
             <span className="text-sm font-semibold tabular-nums">
-              {selectedVisible.length} ausgewählt
+              {selectedIds.length} ausgewählt
+              {hiddenSelectedCount > 0 && (
+                <span className="font-normal text-white/60">
+                  {" "}· {hiddenSelectedCount} gerade ausgeblendet (Filter)
+                </span>
+              )}
             </span>
             <button
               type="button"
@@ -1343,6 +1466,15 @@ export function VersandRunView({
               Aufheben (Esc)
             </button>
             <span className="mx-1 h-4 w-px bg-white/20" />
+            <button
+              type="button"
+              onClick={() => setFollowUpOpen(true)}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-full bg-brand px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand-deep disabled:opacity-50"
+            >
+              <Repeat2 className="size-3.5" />
+              Follow-up starten
+            </button>
             {hasLetters && (
               <>
                 <DropdownMenu>
@@ -1359,7 +1491,7 @@ export function VersandRunView({
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem
                       className="font-medium text-emerald-700 focus:bg-emerald-500/10"
-                      onSelect={() => setSentDialogIds(selectedVisible)}
+                      onSelect={() => setSentDialogIds(selectedIds)}
                     >
                       <span className="size-2 rounded-full bg-emerald-500" />
                       Versendet …
@@ -1367,7 +1499,7 @@ export function VersandRunView({
                     <DropdownMenuItem
                       className="font-medium text-amber-700 focus:bg-amber-500/10"
                       onSelect={() =>
-                        void markStatus(selectedVisible, "in_progress")
+                        void markStatus(selectedIds, "in_progress")
                       }
                     >
                       <span className="size-2 rounded-full bg-amber-500" />
@@ -1375,7 +1507,7 @@ export function VersandRunView({
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className="font-medium"
-                      onSelect={() => void markStatus(selectedVisible, "open")}
+                      onSelect={() => void markStatus(selectedIds, "open")}
                     >
                       <span className="size-2 rounded-full bg-ink-muted" />
                       Offen
@@ -1383,7 +1515,7 @@ export function VersandRunView({
                     <DropdownMenuItem
                       className="font-medium text-red-600 focus:bg-red-500/10"
                       onSelect={() =>
-                        void markStatus(selectedVisible, "discarded")
+                        void markStatus(selectedIds, "discarded")
                       }
                     >
                       <span className="size-2 rounded-full bg-red-500" />
@@ -1394,7 +1526,7 @@ export function VersandRunView({
                 <button
                   type="button"
                   onClick={() =>
-                    setExportMode({ ids: selectedVisible, variant: "bundle" })
+                    setExportMode({ ids: selectedIds, variant: "bundle" })
                   }
                   disabled={busy}
                   className="inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-white/90 disabled:opacity-50"
@@ -1406,7 +1538,7 @@ export function VersandRunView({
             )}
             <button
               type="button"
-              onClick={() => emailTo(selectedVisible)}
+              onClick={() => emailTo(selectedIds)}
               disabled={busy}
               className="inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-white/90 disabled:opacity-50"
             >
@@ -1427,14 +1559,14 @@ export function VersandRunView({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  onSelect={() => setReturnedDialogIds(selectedVisible)}
+                  onSelect={() => setReturnedDialogIds(selectedIds)}
                 >
                   Als Rückläufer markieren
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onSelect={() =>
                     void applyLetterAction(
-                      selectedVisible,
+                      selectedIds,
                       { action: "returned", returned: false },
                       "Rückläufer-Markierung entfernt",
                       (l) => ({ ...l, letterReturnedAt: null }),
@@ -1448,6 +1580,21 @@ export function VersandRunView({
             )}
           </div>
         </div>
+      )}
+
+      {followUpOpen && (
+        <FollowUpDialog
+          onClose={() => setFollowUpOpen(false)}
+          currentCampaignId={campaignId}
+          currentCampaignName={campaignName}
+          contactIds={leads
+            .filter((l) => selected.has(l.id) && l.contactId)
+            .map((l) => l.contactId as string)}
+          missingContactCount={
+            selectedIds.length -
+            leads.filter((l) => selected.has(l.id) && l.contactId).length
+          }
+        />
       )}
 
       {detailContactId && (
@@ -2251,6 +2398,103 @@ function LeadDetailDialog({
             <Button variant="ghost">Schließen</Button>
           </DialogClose>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── Follow-up-Dialog ──────────────────────────────────────────────────────
+ * EINE Entscheidung: für welche Kampagne? (vorausgewählt: aktuelle).
+ * Danach geht's in den Runden-Wizard — vorbefüllt mit genau den
+ * ausgewählten Kontakten (ohne neue Liste, sessionStorage-Übergabe). */
+function FollowUpDialog({
+  onClose,
+  currentCampaignId,
+  currentCampaignName,
+  contactIds,
+  missingContactCount,
+}: {
+  onClose: () => void;
+  currentCampaignId: string;
+  currentCampaignName: string;
+  contactIds: string[];
+  missingContactCount: number;
+}) {
+  const router = useRouter();
+  const [campaigns, setCampaigns] = React.useState<
+    Array<{ id: string; name: string }>
+  >([{ id: currentCampaignId, name: currentCampaignName }]);
+  const [campaignId, setCampaignId] = React.useState(currentCampaignId);
+
+  React.useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/campaigns");
+        const body = await res.json();
+        const items = (body.campaigns ?? body ?? []) as Array<{
+          id: string;
+          name: string;
+        }>;
+        if (items.length > 0) setCampaigns(items);
+      } catch {
+        // Fallback: nur die aktuelle Kampagne im Select.
+      }
+    })();
+  }, []);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (contactIds.length === 0) return;
+    sessionStorage.setItem(
+      "vc-followup",
+      JSON.stringify({ contactIds }),
+    );
+    router.push(`/kampagnen/${campaignId}/runs/neu?followUp=1`);
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Follow-up starten</DialogTitle>
+          <DialogDescription>
+            {contactIds.length} Kontakt{contactIds.length === 1 ? "" : "e"}{" "}
+            {contactIds.length === 1 ? "kommt" : "kommen"} in die neue Runde.
+            {missingContactCount > 0 &&
+              ` ${missingContactCount} ausgewählte${missingContactCount === 1 ? "r" : ""} Lead${missingContactCount === 1 ? "" : "s"} ohne Kontakt-Verknüpfung (ältere Runde) ${missingContactCount === 1 ? "bleibt" : "bleiben"} außen vor.`}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-3">
+          <div>
+            <Label className="mb-1 block text-xs font-semibold">
+              Für welche Kampagne?
+            </Label>
+            <select
+              value={campaignId}
+              onChange={(e) => setCampaignId(e.target.value)}
+              className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm"
+            >
+              {campaigns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.id === currentCampaignId ? " (diese Runde)" : ""}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-ink-muted">
+              Gleiche Kampagne = gleiche Videos und Vorlagen. Eine andere
+              Kampagne schickt denselben Kontakten neue Inhalte.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Abbrechen
+            </Button>
+            <Button type="submit" disabled={contactIds.length === 0}>
+              Weiter zu den Optionen →
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

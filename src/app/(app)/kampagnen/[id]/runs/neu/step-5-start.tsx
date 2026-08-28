@@ -31,6 +31,11 @@ export function Step5Start({
   const { toast } = useToast();
   const [busy, setBusy] = React.useState(false);
 
+  // Doppel-Anschreib-Warnung: Kontakte, die in den letzten 30 Tagen schon
+  // Post hatten. Reine Warnung — blockiert nie, User entscheidet.
+  const [recentContacted, setRecentContacted] = React.useState<string[] | null>(null);
+  const [recentRemoved, setRecentRemoved] = React.useState(false);
+
   const skipContactIds = React.useMemo(() => {
     if (!state.dedupeResults) return [];
     return state.dedupeResults
@@ -39,13 +44,49 @@ export function Step5Start({
       .filter(Boolean);
   }, [state.dedupeResults, state.dedupeDecisions]);
 
-  const totalContacts = state.dedupeResults
+  const followUpIds = state.followUpContactIds;
+
+  React.useEffect(() => {
+    const isFollowUp = !!followUpIds && followUpIds.length > 0;
+    const listId = state.source === "existing-list" ? state.selectedListId : state.targetListId;
+    if (!isFollowUp && !listId) return;
+    let alive = true;
+    void fetch("/api/contacts/v2/recently-contacted", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...(isFollowUp ? { contactIds: followUpIds } : { listId }),
+        days: 30,
+      }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (alive && body && Array.isArray(body.contactIds)) {
+          setRecentContacted(body.contactIds);
+        }
+      })
+      .catch(() => {
+        // Warnung ist nie kritisch — ohne Antwort einfach keine Warnung.
+      });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const recentRemovedIds = recentRemoved && recentContacted ? recentContacted : [];
+  const totalContactsRaw = state.dedupeResults
     ? state.dedupeResults.length - skipContactIds.length
-    : "?";
+    : followUpIds && followUpIds.length > 0
+      ? followUpIds.length
+      : null;
+  const totalContacts =
+    totalContactsRaw !== null
+      ? Math.max(totalContactsRaw - recentRemovedIds.length, 0)
+      : "?";
 
   async function start() {
+    const isFollowUp = !!followUpIds && followUpIds.length > 0;
     const listId = state.source === "existing-list" ? state.selectedListId : state.targetListId;
-    if (!listId) {
+    if (!isFollowUp && !listId) {
       toast({ title: "Keine Liste ausgewählt.", variant: "danger" });
       return;
     }
@@ -55,10 +96,11 @@ export function Step5Start({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          listId,
+          // Follow-up: frei ausgewählte Kontakte statt Liste (keine Auto-Listen).
+          ...(isFollowUp ? { contactIds: followUpIds } : { listId }),
           name: state.runName.trim(),
           contactMapping: state.contactMapping,
-          skipContactIds,
+          skipContactIds: Array.from(new Set([...skipContactIds, ...recentRemovedIds])),
           // Runden-Overrides: der Wizard fragt in Step 3 nach Umschlag +
           // Vorlage, aber ohne diese Zeilen landete die Auswahl nie im
           // Run (Vorfall 2026-08-20: Umschlag aktiviert, kein PDF erzeugt).
@@ -73,7 +115,11 @@ export function Step5Start({
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error);
-      toast({ title: `Runde gestartet — ${body.leadCount} Videos werden erstellt` });
+      const skippedNote =
+        typeof body.skippedBlockedCount === "number" && body.skippedBlockedCount > 0
+          ? ` · ${body.skippedBlockedCount} gesperrte${body.skippedBlockedCount === 1 ? "r Kontakt" : " Kontakte"} übersprungen`
+          : "";
+      toast({ title: `Runde gestartet — ${body.leadCount} Videos werden erstellt${skippedNote}` });
       onStarted(body.runId);
     } catch (err) {
       toastError(toast, err);
@@ -105,7 +151,7 @@ export function Step5Start({
           />
         </div>
 
-        <div className="mt-6 pt-6 border-t border-line">
+        <div className="mt-8">
           <label className="block text-xs font-semibold text-ink mb-1.5">
             Name der Runde
           </label>
@@ -118,7 +164,7 @@ export function Step5Start({
           />
         </div>
 
-        <div className="mt-5 pt-5 border-t border-line">
+        <div className="mt-8">
           <label className="flex items-start gap-2.5 cursor-pointer">
             <input
               type="checkbox"
@@ -146,6 +192,41 @@ export function Step5Start({
           ) : null}
         </div>
       </div>
+
+      {recentContacted && recentContacted.length > 0 && !recentRemoved && (
+        <div className="rounded-2xl bg-warn-soft p-4 text-sm text-ink mb-5 flex flex-wrap items-center gap-3">
+          <span>
+            ⚠ <strong>{recentContacted.length}</strong>{" "}
+            {recentContacted.length === 1
+              ? "Kontakt hatte in den letzten 30 Tagen schon Post von dir."
+              : "Kontakte hatten in den letzten 30 Tagen schon Post von dir."}{" "}
+            Du kannst sie trotzdem anschreiben — oder rausnehmen.
+          </span>
+          <button
+            type="button"
+            onClick={() => setRecentRemoved(true)}
+            className="px-3 py-1.5 rounded-lg bg-ink text-white text-xs font-semibold hover:bg-brand-deep"
+          >
+            Diese {recentContacted.length} entfernen
+          </button>
+        </div>
+      )}
+      {recentRemoved && recentContacted && recentContacted.length > 0 && (
+        <div className="rounded-2xl bg-canvas-deep p-4 text-sm text-ink-muted mb-5 flex flex-wrap items-center gap-3">
+          <span>
+            {recentContacted.length}{" "}
+            {recentContacted.length === 1 ? "Kontakt" : "Kontakte"} mit Post in
+            den letzten 30 Tagen werden übersprungen.
+          </span>
+          <button
+            type="button"
+            onClick={() => setRecentRemoved(false)}
+            className="text-xs font-semibold underline hover:text-ink"
+          >
+            Doch mitnehmen
+          </button>
+        </div>
+      )}
 
       <div className="rounded-2xl bg-brand-soft p-4 text-sm text-ink mb-5">
         <strong className="text-brand-deep">Was jetzt passiert:</strong>{" "}

@@ -112,7 +112,6 @@ export default async function RunDetailPage({
           <LiveTable
             runId={runId}
             campaignId={campaign.id}
-            pdfEnabled={campaign.pdfEnabled}
             abActive={run.abConfig != null}
             initialRun={{
               id: run.id,

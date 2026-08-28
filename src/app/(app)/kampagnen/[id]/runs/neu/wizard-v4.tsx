@@ -33,6 +33,8 @@ interface WizardV4Props {
   pdfEnabled: boolean;
   /** Optional: Liste, die aus /kontakte vorausgewählt wurde. */
   preselectedListId?: string | null;
+  /** Follow-up-Modus (?followUp=1): Kontakt-IDs liegen im sessionStorage. */
+  followUpMode?: boolean;
 }
 
 export function WizardV4({
@@ -41,6 +43,7 @@ export function WizardV4({
   campaignMode,
   pdfEnabled,
   preselectedListId,
+  followUpMode,
 }: WizardV4Props) {
   const router = useRouter();
   const [state, setState] = React.useState<WizardState>(() => {
@@ -52,6 +55,27 @@ export function WizardV4({
       initial.source = "existing-list";
       initial.selectedListId = preselectedListId;
       initial.step = "options";
+    }
+    // Follow-up aus der Versand-Ansicht: frei ausgewählte Kontakte, keine
+    // Liste. Runde + Auto-Label heißen standardmäßig „Follow-up TT.MM.JJJJ".
+    if (followUpMode) {
+      try {
+        const raw = sessionStorage.getItem("vc-followup");
+        const parsed = raw ? (JSON.parse(raw) as { contactIds?: string[] }) : null;
+        const ids = Array.isArray(parsed?.contactIds)
+          ? parsed.contactIds.filter((v): v is string => typeof v === "string")
+          : [];
+        if (ids.length > 0) {
+          const dateDe = new Date().toLocaleDateString("de-DE");
+          initial.source = "existing-list";
+          initial.followUpContactIds = ids;
+          initial.step = "options";
+          initial.runName = `Follow-up ${dateDe}`;
+          initial.autoLabelName = `Follow-up ${dateDe}`;
+        }
+      } catch {
+        // Ohne gültige Übergabe startet der Wizard normal bei Schritt 1.
+      }
     }
     return initial;
   });

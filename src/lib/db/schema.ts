@@ -2146,6 +2146,15 @@ export const contacts = pgTable("contacts", {
   // liegt in contactFields.
   data: jsonb("data").notNull().$type<Record<string, string>>().default({}),
 
+  // Kontakt-Status (Migration 0070) — echtes Feld, kein Label (Labels sind
+  // löschbar, Status ist sicherheitsrelevant). Harter Filter bei jedem
+  // Runden-Start + E-Mail-Versand. Auto-Setzung: Abmeldelink → do_not_contact,
+  // Bounce → undeliverable (nur wenn noch active).
+  status: text("status")
+    .$type<"active" | "do_not_contact" | "undeliverable">()
+    .notNull()
+    .default("active"),
+
   // DSGVO-Soft-Delete. Betroffenen-Löschung geht über bestehende
   // leadDeletionAudit-Pfad, hier zusätzlich für Contact-Level.
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -2170,6 +2179,9 @@ export const contacts = pgTable("contacts", {
   userEmailUq: uniqueIndex("contacts_user_email_uq")
     .on(t.userId, t.email)
     .where(sql`${t.email} IS NOT NULL AND ${t.deletedAt} IS NULL`),
+  userStatusIdx: index("contacts_user_status_idx")
+    .on(t.userId, t.status)
+    .where(sql`${t.deletedAt} IS NULL AND ${t.status} <> 'active'`),
 }));
 
 export const contactLists = pgTable("contact_lists", {
