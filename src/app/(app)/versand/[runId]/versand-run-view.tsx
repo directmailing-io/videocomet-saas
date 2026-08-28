@@ -254,6 +254,59 @@ function todayInputValue(): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
+/** Datum-Input (YYYY-MM-DD) → deutsches Format (TT.MM.JJJJ) für Label-Namen. */
+function inputDateDe(value: string): string {
+  const [y, m, d] = value.split("-");
+  return y && m && d ? `${d}.${m}.${y}` : value;
+}
+
+/**
+ * Checkbox + Namensfeld "Kontakte zusätzlich mit Label markieren" — in den
+ * Versendet-/Rückläufer-Dialogen. Labels tauchen in „Kontakte & Listen" auf,
+ * damit man beim nächsten Versand filtern kann, wer schon Post bekommen hat.
+ */
+function AutoLabelOption({
+  enabled,
+  onEnabledChange,
+  name,
+  onNameChange,
+  hint,
+}: {
+  enabled: boolean;
+  onEnabledChange: (v: boolean) => void;
+  name: string;
+  onNameChange: (v: string) => void;
+  hint: string;
+}) {
+  return (
+    <div className="mt-2 rounded-squircle-sm bg-surface-soft px-3 py-2.5">
+      <label className="flex cursor-pointer items-start gap-2.5">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onEnabledChange(e.target.checked)}
+          className="mt-0.5 size-4 rounded border-line accent-brand"
+        />
+        <span className="text-sm">
+          <span className="block font-medium">
+            Kontakte zusätzlich mit Label markieren
+          </span>
+          <span className="block text-xs text-ink-muted">{hint}</span>
+        </span>
+      </label>
+      {enabled && (
+        <Input
+          value={name}
+          onChange={(e) => onNameChange(e.target.value)}
+          maxLength={60}
+          className="ml-[26px] mt-2 w-56"
+          aria-label="Label-Name"
+        />
+      )}
+    </div>
+  );
+}
+
 function defaultBaseName(runName: string): string {
   return (
     runName
@@ -307,6 +360,7 @@ export function VersandRunView({
     variant: ExportVariant;
   } | null>(null);
   const [postExportIds, setPostExportIds] = React.useState<string[] | null>(null);
+  const [returnedDialogIds, setReturnedDialogIds] = React.useState<string[] | null>(null);
   const [sentDialogIds, setSentDialogIds] = React.useState<string[] | null>(null);
   // Globale Kontakt-Ansicht (identisch zu Kontakte & Listen); Fallback-Dialog
   // nur für Alt-Leads ohne verknüpften Kontakt + für den E-Mail-Verlauf.
@@ -565,6 +619,39 @@ export function VersandRunView({
           status === "sent" ? (sentAtIso ?? new Date().toISOString()) : null,
       }),
     );
+  }
+
+  /**
+   * Auto-Label aus den Versendet-/Rückläufer-Dialogen: Label anlegen (falls
+   * neu) und an die Kontakte der Leads hängen. Nie fatal — Leads ohne
+   * Kontakt-Zuordnung (ältere Runden) werden still übersprungen.
+   */
+  async function assignAutoLabel(leadIds: string[], labelName: string) {
+    const idSet = new Set(leadIds);
+    const contactIds = leads
+      .filter((l) => idSet.has(l.id) && l.contactId)
+      .map((l) => l.contactId as string);
+    if (contactIds.length === 0) return;
+    try {
+      const res = await fetch("/api/contact-labels/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactIds,
+          action: "add",
+          create: { name: labelName },
+        }),
+      });
+      if (res.ok) {
+        toast({
+          variant: "success",
+          title: `Label „${labelName}“ vergeben`,
+          description: "Du findest es in „Kontakte & Listen“ im Label-Filter.",
+        });
+      }
+    } catch {
+      // Label ist Komfort, nie kritisch.
+    }
   }
 
   /** 7-Tage-Hinweis: 1 Klick — versendet, rückdatiert aufs Exportdatum. */
@@ -1284,17 +1371,7 @@ export function VersandRunView({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  onSelect={() =>
-                    void applyLetterAction(
-                      selectedVisible,
-                      { action: "returned", returned: true },
-                      "Als Rückläufer markiert",
-                      (l) => ({
-                        ...l,
-                        letterReturnedAt: new Date().toISOString(),
-                      }),
-                    )
-                  }
+                  onSelect={() => setReturnedDialogIds(selectedVisible)}
                 >
                   Als Rückläufer markieren
                 </DropdownMenuItem>
@@ -1356,12 +1433,17 @@ export function VersandRunView({
         ids={postExportIds}
         onClose={() => setPostExportIds(null)}
         busy={busy}
-        onApply={async (choice, dateValue) => {
+        onApply={async (choice, dateValue, label) => {
           if (!postExportIds) return;
           if (choice === "in_progress") {
             await markStatus(postExportIds, "in_progress");
           } else if (choice === "sent") {
-            await markStatus(postExportIds, "sent", dateInputToIso(dateValue));
+            const ok = await markStatus(
+              postExportIds,
+              "sent",
+              dateInputToIso(dateValue),
+            );
+            if (ok && label) await assignAutoLabel(postExportIds, label);
           }
           setPostExportIds(null);
         }}
@@ -1371,14 +1453,36 @@ export function VersandRunView({
         ids={sentDialogIds}
         onClose={() => setSentDialogIds(null)}
         busy={busy}
-        onApply={async (dateValue) => {
+        onApply={async (dateValue, label) => {
           if (!sentDialogIds) return;
           const ok = await markStatus(
             sentDialogIds,
             "sent",
             dateInputToIso(dateValue),
           );
-          if (ok) setSentDialogIds(null);
+          if (ok) {
+            if (label) await assignAutoLabel(sentDialogIds, label);
+            setSentDialogIds(null);
+          }
+        }}
+      />
+
+      <MarkReturnedDialog
+        ids={returnedDialogIds}
+        onClose={() => setReturnedDialogIds(null)}
+        busy={busy}
+        onApply={async (label) => {
+          if (!returnedDialogIds) return;
+          const ok = await applyLetterAction(
+            returnedDialogIds,
+            { action: "returned", returned: true },
+            "Als Rückläufer markiert",
+            (l) => ({ ...l, letterReturnedAt: new Date().toISOString() }),
+          );
+          if (ok) {
+            if (label) await assignAutoLabel(returnedDialogIds, label);
+            setReturnedDialogIds(null);
+          }
         }}
       />
     </>
@@ -1576,19 +1680,33 @@ function PostExportDialog({
   onApply: (
     choice: "keep" | "in_progress" | "sent",
     dateValue: string,
+    label: string | null,
   ) => void | Promise<void>;
 }) {
   const [choice, setChoice] = React.useState<"keep" | "in_progress" | "sent">(
     "in_progress",
   );
   const [dateValue, setDateValue] = React.useState(todayInputValue());
+  const [labelEnabled, setLabelEnabled] = React.useState(true);
+  const [labelName, setLabelName] = React.useState("");
+  const [labelTouched, setLabelTouched] = React.useState(false);
 
   React.useEffect(() => {
     if (ids) {
+      const today = todayInputValue();
       setChoice("in_progress");
-      setDateValue(todayInputValue());
+      setDateValue(today);
+      setLabelEnabled(true);
+      setLabelTouched(false);
+      setLabelName(`Versand ${inputDateDe(today)}`);
     }
   }, [ids]);
+
+  React.useEffect(() => {
+    if (!labelTouched && dateValue) {
+      setLabelName(`Versand ${inputDateDe(dateValue)}`);
+    }
+  }, [dateValue, labelTouched]);
 
   const n = ids?.length ?? 0;
   const options: {
@@ -1662,13 +1780,31 @@ function PostExportDialog({
                 onChange={(e) => setDateValue(e.target.value)}
                 className="mt-1 w-44"
               />
+              <AutoLabelOption
+                enabled={labelEnabled}
+                onEnabledChange={setLabelEnabled}
+                name={labelName}
+                onNameChange={(v) => {
+                  setLabelTouched(true);
+                  setLabelName(v);
+                }}
+                hint="So siehst du in „Kontakte & Listen“ später sofort, wer diese Post bekommen hat."
+              />
             </div>
           )}
         </div>
 
         <DialogFooter>
           <Button
-            onClick={() => void onApply(choice, dateValue)}
+            onClick={() =>
+              void onApply(
+                choice,
+                dateValue,
+                choice === "sent" && labelEnabled && labelName.trim()
+                  ? labelName.trim()
+                  : null,
+              )
+            }
             loading={busy}
             disabled={busy || (choice === "sent" && !dateValue)}
           >
@@ -1691,13 +1827,29 @@ function MarkSentDialog({
   ids: string[] | null;
   onClose: () => void;
   busy: boolean;
-  onApply: (dateValue: string) => void | Promise<void>;
+  onApply: (dateValue: string, label: string | null) => void | Promise<void>;
 }) {
   const [dateValue, setDateValue] = React.useState(todayInputValue());
+  const [labelEnabled, setLabelEnabled] = React.useState(true);
+  const [labelName, setLabelName] = React.useState("");
+  const [labelTouched, setLabelTouched] = React.useState(false);
 
   React.useEffect(() => {
-    if (ids) setDateValue(todayInputValue());
+    if (ids) {
+      const today = todayInputValue();
+      setDateValue(today);
+      setLabelEnabled(true);
+      setLabelTouched(false);
+      setLabelName(`Versand ${inputDateDe(today)}`);
+    }
   }, [ids]);
+
+  // Datum geändert und Label-Name noch nicht angefasst? Dann mitziehen.
+  React.useEffect(() => {
+    if (!labelTouched && dateValue) {
+      setLabelName(`Versand ${inputDateDe(dateValue)}`);
+    }
+  }, [dateValue, labelTouched]);
 
   const n = ids?.length ?? 0;
 
@@ -1751,6 +1903,17 @@ function MarkSentDialog({
               );
             })}
           </div>
+
+          <AutoLabelOption
+            enabled={labelEnabled}
+            onEnabledChange={setLabelEnabled}
+            name={labelName}
+            onNameChange={(v) => {
+              setLabelTouched(true);
+              setLabelName(v);
+            }}
+            hint="So siehst du in „Kontakte & Listen“ später sofort, wer diese Post bekommen hat."
+          />
         </div>
 
         <DialogFooter>
@@ -1760,12 +1923,88 @@ function MarkSentDialog({
             </Button>
           </DialogClose>
           <Button
-            onClick={() => void onApply(dateValue)}
+            onClick={() =>
+              void onApply(
+                dateValue,
+                labelEnabled && labelName.trim() ? labelName.trim() : null,
+              )
+            }
             loading={busy}
             disabled={busy || !dateValue}
             iconLeft={<CheckCircle2 className="size-4" />}
           >
             Als versendet markieren
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Rückläufer-Dialog (aus der Auswahl-Leiste) ─────────────────────────────
+
+function MarkReturnedDialog({
+  ids,
+  onClose,
+  busy,
+  onApply,
+}: {
+  ids: string[] | null;
+  onClose: () => void;
+  busy: boolean;
+  onApply: (label: string | null) => void | Promise<void>;
+}) {
+  const [labelEnabled, setLabelEnabled] = React.useState(true);
+  const [labelName, setLabelName] = React.useState("Rückläufer");
+
+  React.useEffect(() => {
+    if (ids) {
+      setLabelEnabled(true);
+      setLabelName("Rückläufer");
+    }
+  }, [ids]);
+
+  const n = ids?.length ?? 0;
+
+  return (
+    <Dialog open={ids !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>
+            {n} Brief{n === 1 ? "" : "e"} als Rückläufer markieren
+          </DialogTitle>
+          <DialogDescription>
+            Rückläufer sind Briefe, die von der Post zurückkamen — z. B. wegen
+            falscher Adresse. Die Markierung siehst du hier in der Spalte
+            Brief-Status.
+          </DialogDescription>
+        </DialogHeader>
+
+        <AutoLabelOption
+          enabled={labelEnabled}
+          onEnabledChange={setLabelEnabled}
+          name={labelName}
+          onNameChange={setLabelName}
+          hint="So findest du Rückläufer später in „Kontakte & Listen“ und kannst sie mit korrigierter Adresse erneut anschreiben."
+        />
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="ghost" disabled={busy}>
+              Abbrechen
+            </Button>
+          </DialogClose>
+          <Button
+            onClick={() =>
+              void onApply(
+                labelEnabled && labelName.trim() ? labelName.trim() : null,
+              )
+            }
+            loading={busy}
+            disabled={busy}
+            iconLeft={<Undo2 className="size-4" />}
+          >
+            Als Rückläufer markieren
           </Button>
         </DialogFooter>
       </DialogContent>

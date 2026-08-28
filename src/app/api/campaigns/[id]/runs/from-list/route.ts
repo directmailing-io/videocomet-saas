@@ -24,6 +24,10 @@ import { createRun } from "@/lib/db/queries/runs";
 import { pipelineQueue } from "@/worker/queue";
 import { enqueueForPreflight } from "@/lib/preflight/job-enqueue";
 import {
+  assignLabelToContacts,
+  getOrCreateContactLabel,
+} from "@/lib/db/queries/contact-labels";
+import {
   countUserRenderBacklog,
   fairLeadPriority,
 } from "@/lib/queue-fairness";
@@ -76,6 +80,12 @@ export async function POST(
   const envelopeTemplateId =
     typeof b.envelopeTemplateId === "string" && b.envelopeTemplateId
       ? b.envelopeTemplateId
+      : null;
+  // Optional: Auto-Label aus dem Wizard-Step-5 ("Versand 28.08.2026").
+  // Wird nach dem Lead-Insert an alle Kontakte dieser Runde vergeben.
+  const autoLabel =
+    typeof b.autoLabel === "string" && b.autoLabel.trim()
+      ? b.autoLabel.trim()
       : null;
 
   if (!listId) {
@@ -276,6 +286,23 @@ export async function POST(
     .insert(leads)
     .values(leadRows)
     .returning({ id: leads.id, rowIndex: leads.rowIndex });
+
+  // Auto-Label vergeben (nie fatal für die Runde).
+  if (autoLabel) {
+    try {
+      const label = await getOrCreateContactLabel({
+        userId: auth.user.id,
+        name: autoLabel,
+      });
+      await assignLabelToContacts({
+        userId: auth.user.id,
+        labelId: label.id,
+        contactIds: effectiveContacts.map((c) => c.id),
+      });
+    } catch (err) {
+      console.warn("[from-list] auto-label failed:", err);
+    }
+  }
 
   // ── A/B-Zuteilung (Reliability 2026-08-21) ─────────────────────────────
   // MUSS vor dem Enqueue laufen: die Pipeline liest runs.abConfig +

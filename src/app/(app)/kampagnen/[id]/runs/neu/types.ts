@@ -104,6 +104,12 @@ export interface WizardState {
 
   // Runden-Name für Start-Screen
   runName: string;
+
+  // Auto-Label: markiert alle Kontakte dieser Runde mit einem Label
+  // (z. B. "Versand 28.08.2026"), damit man später filtern kann,
+  // wer schon angeschrieben wurde.
+  autoLabelEnabled: boolean;
+  autoLabelName: string;
 }
 
 export function makeInitialState(): WizardState {
@@ -133,5 +139,7 @@ export function makeInitialState(): WizardState {
     },
     contactMapping: {},
     runName: `Runde ${new Date().toLocaleDateString("de-DE")}`,
+    autoLabelEnabled: true,
+    autoLabelName: `Versand ${new Date().toLocaleDateString("de-DE")}`,
   };
 }

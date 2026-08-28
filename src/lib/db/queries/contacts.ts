@@ -49,6 +49,8 @@ export interface ContactRowUi {
   totalCta: number;
   // Listen-Mitgliedschaft (Namen zum Anzeigen als Chips).
   listNames: string[];
+  // Labels (Migration 0069) als Chips.
+  labels: Array<{ id: string; name: string; color: string }>;
 }
 
 export interface ContactListUi {
@@ -79,6 +81,8 @@ export async function listContacts(input: {
   sort?: "recent" | "name" | "activity";
   /** Ad-hoc-Filter aus Etappe 4 — wird direkt in die WHERE-Klausel gemischt. */
   filter?: FilterDefinition | null;
+  /** Nur Kontakte mit diesem Label (Migration 0069). */
+  labelId?: string | null;
 }): Promise<{ contacts: ContactRowUi[]; total: number }> {
   const {
     userId,
@@ -88,6 +92,7 @@ export async function listContacts(input: {
     offset = 0,
     sort = "activity",
     filter,
+    labelId = null,
   } = input;
 
   // Alle WHERE-Bedingungen als raw SQL mit "c."-Alias, damit sie mit der
@@ -101,6 +106,12 @@ export async function listContacts(input: {
     whereFragments.push(sql`EXISTS (
       SELECT 1 FROM list_memberships lm
       WHERE lm.contact_id = c.id AND lm.list_id = ${listId}
+    )`);
+  }
+  if (labelId) {
+    whereFragments.push(sql`EXISTS (
+      SELECT 1 FROM contact_label_assignments cla
+      WHERE cla.contact_id = c.id AND cla.label_id = ${labelId}
     )`);
   }
   if (filter && filter.conditions.length > 0) {
@@ -148,6 +159,7 @@ export async function listContacts(input: {
     total_plays: number;
     total_cta: number;
     list_names: string[] | null;
+    labels: Array<{ id: string; name: string; color: string }> | null;
   }>(sql`
     SELECT c.id, c.email, c.first_name, c.last_name, c.company, c.company_display,
            c.phone, c.linkedin_url, c.data, c.last_activity_at, c.created_at,
@@ -156,7 +168,8 @@ export async function listContacts(input: {
            COALESCE(agg.total_opens, 0)    AS total_opens,
            COALESCE(agg.total_plays, 0)    AS total_plays,
            COALESCE(agg.total_cta, 0)      AS total_cta,
-           lists.list_names
+           lists.list_names,
+           lbl.labels
     FROM ${contacts} c
     LEFT JOIN LATERAL (
       SELECT
@@ -174,6 +187,15 @@ export async function listContacts(input: {
       JOIN ${contactLists} cl ON cl.id = lm.list_id
       WHERE lm.contact_id = c.id
     ) lists ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT json_agg(
+               json_build_object('id', clb.id, 'name', clb.name, 'color', clb.color)
+               ORDER BY LOWER(clb.name)
+             ) AS labels
+      FROM contact_label_assignments cla
+      JOIN contact_labels clb ON clb.id = cla.label_id
+      WHERE cla.contact_id = c.id
+    ) lbl ON TRUE
     WHERE ${whereExpr}
     ORDER BY ${orderBy}
     LIMIT ${limit} OFFSET ${offset}
@@ -206,6 +228,7 @@ export async function listContacts(input: {
       totalPlays: Number(r.total_plays) || 0,
       totalCta: Number(r.total_cta) || 0,
       listNames: r.list_names ?? [],
+      labels: r.labels ?? [],
     };
   });
 

@@ -21,6 +21,7 @@ import {
   Loader2,
   Plus,
   Search,
+  Tag,
   Trash2,
   Users2,
 } from "lucide-react";
@@ -55,7 +56,27 @@ interface ContactRow {
   totalPlays: number;
   totalCta: number;
   listNames: string[];
+  labels: Array<{ id: string; name: string; color: string }>;
 }
+
+interface ContactLabelInfo {
+  id: string;
+  name: string;
+  color: string;
+  contactCount: number;
+}
+
+/** Farb-Rotation für neue Labels, damit sie unterscheidbar sind. */
+const LABEL_COLORS = [
+  "#AA8CF5",
+  "#5EC26A",
+  "#F59E0B",
+  "#3B82F6",
+  "#EC4899",
+  "#14B8A6",
+  "#EF4444",
+  "#8B5CF6",
+];
 
 interface ContactList {
   id: string;
@@ -102,6 +123,13 @@ export function KontakteView(_props: KontakteViewProps) {
   const [showAddToListMenu, setShowAddToListMenu] = React.useState(false);
   const [showExportMenu, setShowExportMenu] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
+  // Labels (Migration 0069): Liste aller Labels + aktiver Filter + Bulk-Menü
+  const [labels, setLabels] = React.useState<ContactLabelInfo[]>([]);
+  const [labelFilterId, setLabelFilterId] = React.useState<string | null>(null);
+  const [showLabelFilterMenu, setShowLabelFilterMenu] = React.useState(false);
+  const [showLabelMenu, setShowLabelMenu] = React.useState(false);
+  const [newLabelName, setNewLabelName] = React.useState("");
+  const [labelBusy, setLabelBusy] = React.useState(false);
   // Detail-Slide-Over (Etappe 3): welchen Contact anzeigen?
   const [detailContactId, setDetailContactId] = React.useState<string | null>(null);
   const [filter, setFilter] = React.useState<FilterDefinition>(EMPTY_FILTER);
@@ -130,6 +158,16 @@ export function KontakteView(_props: KontakteViewProps) {
     }
   }, [toast]);
 
+  const loadLabels = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/contact-labels");
+      const body = await res.json();
+      if (res.ok) setLabels(body.labels ?? []);
+    } catch {
+      // Labels sind nie kritisch fürs Laden der Seite.
+    }
+  }, []);
+
   const loadContacts = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -155,6 +193,7 @@ export function KontakteView(_props: KontakteViewProps) {
       } else {
         const params = new URLSearchParams();
         if (selectedListId) params.set("listId", selectedListId);
+        if (labelFilterId) params.set("labelId", labelFilterId);
         if (search.trim().length >= 2) params.set("search", search.trim());
         params.set("sort", sort);
         params.set("limit", "500");
@@ -170,11 +209,12 @@ export function KontakteView(_props: KontakteViewProps) {
     } finally {
       setLoading(false);
     }
-  }, [selectedListId, search, sort, filter, toast]);
+  }, [selectedListId, labelFilterId, search, sort, filter, toast]);
 
   React.useEffect(() => {
     void loadLists();
-  }, [loadLists]);
+    void loadLabels();
+  }, [loadLists, loadLabels]);
   React.useEffect(() => {
     void loadContacts();
     setSelectedContactIds(new Set());
@@ -187,6 +227,18 @@ export function KontakteView(_props: KontakteViewProps) {
 
   const allSelected =
     contacts.length > 0 && contacts.every((c) => selectedContactIds.has(c.id));
+
+  // Welche Labels tragen die aktuell ausgewählten Kontakte? (fürs Entfernen-Menü)
+  const labelsOnSelection = React.useMemo(() => {
+    if (selectedContactIds.size === 0) return [];
+    return labels.filter((l) =>
+      contacts.some(
+        (c) =>
+          selectedContactIds.has(c.id) &&
+          (c.labels ?? []).some((x) => x.id === l.id),
+      ),
+    );
+  }, [labels, contacts, selectedContactIds]);
 
   function toggleAll() {
     if (allSelected) {
@@ -234,6 +286,68 @@ export function KontakteView(_props: KontakteViewProps) {
       toastError(toast, err);
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleLabelAction(
+    input: { labelId?: string; createName?: string },
+    action: "add" | "remove",
+  ) {
+    const ids = Array.from(selectedContactIds);
+    if (ids.length === 0) return;
+    setLabelBusy(true);
+    try {
+      const res = await fetch("/api/contact-labels/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactIds: ids,
+          action,
+          labelId: input.labelId,
+          create: input.createName
+            ? {
+                name: input.createName,
+                color: LABEL_COLORS[labels.length % LABEL_COLORS.length],
+              }
+            : undefined,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "Aktion fehlgeschlagen");
+      toast({
+        title:
+          action === "add"
+            ? `Label an ${body.count} Kontakt(e) vergeben`
+            : `Label von ${body.count} Kontakt(en) entfernt`,
+      });
+      setShowLabelMenu(false);
+      setNewLabelName("");
+      await Promise.all([loadLabels(), loadContacts()]);
+    } catch (err) {
+      toastError(toast, err);
+    } finally {
+      setLabelBusy(false);
+    }
+  }
+
+  async function handleDeleteLabel(label: ContactLabelInfo) {
+    if (
+      !confirm(
+        `Label "${label.name}" komplett löschen? Es wird von allen Kontakten entfernt. Die Kontakte selbst bleiben erhalten.`,
+      )
+    )
+      return;
+    try {
+      const res = await fetch(`/api/contact-labels/${label.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? "Fehler beim Löschen");
+      }
+      if (labelFilterId === label.id) setLabelFilterId(null);
+      toast({ title: `Label "${label.name}" gelöscht` });
+      await Promise.all([loadLabels(), loadContacts()]);
+    } catch (err) {
+      toastError(toast, err);
     }
   }
 
@@ -466,6 +580,79 @@ export function KontakteView(_props: KontakteViewProps) {
                   className="pl-7 pr-2 py-1.5 rounded-lg border border-line bg-canvas text-sm w-48 focus:outline-none focus:border-brand"
                 />
               </div>
+              {labels.length > 0 && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowLabelFilterMenu((v) => !v)}
+                    title="Nur Kontakte mit einem bestimmten Label anzeigen"
+                    className={cn(
+                      "px-2.5 py-1.5 rounded-lg border text-sm flex items-center gap-1.5",
+                      labelFilterId
+                        ? "border-brand bg-brand-soft text-brand-deep font-semibold"
+                        : "border-line bg-canvas text-ink-muted",
+                    )}
+                  >
+                    <Tag className="size-3.5" />
+                    {labelFilterId
+                      ? labels.find((l) => l.id === labelFilterId)?.name ?? "Label"
+                      : "Label"}
+                    <ChevronDown className="size-3" />
+                  </button>
+                  {showLabelFilterMenu && (
+                    <div
+                      className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-line py-1 min-w-[230px] z-20 max-h-72 overflow-y-auto"
+                      onMouseLeave={() => setShowLabelFilterMenu(false)}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLabelFilterId(null);
+                          setShowLabelFilterMenu(false);
+                        }}
+                        className={cn(
+                          "w-full text-left px-3 py-1.5 text-xs hover:bg-canvas",
+                          !labelFilterId && "font-semibold",
+                        )}
+                      >
+                        Alle Kontakte (kein Label-Filter)
+                      </button>
+                      {labels.map((l) => (
+                        <div key={l.id} className="group flex items-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLabelFilterId(l.id);
+                              setShowLabelFilterMenu(false);
+                            }}
+                            className={cn(
+                              "flex-1 text-left px-3 py-1.5 text-xs hover:bg-canvas flex items-center gap-2 min-w-0",
+                              labelFilterId === l.id && "font-semibold",
+                            )}
+                          >
+                            <span
+                              className="size-2 rounded-full shrink-0"
+                              style={{ backgroundColor: l.color }}
+                            />
+                            <span className="truncate">{l.name}</span>
+                            <span className="ml-auto text-ink-muted shrink-0">
+                              {l.contactCount}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLabel(l)}
+                            className="hidden group-hover:block text-ink-muted hover:text-danger p-1 mr-1 rounded"
+                            title="Label löschen"
+                          >
+                            <Trash2 className="size-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as SortKey)}
@@ -547,6 +734,104 @@ export function KontakteView(_props: KontakteViewProps) {
                     ))}
                   </div>
                 )}
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    disabled={labelBusy}
+                    onClick={() => setShowLabelMenu((v) => !v)}
+                    title="Ausgewählte Kontakte mit einem Label markieren — z. B. „Versand 28.08.2026“ oder „Rückläufer“"
+                    className="px-3 py-1.5 rounded-lg bg-white text-ink text-xs font-semibold shadow-sm hover:bg-canvas flex items-center gap-1 disabled:opacity-60"
+                  >
+                    {labelBusy ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : (
+                      <Tag className="size-3" />
+                    )}
+                    Label vergeben
+                    <ChevronDown className="size-3" />
+                  </button>
+                  {showLabelMenu && (
+                    <div
+                      className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-line py-1 w-[260px] z-10"
+                      onMouseLeave={() => setShowLabelMenu(false)}
+                    >
+                      <div className="px-3 pt-1.5 pb-2 flex gap-1.5">
+                        <input
+                          type="text"
+                          value={newLabelName}
+                          onChange={(e) => setNewLabelName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && newLabelName.trim() && !labelBusy) {
+                              void handleLabelAction(
+                                { createName: newLabelName.trim() },
+                                "add",
+                              );
+                            }
+                          }}
+                          maxLength={60}
+                          placeholder="Neues Label, z. B. Rückläufer"
+                          className="flex-1 px-2 py-1.5 rounded-lg border border-line bg-canvas text-xs focus:outline-none focus:border-brand"
+                        />
+                        <button
+                          type="button"
+                          disabled={!newLabelName.trim() || labelBusy}
+                          onClick={() =>
+                            handleLabelAction({ createName: newLabelName.trim() }, "add")
+                          }
+                          className="px-2.5 py-1.5 rounded-lg bg-ink text-white text-xs font-semibold disabled:opacity-50"
+                        >
+                          OK
+                        </button>
+                      </div>
+                      {labels.length > 0 && (
+                        <div className="max-h-40 overflow-y-auto border-t border-line pt-1">
+                          {labels.map((l) => (
+                            <button
+                              key={l.id}
+                              type="button"
+                              disabled={labelBusy}
+                              onClick={() => handleLabelAction({ labelId: l.id }, "add")}
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-canvas flex items-center gap-2"
+                            >
+                              <span
+                                className="size-2 rounded-full shrink-0"
+                                style={{ backgroundColor: l.color }}
+                              />
+                              <span className="truncate">{l.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {labelsOnSelection.length > 0 && (
+                        <>
+                          <p className="px-3 pt-2 pb-1 text-[11px] font-semibold text-ink-muted uppercase tracking-wide border-t border-line mt-1">
+                            Label entfernen
+                          </p>
+                          <div className="max-h-32 overflow-y-auto">
+                            {labelsOnSelection.map((l) => (
+                              <button
+                                key={l.id}
+                                type="button"
+                                disabled={labelBusy}
+                                onClick={() =>
+                                  handleLabelAction({ labelId: l.id }, "remove")
+                                }
+                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-danger-soft text-danger flex items-center gap-2"
+                              >
+                                <span
+                                  className="size-2 rounded-full shrink-0"
+                                  style={{ backgroundColor: l.color }}
+                                />
+                                <span className="truncate">{l.name} entfernen</span>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div className="relative">
                   <button
@@ -636,6 +921,7 @@ export function KontakteView(_props: KontakteViewProps) {
                   <th className="px-3 py-2 text-left">E-Mail</th>
                   <th className="px-3 py-2 text-left">Telefon</th>
                   <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-left">Labels</th>
                   <th className="px-3 py-2 text-right">Öffnungen</th>
                   <th className="px-3 py-2 text-right">CTA</th>
                   <th className="px-3 py-2 text-left">Letzte Aktivität</th>
@@ -644,7 +930,7 @@ export function KontakteView(_props: KontakteViewProps) {
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={9} className="px-3 py-10 text-center text-ink-muted">
+                    <td colSpan={10} className="px-3 py-10 text-center text-ink-muted">
                       <Loader2 className="size-4 inline animate-spin mr-2" />
                       Lade Kontakte…
                     </td>
@@ -652,7 +938,7 @@ export function KontakteView(_props: KontakteViewProps) {
                 )}
                 {!loading && contacts.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-3 py-10 text-center text-ink-muted text-sm">
+                    <td colSpan={10} className="px-3 py-10 text-center text-ink-muted text-sm">
                       {selectedListId
                         ? 'Diese Liste ist noch leer. Wähle links "Alle Kontakte", markiere ein paar und stecke sie in diese Liste.'
                         : "Noch keine Kontakte. Erstelle eine Kampagne mit CSV-Upload — deine Kontakte landen dann automatisch hier."}
@@ -697,6 +983,22 @@ export function KontakteView(_props: KontakteViewProps) {
                         </td>
                         <td className="px-3 py-2">
                           <StatusPill status={status} />
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-wrap gap-1 max-w-[240px]">
+                            {(c.labels ?? []).map((l) => (
+                              <span
+                                key={l.id}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-canvas-deep text-[11px] text-ink whitespace-nowrap"
+                              >
+                                <span
+                                  className="size-1.5 rounded-full"
+                                  style={{ backgroundColor: l.color }}
+                                />
+                                {l.name}
+                              </span>
+                            ))}
+                          </div>
                         </td>
                         <td className="px-3 py-2 text-right text-ink-muted tabular-nums">
                           {c.totalOpens}

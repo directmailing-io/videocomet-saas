@@ -2204,6 +2204,31 @@ export const contactLists = pgTable("contact_lists", {
   userNameUq: uniqueIndex("contact_lists_user_name_uq").on(t.userId, t.name),
 }));
 
+// ── Kontakt-Labels (Migration 0069) ────────────────────────────────────
+// Frei benennbare Markierungen (z. B. "Versand 14.08.2026"), manuell per
+// Bulk-Aktion oder automatisch (Runden-Start, Versandzentrale) vergeben.
+export const contactLabels = pgTable("contact_labels", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  color: text("color").notNull().default("#AA8CF5"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // LOWER(name)-Unique liegt als raw-Index in der Migration.
+  userIdx: index("contact_labels_user_idx").on(t.userId),
+}));
+
+export const contactLabelAssignments = pgTable("contact_label_assignments", {
+  contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  labelId: uuid("label_id").notNull().references(() => contactLabels.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk: unique("contact_label_assignments_pk").on(t.contactId, t.labelId),
+  labelIdx: index("contact_label_assignments_label_idx").on(t.labelId),
+}));
+
+export type ContactLabel = typeof contactLabels.$inferSelect;
+
 export const listMemberships = pgTable("list_memberships", {
   listId: uuid("list_id").notNull().references(() => contactLists.id, { onDelete: "cascade" }),
   contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),

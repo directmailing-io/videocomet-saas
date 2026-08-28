@@ -65,6 +65,10 @@ export function Step5Start({
           envelopeTemplateId: state.options.envelopeEnabled
             ? state.options.envelopeTemplateId
             : null,
+          autoLabel:
+            state.autoLabelEnabled && state.autoLabelName.trim()
+              ? state.autoLabelName.trim()
+              : null,
         }),
       });
       const body = await res.json();
@@ -112,6 +116,34 @@ export function Step5Start({
             maxLength={120}
             className="w-full px-3 py-2.5 rounded-xl border border-line bg-canvas text-sm focus:outline-none focus:border-brand"
           />
+        </div>
+
+        <div className="mt-5 pt-5 border-t border-line">
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={state.autoLabelEnabled}
+              onChange={(e) => patch({ autoLabelEnabled: e.target.checked })}
+              className="mt-0.5 size-4 rounded border-line accent-brand"
+            />
+            <span className="text-sm text-ink">
+              <span className="font-semibold">Kontakte mit Label markieren</span>
+              <span className="block text-xs text-ink-muted mt-0.5">
+                Alle Kontakte dieser Runde bekommen ein Label. So siehst du in
+                „Kontakte &amp; Listen" später sofort, wer schon angeschrieben wurde.
+              </span>
+            </span>
+          </label>
+          {state.autoLabelEnabled ? (
+            <input
+              type="text"
+              value={state.autoLabelName}
+              onChange={(e) => patch({ autoLabelName: e.target.value })}
+              maxLength={60}
+              placeholder={`Versand ${new Date().toLocaleDateString("de-DE")}`}
+              className="mt-2.5 ml-[26px] w-full max-w-xs px-3 py-2 rounded-xl border border-line bg-canvas text-sm focus:outline-none focus:border-brand"
+            />
+          ) : null}
         </div>
       </div>
 

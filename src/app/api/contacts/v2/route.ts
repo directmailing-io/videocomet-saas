@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.response;
 
   const listId = req.nextUrl.searchParams.get("listId") ?? null;
+  const labelId = req.nextUrl.searchParams.get("labelId") ?? null;
   const search = req.nextUrl.searchParams.get("search") ?? undefined;
   const sortParam = req.nextUrl.searchParams.get("sort");
   const sort =
@@ -58,6 +59,7 @@ export async function GET(req: NextRequest) {
     listContacts({
       userId: auth.user.id,
       listId: effectiveListId,
+      labelId,
       search: search?.trim() || undefined,
       sort,
       limit,
