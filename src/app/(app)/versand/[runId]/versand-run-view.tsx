@@ -963,20 +963,23 @@ export function VersandRunView({
                 <SortableTh col={emailSortColumn} label="E-Mail-Adresse" />
                 {/* Status-Spalten kleben rechts (sticky) — deckende Farben
                     statt Transparenz, sonst scheint gescrollter Inhalt durch. */}
+                {/* Die Breiten (min+max) MÜSSEN exakt zu den right-Offsets
+                    passen (0 + 3rem + 12rem), sonst entstehen Lücken zwischen
+                    den fixierten Spalten. */}
                 {hasLetters && (
-                  <th className="sticky right-60 z-[1] w-40 border-l border-line bg-[#eefaf6] px-3 py-2.5 font-semibold text-emerald-800">
+                  <th className="sticky right-60 z-[1] w-40 min-w-40 max-w-40 whitespace-nowrap border-l border-line bg-[#eefaf6] px-3 py-2.5 font-semibold text-emerald-800">
                     Post-Status
                   </th>
                 )}
                 <th
                   className={cn(
-                    "sticky right-12 z-[1] w-48 bg-[#f9f7fe] px-3 py-2.5 font-semibold text-brand-deep",
+                    "sticky right-12 z-[1] w-48 min-w-48 max-w-48 whitespace-nowrap bg-[#f9f7fe] px-3 py-2.5 font-semibold text-brand-deep",
                     !hasLetters && "border-l border-line",
                   )}
                 >
                   E-Mail-Status
                 </th>
-                <th className="sticky right-0 z-[1] w-12 bg-surface px-2 py-2.5">
+                <th className="sticky right-0 z-[1] w-12 min-w-12 max-w-12 bg-surface px-2 py-2.5">
                   <span className="sr-only">Aktionen</span>
                 </th>
               </tr>
