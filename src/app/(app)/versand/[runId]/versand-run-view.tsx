@@ -961,15 +961,22 @@ export function VersandRunView({
                   <SortableTh key={col} col={col} label={col} />
                 ))}
                 <SortableTh col={emailSortColumn} label="E-Mail-Adresse" />
+                {/* Status-Spalten kleben rechts (sticky) — deckende Farben
+                    statt Transparenz, sonst scheint gescrollter Inhalt durch. */}
                 {hasLetters && (
-                  <th className="bg-emerald-500/[0.07] px-3 py-2.5 font-semibold text-emerald-800">
+                  <th className="sticky right-60 z-[1] w-40 border-l border-line bg-[#eefaf6] px-3 py-2.5 font-semibold text-emerald-800">
                     Post-Status
                   </th>
                 )}
-                <th className="bg-brand/[0.07] px-3 py-2.5 font-semibold text-brand-deep">
+                <th
+                  className={cn(
+                    "sticky right-12 z-[1] w-48 bg-[#f9f7fe] px-3 py-2.5 font-semibold text-brand-deep",
+                    !hasLetters && "border-l border-line",
+                  )}
+                >
                   E-Mail-Status
                 </th>
-                <th className="w-12 px-4 py-2.5">
+                <th className="sticky right-0 z-[1] w-12 bg-surface px-2 py-2.5">
                   <span className="sr-only">Aktionen</span>
                 </th>
               </tr>
@@ -1045,7 +1052,7 @@ export function VersandRunView({
                       )}
                     </td>
                     {hasLetters && (
-                    <td className="bg-emerald-500/[0.04] px-3 py-3">
+                    <td className="sticky right-60 z-[1] border-l border-line bg-[#f5fcfa] px-3 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Badge variant={meta.badge} dot>
                           {meta.label}
@@ -1065,7 +1072,10 @@ export function VersandRunView({
                     </td>
                     )}
                     <td
-                      className="bg-brand/[0.04] px-3 py-3"
+                      className={cn(
+                        "sticky right-12 z-[1] bg-[#fcfaff] px-3 py-3",
+                        !hasLetters && "border-l border-line",
+                      )}
                       onClick={(e) => e.stopPropagation()}
                     >
                       {l.emailHistory.length > 0 ? (
@@ -1109,7 +1119,7 @@ export function VersandRunView({
                       )}
                     </td>
                     <td
-                      className="px-4 py-3 text-right"
+                      className="sticky right-0 z-[1] bg-surface px-2 py-3 text-center"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <DropdownMenu>
