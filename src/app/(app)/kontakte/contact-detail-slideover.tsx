@@ -767,6 +767,28 @@ function EditableField({
       if (!res.ok) throw new Error(body?.error ?? "Fehler beim Speichern");
       setEditing(false);
       onSaved?.();
+
+      // Wenn wir die E-Mail-Adresse geändert haben, hat der Server sie
+      // sofort geprüft — Ergebnis als Toast anzeigen, damit der User NICHT
+      // erst beim späteren Versand herausfindet, dass die Domain nicht
+      // existiert (Tippfehler etc.).
+      const checkStatus: string | undefined = body?.emailCheck?.status;
+      if (checkStatus === "invalid_syntax" || checkStatus === "no_mailserver") {
+        toast({
+          variant: "danger",
+          title: "Neue E-Mail-Adresse nicht erreichbar",
+          description:
+            checkStatus === "invalid_syntax"
+              ? "Das ist keine gültige E-Mail-Adresse. Bitte prüfe die Schreibweise."
+              : "Diese Adresse kann keine E-Mails empfangen. Die Domain hinter dem @-Zeichen existiert nicht oder hat keinen Mailserver. Bitte prüfe die Schreibweise.",
+        });
+      } else if (checkStatus === "ok") {
+        toast({
+          variant: "success",
+          title: "E-Mail-Adresse geprüft",
+          description: "Die neue Adresse sieht gut aus und kann E-Mails empfangen.",
+        });
+      }
     } catch (err) {
       toastError(toast, err);
       setDraft(value);

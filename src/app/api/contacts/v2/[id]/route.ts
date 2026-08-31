@@ -13,16 +13,17 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { requireUserApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
-import { contactFields } from "@/lib/db/schema";
+import { contactFields, contacts } from "@/lib/db/schema";
 import {
   getContactDetail,
   softDeleteContact,
   updateContact,
 } from "@/lib/db/queries/contacts";
 import { slugifyFieldKey } from "@/lib/contacts/detect-field";
+import { checkEmailAddress } from "@/lib/email/address-check";
 
 export async function GET(
   _req: NextRequest,
@@ -143,6 +144,19 @@ export async function PATCH(
     }
   }
 
+  // Alte E-Mail merken, damit wir bei Änderung sofort einen MX-Check
+  // machen und den User warnen können — sonst geht die Adress-Korrektur
+  // stumm durch und fällt erst beim Versand als Fehler auf.
+  let oldEmail: string | null = null;
+  if (patch.email !== undefined) {
+    const [prev] = await db
+      .select({ email: contacts.email })
+      .from(contacts)
+      .where(and(eq(contacts.id, params.id), eq(contacts.userId, auth.user.id)))
+      .limit(1);
+    oldEmail = (prev?.email ?? "").trim().toLowerCase() || null;
+  }
+
   const row = await updateContact({
     userId: auth.user.id,
     contactId: params.id,
@@ -151,7 +165,14 @@ export async function PATCH(
   if (!row) {
     return NextResponse.json({ error: "Diesen Kontakt gibt es nicht mehr." }, { status: 404 });
   }
-  return NextResponse.json({ contact: row });
+
+  let emailCheck: { status: string } | null = null;
+  const newEmail = (row.email ?? "").trim().toLowerCase() || null;
+  if (patch.email !== undefined && newEmail && newEmail !== oldEmail) {
+    emailCheck = await checkEmailAddress(newEmail);
+  }
+
+  return NextResponse.json({ contact: row, emailCheck });
 }
 
 export async function DELETE(
