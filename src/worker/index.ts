@@ -68,6 +68,7 @@ import { startBunnyLibraryReconciler } from "./processors/bunny-library-reconcil
 import { recoverStaleEmailClaims, startEmailDrip } from "./jobs/email-drip";
 import { startMailboxSync } from "./jobs/mailbox-sync";
 import { startAccountCleanup } from "./jobs/account-cleanup";
+import { startAnalyticsRetention } from "./jobs/analytics-retention";
 import {
   startHeartbeat,
   stopHeartbeat,
@@ -900,6 +901,10 @@ async function main(): Promise<void> {
   // Bestaetigungs-Mail. Credits und Account bleiben erhalten.
   const stopAccountCleanup = startAccountCleanup();
 
+  // Analytics-Retention: 6h-Sweep. Heartbeats > 24h + andere Events > 90d
+  // löschen, damit site_events unabhängig vom Traffic stabil bleibt.
+  const stopAnalyticsRetention = startAnalyticsRetention();
+
   // Global cap — muss über der Summe der per-stage timeouts in
   // processors/pipeline.ts liegen. Worst case (Docs-native-Kampagne):
   // videoRender 300 + videoCompress 90 + videoUpload 330 (inkl. Bunny-
@@ -1454,6 +1459,11 @@ async function main(): Promise<void> {
       stopAccountCleanup();
     } catch (err) {
       log("error", "account cleanup stop failed:", err);
+    }
+    try {
+      stopAnalyticsRetention();
+    } catch (err) {
+      log("error", "analytics retention stop failed:", err);
     }
     if (preflightWorkerShutdown) {
       try {

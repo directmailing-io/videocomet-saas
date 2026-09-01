@@ -48,8 +48,27 @@ function readUtm(searchParams: URLSearchParams | null) {
   return { source, medium, campaign, content, term };
 }
 
+// Dedupe-Fenster pro Event-Typ (Doppelklicks / hektisches Scrollen dürfen
+// keine Duplikate erzeugen). Heartbeats haben ein eigenes 60-s-Intervall
+// und brauchen hier nicht extra deduplizieren.
+const DEDUPE_WINDOW_MS = 1000;
+const lastSentAt = new Map<string, number>();
+
 function send(payload: Record<string, unknown>) {
   try {
+    const eventKey = String(payload.event ?? "");
+    const meta = (payload.meta as Record<string, unknown> | undefined) ?? {};
+    // Klicks werden pro Ziel-Label dedupliziert, damit „Doppelklick auf
+    // 'Jetzt starten'" nur einmal zählt. Andere Events pro Event-Typ.
+    const dedupeKey =
+      eventKey === "click"
+        ? `click:${String(meta.label ?? "")}:${String(meta.href ?? "")}`
+        : eventKey;
+    const now = Date.now();
+    const last = lastSentAt.get(dedupeKey) ?? 0;
+    if (now - last < DEDUPE_WINDOW_MS) return;
+    lastSentAt.set(dedupeKey, now);
+
     const body = JSON.stringify(payload);
     if (typeof navigator.sendBeacon === "function") {
       const blob = new Blob([body], { type: "application/json" });
