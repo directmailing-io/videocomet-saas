@@ -328,6 +328,9 @@ export async function processIntroPreviewJob(job: {
           result = await generatePersonalizedWebcam({
             userId: run.userId,
             tag: `pv-${cand.leadId.slice(0, 8)}`,
+            leadId: cand.leadId,
+            runId: run.id,
+            campaignId: run.campaignId,
             substitutions: cand.substitutions,
             calibration,
             fishModelId,

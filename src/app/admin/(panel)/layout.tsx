@@ -9,6 +9,7 @@ function navKeyFromPathname(pathname: string | null): AdminNavKey {
   if (pathname.startsWith("/admin/domains")) return "domains";
   if (pathname.startsWith("/admin/email-outreach")) return "email";
   if (pathname.startsWith("/admin/meta-events")) return "meta-events";
+  if (pathname.startsWith("/admin/costs")) return "costs";
   if (pathname.startsWith("/admin/users")) return "users";
   if (pathname.startsWith("/admin/system")) return "system";
   if (pathname.startsWith("/admin/settings") || pathname.startsWith("/admin/einstellungen")) {

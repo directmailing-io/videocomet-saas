@@ -462,6 +462,9 @@ export async function introGenerationProcessor(
           generatePersonalizedWebcam({
             userId: run.userId,
             tag: leadId.slice(0, 8),
+            leadId,
+            runId,
+            campaignId: run.campaignId,
             substitutions: substResult.substitutions,
             calibration,
             fishModelId: introFishModelId,

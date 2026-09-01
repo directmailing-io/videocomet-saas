@@ -35,6 +35,11 @@ import {
   deleteIntroFileByUrl,
 } from "@/lib/bunny/intro-storage";
 import {
+  logCostEvent,
+  FISH_TTS_MICRO_EUR_PER_CHAR,
+  SYNCSO_MICRO_EUR_PER_SECOND,
+} from "@/lib/costs";
+import {
   DEFAULT_TTS_TEMPLATE,
   countGreetingMentions,
   parseGreetingTemplate,
@@ -120,6 +125,10 @@ export interface GeneratePersonalizedWebcamOpts {
   userId: string;
   /** Eindeutiger Tag für Dateinamen (Lead-ID oder Test-Tag). */
   tag: string;
+  /** Kontext für das Kosten-Log (optional, wird bei Preview-/Test-Läufen leer sein). */
+  leadId?: string | null;
+  runId?: string | null;
+  campaignId?: string | null;
   /**
    * Fertig geprüfte Substitutionen für die Template-Platzhalter. Enthält
    * `vorname` (für Templates mit `{vorname}`) ODER `anrede`+`nachname`
@@ -292,6 +301,9 @@ export async function generatePersonalizedWebcam(
   const tag = opts.tag.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
   // Bunny-Uploads, die im Erfolgs- wie Fehlerfall best-effort gelöscht werden.
   const uploadedUrls: string[] = [];
+  // Fish-TTS-Zeichen aufsummieren (Best-of-N + Fallback). Bei ttsOverride
+  // (A/B-Tests mit anderer TTS) wird NICHT gezählt.
+  let fishBillableChars = 0;
 
   try {
     // ── 1. TTS ──────────────────────────────────────────────────────────
@@ -319,6 +331,9 @@ export async function generatePersonalizedWebcam(
       // der Anrede-Dauern (Ausreißer = Nuschler oder Hänger).
       const formal = template.includes("{anrede}");
       const carrierText = `${text.trim()} ${formal ? "Schön, dass Sie reinschauen." : "Schön, dass du reinschaust."}`;
+      if (!opts.ttsOverride) {
+        fishBillableChars += TTS_CANDIDATES * carrierText.length;
+      }
       const settled = await Promise.allSettled(
         Array.from({ length: TTS_CANDIDATES }, () =>
           opts.ttsOverride
@@ -400,6 +415,7 @@ export async function generatePersonalizedWebcam(
         ttsDurMs = cutMsChosen;
       } else {
         // Alle Carrier-Kandidaten unbrauchbar → plain-TTS der puren Anrede.
+        if (!opts.ttsOverride) fishBillableChars += text.length;
         const buf = opts.ttsOverride
           ? await opts.ttsOverride(text)
           : await tts({
@@ -413,6 +429,7 @@ export async function generatePersonalizedWebcam(
         ttsDurMs = durSec * 1000;
       }
     } else {
+      if (!opts.ttsOverride) fishBillableChars += text.length;
       const ttsBuffer = opts.ttsOverride
         ? await opts.ttsOverride(text)
         : await tts({ text, referenceId: opts.fishModelId });
@@ -867,6 +884,33 @@ export async function generatePersonalizedWebcam(
         `extension=${(extensionMs / 1000).toFixed(3)}s ttsAt=${(ttsAtMs / 1000).toFixed(3)}s ` +
         `out=${outDurSec.toFixed(2)}s windowLufs=${windowLufs.toFixed(1)} (ref=${lufsRef})`,
     );
+
+    // Kosten-Log (fire-and-forget, ohne await auf die Pipeline zu blockieren):
+    // Fish-TTS (nur wenn nicht per Override umgeleitet) + sync.so Lipsync
+    // (immer, denn Override betrifft nur TTS). syncedDurSec = Länge des
+    // Lipsync-Outputs, das ist die Grundlage der sync.so-Abrechnung.
+    if (fishBillableChars > 0) {
+      void logCostEvent({
+        userId: opts.userId,
+        leadId: opts.leadId ?? null,
+        runId: opts.runId ?? null,
+        campaignId: opts.campaignId ?? null,
+        kind: "intro_tts",
+        amountMicroEur: fishBillableChars * FISH_TTS_MICRO_EUR_PER_CHAR,
+        meta: { chars: fishBillableChars },
+      });
+    }
+    if (syncedDurSec !== null && syncedDurSec > 0) {
+      void logCostEvent({
+        userId: opts.userId,
+        leadId: opts.leadId ?? null,
+        runId: opts.runId ?? null,
+        campaignId: opts.campaignId ?? null,
+        kind: "intro_lipsync",
+        amountMicroEur: Math.round(syncedDurSec * SYNCSO_MICRO_EUR_PER_SECOND),
+        meta: { seconds: Number(syncedDurSec.toFixed(3)) },
+      });
+    }
 
     // Netto-Zeitversatz des Original-Contents: positiv = vorne getrimmt
     // (Content früher), negativ = vorne verlängert (Content später).

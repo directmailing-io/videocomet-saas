@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, smallint, real, doublePrecision, jsonb, numeric, pgEnum, index, unique, uniqueIndex, bigserial, date, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, boolean, integer, smallint, real, doublePrecision, jsonb, numeric, pgEnum, index, unique, uniqueIndex, bigserial, bigint, date, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { CampaignThumbnailImage } from "@/lib/segments/types";
 
@@ -1558,6 +1558,41 @@ export const creditTransactions = pgTable(
 
 export type CreditTransaction = typeof creditTransactions.$inferSelect;
 export type NewCreditTransaction = typeof creditTransactions.$inferInsert;
+
+// ── Kosten-Ledger (Migration 0071) ────────────────────────────────────────
+// Pro externen API-Call (Fish TTS, sync.so Lipsync, …) loggen wir hier den
+// Betrag in Micro-EUR (1_000_000 = 1 €). Micro statt Cent, damit Sub-Cent-
+// Preise (Fish: 0,0015 € pro Anrede) ohne Rundung summiert werden. Rein
+// informell — beeinflusst NICHTS am Credit-Verbrauch oder Billing.
+export const costEvents = pgTable(
+  "cost_events",
+  {
+    id: bigserial("id", { mode: "bigint" }).primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    runId: uuid("run_id").references(() => runs.id, { onDelete: "set null" }),
+    campaignId: uuid("campaign_id").references(() => campaigns.id, {
+      onDelete: "set null",
+    }),
+    /** 'intro_tts' (Fish Audio) | 'intro_lipsync' (sync.so) | 'other'. */
+    kind: text("kind").notNull(),
+    /** Betrag in Micro-EUR (1_000_000 = 1 €), immer >= 0. */
+    amountMicroEur: bigint("amount_micro_eur", { mode: "number" }).notNull(),
+    /** Freies Meta, z.B. {chars: 156} oder {seconds: 8.4}. */
+    meta: jsonb("meta").notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    byUser: index("cost_events_user_ts_idx").on(t.userId, t.createdAt),
+    byRun: index("cost_events_run_idx").on(t.runId),
+    byCampaign: index("cost_events_campaign_ts_idx").on(t.campaignId, t.createdAt),
+    byKind: index("cost_events_kind_ts_idx").on(t.kind, t.createdAt),
+  }),
+);
+export type CostEvent = typeof costEvents.$inferSelect;
+export type NewCostEvent = typeof costEvents.$inferInsert;
 
 // ── Stripe-Webhook-Events (Migration 0027) ───────────────────────────────
 // Idempotenz-Tabelle gegen Stripe-Webhook-Replay. Stripe sendet bei
