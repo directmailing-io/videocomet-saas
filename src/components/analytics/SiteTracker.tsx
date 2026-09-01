@@ -94,6 +94,20 @@ export function SiteTracker() {
     });
   }, [pathname, searchParams]);
 
+  // Heartbeat alle 30s, solange der Tab sichtbar ist — damit „Live jetzt"
+  // auch dann korrekt bleibt, wenn ein Besucher die Seite lange offen hat
+  // ohne zu klicken. Kein Traffic-Overhead beim Server (kleiner INSERT).
+  React.useEffect(() => {
+    if (!isMarketingRef.current) return;
+    const id = window.setInterval(() => {
+      const sid = sidRef.current;
+      if (!sid) return;
+      if (document.visibilityState !== "visible") return;
+      send({ sessionId: sid, event: "heartbeat", path: pathname });
+    }, 30_000);
+    return () => window.clearInterval(id);
+  }, [pathname]);
+
   // Klick-Tracking auf <a> und <button> (bubbling).
   React.useEffect(() => {
     if (!isMarketingRef.current) return;
