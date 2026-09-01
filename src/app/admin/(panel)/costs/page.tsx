@@ -1,25 +1,23 @@
 /**
- * Admin-Kosten-Übersicht: was uns externe APIs pro Video wirklich kosten
- * (Fish TTS + sync.so Lipsync — pro Job-Ende geloggt via logCostEvent).
+ * Admin-Kosten-Übersicht: zeigt einfach, was wir an externen API-Kosten
+ * verbrennen. Keine Marge, keine Auslegung — nur Preise-Referenz und
+ * tageweise Kostenaufstellung.
  *
- * Diese Seite ist rein informell und beeinflusst NICHTS am Credit-System
- * oder Billing. Ziel: sehen, wo die Marge pro Kampagne/Lead liegt, und
- * Ausrutscher (z.B. sync.so-Job mit sehr langem Segment) früh erkennen.
+ * Preise sollten monatlich verifiziert werden (Fish/sync.so-Anbieter-
+ * Websites) und danach in `src/lib/costs.ts` aktualisiert werden.
  */
 
-import Link from "next/link";
-import { desc, eq, inArray, sql } from "drizzle-orm";
-import { Wallet, Zap, MicVocal } from "lucide-react";
+import { desc, sql } from "drizzle-orm";
+import { ExternalLink, Wallet } from "lucide-react";
 import { db } from "@/lib/db";
-import {
-  campaigns,
-  costEvents,
-  creditTransactions,
-  users,
-} from "@/lib/db/schema";
+import { costEvents, campaigns, leads } from "@/lib/db/schema";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatMicroEurCompact } from "@/lib/costs";
+import {
+  formatMicroEurCompact,
+  FISH_TTS_MICRO_EUR_PER_CHAR,
+  SYNCSO_MICRO_EUR_PER_SECOND,
+} from "@/lib/costs";
 
 export const dynamic = "force-dynamic";
 
@@ -29,255 +27,319 @@ const KIND_LABEL: Record<string, string> = {
   other: "Sonstiges",
 };
 
+const PRICE_LAST_CHECKED = "2026-09-01";
+
 async function loadTotals() {
-  const rows = await db.execute<{
-    window: string;
-    kind: string;
-    total: string;
-  }>(sql`
+  const rows = await db
+    .select({
+      kind: costEvents.kind,
+      today: sql<string>`COALESCE(SUM(CASE WHEN ${costEvents.createdAt} > now() - interval '24 hours' THEN ${costEvents.amountMicroEur} ELSE 0 END), 0)::text`,
+      d7: sql<string>`COALESCE(SUM(CASE WHEN ${costEvents.createdAt} > now() - interval '7 days' THEN ${costEvents.amountMicroEur} ELSE 0 END), 0)::text`,
+      d30: sql<string>`COALESCE(SUM(CASE WHEN ${costEvents.createdAt} > now() - interval '30 days' THEN ${costEvents.amountMicroEur} ELSE 0 END), 0)::text`,
+    })
+    .from(costEvents)
+    .where(sql`${costEvents.createdAt} > now() - interval '30 days'`)
+    .groupBy(costEvents.kind);
+
+  const totals = { today: 0, d7: 0, d30: 0 };
+  const byKind: Record<string, { today: number; d7: number; d30: number }> = {};
+  for (const r of rows) {
+    const today = Number(r.today);
+    const d7 = Number(r.d7);
+    const d30 = Number(r.d30);
+    totals.today += today;
+    totals.d7 += d7;
+    totals.d30 += d30;
+    byKind[r.kind] = { today, d7, d30 };
+  }
+  return { totals, byKind };
+}
+
+async function loadDailyBreakdown() {
+  const rows = await db.execute<{ day: string; kind: string; total: string }>(sql`
     SELECT
-      CASE
-        WHEN ${costEvents.createdAt} > now() - interval '24 hours' THEN '24h'
-        WHEN ${costEvents.createdAt} > now() - interval '7 days'   THEN '7d'
-        ELSE '30d'
-      END AS window,
+      to_char(date_trunc('day', ${costEvents.createdAt}), 'YYYY-MM-DD') AS day,
       ${costEvents.kind} AS kind,
       SUM(${costEvents.amountMicroEur})::text AS total
     FROM ${costEvents}
     WHERE ${costEvents.createdAt} > now() - interval '30 days'
     GROUP BY 1, 2
+    ORDER BY 1 DESC, 2
   `);
-  const map: Record<"24h" | "7d" | "30d", Record<string, number>> = {
-    "24h": {},
-    "7d": {},
-    "30d": {},
-  };
-  const rowList = (rows as unknown as Array<{ window: string; kind: string; total: string }>);
-  for (const r of rowList) {
-    const win = r.window as "24h" | "7d" | "30d";
-    map[win][r.kind] = Number(r.total);
+  const list = rows as unknown as Array<{ day: string; kind: string; total: string }>;
+  const map = new Map<string, Record<string, number>>();
+  for (const r of list) {
+    if (!map.has(r.day)) map.set(r.day, {});
+    map.get(r.day)![r.kind] = Number(r.total);
   }
-  // 7d = 24h + 7d-only rows; 30d = alles.
-  const kinds = new Set<string>();
-  (["24h", "7d", "30d"] as const).forEach((w) => {
-    Object.keys(map[w]).forEach((k) => kinds.add(k));
-  });
-  const acc: Record<"24h" | "7d" | "30d", Record<string, number>> = {
-    "24h": {},
-    "7d": {},
-    "30d": {},
-  };
-  Array.from(kinds).forEach((k) => {
-    const c24 = map["24h"][k] ?? 0;
-    const c7 = map["7d"][k] ?? 0;
-    const c30 = map["30d"][k] ?? 0;
-    acc["24h"][k] = c24;
-    acc["7d"][k] = c24 + c7;
-    acc["30d"][k] = c24 + c7 + c30;
-  });
-  return acc;
-}
-
-async function loadTopLeads() {
-  const rows = await db
-    .select({
-      leadId: costEvents.leadId,
-      total: sql<string>`SUM(${costEvents.amountMicroEur})::text`,
-    })
-    .from(costEvents)
-    .where(sql`${costEvents.leadId} IS NOT NULL AND ${costEvents.createdAt} > now() - interval '30 days'`)
-    .groupBy(costEvents.leadId)
-    .orderBy(sql`SUM(${costEvents.amountMicroEur}) DESC`)
-    .limit(10);
-  return rows.map((r) => ({
-    leadId: r.leadId!,
-    total: Number(r.total),
+  return Array.from(map.entries()).map(([day, kinds]) => ({
+    day,
+    kinds,
+    total: Object.values(kinds).reduce((s, v) => s + v, 0),
   }));
 }
 
-async function loadCampaignMargin() {
-  // Verbrauchte Credits pro Kampagne (video_charge, negativer Delta).
-  const creditRows = await db
+async function loadRecentEvents() {
+  return db
     .select({
-      campaignId: campaigns.id,
+      id: costEvents.id,
+      kind: costEvents.kind,
+      amountMicroEur: costEvents.amountMicroEur,
+      meta: costEvents.meta,
+      createdAt: costEvents.createdAt,
+      leadId: costEvents.leadId,
+      leadRowIndex: leads.rowIndex,
+      leadEmail: leads.normalizedEmail,
+      campaignId: costEvents.campaignId,
       campaignName: campaigns.name,
-      userEmail: users.email,
-      creditsSpent: sql<string>`ABS(SUM(${creditTransactions.delta}))::text`,
     })
-    .from(creditTransactions)
-    .innerJoin(campaigns, sql`${creditTransactions.runId} IN (SELECT id FROM runs WHERE runs.campaign_id = ${campaigns.id})`)
-    .innerJoin(users, eq(users.id, campaigns.userId))
-    .where(sql`${creditTransactions.kind} = 'video_charge' AND ${creditTransactions.createdAt} > now() - interval '30 days'`)
-    .groupBy(campaigns.id, campaigns.name, users.email)
-    .orderBy(desc(sql`ABS(SUM(${creditTransactions.delta}))`))
-    .limit(15);
+    .from(costEvents)
+    .leftJoin(leads, sql`${leads.id} = ${costEvents.leadId}`)
+    .leftJoin(campaigns, sql`${campaigns.id} = ${costEvents.campaignId}`)
+    .orderBy(desc(costEvents.createdAt))
+    .limit(200);
+}
 
-  const campaignIds = creditRows.map((r) => r.campaignId);
-  const costMap = new Map<string, number>();
-  if (campaignIds.length > 0) {
-    const costRows = await db
-      .select({
-        campaignId: costEvents.campaignId,
-        total: sql<string>`SUM(${costEvents.amountMicroEur})::text`,
-      })
-      .from(costEvents)
-      .where(
-        sql`${inArray(costEvents.campaignId, campaignIds)} AND ${costEvents.createdAt} > now() - interval '30 days'`,
-      )
-      .groupBy(costEvents.campaignId);
-    for (const r of costRows) {
-      if (r.campaignId) costMap.set(r.campaignId, Number(r.total));
-    }
-  }
-
-  return creditRows.map((r) => {
-    const creditsSpent = Number(r.creditsSpent);
-    const revenueMicroEur = creditsSpent * 1_000_000; // 1 Credit = 1 €
-    const costMicroEur = costMap.get(r.campaignId) ?? 0;
-    return {
-      campaignId: r.campaignId,
-      campaignName: r.campaignName ?? "(ohne Name)",
-      userEmail: r.userEmail,
-      creditsSpent,
-      revenueMicroEur,
-      costMicroEur,
-      marginMicroEur: revenueMicroEur - costMicroEur,
-    };
-  });
+function fmtTime(d: Date) {
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
+function fmtDay(day: string) {
+  const d = new Date(day);
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    weekday: "short",
+  }).format(d);
 }
 
 export default async function AdminCostsPage() {
-  const [totals, topLeads, campaignMargin] = await Promise.all([
+  const [{ totals, byKind }, daily, recent] = await Promise.all([
     loadTotals(),
-    loadTopLeads(),
-    loadCampaignMargin(),
+    loadDailyBreakdown(),
+    loadRecentEvents(),
   ]);
-
-  const windowsList: Array<"24h" | "7d" | "30d"> = ["24h", "7d", "30d"];
-  const totalByWindow = (w: "24h" | "7d" | "30d") =>
-    Object.values(totals[w]).reduce((s, v) => s + v, 0);
+  const kindKeys = Array.from(new Set(daily.flatMap((d) => Object.keys(d.kinds))));
 
   return (
     <>
       <PageHeader
         title="Kosten"
-        subtitle="Was uns externe APIs pro Video kosten — Fish TTS + sync.so Lipsync werden pro Job-Ende geloggt."
+        subtitle={`Was externe APIs pro Video kosten. Preise Stand ${PRICE_LAST_CHECKED} — bitte monatlich prüfen.`}
       />
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {windowsList.map((w) => (
-          <Card key={w}>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm font-medium text-ink-muted">
-                <Wallet className="size-4" />
-                Kosten {w === "24h" ? "letzte 24 h" : w === "7d" ? "letzte 7 Tage" : "letzte 30 Tage"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold tabular-nums text-ink">
-                {formatMicroEurCompact(totalByWindow(w))}
-              </p>
-              <ul className="mt-3 space-y-1 text-xs text-ink-muted">
-                {Object.entries(totals[w]).map(([kind, v]) => (
-                  <li key={kind} className="flex justify-between">
-                    <span className="truncate">{KIND_LABEL[kind] ?? kind}</span>
-                    <span className="tabular-nums">{formatMicroEurCompact(v)}</span>
-                  </li>
-                ))}
-                {Object.keys(totals[w]).length === 0 && (
-                  <li className="italic">Noch keine Kosten geloggt.</li>
-                )}
-              </ul>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="size-4 text-brand-deep" />
-              Marge pro Kampagne (letzte 30 Tage)
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-ink-muted">
+              <Wallet className="size-4" />
+              Kosten heute
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {campaignMargin.length === 0 ? (
-              <p className="text-sm text-ink-muted italic">
-                Noch keine bezahlten Videos in den letzten 30 Tagen.
-              </p>
-            ) : (
-              <ul className="divide-y divide-line-soft">
-                {campaignMargin.map((c) => (
-                  <li key={c.campaignId} className="grid grid-cols-[1fr_auto] gap-4 py-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-ink">
-                        {c.campaignName}
-                      </p>
-                      <p className="truncate text-xs text-ink-muted">
-                        {c.userEmail} · {c.creditsSpent} Credits verbraucht
-                      </p>
-                    </div>
-                    <div className="text-right tabular-nums">
-                      <p className="text-sm font-semibold text-ink">
-                        {formatMicroEurCompact(c.marginMicroEur)}
-                      </p>
-                      <p className="text-xs text-ink-muted">
-                        {formatMicroEurCompact(c.revenueMicroEur)} − {formatMicroEurCompact(c.costMicroEur)}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <p className="text-2xl font-bold tabular-nums text-ink">
+              {formatMicroEurCompact(totals.today)}
+            </p>
+            <ul className="mt-2 space-y-0.5 text-xs text-ink-muted">
+              {Object.entries(byKind).map(([kind, v]) => (
+                <li key={kind} className="flex justify-between">
+                  <span className="truncate">{KIND_LABEL[kind] ?? kind}</span>
+                  <span className="tabular-nums">{formatMicroEurCompact(v.today)}</span>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MicVocal className="size-4 text-brand-deep" />
-              Teuerste Leads (letzte 30 Tage)
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-ink-muted">
+              <Wallet className="size-4" />
+              Letzte 7 Tage
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {topLeads.length === 0 ? (
-              <p className="text-sm text-ink-muted italic">
-                Noch keine Lead-Kosten geloggt.
-              </p>
-            ) : (
-              <ul className="divide-y divide-line-soft">
-                {topLeads.map((l) => (
-                  <li
-                    key={l.leadId}
-                    className="grid grid-cols-[1fr_auto] gap-4 py-2 text-sm"
-                  >
-                    <Link
-                      href={`/admin/users?leadId=${l.leadId}`}
-                      className="truncate font-mono text-xs text-brand-deep hover:underline"
-                      title={l.leadId}
-                    >
-                      {l.leadId.slice(0, 8)}…{l.leadId.slice(-4)}
-                    </Link>
-                    <span className="tabular-nums text-ink">
-                      {formatMicroEurCompact(l.total)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <p className="text-2xl font-bold tabular-nums text-ink">
+              {formatMicroEurCompact(totals.d7)}
+            </p>
+            <ul className="mt-2 space-y-0.5 text-xs text-ink-muted">
+              {Object.entries(byKind).map(([kind, v]) => (
+                <li key={kind} className="flex justify-between">
+                  <span className="truncate">{KIND_LABEL[kind] ?? kind}</span>
+                  <span className="tabular-nums">{formatMicroEurCompact(v.d7)}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-ink-muted">
+              <Wallet className="size-4" />
+              Letzte 30 Tage
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold tabular-nums text-ink">
+              {formatMicroEurCompact(totals.d30)}
+            </p>
+            <ul className="mt-2 space-y-0.5 text-xs text-ink-muted">
+              {Object.entries(byKind).map(([kind, v]) => (
+                <li key={kind} className="flex justify-between">
+                  <span className="truncate">{KIND_LABEL[kind] ?? kind}</span>
+                  <span className="tabular-nums">{formatMicroEurCompact(v.d30)}</span>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       </div>
 
-      <div className="mt-6 rounded-squircle-md bg-surface p-5 shadow-card">
-        <h3 className="mb-2 text-sm font-semibold text-ink">Preis-Annahmen</h3>
+      <div className="mb-6 rounded-squircle-md bg-surface p-5 shadow-card">
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+          Preis-Referenz (Stand {PRICE_LAST_CHECKED})
+        </h3>
         <ul className="space-y-1 text-xs text-ink-muted">
-          <li>Fish Audio s2.1-pro: 15 € / 1M Zeichen (~0,2 Cent pro KI-Begrüßung)</li>
-          <li>sync.so lipsync-2: 0,06 € pro Sekunde generiertes Video (typisch 30–60 Cent pro Intro)</li>
-          <li>Bunny-Storage/-CDN + Server-Fixkosten sind NICHT enthalten (fließen als Aggregat in die Monatsrechnung).</li>
+          <li>
+            <strong>Fish Audio s2.1-pro:</strong> 15 € pro 1 Mio Zeichen (=
+            {" "}
+            {FISH_TTS_MICRO_EUR_PER_CHAR} Micro-EUR pro Zeichen) —{" "}
+            <a
+              href="https://fish.audio/pricing"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-brand-deep hover:underline"
+            >
+              prüfen <ExternalLink className="size-3" />
+            </a>
+          </li>
+          <li>
+            <strong>sync.so lipsync-2:</strong> 0,06 € pro Sekunde generiertes
+            Video (= {SYNCSO_MICRO_EUR_PER_SECOND} Micro-EUR pro Sekunde) —{" "}
+            <a
+              href="https://sync.so/pricing"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-brand-deep hover:underline"
+            >
+              prüfen <ExternalLink className="size-3" />
+            </a>
+          </li>
         </ul>
+        <p className="mt-3 text-xs text-ink-muted">
+          Nach Änderung: Werte in <code>src/lib/costs.ts</code> anpassen und{" "}
+          <code>PRICE_LAST_CHECKED</code> auf dieser Seite hochsetzen.
+        </p>
       </div>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Kosten pro Tag (letzte 30 Tage)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {daily.length === 0 ? (
+            <p className="text-sm italic text-ink-muted">
+              Noch keine Kosten geloggt. Sobald jemand ein Video mit KI-
+              Begrüßung generiert, tauchen hier Zeilen auf.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line-soft text-left text-xs text-ink-muted">
+                    <th className="py-2 pr-4">Tag</th>
+                    {kindKeys.map((k) => (
+                      <th key={k} className="py-2 pr-4 text-right">
+                        {KIND_LABEL[k] ?? k}
+                      </th>
+                    ))}
+                    <th className="py-2 text-right">Gesamt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {daily.map((row) => (
+                    <tr key={row.day} className="border-b border-line-soft/50">
+                      <td className="py-1.5 pr-4 text-ink">{fmtDay(row.day)}</td>
+                      {kindKeys.map((k) => (
+                        <td key={k} className="py-1.5 pr-4 text-right tabular-nums text-ink">
+                          {formatMicroEurCompact(row.kinds[k] ?? 0)}
+                        </td>
+                      ))}
+                      <td className="py-1.5 text-right font-semibold tabular-nums text-ink">
+                        {formatMicroEurCompact(row.total)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Letzte 200 Kosten-Events</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {recent.length === 0 ? (
+            <p className="text-sm italic text-ink-muted">Noch nichts geloggt.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-line-soft text-left text-ink-muted">
+                    <th className="py-2 pr-3">Zeit</th>
+                    <th className="py-2 pr-3">Art</th>
+                    <th className="py-2 pr-3">Details</th>
+                    <th className="py-2 pr-3">Lead</th>
+                    <th className="py-2 pr-3">Kampagne</th>
+                    <th className="py-2 text-right">Kosten</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((e) => {
+                    const meta = (e.meta as Record<string, unknown>) ?? {};
+                    const details =
+                      e.kind === "intro_tts"
+                        ? `${meta.chars ?? "?"} Zeichen`
+                        : e.kind === "intro_lipsync"
+                          ? `${meta.seconds ?? "?"} s Video`
+                          : JSON.stringify(meta).slice(0, 60);
+                    const leadName =
+                      e.leadEmail ||
+                      (e.leadRowIndex != null ? `#${e.leadRowIndex}` : "") ||
+                      "–";
+                    return (
+                      <tr key={String(e.id)} className="border-b border-line-soft/50">
+                        <td className="py-1.5 pr-3 tabular-nums text-ink-muted">
+                          {fmtTime(e.createdAt)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-ink">
+                          {KIND_LABEL[e.kind] ?? e.kind}
+                        </td>
+                        <td className="py-1.5 pr-3 text-ink-muted">{details}</td>
+                        <td className="py-1.5 pr-3 truncate text-ink" title={leadName}>
+                          {leadName}
+                        </td>
+                        <td className="py-1.5 pr-3 truncate text-ink" title={e.campaignName ?? ""}>
+                          {e.campaignName ?? "–"}
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums font-semibold text-ink">
+                          {formatMicroEurCompact(e.amountMicroEur)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </>
   );
 }
