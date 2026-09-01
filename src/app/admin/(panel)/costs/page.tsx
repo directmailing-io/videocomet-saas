@@ -8,7 +8,7 @@
  */
 
 import Link from "next/link";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { Wallet, Zap, MicVocal } from "lucide-react";
 import { db } from "@/lib/db";
 import {
@@ -121,7 +121,9 @@ async function loadCampaignMargin() {
         total: sql<string>`SUM(${costEvents.amountMicroEur})::text`,
       })
       .from(costEvents)
-      .where(sql`${costEvents.campaignId} = ANY(${campaignIds}) AND ${costEvents.createdAt} > now() - interval '30 days'`)
+      .where(
+        sql`${inArray(costEvents.campaignId, campaignIds)} AND ${costEvents.createdAt} > now() - interval '30 days'`,
+      )
       .groupBy(costEvents.campaignId);
     for (const r of costRows) {
       if (r.campaignId) costMap.set(r.campaignId, Number(r.total));
