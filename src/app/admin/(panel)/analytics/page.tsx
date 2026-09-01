@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 async function loadKpis() {
-  const [row] = await db.execute<{
+  const rows = await db.execute<{
     live_sessions: string;
     views_24h: string;
     views_7d: string;
@@ -45,7 +45,7 @@ async function loadKpis() {
       (SELECT COUNT(*)::text FROM ${siteEvents}
         WHERE event_name = 'click' AND created_at > now() - interval '24 hours') AS clicks_24h
   `);
-  const first = (row as unknown as Array<Record<string, string>>)[0] ?? {};
+  const first = (rows as unknown as Array<Record<string, string>>)[0] ?? {};
   return {
     liveSessions: Number(first.live_sessions ?? 0),
     views: {
