@@ -14,7 +14,6 @@ import {
   Globe,
   Target,
   Wallet,
-  BarChart3,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +40,6 @@ export type AdminNavKey =
   | "domains"
   | "email"
   | "meta-events"
-  | "analytics"
   | "costs"
   | "system"
   | "settings";
@@ -74,7 +72,6 @@ const NAV: NavItem[] = [
   { key: "domains", label: "Domains", href: "/admin/domains", icon: Globe },
   { key: "email", label: "E-Mail-Outreach", href: "/admin/email-outreach", icon: Send },
   { key: "meta-events", label: "Meta Pixel", href: "/admin/meta-events", icon: Target },
-  { key: "analytics", label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   { key: "costs", label: "Kosten", href: "/admin/costs", icon: Wallet },
   { key: "system", label: "System", href: "/admin/system", icon: ServerCog },
   { key: "settings", label: "Einstellungen", href: "/admin/settings", icon: Settings },

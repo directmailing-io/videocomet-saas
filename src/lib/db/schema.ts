@@ -1594,40 +1594,6 @@ export const costEvents = pgTable(
 export type CostEvent = typeof costEvents.$inferSelect;
 export type NewCostEvent = typeof costEvents.$inferInsert;
 
-// ── Site-Analytics-Events (Migration 0072) ────────────────────────────────
-// Rohes First-Party-Tracking für videocomet.de (Marketing-Website):
-// PageViews + Klicks, ohne Cookies. Session-ID kommt aus dem Browser-
-// sessionStorage, IP wird gehasht gespeichert. Zweck: schnelle Admin-
-// Übersicht, kein Marketing-Zweck → kein Consent erforderlich.
-export const siteEvents = pgTable(
-  "site_events",
-  {
-    id: bigserial("id", { mode: "bigint" }).primaryKey(),
-    sessionId: text("session_id").notNull(),
-    eventName: text("event_name").notNull(),
-    path: text("path"),
-    referrer: text("referrer"),
-    utmSource: text("utm_source"),
-    utmMedium: text("utm_medium"),
-    utmCampaign: text("utm_campaign"),
-    utmContent: text("utm_content"),
-    utmTerm: text("utm_term"),
-    meta: jsonb("meta").notNull().default(sql`'{}'::jsonb`),
-    ipHash: text("ip_hash"),
-    userAgent: text("user_agent"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => ({
-    byTs: index("site_events_ts_idx").on(t.createdAt),
-    bySession: index("site_events_session_ts_idx").on(t.sessionId, t.createdAt),
-    byName: index("site_events_name_ts_idx").on(t.eventName, t.createdAt),
-  }),
-);
-export type SiteEvent = typeof siteEvents.$inferSelect;
-export type NewSiteEvent = typeof siteEvents.$inferInsert;
-
 // ── Stripe-Webhook-Events (Migration 0027) ───────────────────────────────
 // Idempotenz-Tabelle gegen Stripe-Webhook-Replay. Stripe sendet bei
 // Timeouts denselben Event mehrfach — wir muessen jeden Event genau einmal

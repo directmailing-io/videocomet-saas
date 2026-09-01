@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { CookieBanner } from "@/components/consent/CookieBanner";
 import { MetaPixelLoader } from "@/components/meta/meta-pixel-loader";
 import { CONSENT_COOKIE, parseConsentCookie } from "@/components/consent/consent-parse";
-import { SiteTracker } from "@/components/analytics/SiteTracker";
 import { fontClasses } from "@/lib/fonts";
 import "./globals.css";
 
@@ -54,9 +52,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             initialMarketingConsent={marketingConsent}
           />
         ) : null}
-        <Suspense fallback={null}>
-          <SiteTracker />
-        </Suspense>
       </body>
     </html>
   );
