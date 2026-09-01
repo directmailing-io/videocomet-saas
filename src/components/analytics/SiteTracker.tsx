@@ -104,7 +104,7 @@ export function SiteTracker() {
       if (!sid) return;
       if (document.visibilityState !== "visible") return;
       send({ sessionId: sid, event: "heartbeat", path: pathname });
-    }, 30_000);
+    }, 60_000);
     return () => window.clearInterval(id);
   }, [pathname]);
 

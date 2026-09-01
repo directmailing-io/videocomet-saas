@@ -136,6 +136,9 @@ async function loadTopClicks() {
 }
 
 async function loadRecent() {
+  // Heartbeats bewusst aus der Liste ausgeschlossen — sie sind nur ein
+  // technisches Signal für die „Live jetzt"-Kennzahl und würden die
+  // Übersicht sonst mit Rauschen fluten.
   return db
     .select({
       id: siteEvents.id,
@@ -149,6 +152,7 @@ async function loadRecent() {
       createdAt: siteEvents.createdAt,
     })
     .from(siteEvents)
+    .where(sql`${siteEvents.eventName} <> 'heartbeat'`)
     .orderBy(desc(siteEvents.createdAt))
     .limit(200);
 }
