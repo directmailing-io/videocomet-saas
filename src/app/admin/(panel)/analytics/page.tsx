@@ -11,8 +11,10 @@ import { db } from "@/lib/db";
 import { siteEvents } from "@/lib/db/schema";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AutoRefresh } from "@/components/analytics/AutoRefresh";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 async function loadKpis() {
   const [row] = await db.execute<{
@@ -179,6 +181,7 @@ export default async function AdminAnalyticsPage() {
       <PageHeader
         title="Analytics"
         subtitle="Eigene Übersicht für videocomet.de — PageViews, Klicks, UTMs. Ohne Cookies, ohne Drittanbieter."
+        actions={<AutoRefresh intervalMs={5000} />}
       />
 
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">

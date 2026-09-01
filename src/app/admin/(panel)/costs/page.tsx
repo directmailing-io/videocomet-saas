@@ -17,7 +17,10 @@ import {
   formatMicroEurCompact,
   FISH_TTS_MICRO_EUR_PER_CHAR,
   SYNCSO_MICRO_EUR_PER_SECOND,
+  INFRA_MONTHLY_MICRO_EUR,
+  INFRA_COSTS_LAST_CHECKED,
 } from "@/lib/costs";
+import { AutoRefresh } from "@/components/analytics/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +133,7 @@ export default async function AdminCostsPage() {
       <PageHeader
         title="Kosten"
         subtitle={`Was externe APIs pro Video kosten. Preise Stand ${PRICE_LAST_CHECKED} — bitte monatlich prüfen.`}
+        actions={<AutoRefresh intervalMs={10000} />}
       />
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -198,9 +202,51 @@ export default async function AdminCostsPage() {
         </Card>
       </div>
 
-      <div className="mb-6 rounded-squircle-md bg-surface p-5 shadow-card">
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="rounded-squircle-md bg-surface p-5 shadow-card">
+          <h3 className="mb-3 text-sm font-semibold text-ink">
+            Fixkosten pro Monat (Schätzung, Stand {INFRA_COSTS_LAST_CHECKED})
+          </h3>
+          <ul className="space-y-1.5 text-sm">
+            <li className="flex items-baseline justify-between">
+              <span className="text-ink-muted">Hetzner CX53 (Server + Backups)</span>
+              <span className="tabular-nums font-semibold text-ink">
+                {formatMicroEurCompact(INFRA_MONTHLY_MICRO_EUR.server)}
+              </span>
+            </li>
+            <li className="flex items-baseline justify-between">
+              <span className="text-ink-muted">Bunny (Stream + Storage + CDN)</span>
+              <span className="tabular-nums font-semibold text-ink">
+                ~{formatMicroEurCompact(INFRA_MONTHLY_MICRO_EUR.bunny)}
+              </span>
+            </li>
+            <li className="flex items-baseline justify-between">
+              <span className="text-ink-muted">Resend (System-Mails, freier Tarif)</span>
+              <span className="tabular-nums font-semibold text-ink">
+                {formatMicroEurCompact(INFRA_MONTHLY_MICRO_EUR.resend)}
+              </span>
+            </li>
+            <li className="mt-2 flex items-baseline justify-between border-t border-line-soft pt-2">
+              <span className="font-semibold text-ink">Gesamt Fixkosten</span>
+              <span className="tabular-nums font-bold text-ink">
+                {formatMicroEurCompact(
+                  INFRA_MONTHLY_MICRO_EUR.server +
+                    INFRA_MONTHLY_MICRO_EUR.bunny +
+                    INFRA_MONTHLY_MICRO_EUR.resend,
+                )}
+              </span>
+            </li>
+          </ul>
+          <p className="mt-3 text-xs text-ink-muted">
+            Fixkosten laufen unabhängig vom Video-Volumen. Bunny ist geschätzt —
+            exakte Zahl im Bunny-Portal. Anpassen in{" "}
+            <code>src/lib/costs.ts</code>.
+          </p>
+        </div>
+
+        <div className="rounded-squircle-md bg-surface p-5 shadow-card">
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-          Preis-Referenz (Stand {PRICE_LAST_CHECKED})
+          Preis-Referenz externe APIs (Stand {PRICE_LAST_CHECKED})
         </h3>
         <ul className="space-y-1 text-xs text-ink-muted">
           <li>
@@ -233,6 +279,11 @@ export default async function AdminCostsPage() {
           Nach Änderung: Werte in <code>src/lib/costs.ts</code> anpassen und{" "}
           <code>PRICE_LAST_CHECKED</code> auf dieser Seite hochsetzen.
         </p>
+        <p className="mt-2 text-xs text-ink-muted">
+          Weitere API-Kosten pro Video gibt es aktuell nicht (kein OpenAI /
+          Anthropic / Azure). Google Docs / Sheets / Fonts sind kostenlos.
+        </p>
+        </div>
       </div>
 
       <Card className="mb-6">

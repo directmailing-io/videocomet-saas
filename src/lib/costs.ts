@@ -23,6 +23,24 @@ export const FISH_TTS_MICRO_EUR_PER_CHAR = 15;
 /** sync.so lipsync-2: 0,06 € / s → 60_000 Micro-EUR pro Sekunde. */
 export const SYNCSO_MICRO_EUR_PER_SECOND = 60_000;
 
+/**
+ * Fixkosten (Infrastruktur, unabhängig vom Video-Volumen). Diese Zahlen
+ * fließen NICHT ins Cost-Event-Ledger — sie werden nur im Admin-Dashboard
+ * als monatliche Referenz angezeigt. Nach Änderung (Server-Upgrade, Bunny-
+ * Rechnung stark abweichend) hier anpassen und `INFRA_COSTS_LAST_CHECKED`
+ * hochsetzen.
+ */
+export const INFRA_MONTHLY_MICRO_EUR = {
+  /** Hetzner CX53 (App + Worker + Postgres + Redis) inkl. Backups. */
+  server: 52 * MICRO_EUR_PER_EUR,
+  /** Bunny Stream + Storage + CDN (Schätzung — Bunny-Portal für exakt). */
+  bunny: 15 * MICRO_EUR_PER_EUR,
+  /** Resend (System-Mails, Auth-Verify etc.) — freier Tarif reicht bis 3k/Monat. */
+  resend: 0,
+} as const;
+
+export const INFRA_COSTS_LAST_CHECKED = "2026-09-01";
+
 export type CostKind = "intro_tts" | "intro_lipsync" | "other";
 
 export interface LogCostEventInput {
