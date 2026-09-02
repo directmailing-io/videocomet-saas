@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toaster";
 import { runStatusLabel, runStatusVariant } from "@/lib/run-status";
 import { DangerZone } from "./danger-zone";
+import { useAdminReauth } from "@/components/admin/reauth-dialog";
 import { RunLeadsDialog } from "./run-leads-panel";
 
 export interface AdminUserDetail {
@@ -111,6 +112,7 @@ export function UserDetailClient({
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
+  const reauth = useAdminReauth();
   const [user, setUser] = React.useState<AdminUserDetail>(initialUser);
   const [tab, setTab] = React.useState(
     ["profile", "campaigns", "credits", "security", "activity", "danger"].includes(
@@ -155,12 +157,14 @@ export function UserDetailClient({
       });
       return;
     }
+    const adminPassword = await reauth.askPassword("Gratis-Zugang gewähren");
+    if (!adminPassword) return;
     setCompBusy(true);
     try {
       const res = await fetch(`/api/admin/users/${user.id}/comp-access`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ months, reason: compReason.trim() }),
+        body: JSON.stringify({ months, reason: compReason.trim(), adminPassword }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -190,10 +194,14 @@ export function UserDetailClient({
     ) {
       return;
     }
+    const adminPassword = await reauth.askPassword("Zugang sperren");
+    if (!adminPassword) return;
     setCompBusy(true);
     try {
       const res = await fetch(`/api/admin/users/${user.id}/comp-access`, {
         method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ adminPassword }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -233,6 +241,8 @@ export function UserDetailClient({
       });
       return;
     }
+    const adminPassword = await reauth.askPassword("Credits ändern");
+    if (!adminPassword) return;
     setCreditSaving(true);
     try {
       const res = await fetch("/api/admin/billing/adjust", {
@@ -242,6 +252,7 @@ export function UserDetailClient({
           userId: user.id,
           delta: creditDirection === "add" ? amount : -amount,
           reason: creditReason.trim(),
+          adminPassword,
         }),
       });
       const data = await res.json();
@@ -309,12 +320,14 @@ export function UserDetailClient({
       });
       return;
     }
+    const adminPassword = await reauth.askPassword("Passwort für diesen Nutzer setzen");
+    if (!adminPassword) return;
     setPwSetting(true);
     try {
       const res = await fetch(`/api/admin/users/${user.id}/set-password`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ newPassword }),
+        body: JSON.stringify({ newPassword, adminPassword }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? "Passwort konnte nicht gesetzt werden.");
@@ -341,7 +354,9 @@ export function UserDetailClient({
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
-          role: user.role,
+          // `role` wird seit 2026-09-02 nicht mehr über die API geändert
+          // (Rollen-Eskalation). Admin-Konten entstehen nur noch über
+          // "Nutzer anlegen" mit Passwort-Bestätigung.
           phone: user.phone,
           companyName: user.companyName,
           vatId: user.vatId,
@@ -377,6 +392,7 @@ export function UserDetailClient({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
+      {reauth.dialog}
       <div className="flex flex-col gap-4">
         <Card>
           <CardContent className="flex flex-col items-center gap-4 pt-6">
@@ -495,10 +511,9 @@ export function UserDetailClient({
                   </div>
                   <div>
                     <Label htmlFor="role">Rolle</Label>
-                    <Select
-                      value={user.role}
-                      onValueChange={(v: "admin" | "user") => setField("role", v)}
-                    >
+                    {/* Seit 2026-09-02 nicht mehr änderbar (Rollen-Eskalation).
+                        Admin-Konten nur über „Nutzer anlegen" mit Passwort. */}
+                    <Select value={user.role} disabled>
                       <SelectTrigger id="role">
                         <SelectValue />
                       </SelectTrigger>

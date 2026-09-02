@@ -23,6 +23,7 @@ export default async function AdminSettingsPage() {
           lastName: full.lastName,
           phone: full.phone,
         }}
+        totpEnabled={Boolean(full.totpEnabledAt)}
       />
     </div>
   );

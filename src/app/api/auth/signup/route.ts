@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { users, emailVerifications } from "@/lib/db/schema";
 import { createUser } from "@/lib/db/queries/users";
 import { createSignupCheckout, marketingOrigin } from "@/lib/billing/signup-checkout";
-import { sendEmailVerificationMail } from "@/lib/mail";
+import { sendEmailVerificationMail, sendExistingAccountNoticeMail } from "@/lib/mail";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { trackServerBrowserEvent } from "@/lib/meta/track-server";
@@ -117,20 +117,24 @@ export async function POST(req: NextRequest) {
   let emailVerified: boolean;
 
   if (existing) {
-    // Falls User schon aktiv → 409 mit generischer Message (keine
-    // Enumeration ob User existiert).
+    // Aktives Bestandskonto: nach aussen EXAKT wie ein neuer Signup
+    // antworten ("wir haben dir eine E-Mail geschickt"), damit niemand
+    // ueber das Formular abfragen kann, welche Adressen Kunden sind.
+    // Die Info geht nur ins Postfach des Kontoinhabers (Hinweis-Mail mit
+    // Login-/Reset-Link). Bis 2026-09-02 kam hier ein 409 zurueck, der
+    // aktive Kunden verraten hat.
     if (
       existing.subscriptionStatus === "active" ||
       existing.subscriptionStatus === "trialing"
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "Konto existiert bereits. Bitte einloggen oder Passwort zurücksetzen.",
-          errorKind: "existing_active",
-        },
-        { status: 409 },
-      );
+      const appOrigin = (process.env.APP_URL ?? "https://app.videocomet.de").replace(/\/+$/, "");
+      void sendExistingAccountNoticeMail({
+        to: email,
+        firstName,
+        loginUrl: `${appOrigin}/login`,
+        resetUrl: `${appOrigin}/passwort-vergessen`,
+      }).catch((err) => console.error("[signup] existing-account mail error:", err));
+      return NextResponse.json({ verificationRequired: true }, { status: 200 });
     }
     // Sonst: existiert aber Zahlung nicht erfolgreich — wir reusen und
     // starten neuen Checkout. Passwort NICHT ueberschreiben (Security:

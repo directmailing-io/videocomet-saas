@@ -8,8 +8,9 @@ import { db } from "@/lib/db";
 import { passwordResets } from "@/lib/db/schema";
 import { getUserById } from "@/lib/db/queries/users";
 import { sendPasswordResetMail } from "@/lib/mail";
+import { logAdminAction } from "@/lib/admin-audit";
 
-export async function POST(_req: NextRequest, ctx: { params: { id: string } }) {
+export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
   const guard = await requireAdminApi();
   if (!guard.ok) return guard.response;
 
@@ -40,6 +41,15 @@ export async function POST(_req: NextRequest, ctx: { params: { id: string } }) {
     console.error("[admin:users:send-reset] mail error", err);
     return NextResponse.json({ error: "Mail konnte nicht versendet werden." }, { status: 500 });
   }
+
+  await logAdminAction({
+    admin: { id: guard.user.id, email: guard.user.email },
+    action: "user.send_reset",
+    targetType: "user",
+    targetId: user.id,
+    details: { targetEmail: user.email },
+    req,
+  });
 
   return NextResponse.json({ ok: true });
 }

@@ -10,20 +10,29 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth-guard";
-import { forceDomainRecheck } from "@/worker/jobs/domain-verifier";
+import { requestDomainRecheck } from "@/lib/domain-recheck";
+import { logAdminAction } from "@/lib/admin-audit";
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: { id: string } },
 ): Promise<NextResponse> {
   const guard = await requireAdminApi();
   if (!guard.ok) return guard.response;
 
   try {
-    const updated = await forceDomainRecheck(ctx.params.id);
+    const updated = await requestDomainRecheck(ctx.params.id);
     if (!updated) {
       return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
     }
+    await logAdminAction({
+      admin: { id: guard.user.id, email: guard.user.email },
+      action: "domain.recheck",
+      targetType: "domain",
+      targetId: updated.id,
+      details: { hostname: updated.hostname, status: updated.status },
+      req,
+    });
     return NextResponse.json({
       ok: true,
       domain: {

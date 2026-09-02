@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 
 /**
  * POST /api/admin/bunny-purge/tick — Trigger-Endpoint für sofortige
@@ -33,8 +34,10 @@ export async function POST(req: NextRequest) {
   if (!SECRET) {
     return NextResponse.json({ error: "Not configured" }, { status: 503 });
   }
-  const got = req.headers.get("x-bunny-purge-secret");
-  if (got !== SECRET) {
+  const got = req.headers.get("x-bunny-purge-secret") ?? "";
+  const a = Buffer.from(got);
+  const b = Buffer.from(SECRET);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

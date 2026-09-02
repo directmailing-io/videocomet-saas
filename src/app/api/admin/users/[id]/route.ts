@@ -5,12 +5,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth-guard";
 import { deleteUser, getUserById, getUserByEmail, updateUser } from "@/lib/db/queries/users";
+import { logAdminAction } from "@/lib/admin-audit";
+import { requireAdminPassword } from "@/lib/admin-reauth";
 
 const patchBodySchema = z.object({
   email: z.string().email().optional(),
   firstName: z.string().trim().nullable().optional(),
   lastName: z.string().trim().nullable().optional(),
-  role: z.enum(["admin", "user"]).optional(),
+  // `role` ist seit 2026-09-02 absichtlich NICHT mehr änderbar (Rollen-
+  // Eskalation über eine gestohlene Admin-Session). Admin-Konten werden
+  // nur noch über POST /api/admin/users mit Passwort-Bestätigung angelegt.
   phone: z.string().trim().nullable().optional(),
   companyName: z.string().trim().nullable().optional(),
   vatId: z.string().trim().nullable().optional(),
@@ -60,6 +64,14 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
 
   try {
     const updated = await updateUser(id, patch);
+    await logAdminAction({
+      admin: { id: guard.user.id, email: guard.user.email },
+      action: "user.update",
+      targetType: "user",
+      targetId: id,
+      details: { fields: Object.keys(patch) },
+      req,
+    });
     return NextResponse.json({ user: stripUser(updated) });
   } catch (err) {
     console.error("[admin:users:patch] error", err);
@@ -86,12 +98,27 @@ export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) 
     return NextResponse.json({ error: "Du kannst dich nicht selbst löschen." }, { status: 400 });
   }
 
+  const raw = (await req.json().catch(() => null)) as { adminPassword?: unknown } | null;
+  const reauth = await requireAdminPassword(guard.user.id, raw?.adminPassword);
+  if (!reauth.ok) return reauth.response;
+
+  let targetEmail: string | null = null;
   try {
+    targetEmail = (await getUserById(id)).email;
     await deleteUser(id);
   } catch (err) {
     console.error("[admin:users:delete] error", err);
     return NextResponse.json({ error: "Benutzer nicht gefunden." }, { status: 404 });
   }
+
+  await logAdminAction({
+    admin: { id: guard.user.id, email: guard.user.email },
+    action: "user.delete",
+    targetType: "user",
+    targetId: id,
+    details: { targetEmail },
+    req,
+  });
 
   return NextResponse.json({ ok: true });
 }

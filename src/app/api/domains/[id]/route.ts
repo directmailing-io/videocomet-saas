@@ -17,7 +17,6 @@ import {
   getUserDomain,
   updateDomainRootRedirect,
 } from "@/lib/db/queries/user-domains";
-import { cleanupDeletedDomain } from "@/worker/jobs/domain-verifier";
 
 export async function GET(
   _req: NextRequest,
@@ -147,12 +146,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
 
-  // Best-effort: Traefik-YAML löschen, damit die Domain sofort nicht mehr
-  // routet (sonst wartet Traefik bis zum Watch-Reload).
-  if (res.hostname) {
-    await cleanupDeletedDomain(res.hostname);
-  }
-
+  // Die Traefik-YAML entfernt der Worker-Reconcile binnen 30 s. Der App-
+  // Container hat seit 2026-09-02 keinen Traefik-Mount mehr (Security).
   return NextResponse.json({
     ok: true,
     deleted: { id: d.id, hostname: d.hostname },

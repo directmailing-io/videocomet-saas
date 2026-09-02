@@ -114,6 +114,15 @@ export const users = pgTable("users", {
   notifyRunEmails: boolean("notify_run_emails").notNull().default(true),
 
   /**
+   * Zwei-Faktor (TOTP, Migration 0074, Security-Härtung 2026-09-02).
+   * Nur für Admin-Konten genutzt. `totpSecretEnc` = AES-256-GCM-verschluesselt
+   * (Key aus COOKIE_SECRET abgeleitet, siehe lib/totp.ts). NULL = kein 2FA.
+   * `totpEnabledAt` gesetzt = Login verlangt zusaetzlich den 6-stelligen Code.
+   */
+  totpSecretEnc: text("totp_secret_enc"),
+  totpEnabledAt: timestamp("totp_enabled_at", { withTimezone: true }),
+
+  /**
    * Account-weiter Standard-Brand-Kit (Migration 0053, Landingpage v3).
    * Shape: `BrandKit` aus `src/lib/landing-theme/brand-kit.ts` — wird beim
    * Schreiben via `brandKitSchema` validiert, beim Lesen defensiv geparst.
@@ -2339,3 +2348,24 @@ export const apiKeys = pgTable("api_keys", {
 }));
 
 export type ApiKeyRow = typeof apiKeys.$inferSelect;
+
+
+// ── Admin-Audit-Log (Migration 0074, Security-Härtung 2026-09-02) ──────────
+// Jede mutierende Admin-Aktion (Passwort setzen, Credits, Rollen, Löschen,
+// Domain-Eingriffe, Re-Renders, Blast-Kill-Switch, 2FA-Änderungen) landet
+// hier mit Akteur, Ziel, Details und IP. Append-only, nie vom App-Code
+// gelöscht. Sichtbar unter /admin/system.
+export const adminAuditLog = pgTable("admin_audit_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  adminUserId: uuid("admin_user_id").references(() => users.id, { onDelete: "set null" }),
+  adminEmail: text("admin_email"),
+  action: text("action").notNull(),
+  targetType: text("target_type"),
+  targetId: text("target_id"),
+  details: jsonb("details").$type<Record<string, unknown>>(),
+  ip: text("ip"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  createdIdx: index("admin_audit_log_created_idx").on(t.createdAt),
+  adminIdx: index("admin_audit_log_admin_idx").on(t.adminUserId),
+}));

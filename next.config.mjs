@@ -1,3 +1,30 @@
+/**
+ * Content-Security-Policy im REPORT-ONLY-Modus (Security-Härtung 2026-09-02).
+ * Blockiert nichts, meldet Verstöße an /api/csp-report. Nach einer Woche
+ * ohne echte Treffer im Container-Log wird der Header auf
+ * "Content-Security-Policy" (enforce) umgestellt. Liste der bekannten
+ * Drittquellen: Turnstile (challenges.cloudflare.com), Meta Pixel
+ * (connect.facebook.net, www.facebook.com), Bunny-Player
+ * (iframe.mediadelivery.net, *.b-cdn.net), Google Fonts, Google Docs/Slides-
+ * Embeds, Stripe-Redirects (form-action).
+ */
+const CSP_REPORT_ONLY = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://connect.facebook.net",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https: http:",
+  "media-src 'self' blob: data: https://*.b-cdn.net https://*.mediadelivery.net",
+  "connect-src 'self' https://*.b-cdn.net https://*.mediadelivery.net https://challenges.cloudflare.com https://www.facebook.com https://connect.facebook.net https://storage.bunnycdn.com https://*.storage.bunnycdn.com",
+  "frame-src 'self' https://challenges.cloudflare.com https://iframe.mediadelivery.net https://docs.google.com https://drive.google.com https://www.youtube.com https://player.vimeo.com",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self' https://checkout.stripe.com https://billing.stripe.com",
+  "frame-ancestors 'self'",
+  "report-uri /api/csp-report",
+].join("; ");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
@@ -29,6 +56,16 @@ const nextConfig = {
             value:
               "camera=(self), microphone=(self), geolocation=(), payment=(), usb=()",
           },
+        ],
+      },
+      {
+        // Erst nur melden, dann scharf schalten (siehe CSP_REPORT_ONLY oben).
+        // Kunden-Landingpages (/v, /cv, /lp-block, /c, /domain-root) sind
+        // ausgenommen: sie haben eine eigene, bewusst lockere CSP (csp.ts)
+        // und wuerden das Report-Log nur mit Kunden-HTML-Treffern fluten.
+        source: "/((?!v/|cv/|lp-block/|c$|domain-root).*)",
+        headers: [
+          { key: "Content-Security-Policy-Report-Only", value: CSP_REPORT_ONLY },
         ],
       },
     ];

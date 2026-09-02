@@ -9,6 +9,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { lucia } from "@/lib/auth";
+import { signShortToken } from "@/lib/totp";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/tracking";
 
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
       passwordHash: users.passwordHash,
       isActive: users.isActive,
       role: users.role,
+      totpEnabledAt: users.totpEnabledAt,
     })
     .from(users)
     .where(eq(users.email, email))
@@ -74,10 +76,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 403 });
   }
 
+  // Zwei-Faktor (nur Admin-Konten mit aktiviertem TOTP, seit 2026-09-02):
+  // Passwort stimmt, aber es gibt noch keine Session. Der Client bekommt
+  // ein 5 Minuten gueltiges, signiertes Token und schickt es zusammen mit
+  // dem 6-stelligen Code an /api/auth/login/totp.
+  if (user.role === "admin" && user.totpEnabledAt) {
+    const mfaToken = signShortToken({ uid: user.id }, 5 * 60, "mfa-login");
+    return NextResponse.json({ ok: false, mfaRequired: true, mfaToken });
+  }
+
   await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
 
   const session = await lucia.createSession(user.id, {});
   const cookie = lucia.createSessionCookie(session.id);
+  // Hinweis: Das alte domain-weite Cookie (.videocomet.de, bis 2026-09-02)
+  // raeumt die Middleware beim naechsten Seitenaufruf weg (Set-Cookie mit
+  // Max-Age=0). Hier geht das nicht: cookies().set() ist per Name gekeyt.
   (await cookies()).set(cookie.name, cookie.value, cookie.attributes);
 
   return NextResponse.json({ ok: true, role: user.role });

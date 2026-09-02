@@ -16,10 +16,10 @@ import {
   getDomainByIdAdmin,
   resetDomainAdmin,
 } from "@/lib/db/queries/user-domains";
-import { cleanupDeletedDomain } from "@/worker/jobs/domain-verifier";
+import { logAdminAction } from "@/lib/admin-audit";
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: { id: string } },
 ): Promise<NextResponse> {
   const guard = await requireAdminApi();
@@ -30,16 +30,18 @@ export async function POST(
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
 
-  // Best-effort: Traefik-YAML entfernen — der Verifier schreibt sie beim
-  // nächsten erfolgreichen Tick neu. So sind wir sicher, dass kein
-  // verwaister Cert/Router-Eintrag mehr lebt.
-  try {
-    await cleanupDeletedDomain(d.hostname);
-  } catch (err) {
-    console.warn("[admin:domains:reset] cleanup warn", err);
-  }
-
+  // Die Traefik-YAML entfernt der Worker-Tick binnen 30 s (Reconcile:
+  // Domains ohne Status issuing_cert/active haben keine YAML). Der App-
+  // Container fasst seit 2026-09-02 keine Traefik-Dateien mehr an.
   await resetDomainAdmin(d.id);
+  await logAdminAction({
+    admin: { id: guard.user.id, email: guard.user.email },
+    action: "domain.reset",
+    targetType: "domain",
+    targetId: d.id,
+    details: { hostname: d.hostname, previousStatus: d.status },
+    req,
+  });
 
   const updated = await getDomainByIdAdmin(d.id);
   return NextResponse.json({

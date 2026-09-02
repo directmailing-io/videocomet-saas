@@ -39,7 +39,7 @@ function getDir(): string {
  * Erzeugt einen sicheren Dateinamen aus dem Hostname.
  * Beispiel: video.klein-solutions.de → vc-customdomain-video-klein-solutions-de.yml
  */
-function fileNameFor(hostname: string): string {
+export function fileNameFor(hostname: string): string {
   const safe = hostname.toLowerCase().replace(/[^a-z0-9.-]/g, "-").replace(/\.+/g, "-");
   return `${FILE_PREFIX}${safe}.yml`;
 }

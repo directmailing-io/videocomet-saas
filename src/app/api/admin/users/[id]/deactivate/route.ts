@@ -5,8 +5,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth-guard";
 import { deactivateUser } from "@/lib/db/queries/users";
 import { lucia } from "@/lib/auth";
+import { logAdminAction } from "@/lib/admin-audit";
 
-export async function POST(_req: NextRequest, ctx: { params: { id: string } }) {
+export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
   const guard = await requireAdminApi();
   if (!guard.ok) return guard.response;
 
@@ -18,6 +19,14 @@ export async function POST(_req: NextRequest, ctx: { params: { id: string } }) {
     const user = await deactivateUser(ctx.params.id);
     // Drop all sessions of the deactivated user immediately.
     await lucia.invalidateUserSessions(ctx.params.id);
+    await logAdminAction({
+      admin: { id: guard.user.id, email: guard.user.email },
+      action: "user.deactivate",
+      targetType: "user",
+      targetId: user.id,
+      details: { targetEmail: user.email },
+      req,
+    });
     const { passwordHash: _ph, ...rest } = user;
     return NextResponse.json({ user: rest });
   } catch (err) {

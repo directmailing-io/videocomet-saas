@@ -12,6 +12,26 @@ import type { CampaignThumbnailImage } from "@/lib/segments/types";
 import { ensureIntroCalibration } from "@/lib/intro-calibration-enqueue";
 import { syncCampaignMediaRefs } from "@/lib/bunny/campaign-media-refs";
 
+/**
+ * Google-Docs-Link: nur https://docs.google.com/… (oder drive.google.com).
+ * Die Pipeline extrahiert daraus ohnehin nur die Dokument-ID; die Pruefung
+ * gibt dem Nutzer eine klare Fehlermeldung statt eines spaeten Render-Fehlers.
+ */
+const googleDocsUrlSchema = z
+  .string()
+  .url()
+  .refine((u) => {
+    try {
+      const p = new URL(u);
+      return (
+        p.protocol === "https:" &&
+        (p.hostname === "docs.google.com" || p.hostname === "drive.google.com")
+      );
+    } catch {
+      return false;
+    }
+  }, "Bitte einen Link von docs.google.com einfügen.");
+
 const createSchema = z.object({
   name: z.string().min(1).max(120),
   mode: z.enum(["webcam-only", "with-presentation"]).default("webcam-only"),
@@ -34,12 +54,12 @@ const createSchema = z.object({
     .nullable()
     .optional(),
   pdfEnabled: z.boolean().optional(),
-  pdfGoogleDocsUrl: z.string().url().nullable().optional(),
+  pdfGoogleDocsUrl: googleDocsUrlSchema.nullable().optional(),
   // A/B-Test direkt bei der Erstellung: Brief B + Aktivierung. Die
   // Aktiv-Semantik (nur wirksam wenn pdfEnabled + beide URLs) prüft der
   // Start-Endpoint erneut — hier reicht Format-Validierung.
   abTestingEnabled: z.boolean().optional(),
-  pdfGoogleDocsUrlB: z.string().url().nullable().optional(),
+  pdfGoogleDocsUrlB: googleDocsUrlSchema.nullable().optional(),
   abSplitMode: z.enum(["random", "sequential"]).optional(),
   abSplitWeightA: z.number().int().min(10).max(90).optional(),
   pdfQrEnabled: z.boolean().optional(),

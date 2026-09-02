@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error: "Ungültige Eingabe.",
-        details: parsed.error.issues.map((i) => i.message),
+        details: parsed.error.issues[0]?.message ?? "Ungültige Eingabe.",
       },
       { status: 400 },
     );

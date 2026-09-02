@@ -7,13 +7,14 @@ import {
   cancelEmailBlast,
   getEmailBlastAdmin,
 } from "@/lib/db/queries/email-blasts";
+import { logAdminAction } from "@/lib/admin-audit";
 
 /**
  * POST /api/admin/email-blasts/[id]/cancel — Kill-Switch: bricht den
  * Blast eines beliebigen Users ab.
  */
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } },
 ) {
   const auth = await requireAdminApi();
@@ -31,6 +32,14 @@ export async function POST(
       { status: 409 },
     );
   }
+  await logAdminAction({
+    admin: { id: auth.user.id, email: auth.user.email },
+    action: "email_blast.cancel",
+    targetType: "email_blast",
+    targetId: blast.id,
+    details: { userId: blast.userId, cancelledMessages: result.cancelledMessages },
+    req,
+  });
   return NextResponse.json({
     ok: true,
     cancelledMessages: result.cancelledMessages,

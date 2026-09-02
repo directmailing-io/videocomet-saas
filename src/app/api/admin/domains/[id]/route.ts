@@ -15,7 +15,7 @@ import {
   listDomainCheckLog,
 } from "@/lib/db/queries/user-domains";
 import { verifyRecordName, verifyRecordValue } from "@/lib/domain-utils";
-import { cleanupDeletedDomain } from "@/worker/jobs/domain-verifier";
+import { logAdminAction } from "@/lib/admin-audit";
 
 export async function GET(
   _req: NextRequest,
@@ -80,7 +80,7 @@ export async function GET(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: { id: string } },
 ): Promise<NextResponse> {
   const guard = await requireAdminApi();
@@ -97,10 +97,16 @@ export async function DELETE(
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
 
-  if (res.hostname) {
-    await cleanupDeletedDomain(res.hostname);
-  }
-
+  // Traefik-YAML räumt der Worker-Reconcile binnen 30 s weg (kein
+  // Dateisystem-Zugriff aus dem App-Container seit 2026-09-02).
+  await logAdminAction({
+    admin: { id: guard.user.id, email: guard.user.email },
+    action: "domain.delete",
+    targetType: "domain",
+    targetId: d.id,
+    details: { hostname: d.hostname, userId: d.userId, impact },
+    req,
+  });
   return NextResponse.json({
     ok: true,
     deleted: { id: d.id, hostname: d.hostname },

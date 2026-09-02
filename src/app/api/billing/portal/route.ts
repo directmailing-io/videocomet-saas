@@ -44,5 +44,8 @@ export async function POST() {
     return_url: `${appOrigin}/einstellungen?tab=abrechnung`,
   });
 
-  return NextResponse.json({ url: session.url }, { status: 200 });
+  return NextResponse.json(
+    { url: session.url },
+    { status: 200, headers: { "Cache-Control": "no-store" } },
+  );
 }

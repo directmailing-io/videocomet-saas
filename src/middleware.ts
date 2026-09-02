@@ -69,6 +69,8 @@ const PUBLIC_API_PREFIXES = [
   "/api/email/",
   "/api/health",
   "/api/healthz",
+  // CSP-Verstoss-Reports kommen ohne verwertbaren Origin-Header.
+  "/api/csp-report",
 ];
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -194,6 +196,26 @@ function classifyHost(host: string | null | undefined): "own" | "custom" | "igno
   return "custom";
 }
 
+/**
+ * Uebergangs-Aufraeumen (seit 2026-09-02, entfernbar ab ~2026-10-15):
+ * Das Session-Cookie war bis dahin auf `Domain=.videocomet.de` gesetzt und
+ * ist jetzt host-only. Browser mit dem alten Cookie bekommen hier auf
+ * jeder Seitenantwort ein Set-Cookie mit Max-Age=0 fuer den alten Scope.
+ * Wir haengen den Header roh an (nicht ueber res.cookies.set), weil die
+ * Cookie-API per Name gekeyt ist und sonst mit dem neuen Cookie kollidiert.
+ * Auf /api/auth/* nicht anwenden — dort setzt der Handler selbst Cookies.
+ */
+const LEGACY_COOKIE_DELETE =
+  `${SESSION_COOKIE}=; Domain=.videocomet.de; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax`;
+
+function withLegacyCookieCleanup(res: NextResponse, req: NextRequest, hasCookie: boolean): NextResponse {
+  if (!hasCookie) return res;
+  if (process.env.NODE_ENV !== "production") return res;
+  if (req.nextUrl.pathname.startsWith("/api/auth/")) return res;
+  res.headers.append("Set-Cookie", LEGACY_COOKIE_DELETE);
+  return res;
+}
+
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const session = req.cookies.get(SESSION_COOKIE)?.value;
@@ -208,6 +230,11 @@ export function middleware(req: NextRequest) {
       (hostKind === "custom" || rawHost === SANDBOX_LP_HOST)
     ) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    // Admin-API ohne Session-Cookie: sofort 401. Der Rollen-Check selbst
+    // bleibt in requireAdminApi (Middleware hat keinen DB-Zugriff).
+    if (pathname.startsWith("/api/admin/") && !session) {
+      return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
     }
     if (isProtectedApi && MUTATING_METHODS.has(req.method)) {
       const origin = req.headers.get("origin");
@@ -340,7 +367,7 @@ export function middleware(req: NextRequest) {
       url.search = "";
       return NextResponse.redirect(url);
     }
-    return NextResponse.next();
+    return withLegacyCookieCleanup(NextResponse.next(), req, true);
   }
 
   if (isAppPath(pathname)) {
@@ -356,12 +383,20 @@ export function middleware(req: NextRequest) {
     // sieht `headers()` in RSC den Wert nicht.
     const passHeaders = new Headers(req.headers);
     passHeaders.set("x-pathname", pathname);
-    return NextResponse.next({ request: { headers: passHeaders } });
+    return withLegacyCookieCleanup(
+      NextResponse.next({ request: { headers: passHeaders } }),
+      req,
+      true,
+    );
   }
 
   const finalHeaders = new Headers(req.headers);
   finalHeaders.set("x-pathname", pathname);
-  return NextResponse.next({ request: { headers: finalHeaders } });
+  return withLegacyCookieCleanup(
+    NextResponse.next({ request: { headers: finalHeaders } }),
+    req,
+    Boolean(session) && hostKind === "own",
+  );
 }
 
 export const config = {

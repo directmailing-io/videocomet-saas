@@ -45,6 +45,7 @@ import {
   RenderNotReadyError,
   type CleanPageSession,
 } from "./clean-render";
+import { assertUrlIsSafe } from "@/lib/media-urls/ssrf-guard";
 
 /**
  * Schnelle DNS-Vorab-Prüfung: löst den Host der URL in 3s auf, sonst wirft.
@@ -343,6 +344,7 @@ async function fallbackScreenshotPath(
     // Clean-Render light: Adblock + Preseed + Dismiss, aber ohne Watchdog/
     // Telemetrie (der Haupt-Run hat schon einen Telemetrie-Eintrag) und ohne
     // QA-Gate-Throw — dieser Pfad ist die letzte Rettung vor Schwarzbild.
+    await assertUrlIsSafe(opts.url); // SECURITY: kein Zugriff auf interne Netze
     const fbClean = await prepareCleanPage(fbPage, opts.url);
     await fbPage
       .goto(opts.url, {
@@ -515,6 +517,10 @@ export async function renderWebsiteCapture(
     // Clean-Render Schicht 0+1: Adblocker + Consent-Preseed VOR goto.
     const clean = await prepareCleanPage(page, opts.url);
     cleanupHolder.clean = clean;
+
+    // SECURITY: Ziel-URL stammt aus Kundendaten — vor der Navigation gegen
+    // interne Netze pruefen (169.254.169.254, 10.x, Docker-Netz).
+    await assertUrlIsSafe(opts.url);
 
     // DOM reicht für den anschließenden Screenshot-Lauf; auf `networkidle2`
     // (Analytics, Chatwidgets, LazyLoad-Bilder) kommen viele Marketing-Sites

@@ -33,6 +33,7 @@
 import puppeteerCore, { type Browser, type Page } from "puppeteer-core";
 import { addExtra } from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import { assertUrlIsSafe } from "@/lib/media-urls/ssrf-guard";
 
 // puppeteer-extra ist ein Wrapper über (hier) puppeteer-core und akzeptiert
 // Plugins. Stealth-Plugin tarnt die typischen Headless-Marker (`navigator.
@@ -278,6 +279,9 @@ export async function captureLightScreenshot(
     // nicht gecrasht ist. Damit fangen wir die typischen B2B-Seiten ab,
     // die wegen Trackern nie "networkidle2" erreichen aber visuell
     // längst nutzbar sind.
+    // SECURITY: URL aus der Kontaktliste — interne Netze blocken (SSRF).
+    await assertUrlIsSafe(url);
+
     let navigationFailed = false;
     try {
       await page.goto(url, {

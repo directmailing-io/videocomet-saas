@@ -619,6 +619,77 @@ export async function sendEmailVerificationMail(
   if (sendResult.error) throw new Error(`Resend: ${sendResult.error.message}`);
 }
 
+export interface SendExistingAccountNoticeMailInput {
+  to: string;
+  firstName?: string | null;
+  loginUrl: string;
+  resetUrl: string;
+}
+
+/**
+ * Wird verschickt, wenn sich jemand mit einer E-Mail registriert, zu der
+ * bereits ein aktives Konto existiert. Die Registrierung antwortet nach
+ * aussen identisch wie bei einer neuen Adresse ("Wir haben dir eine Mail
+ * geschickt"), damit niemand ueber das Formular pruefen kann, wer Kunde ist.
+ * Die eigentliche Information landet nur im Postfach des Kontoinhabers.
+ */
+export async function sendExistingAccountNoticeMail(
+  input: SendExistingAccountNoticeMailInput,
+): Promise<void> {
+  const greeting = input.firstName ? `Hallo ${input.firstName},` : "Hallo,";
+
+  const body = `
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:${BRAND_INK};line-height:1.25;">
+      Du hast bereits ein VIDEOCOMET-Konto
+    </h1>
+    <p style="margin:0 0 14px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      ${escapeHtml(greeting)}
+    </p>
+    <p style="margin:0 0 20px 0;font-size:15px;line-height:1.55;color:${BRAND_INK};">
+      gerade wurde versucht, mit dieser E-Mail-Adresse ein neues Konto anzulegen. Zu dieser Adresse gibt es aber schon ein aktives Konto. Du kannst dich einfach einloggen oder, falls du dein Passwort vergessen hast, ein neues setzen.
+    </p>
+    <p style="margin:0 0 20px 0;">
+      <a href="${input.loginUrl}" style="display:inline-block;background:${BRAND_ACCENT};color:#FFFFFF;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:999px;">
+        Zum Login
+      </a>
+    </p>
+    <p style="margin:0 0 20px 0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Passwort vergessen? <a href="${input.resetUrl}" style="color:${BRAND_ACCENT};text-decoration:underline;">Hier ein neues Passwort setzen.</a>
+    </p>
+    <p style="margin:0;font-size:13px;line-height:1.55;color:${BRAND_MUTED};">
+      Wenn du das nicht selbst warst, musst du nichts tun. Dein Konto und dein Passwort wurden nicht veraendert.
+    </p>
+  `;
+
+  const subject = "Du hast bereits ein VIDEOCOMET-Konto";
+  const html = shellHtml({
+    headline: "Du hast bereits ein VIDEOCOMET-Konto",
+    preheader: "Einfach einloggen oder ein neues Passwort setzen.",
+    body,
+  });
+  const text = [
+    greeting,
+    "",
+    "gerade wurde versucht, mit dieser E-Mail-Adresse ein neues Konto anzulegen.",
+    "Zu dieser Adresse gibt es aber schon ein aktives Konto.",
+    "",
+    `Login: ${input.loginUrl}`,
+    `Passwort vergessen: ${input.resetUrl}`,
+    "",
+    "Wenn du das nicht selbst warst, musst du nichts tun. Dein Konto wurde nicht veraendert.",
+    "",
+    "VIDEOCOMET",
+  ].join("\n");
+
+  const resend = getResend();
+  if (!resend) {
+    console.log("[mail:dev] sendExistingAccountNoticeMail -> %s", input.to);
+    return;
+  }
+  const sendResult = await resend.emails.send({ from: fromAddress(), to: input.to, subject, html, text });
+  if (sendResult.error) throw new Error(`Resend: ${sendResult.error.message}`);
+}
+
 export interface SendSubscriptionStartedMailInput {
   to: string;
   firstName?: string | null;

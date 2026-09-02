@@ -8,6 +8,7 @@ import { requireAdminApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { leads, runs } from "@/lib/db/schema";
 import { regenerateLeadCore, type LeadRegenScope } from "@/lib/regenerate";
+import { logAdminAction } from "@/lib/admin-audit";
 
 /**
  * POST /api/admin/leads/[id]/regenerate
@@ -70,5 +71,13 @@ export async function POST(
     },
     scope,
   );
+  await logAdminAction({
+    admin: { id: auth.user.id, email: auth.user.email },
+    action: "lead.regenerate",
+    targetType: "lead",
+    targetId: row.leadId,
+    details: { scope, runId: row.runId, ownerUserId: row.userId, status: outcome.status },
+    req,
+  });
   return NextResponse.json(outcome.body, { status: outcome.status });
 }

@@ -22,10 +22,13 @@ import { requireAdminApi } from "@/lib/auth-guard";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { getUserById } from "@/lib/db/queries/users";
+import { logAdminAction } from "@/lib/admin-audit";
+import { requireAdminPassword } from "@/lib/admin-reauth";
 
 const GRANT_BODY = z.object({
   months: z.number().refine((v) => v >= 0.5 && v <= 60, "months 0.5–60"),
   reason: z.string().trim().min(3, "Grund ist Pflicht (min 3 Zeichen)").max(500),
+  adminPassword: z.string().optional(),
 });
 
 export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
@@ -42,6 +45,9 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
         : "Ungültige Anfrage.";
     return NextResponse.json({ error: msg }, { status: 400 });
   }
+
+  const reauth = await requireAdminPassword(guard.user.id, body.adminPassword);
+  if (!reauth.ok) return reauth.response;
 
   let target;
   try {
@@ -77,9 +83,14 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
       subscriptionCurrentPeriodEnd: users.subscriptionCurrentPeriodEnd,
     });
 
-  console.log(
-    `[admin:comp-access:grant] admin=${guard.user.id} target=${ctx.params.id} months=${body.months} reason=${JSON.stringify(body.reason)}`,
-  );
+  await logAdminAction({
+    admin: { id: guard.user.id, email: guard.user.email },
+    action: "user.comp_access.grant",
+    targetType: "user",
+    targetId: ctx.params.id,
+    details: { months: body.months, reason: body.reason, targetEmail: target.email },
+    req,
+  });
 
   return NextResponse.json({
     ok: true,
@@ -88,9 +99,13 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
   });
 }
 
-export async function DELETE(_req: NextRequest, ctx: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) {
   const guard = await requireAdminApi();
   if (!guard.ok) return guard.response;
+
+  const raw = (await req.json().catch(() => null)) as { adminPassword?: unknown } | null;
+  const reauth = await requireAdminPassword(guard.user.id, raw?.adminPassword);
+  if (!reauth.ok) return reauth.response;
 
   let target;
   try {
@@ -118,9 +133,14 @@ export async function DELETE(_req: NextRequest, ctx: { params: { id: string } })
     })
     .where(eq(users.id, ctx.params.id));
 
-  console.log(
-    `[admin:comp-access:revoke] admin=${guard.user.id} target=${ctx.params.id}`,
-  );
+  await logAdminAction({
+    admin: { id: guard.user.id, email: guard.user.email },
+    action: "user.comp_access.revoke",
+    targetType: "user",
+    targetId: ctx.params.id,
+    details: { targetEmail: target.email },
+    req,
+  });
 
   return NextResponse.json({ ok: true });
 }

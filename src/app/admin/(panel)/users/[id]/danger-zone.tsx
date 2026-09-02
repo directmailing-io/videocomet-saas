@@ -30,6 +30,7 @@ export function DangerZone({ userId, email }: Props) {
   const [confirmText, setConfirmText] = React.useState("");
   const [countdown, setCountdown] = React.useState(5);
   const [deleting, setDeleting] = React.useState(false);
+  const [adminPassword, setAdminPassword] = React.useState("");
 
   const expectedConfirm = `DELETE ${email}`;
   const matchesConfirm = confirmText === expectedConfirm;
@@ -48,6 +49,7 @@ export function DangerZone({ userId, email }: Props) {
     setStage("closed");
     setConfirmText("");
     setCountdown(5);
+    setAdminPassword("");
   }
 
   async function confirmDelete() {
@@ -55,7 +57,11 @@ export function DangerZone({ userId, email }: Props) {
     try {
       const res = await fetch(
         `/api/admin/users/${userId}?confirm=DELETE-USER-${userId}`,
-        { method: "DELETE" },
+        {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ adminPassword }),
+        },
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -207,6 +213,16 @@ export function DangerZone({ userId, email }: Props) {
                 : "Du kannst jetzt löschen."}
             </p>
           </div>
+          <div>
+            <Label htmlFor="delete-admin-password">Dein Admin-Passwort zur Bestätigung</Label>
+            <Input
+              id="delete-admin-password"
+              type="password"
+              autoComplete="current-password"
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+            />
+          </div>
           <DialogFooter>
             <Button
               variant="ghost"
@@ -219,7 +235,7 @@ export function DangerZone({ userId, email }: Props) {
             <Button
               variant="danger"
               type="button"
-              disabled={countdown > 0 || deleting}
+              disabled={countdown > 0 || deleting || adminPassword.length === 0}
               loading={deleting}
               onClick={confirmDelete}
               iconLeft={<Trash2 className="size-4" />}

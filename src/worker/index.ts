@@ -68,6 +68,7 @@ import { startBunnyLibraryReconciler } from "./processors/bunny-library-reconcil
 import { recoverStaleEmailClaims, startEmailDrip } from "./jobs/email-drip";
 import { startMailboxSync } from "./jobs/mailbox-sync";
 import { startAccountCleanup } from "./jobs/account-cleanup";
+import { startSessionPrune } from "@/worker/jobs/session-prune";
 import {
   startHeartbeat,
   stopHeartbeat,
@@ -899,6 +900,7 @@ async function main(): Promise<void> {
   // Videos komplett geloescht — mit Ankuendigungs-, Erinnerungs- und
   // Bestaetigungs-Mail. Credits und Account bleiben erhalten.
   const stopAccountCleanup = startAccountCleanup();
+  const stopSessionPrune = startSessionPrune();
 
   // Global cap — muss über der Summe der per-stage timeouts in
   // processors/pipeline.ts liegen. Worst case (Docs-native-Kampagne):
@@ -1452,6 +1454,7 @@ async function main(): Promise<void> {
     }
     try {
       stopAccountCleanup();
+    stopSessionPrune();
     } catch (err) {
       log("error", "account cleanup stop failed:", err);
     }

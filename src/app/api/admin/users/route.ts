@@ -7,6 +7,8 @@ import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth-guard";
 import { createUser, getUserByEmail, listUsers } from "@/lib/db/queries/users";
 import { sendAdminInviteMail } from "@/lib/mail";
+import { logAdminAction } from "@/lib/admin-audit";
+import { requireAdminPassword } from "@/lib/admin-reauth";
 
 const listQuerySchema = z.object({
   search: z.string().optional(),
@@ -61,6 +63,8 @@ const createBodySchema = z.object({
   billingCountry: z.string().trim().optional(),
   password: z.string().min(8).optional(),
   sendInviteMail: z.boolean().optional().default(false),
+  /** Pflicht, wenn role === "admin" (Re-Auth, seit 2026-09-02). */
+  adminPassword: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -73,6 +77,13 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const msg = err instanceof z.ZodError ? (err.issues[0]?.message ?? "Ungültige Anfrage.") : "Ungültige Anfrage.";
     return NextResponse.json({ error: msg }, { status: 400 });
+  }
+
+  if (body.role === "admin") {
+    // Neuer Admin = maximale Rechte. Nur mit bestätigtem Passwort des
+    // anlegenden Admins (gestohlene Session reicht nicht).
+    const reauth = await requireAdminPassword(guard.user.id, body.adminPassword);
+    if (!reauth.ok) return reauth.response;
   }
 
   const existing = await getUserByEmail(body.email);
@@ -107,6 +118,15 @@ export async function POST(req: NextRequest) {
     console.error("[admin:users:create] error", err);
     return NextResponse.json({ error: "Benutzer konnte nicht angelegt werden." }, { status: 500 });
   }
+
+  await logAdminAction({
+    admin: { id: guard.user.id, email: guard.user.email },
+    action: "user.create",
+    targetType: "user",
+    targetId: user.id,
+    details: { email: user.email, role: body.role, inviteMail: body.sendInviteMail },
+    req,
+  });
 
   if (body.sendInviteMail) {
     try {

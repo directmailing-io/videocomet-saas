@@ -45,6 +45,7 @@ import {
   type ScreenshotJobData,
 } from "../screenshot-queue";
 import { getRedisConnection } from "../queue";
+import { assertUrlIsSafe } from "@/lib/media-urls/ssrf-guard";
 
 export type { ScreenshotJobData };
 
@@ -180,6 +181,9 @@ export async function screenshotProcessor(
       height: VIEWPORT.height,
       deviceScaleFactor: 1,
     });
+
+    // SECURITY: URL aus Kundendaten — interne Netze blocken (SSRF).
+    await assertUrlIsSafe(url);
 
     // Clean-Render Schicht 0+1: Adblocker + Consent-Preseed VOR goto.
     const clean = await prepareCleanPage(page, url);

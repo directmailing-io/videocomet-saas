@@ -64,7 +64,7 @@ export async function POST(
     return NextResponse.json(
       {
         error: "Ungültige Anfrage.",
-        details: parsed.error.message,
+        details: parsed.error.issues[0]?.message ?? "Ungültige Eingabe.",
       },
       { status: 400 },
     );

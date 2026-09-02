@@ -15,7 +15,7 @@ import {
   getDomainImpact,
   getUserDomain,
 } from "@/lib/db/queries/user-domains";
-import { forceDomainRecheck } from "@/worker/jobs/domain-verifier";
+import { requestDomainRecheck } from "@/lib/domain-recheck";
 
 export async function POST(
   _req: NextRequest,
@@ -28,7 +28,7 @@ export async function POST(
   const owned = await getUserDomain(id, auth.user.id);
   if (!owned) return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
 
-  const updated = await forceDomainRecheck(id);
+  const updated = await requestDomainRecheck(id);
   if (!updated) {
     return NextResponse.json(
       { error: "Re-Check fehlgeschlagen." },

@@ -17,6 +17,23 @@ import puppeteer, {
 
 let browserPromise: Promise<Browser> | null = null;
 
+/**
+ * Host-Resolver-Regeln: private IPv4-Bereiche, Link-Local (Cloud-Metadata)
+ * und Loopback → NOTFOUND. Chromium matcht die Muster gegen den Host-String,
+ * also auch gegen IP-Literale. Hostnamen, die per DNS auf private IPs
+ * zeigen, faengt zusaetzlich `assertUrlIsSafe` (DNS-Lookup) ab.
+ */
+const HOST_RESOLVER_RULES = [
+  "MAP 169.254.* ~NOTFOUND",
+  "MAP metadata.google.internal ~NOTFOUND",
+  "MAP 10.* ~NOTFOUND",
+  "MAP 192.168.* ~NOTFOUND",
+  ...Array.from({ length: 16 }, (_, i) => `MAP 172.${16 + i}.* ~NOTFOUND`),
+  "MAP 127.* ~NOTFOUND",
+  "MAP 0.* ~NOTFOUND",
+  "MAP localhost ~NOTFOUND",
+].join(", ");
+
 function chromiumPath(): string {
   // The worker Dockerfile installs `chromium` (not `chromium-browser`) and
   // sets CHROMIUM_PATH=/usr/bin/chromium. Keep `/usr/bin/chromium` as the
@@ -40,6 +57,12 @@ async function launchBrowser(): Promise<Browser> {
       "--disable-extensions",
       "--hide-scrollbars",
       "--disable-features=TranslateUI",
+      // SECURITY (Defense-in-Depth zum assertUrlIsSafe-Check vor jedem goto):
+      // Chromium selbst darf private/Link-Local-Ziele nicht aufloesen. Faengt
+      // Redirects und Sub-Ressourcen auf interne Adressen ab, die der
+      // Pre-Navigation-Check nicht sieht (z.B. https://kunde.de → 302 →
+      // http://169.254.169.254/). file:// bleibt unberuehrt (PDF/HTML-Render).
+      `--host-resolver-rules=${HOST_RESOLVER_RULES}`,
     ],
     // Default viewport; can be overridden per-page.
     defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 },

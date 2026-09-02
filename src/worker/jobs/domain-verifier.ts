@@ -33,6 +33,8 @@ import {
 } from "@/lib/db/queries/user-domains";
 import { verifyDomain } from "@/lib/dns-verifier";
 import {
+  fileNameFor,
+  listOwnedConfigs,
   readCertExpiry,
   removeTraefikConfig,
   syncTraefikConfigs,
@@ -133,9 +135,36 @@ async function tickDomain(d: UserDomain): Promise<void> {
 }
 
 /**
+ * Reconcile (seit 2026-09-02): Traefik-YAMLs, zu denen es keine Domain im
+ * Status issuing_cert/active mehr gibt, werden entfernt. Das ersetzt die
+ * frueheren Direkt-Loeschungen aus den API-Routen (Domain loeschen, Admin-
+ * Reset) — der App-Container hat keinen Traefik-Zugriff mehr. Nur ein
+ * readdir + Set-Vergleich pro Tick, keine Schreibvorgaenge im Normalfall.
+ */
+async function reconcileOrphanConfigs(): Promise<void> {
+  const routed = await listDomainsByStatus(["issuing_cert", "active"]);
+  const expected = new Set(routed.map((d) => fileNameFor(d.hostname)));
+  const existing = await listOwnedConfigs();
+  for (const file of existing) {
+    if (expected.has(file)) continue;
+    // Dateiname → Hostname ist nicht eindeutig rueckrechenbar, deshalb
+    // ueber removeTraefikConfig mit dem rekonstruierten Namen gehen:
+    // fileNameFor ist idempotent auf dem bereits "safen" Namen.
+    const host = file.replace(/^vc-customdomain-/, "").replace(/\.yml$/, "");
+    const removed = await removeTraefikConfig(host);
+    log("info", `reconcile: removed orphan Traefik config ${file} (${removed ? "ok" : "already gone"})`);
+  }
+}
+
+/**
  * Eine Iteration durch alle relevanten Domains.
  */
 async function runVerifierTick(): Promise<void> {
+  try {
+    await reconcileOrphanConfigs();
+  } catch (err) {
+    log("warn", `reconcile skipped: ${(err as Error).message}`);
+  }
   const pending = await listDomainsByStatus([
     "pending",
     "verifying",

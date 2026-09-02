@@ -11,6 +11,7 @@ import {
   regenerateRunCore,
   type RunRegenMode,
 } from "@/lib/regenerate";
+import { logAdminAction } from "@/lib/admin-audit";
 
 /**
  * POST /api/admin/runs/[id]/regenerate
@@ -57,5 +58,13 @@ export async function POST(
   }
 
   const outcome = await regenerateRunCore(run, mode);
+  await logAdminAction({
+    admin: { id: auth.user.id, email: auth.user.email },
+    action: "run.regenerate",
+    targetType: "run",
+    targetId: run.id,
+    details: { mode, ownerUserId: run.userId, status: outcome.status },
+    req,
+  });
   return NextResponse.json(outcome.body, { status: outcome.status });
 }

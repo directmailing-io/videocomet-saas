@@ -29,13 +29,14 @@ export const lucia = new Lucia(adapter, {
       // mutierenden /api-Routen + Host-Gating fuer lp./Custom-Domains).
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      // Domain-Scope: In Prod muessen videocomet.de UND app.videocomet.de
-      // dieselbe Session sehen (Signup laeuft auf Marketing-Domain,
-      // Memberbereich auf App-Domain). Leading-Dot = alle Subdomains inkl.
-      // Root gelten als eine Session. Localhost bleibt host-only.
-      ...(process.env.NODE_ENV === "production"
-        ? { domain: ".videocomet.de" }
-        : {}),
+      // SECURITY (2026-09-02): Cookie ist host-only (nur app.videocomet.de).
+      // Bis dahin galt `domain: ".videocomet.de"` — damit wurde die Session
+      // auch an lp.videocomet.de (Kunden-HTML mit eigenem JS) mitgeschickt,
+      // und Kunden-JS haette dort per Cookie-Tossing eine fremde Session
+      // unterschieben koennen. Die urspruengliche Begruendung (Signup auf
+      // der Marketing-Domain) traegt nicht: Signup erzeugt keine Session,
+      // keine Marketing-Seite liest sie. Alte Domain-Cookies werden ueber
+      // `legacySessionCookieAttributes()` aktiv geloescht.
     },
   },
   getUserAttributes: (attributes) => ({

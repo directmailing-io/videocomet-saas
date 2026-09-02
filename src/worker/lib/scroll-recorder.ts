@@ -33,6 +33,7 @@ import {
   RenderNotReadyError,
   type CleanPageSession,
 } from "./clean-render";
+import { assertUrlIsSafe } from "@/lib/media-urls/ssrf-guard";
 
 /** Zwei unterstützte Capture-Modi (siehe Modul-Doc oben). */
 export type CaptureMode = "static-hero" | "scroll-recorded";
@@ -282,6 +283,11 @@ export async function recordCapture(opts: RecordOpts): Promise<RecordResult> {
       height: viewport.height,
       deviceScaleFactor: 1,
     });
+
+    // SECURITY: Ziel-URL kommt aus der Kunden-Kontaktliste. Vor JEDER
+    // Navigation gegen interne Netze pruefen (Metadata-Dienst, Docker-Netz,
+    // Privatnetz der Render-Server). Wirft SsrfBlockedError → Lead-Fehler.
+    await assertUrlIsSafe(opts.url);
 
     // Clean-Render Schicht 0+1: Adblocker + Consent-Preseed VOR goto.
     const clean = await prepareCleanPage(page, opts.url);
