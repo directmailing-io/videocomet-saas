@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { mediaItems, voiceProfiles } from "@/lib/db/schema";
 import { CONSENT_TEXT_VERSION } from "@/lib/intro";
 import { voiceTrainingQueue } from "@/worker/intro-queue";
+import { presentStorageUrl, presentStorageUrlOrNull } from "@/lib/bunny/private-storage";
 
 const MIN_VIDEO_SECONDS = 30;
 
@@ -126,5 +127,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, profile });
+  return NextResponse.json({
+    ok: true,
+    profile: { ...profile, sampleUrl: presentStorageUrlOrNull(profile.sampleUrl) },
+  });
 }

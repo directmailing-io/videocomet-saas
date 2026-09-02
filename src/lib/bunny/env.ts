@@ -34,6 +34,11 @@ export interface BunnyStorageEnv {
   accessKey: string;
   readonlyKey: string;
   cdnHostname: string;
+  /**
+   * ZoneSecurityKey der Storage-Pull-Zone (Token Authentication). Wird per
+   * Edge-Rule nur für private Ordner erzwungen, siehe lib/bunny/private-storage.ts.
+   */
+  tokenAuthKey: string | null;
 }
 
 export function getBunnyStreamEnv(): BunnyStreamEnv {
@@ -52,5 +57,8 @@ export function getBunnyStorageEnv(): BunnyStorageEnv {
     accessKey: requireEnv("BUNNY_STORAGE_ACCESS_KEY"),
     readonlyKey: requireEnv("BUNNY_STORAGE_READONLY_KEY"),
     cdnHostname: requireEnv("BUNNY_STORAGE_CDN_HOSTNAME"),
+    tokenAuthKey: process.env.BUNNY_STORAGE_TOKEN_AUTH_KEY?.length
+      ? process.env.BUNNY_STORAGE_TOKEN_AUTH_KEY
+      : null,
   };
 }

@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { introCalibrations, voiceProfiles } from "@/lib/db/schema";
 import { deleteVoiceModel } from "@/lib/fish-audio";
 import { deleteIntroFileByUrl } from "@/lib/bunny/intro-storage";
+import { presentStorageUrlOrNull } from "@/lib/bunny/private-storage";
 
 /**
  * GET /api/voice-profile — Voice-Profil des Users + Kalibrierungen seiner
@@ -29,9 +30,17 @@ export async function GET() {
     .where(eq(introCalibrations.userId, auth.user.id))
     .orderBy(desc(introCalibrations.createdAt));
 
+  // Dateien unter intro/ und users/*/webcam sind token-geschützt → für den
+  // Browser signieren. DB-Werte bleiben unsigniert.
   return NextResponse.json({
-    profile: profile ?? null,
-    calibrations,
+    profile: profile
+      ? { ...profile, sampleUrl: presentStorageUrlOrNull(profile.sampleUrl) }
+      : null,
+    calibrations: calibrations.map((c) => ({
+      ...c,
+      roomtoneUrl: presentStorageUrlOrNull(c.roomtoneUrl),
+      extraAudioUrl: presentStorageUrlOrNull(c.extraAudioUrl),
+    })),
   });
 }
 

@@ -13,6 +13,7 @@ import { validateUpload, type UploadKind } from "@/lib/upload";
 import { sniffImage } from "@/lib/upload-sniff";
 import { addBunnyAssetRef } from "@/lib/db/queries/bunny-assets";
 import { ensureIntroCalibration } from "@/lib/intro-calibration-enqueue";
+import { presentMediaItem, presentStorageUrl, presentStorageUrlOrNull } from "@/lib/bunny/private-storage";
 
 const MEDIA_TYPES: ReadonlyArray<MediaType> = [
   "webcam",
@@ -66,7 +67,9 @@ export async function GET(req: NextRequest) {
   }
 
   const items = await listUserMedia(auth.user.id, type);
-  return NextResponse.json({ items });
+  // Webcam-Aufnahmen liegen in einem token-geschützten Ordner → für den
+  // Browser signieren (DB behält die unsignierte URL).
+  return NextResponse.json({ items: items.map(presentMediaItem) });
 }
 
 export async function POST(req: NextRequest) {
@@ -197,7 +200,7 @@ export async function POST(req: NextRequest) {
       await ensureIntroCalibration(auth.user.id, media.id);
     }
 
-    return NextResponse.json({ media }, { status: 201 });
+    return NextResponse.json({ media: presentMediaItem(media) }, { status: 201 });
   } catch (err) {
     console.error("[api/media] upload failed:", err);
     return NextResponse.json(

@@ -9,6 +9,7 @@ import { campaigns, leads, voiceProfiles } from "@/lib/db/schema";
 import { getPreflightCounts } from "@/lib/db/queries/leads";
 import { getRunForPreflight } from "@/lib/db/queries/runs";
 import { INTRO_PREVIEW_TARGET } from "@/lib/intro";
+import { presentStorageUrl } from "@/lib/bunny/private-storage";
 
 /**
  * Intro-Block der Status-Antwort (personalisierte Video-Begrüßung,
@@ -179,7 +180,7 @@ export async function GET(
       previews: entries.map((e) => ({
         leadId: e.leadId,
         firstName: firstNameByLead.get(e.leadId) ?? null,
-        videoUrl: e.videoUrl,
+        videoUrl: presentStorageUrl(e.videoUrl),
       })),
     };
   }

@@ -27,6 +27,7 @@ import {
   getBunnyStreamEmbedUrl,
   DEFAULT_HLS_SIGN_TTL_SEC,
 } from "@/lib/bunny/sign-url";
+import { presentStorageUrl } from "@/lib/bunny/private-storage";
 
 export async function GET(
   _req: NextRequest,
@@ -49,7 +50,9 @@ export async function GET(
   // eigener Player hat eigene Auth-Logik und braucht keinen Token-Key.
   // Sign-Helper als Fallback (wenn Embed-URL nicht ableitbar oder
   // BUNNY_STREAM_TOKEN_AUTH_KEY gesetzt ist).
-  let url = original;
+  // Storage-URLs in token-geschützten Ordnern (Webcam, Gast-Aufnahmen,
+  // Intro) bekommen hier ihren Browser-Token (seit 2026-09-02).
+  let url = presentStorageUrl(original);
   let embed = false;
   if (isStream) {
     const embedUrl = getBunnyStreamEmbedUrl(original);
@@ -65,7 +68,7 @@ export async function GET(
     {
       url,
       embed,
-      signed: isStream && !embed && url !== original,
+      signed: url !== original && !embed,
       expiresInSec: DEFAULT_HLS_SIGN_TTL_SEC,
     },
     { headers: { "Cache-Control": "private, no-store" } },

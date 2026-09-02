@@ -31,6 +31,7 @@ import {
 } from "./campaign-leads-table";
 import { ActivityCenter } from "@/app/(app)/aktivitaet/activity-center";
 import { CrmTab } from "./crm-tab";
+import { presentStorageUrl } from "@/lib/bunny/private-storage";
 
 function formatDate(d: Date | null): string {
   if (!d) return "";
@@ -881,7 +882,7 @@ function WebcamPreview({
     />
   ) : (
     <video
-      src={media.publicUrl}
+      src={presentStorageUrl(media.publicUrl)}
       controls
       preload="metadata"
       className={`${aspectClass} rounded-squircle-md bg-ink object-contain`}

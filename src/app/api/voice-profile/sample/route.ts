@@ -9,6 +9,7 @@ import { voiceProfiles } from "@/lib/db/schema";
 import { uploadIntroFile } from "@/lib/bunny/intro-storage";
 import { CONSENT_TEXT_VERSION } from "@/lib/intro";
 import { voiceTrainingQueue } from "@/worker/intro-queue";
+import { presentStorageUrl, presentStorageUrlOrNull } from "@/lib/bunny/private-storage";
 
 const MAX_SAMPLE_BYTES = 25 * 1024 * 1024;
 
@@ -138,5 +139,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, profile });
+  return NextResponse.json({
+    ok: true,
+    profile: { ...profile, sampleUrl: presentStorageUrlOrNull(profile.sampleUrl) },
+  });
 }
