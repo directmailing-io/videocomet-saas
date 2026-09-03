@@ -14,11 +14,20 @@
  *  - Der Gast wählt Querformat oder Hochformat, oder der Link gibt das
  *    Format vor (`orientation`-Preset des Share-Links). Auf dem Handy ist
  *    Hochformat der Standard, am Rechner Querformat.
- *  - Die Video-Bühne folgt IMMER den echten Pixelmaßen des Kamerabilds
- *    bzw. der fertigen Aufnahme (loadedmetadata). Vorher war die Bühne fix
- *    16:9, ein Handy-Hochkant-Video hing dann mit schwarzen Balken darin.
- *  - Passt das Kamerabild nicht zum gewünschten Format (Handy quer gehalten,
- *    Desktop-Webcam kann kein Hochformat), sagt die Seite das klar.
+ *  - HANDY: Die Frame-Orientierung bestimmt das Gerät selbst (iOS rotiert
+ *    die Frames passend zur Haltung; vertauschte width/height-Constraints
+ *    kehren das Ergebnis auf iOS sogar um). Deshalb fordern wir auf Touch-
+ *    Geräten KEINE gedrehten Constraints an. Die Format-Wahl ist dort eine
+ *    Anleitung ("Handy senkrecht halten") plus Live-Abgleich mit dem Bild.
+ *  - DESKTOP: gedrehte Constraints (720x1280) für Webcams, die Hochformat
+ *    können; die meisten bleiben quer, das zeigen wir als Hinweis.
+ *  - Die Video-Bühne folgt IMMER den echten Pixelmaßen des Kamerabilds bzw.
+ *    der fertigen Aufnahme. Größe wird per JS in Pixeln gesetzt (Breite,
+ *    Höhe), nicht per CSS aspect-ratio: WebKit löst Prozent-Höhen von
+ *    Kindern gegen aspect-ratio-Höhen nicht zuverlässig auf, die Bühne
+ *    "zerfiel" auf dem iPhone (Balken links/rechts).
+ *  - Der KI-Hinweis ist zuklappbar und klappt automatisch zu, sobald die
+ *    Kamera läuft (Kurzform bleibt als eine Zeile sichtbar).
  *
  * KI-Begrüßung: Vor der Aufnahme gibt es einen 3-Sekunden-Countdown, in den
  * ersten Sekunden der Aufnahme eine Einblendung „Hi!“, „kurz Pause“, „weiter“.
@@ -50,8 +59,12 @@ import {
   Mic,
   Monitor,
   Smartphone,
+  ChevronDown,
+  ChevronUp,
+  Lightbulb,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { RecordingHint } from "@/components/intro/recording-hint";
 import { cn } from "@/lib/utils";
 
 type Status = "open" | "used" | "expired" | "revoked";
@@ -84,6 +97,10 @@ interface Dims {
 
 const COUNTDOWN_SECONDS = 3;
 const CUE_SECONDS = 5;
+/** Bühne darf höchstens diesen Anteil der Fensterhöhe belegen. */
+const STAGE_MAX_VIEWPORT_SHARE = 0.68;
+/** Hochkant-Bühne am Desktop nicht breiter als das (sonst riesig). */
+const STAGE_PORTRAIT_MAX_WIDTH = 360;
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "video/webm";
@@ -226,6 +243,35 @@ export function GuestRecorder({
   const [liveDims, setLiveDims] = React.useState<Dims | null>(null);
   const [reviewDims, setReviewDims] = React.useState<Dims | null>(null);
 
+  /** KI-Hinweis: offen bis die Kamera läuft, danach eine Zeile. */
+  const [hintOpen, setHintOpen] = React.useState(true);
+  const hintTouchedRef = React.useRef(false);
+
+  /** Verfügbare Breite + Fensterhöhe für die Bühne (per JS gemessen). */
+  const stageHostRef = React.useRef<HTMLDivElement | null>(null);
+  const [stageBox, setStageBox] = React.useState<{ width: number; viewportH: number } | null>(null);
+  React.useEffect(() => {
+    const host = stageHostRef.current;
+    if (!host) return;
+    const measure = () => {
+      const w = host.getBoundingClientRect().width;
+      const vh = window.visualViewport?.height ?? window.innerHeight;
+      if (w > 0 && vh > 0) setStageBox({ width: w, viewportH: vh });
+    };
+    measure();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(host);
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    window.visualViewport?.addEventListener("resize", measure);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+      window.visualViewport?.removeEventListener("resize", measure);
+    };
+  }, []);
+
   const remaining = Math.max(0, maxDurationSec - elapsed);
   const overTime = elapsed >= maxDurationSec;
 
@@ -304,6 +350,7 @@ export function GuestRecorder({
       setLiveDims({ width: el.videoWidth, height: el.videoHeight });
       return;
     }
+    if (isTouchDevice()) return; // getSettings = Sensor-Masse, auf dem Handy irrefuehrend
     const vt = streamRef.current?.getVideoTracks()[0];
     const s = vt?.getSettings();
     if (s?.width && s?.height) setLiveDims({ width: s.width, height: s.height });
@@ -312,23 +359,31 @@ export function GuestRecorder({
   const initCamera = React.useCallback(async (mode?: GuestOrientation) => {
     const effective = mode ?? orientationRef.current;
     const portrait = effective === "portrait";
+    const mobile = isTouchDevice();
     setPermError(null);
     setRecordError(null);
     setInitializing(true);
     try {
-      // Bei Hochformat drehen wir width/height + aspectRatio. Handys
-      // liefern dann Hochkant. Desktop-Webcams ignorieren das meist und
-      // bleiben quer; das zeigen wir dem Gast unten als Hinweis an.
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: portrait ? { ideal: 720, max: 1080 } : { ideal: 1280, max: 1920 },
-          height: portrait ? { ideal: 1280, max: 1920 } : { ideal: 720, max: 1080 },
-          frameRate: { ideal: 30, max: 60 },
-          aspectRatio: { ideal: portrait ? 9 / 16 : 16 / 9 },
-          facingMode: { ideal: "user" },
-        },
-        audio: true,
-      });
+      // HANDY: keine gedrehten Constraints. iOS rotiert die Frames passend
+      // zur Haltung des Geräts; width/height beziehen sich dort auf den
+      // Sensor und wuerden das Ergebnis umkehren (beobachtet 2026-09-03).
+      // DESKTOP: bei Hochformat width/height + aspectRatio drehen, damit
+      // Webcams, die es koennen, Hochkant liefern.
+      const video: MediaTrackConstraints = mobile
+        ? {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30, max: 60 },
+            facingMode: { ideal: "user" },
+          }
+        : {
+            width: portrait ? { ideal: 720, max: 1080 } : { ideal: 1280, max: 1920 },
+            height: portrait ? { ideal: 1280, max: 1920 } : { ideal: 720, max: 1080 },
+            frameRate: { ideal: 30, max: 60 },
+            aspectRatio: { ideal: portrait ? 9 / 16 : 16 / 9 },
+            facingMode: { ideal: "user" },
+          };
+      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
       streamRef.current = stream;
       const vt = stream.getVideoTracks()[0];
       if (vt) {
@@ -336,13 +391,16 @@ export function GuestRecorder({
         console.log(
           `[guest-recorder] video track: ${s.width}x${s.height} @${s.frameRate}fps (wanted ${effective})`,
         );
-        if (s.width && s.height) setLiveDims({ width: s.width, height: s.height });
+        // Nur Startwert. Auf iOS sind das Sensor-Masse (quer), die echten
+        // Frame-Masse kommen gleich per loadedmetadata (readLiveDims).
+        if (s.width && s.height && !mobile) setLiveDims({ width: s.width, height: s.height });
       }
       if (liveVideoRef.current) {
         liveVideoRef.current.srcObject = stream;
         liveVideoRef.current.play().catch(() => {});
       }
       setHasStream(true);
+      if (!hintTouchedRef.current) setHintOpen(false);
       startAudioMeter(stream);
     } catch (err) {
       console.error("[guest-recorder] getUserMedia failed:", err);
@@ -400,13 +458,17 @@ export function GuestRecorder({
     beginCountdown();
   }
 
-  /** Format wechseln: nur vor der Aufnahme. Stream neu anfordern. */
+  /**
+   * Format wechseln: nur vor der Aufnahme. Am Desktop Stream mit gedrehten
+   * Constraints neu anfordern. Am Handy aendert sich nichts am Stream (die
+   * Frames folgen der Haltung), nur Wunsch + Hinweis.
+   */
   async function switchOrientation(next: GuestOrientation) {
     if (state !== "ready") return;
     if (next === orientation) return;
     setOrientation(next);
     orientationRef.current = next;
-    if (streamRef.current) {
+    if (streamRef.current && !isTouchDevice()) {
       stopAudioMeter();
       stopStream();
       await initCamera(next);
@@ -620,6 +682,19 @@ export function GuestRecorder({
         : 16 / 9;
   const stageIsPortrait = stageAspect < 1;
 
+  // Explizite Pixelmasse: Breite = min(verfuegbar, Hochkant-Deckel,
+  // max. Hoehe * Aspect). Vor der ersten Messung (SSR) faellt die Buehne
+  // auf volle Breite mit 16:9 zurueck, damit nichts springt.
+  const stageSize = (() => {
+    if (!stageBox) return null;
+    const maxH = stageBox.viewportH * STAGE_MAX_VIEWPORT_SHARE;
+    let width = stageBox.width;
+    if (stageIsPortrait) width = Math.min(width, STAGE_PORTRAIT_MAX_WIDTH);
+    width = Math.min(width, maxH * stageAspect);
+    width = Math.max(120, Math.floor(width));
+    return { width, height: Math.round(width / stageAspect) };
+  })();
+
   // Stimmt das Kamerabild mit dem gewünschten Format überein?
   const actualLive = dimsToOrientation(liveDims);
   const wanted: GuestOrientation = presetOrientation ?? orientation;
@@ -686,6 +761,42 @@ export function GuestRecorder({
 
   return (
     <div className="space-y-5">
+      {/* KI-Begrüßungs-Hinweis: zuklappbar. Offen bis die Kamera läuft,
+          danach als eine Zeile. Der Gast kann jederzeit auf- und zuklappen. */}
+      {hintOpen ? (
+        <div className="relative">
+          <RecordingHint className="border-brand/30 bg-brand-soft/40 pr-4" />
+          <button
+            type="button"
+            onClick={() => {
+              hintTouchedRef.current = true;
+              setHintOpen(false);
+            }}
+            className="mt-2 mx-auto flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-ink-muted hover:text-ink hover:bg-surface-soft transition-colors"
+            aria-expanded
+          >
+            <ChevronUp className="size-3.5" />
+            Hinweis zuklappen
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            hintTouchedRef.current = true;
+            setHintOpen(true);
+          }}
+          aria-expanded={false}
+          className="flex w-full items-center gap-2.5 rounded-squircle-md border border-brand/30 bg-brand-soft/40 px-4 py-3 text-left text-sm text-ink hover:bg-brand-soft/70 transition-colors"
+        >
+          <Lightbulb className="size-4 shrink-0 text-brand-deep" />
+          <span className="flex-1 leading-snug">
+            <span className="font-semibold">Start mit „Hi!“,</span> dann kurz Luft holen, dann weitersprechen.
+          </span>
+          <ChevronDown className="size-4 shrink-0 text-ink-muted" />
+        </button>
+      )}
+
       {/* Format-Wahl (nur vor der Aufnahme). Bei Vorgabe durch den Link:
           fester Hinweis statt Umschalter. */}
       {state === "ready" && (
@@ -698,8 +809,10 @@ export function GuestRecorder({
                 <Monitor className="size-4" />
               )}
               Bitte im {orientationLabel(presetOrientation)} aufnehmen
-              {presetOrientation === "portrait" && touch ? (
-                <span className="font-normal text-brand-deep/80">(Handy senkrecht halten)</span>
+              {touch ? (
+                <span className="font-normal text-brand-deep/80">
+                  {presetOrientation === "portrait" ? "(Handy senkrecht halten)" : "(Handy quer halten)"}
+                </span>
               ) : null}
             </div>
           ) : (
@@ -739,35 +852,35 @@ export function GuestRecorder({
                 </button>
               </div>
               <p className="text-xs text-ink-muted text-center">
-                {orientation === "portrait"
-                  ? "Hochformat passt für Handy-Videos, Reels und Stories."
-                  : "Querformat passt für Videos am Rechner und auf Webseiten."}
+                {touch
+                  ? orientation === "portrait"
+                    ? "Halte dein Handy senkrecht."
+                    : "Halte dein Handy quer."
+                  : orientation === "portrait"
+                    ? "Hochformat passt für Handy-Videos, Reels und Stories."
+                    : "Querformat passt für Videos am Rechner und auf Webseiten."}
               </p>
             </>
           )}
         </div>
       )}
 
-      {/* Video-Bühne: folgt den echten Maßen des Bilds. Live + Review sind
-          gleichzeitig gemountet (refs nie null), Sichtbarkeit per CSS. */}
-      <div className="flex justify-center">
+      {/* Video-Bühne: folgt den echten Maßen des Bilds. Größe wird in
+          Pixeln gesetzt (WebKit-sicher). Live + Review sind gleichzeitig
+          gemountet (refs nie null), Sichtbarkeit per CSS. */}
+      <div ref={stageHostRef} className="flex w-full justify-center">
         <div
-          className={cn(
-            "relative overflow-hidden rounded-squircle-xl bg-ink shadow-lift transition-[aspect-ratio] duration-300",
-            stageIsPortrait ? "w-full max-w-[360px]" : "w-full",
-          )}
-          // Breite so begrenzen, dass die Höhe nie über 70 % des Bildschirms
-          // geht. So bleibt das Seitenverhältnis exakt und es gibt keine
-          // Ränder (maxHeight allein würde die Breite stehen lassen).
-          style={{
-            aspectRatio: String(stageAspect),
-            maxWidth: `min(100%, calc(70vh * ${stageAspect.toFixed(4)}))`,
-          }}
+          className="relative overflow-hidden rounded-squircle-xl bg-ink shadow-lift"
+          style={
+            stageSize
+              ? { width: `${stageSize.width}px`, height: `${stageSize.height}px` }
+              : { width: "100%", aspectRatio: "16 / 9" }
+          }
         >
           <video
             ref={liveVideoRef}
             className={cn(
-              "h-full w-full object-contain",
+              "absolute inset-0 h-full w-full object-contain",
               showLiveStage ? "block" : "hidden",
             )}
             autoPlay

@@ -21,7 +21,6 @@ import { notFound } from "next/navigation";
 import { getShareLinkBySlugPublic } from "@/lib/db/queries/webcam-share";
 import { GuestRecorder } from "./guest-recorder";
 import { TipsCard } from "./tips-card";
-import { RecordingHint } from "@/components/intro/recording-hint";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -53,12 +52,6 @@ export default async function GuestRecordingPage({
             Link-ID: #{String(info.numericId).padStart(3, "0")}
           </p>
         </header>
-
-        {/* Wichtigster Hinweis zuerst: „Hi!“ und dann kurze Pause. In diese
-            Pause setzt die KI-Begrüßung später den Namen. */}
-        {info.status === "open" && (
-          <RecordingHint className="border-brand/30 bg-brand-soft/40" />
-        )}
 
         {/* Video: die Haupthandlung */}
         <GuestRecorder
