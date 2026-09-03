@@ -109,8 +109,6 @@ const TOTAL_EST_SEC = 170;
 
 function useRenderElapsed(storageKey: string): number {
   const [elapsed, setElapsed] = React.useState(0);
-  /** Format je Vorschau-Video, aus den echten Videomaßen (Hochkant-Webcam → Hochkant-Vorschau). */
-  const [previewOrientation, setPreviewOrientation] = React.useState<Record<string, VideoOrientation>>({});
   React.useEffect(() => {
     let startedAt = Number(window.sessionStorage.getItem(storageKey));
     if (!startedAt || Number.isNaN(startedAt)) {
@@ -237,6 +235,8 @@ export function IntroPreviewSection({
   /** Für die Fortschritts-Persistenz über Reloads (sessionStorage-Key). */
   runId: string;
 }) {
+  /** Format je Vorschau-Video aus den echten Videomaßen (Hochkant-Webcam → Hochkant-Vorschau). Vor dem Early-Return (Rules of Hooks). */
+  const [previewOrientation, setPreviewOrientation] = React.useState<Record<string, VideoOrientation>>({});
   if (!intro.enabled) return null;
 
   // Kein ready-Voice-Profil → Feature fällt für diese Runde aus.
