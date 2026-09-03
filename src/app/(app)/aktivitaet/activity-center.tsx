@@ -29,6 +29,7 @@ import { useKeyboardShortcuts } from "./_components/use-keyboard-shortcuts";
 import type { ActivityKind } from "./_components/event-icon";
 import type { LeadTemperature } from "./_components/temperature-badge";
 import type { FunnelResult } from "./_components/funnel-card";
+import { collapseVideoEvents } from "@/lib/activity/video-progress-label";
 
 // ─────────────────────────────────────────────────────────────────────
 // PUBLIC TYPES — exakt aus dem Briefing.
@@ -664,7 +665,7 @@ export function ActivityCenter({
 
             {rows.length > 0 && (
               <ul role="rowgroup" className="flex flex-col">
-                {rows.map((row, idx) => (
+                {collapseFeedRows(rows).map((row, idx) => (
                   <li
                     key={row.eventId}
                     data-feed-idx={idx}
@@ -1053,4 +1054,40 @@ function defaultViewName(filters: {
   else if (filters.dateRange === "7d") parts.push("diese Woche");
   else if (filters.dateRange === "30d") parts.push("letzte 30 Tage");
   return parts.join(" ");
+}
+
+
+/**
+ * Verdichtet Video-Fortschritts-Ticks (alle 5 s) je Lead und Sitzung zu
+ * EINEM Feed-Eintrag mit Endstand („Video gesehen 96 %“). Andere Events
+ * bleiben unveraendert. Reihenfolge: neueste zuerst.
+ */
+function collapseFeedRows(rows: ActivityFeedRow[]): ActivityFeedRow[] {
+  const byLead = new Map<string, ActivityFeedRow[]>();
+  for (const r of rows) {
+    const list = byLead.get(r.lead.id) ?? [];
+    list.push(r);
+    byLead.set(r.lead.id, list);
+  }
+  const out: ActivityFeedRow[] = [];
+  byLead.forEach((list) => {
+    const collapsed = collapseVideoEvents(
+      list.map((r) => ({ eventId: r.eventId, ts: r.ts, kind: r.kind as string, payload: r.payload })),
+    );
+    const byId = new Map(list.map((r) => [r.eventId, r]));
+    for (const ev of collapsed) {
+      const base = byId.get(ev.eventId);
+      if (!base) continue;
+      if ("pct" in ev && ev.kind === "video_session") {
+        out.push({
+          ...base,
+          kind: (ev.ended ? "video_ended" : "video_progress") as ActivityKind,
+          payload: { ...(base.payload ?? {}), coveragePct: ev.pct ?? undefined, collapsedCount: ev.count },
+        });
+      } else {
+        out.push(base);
+      }
+    }
+  });
+  return out.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
 }

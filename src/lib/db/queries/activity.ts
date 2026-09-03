@@ -326,7 +326,14 @@ export async function getActivityCounts(
       byKindJson: sql<Record<string, number> | null>`(
         SELECT COALESCE(jsonb_object_agg(k, c), '{}'::jsonb)
         FROM (
-          SELECT ${leadEvents.kind} AS k, COUNT(*)::int AS c
+          SELECT ${leadEvents.kind} AS k,
+            CASE
+              -- Fortschritts-Ticks (alle 5 s) nicht als Einzel-Events zaehlen,
+              -- sondern als Ansehen-Sitzungen (ein Eintrag je Sitzung).
+              WHEN ${leadEvents.kind} IN ('video_progress', 'video_ended')
+                THEN COUNT(DISTINCT COALESCE(${leadEvents.sessionId}, ${leadEvents.id}::text))::int
+              ELSE COUNT(*)::int
+            END AS c
           FROM ${leadEvents}
           INNER JOIN ${leads} ON ${leads.id} = ${leadEvents.leadId}
           INNER JOIN ${runs} ON ${runs.id} = ${leads.runId}
@@ -348,6 +355,8 @@ export async function getActivityCounts(
       byKind[k] = Number(v) || 0;
     }
   }
+  // Gesamt = Summe der (verdichteten) Chip-Zaehler, damit „Alle“ zur Liste passt.
+  const totalCollapsed = Object.values(byKind).reduce((a, b) => a + b, 0);
 
   // Temperature breakdown across the unique leads in the filtered set.
   // Pull only the per-lead aggregates needed for the classifier.
@@ -390,7 +399,7 @@ export async function getActivityCounts(
   }
 
   return {
-    total: row?.total ?? 0,
+    total: totalCollapsed || (row?.total ?? 0),
     byKind,
     byTemperature,
     uniqueLeads: row?.uniqueLeads ?? 0,

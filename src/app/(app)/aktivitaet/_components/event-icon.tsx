@@ -20,7 +20,7 @@ import {
   CircleDot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { progressLabel } from "@/lib/activity/video-progress-label";
+import { progressLabel, progressPercent } from "@/lib/activity/video-progress-label";
 
 /**
  * Aktivitäts-Event-Typen — als String-Literal-Union, weil die Source-of-Truth
@@ -126,8 +126,10 @@ export function describeKind(kind: ActivityKind, payload?: Record<string, unknow
     case "video_progress":
       // Einheitlich ueber lib/activity: coveragePct (neu) bzw. atSec/duration (alt).
       return progressLabel(payload as Record<string, unknown> | null | undefined);
-    case "video_ended":
-      return "Video komplett gesehen";
+    case "video_ended": {
+      const pct = progressPercent(payload as Record<string, unknown> | null | undefined);
+      return pct !== null && pct < 100 ? `Video zu Ende gesehen (${pct} % der Zeitleiste)` : "Video komplett gesehen";
+    }
     case "video_mute":
       return "Ton stumm geschaltet";
     case "video_unmute":
