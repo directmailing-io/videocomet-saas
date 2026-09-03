@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 // `(slug, domain)` pair in Node-runtime (Edge can't reach the DB).
 
 const SESSION_COOKIE = "videocomet_session";
+const ADMIN_SESSION_COOKIE = "videocomet_admin_session";
 
 const ADMIN_PUBLIC_PATHS = ["/admin/login"];
 
@@ -228,6 +229,7 @@ function withLegacyCookieCleanup(res: NextResponse, req: NextRequest, hasCookie:
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const session = req.cookies.get(SESSION_COOKIE)?.value;
+  const adminSession = req.cookies.get(ADMIN_SESSION_COOKIE)?.value;
   const rawHost = (req.headers.get("host") ?? "").toLowerCase().split(":")[0];
   const hostKind = classifyHost(rawHost);
 
@@ -242,7 +244,7 @@ export function middleware(req: NextRequest) {
     }
     // Admin-API ohne Session-Cookie: sofort 401. Der Rollen-Check selbst
     // bleibt in requireAdminApi (Middleware hat keinen DB-Zugriff).
-    if (pathname.startsWith("/api/admin/") && !session) {
+    if (pathname.startsWith("/api/admin/") && !adminSession) {
       return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
     }
     if (isProtectedApi && MUTATING_METHODS.has(req.method)) {
@@ -370,7 +372,7 @@ export function middleware(req: NextRequest) {
   }
 
   if (isAdminPath(pathname)) {
-    if (!session) {
+    if (!adminSession) {
       const url = req.nextUrl.clone();
       url.pathname = "/admin/login";
       url.search = "";
@@ -404,7 +406,7 @@ export function middleware(req: NextRequest) {
   return withLegacyCookieCleanup(
     NextResponse.next({ request: { headers: finalHeaders } }),
     req,
-    Boolean(session) && hostKind === "own",
+    Boolean(session || adminSession) && hostKind === "own",
   );
 }
 

@@ -2,14 +2,14 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import type { Session, User } from "lucia";
-import { lucia, validateRequest } from "@/lib/auth";
+import { lucia, luciaAdmin, validateRequest } from "@/lib/auth";
 
 export type AuthedRSC = { user: User; session: Session };
 
 // ── RSC Guards ──────────────────────────────────────────────────────────────
 
 export async function requireUser(): Promise<AuthedRSC> {
-  const { user, session } = await validateRequest();
+  const { user, session } = await validateRequest("user");
   if (!user || !session) {
     redirect("/login");
   }
@@ -30,7 +30,7 @@ export async function requireUser(): Promise<AuthedRSC> {
 }
 
 export async function requireAdmin(): Promise<AuthedRSC> {
-  const { user, session } = await validateRequest();
+  const { user, session } = await validateRequest("admin");
   if (!user || !session) {
     redirect("/admin/login");
   }
@@ -39,7 +39,7 @@ export async function requireAdmin(): Promise<AuthedRSC> {
   }
   if (!user.isActive) {
     try {
-      const blank = lucia.createBlankSessionCookie();
+      const blank = luciaAdmin.createBlankSessionCookie();
       (await cookies()).set(blank.name, blank.value, blank.attributes);
     } catch {
       // ignore
@@ -56,7 +56,7 @@ export type ApiGuardResult =
   | { ok: false; response: NextResponse };
 
 export async function requireUserApi(): Promise<ApiGuardResult> {
-  const { user, session } = await validateRequest();
+  const { user, session } = await validateRequest("user");
   if (!user || !session) {
     return {
       ok: false,
@@ -79,7 +79,7 @@ export async function requireUserApi(): Promise<ApiGuardResult> {
 }
 
 export async function requireAdminApi(): Promise<ApiGuardResult> {
-  const { user, session } = await validateRequest();
+  const { user, session } = await validateRequest("admin");
   if (!user || !session) {
     return {
       ok: false,

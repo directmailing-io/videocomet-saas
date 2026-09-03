@@ -49,3 +49,4 @@ drizzle/meta/
 intro-poc/
 .recorder-e2e.mjs
 .cookie-test.mjs
+.shot-test.mjs

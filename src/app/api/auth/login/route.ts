@@ -8,7 +8,7 @@ import argon2 from "argon2";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
-import { lucia } from "@/lib/auth";
+import { luciaFor } from "@/lib/auth";
 import { signShortToken } from "@/lib/totp";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/tracking";
@@ -87,8 +87,11 @@ export async function POST(req: NextRequest) {
 
   await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
 
-  const session = await lucia.createSession(user.id, {});
-  const cookie = lucia.createSessionCookie(session.id);
+  // Admin und Kunde haben getrennte Cookie-Namen (seit 2026-09-03), damit
+  // beide Sitzungen im selben Browser nebeneinander bestehen koennen.
+  const inst = luciaFor(user.role);
+  const session = await inst.createSession(user.id, {});
+  const cookie = inst.createSessionCookie(session.id);
   // Hinweis: Das alte domain-weite Cookie (.videocomet.de, bis 2026-09-02)
   // raeumt die Middleware beim naechsten Seitenaufruf weg (Set-Cookie mit
   // Max-Age=0). Hier geht das nicht: cookies().set() ist per Name gekeyt.

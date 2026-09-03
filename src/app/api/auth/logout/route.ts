@@ -3,15 +3,19 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { lucia, validateRequest } from "@/lib/auth";
+import { allValidSessions, lucia, luciaAdmin } from "@/lib/auth";
 
 async function destroySession() {
-  const { session } = await validateRequest();
-  if (session) {
-    await lucia.invalidateSession(session.id);
+  // Alle Sitzungen abmelden, die der Browser mitschickt (Kunde UND Admin),
+  // und beide Cookie-Namen leeren.
+  for (const { inst, session } of await allValidSessions()) {
+    await inst.invalidateSession(session.id);
   }
-  const blank = lucia.createBlankSessionCookie();
-  (await cookies()).set(blank.name, blank.value, blank.attributes);
+  const jar = await cookies();
+  for (const inst of [lucia, luciaAdmin]) {
+    const blank = inst.createBlankSessionCookie();
+    jar.set(blank.name, blank.value, blank.attributes);
+  }
 }
 
 export async function POST() {

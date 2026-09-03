@@ -14,7 +14,7 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
-import { lucia } from "@/lib/auth";
+import { luciaAdmin } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { decryptTotpSecret, verifyShortToken, verifyTotp } from "@/lib/totp";
 
@@ -69,8 +69,8 @@ export async function POST(req: NextRequest) {
   }
 
   await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
-  const session = await lucia.createSession(user.id, {});
-  const cookie = lucia.createSessionCookie(session.id);
+  const session = await luciaAdmin.createSession(user.id, {});
+  const cookie = luciaAdmin.createSessionCookie(session.id);
   (await cookies()).set(cookie.name, cookie.value, cookie.attributes);
   return NextResponse.json({ ok: true, role: user.role });
 }
