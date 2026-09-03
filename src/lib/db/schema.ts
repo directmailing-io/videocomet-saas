@@ -1037,6 +1037,11 @@ export const webcamShareLinks = pgTable("webcam_share_links", {
   title: text("title"),
   /** Maximale Aufnahmedauer in Sekunden (Default 120s). */
   maxDurationSec: integer("max_duration_sec").notNull().default(120),
+  /**
+   * Vorgegebenes Aufnahmeformat (Migration 0075): 'landscape' | 'portrait'.
+   * NULL = der Gast wählt selbst (Handy → Hochformat, Rechner → Querformat).
+   */
+  orientation: text("orientation"),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   usedAt: timestamp("used_at", { withTimezone: true }),
   mediaItemId: uuid("media_item_id").references(() => mediaItems.id, { onDelete: "set null" }),

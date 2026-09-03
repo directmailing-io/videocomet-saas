@@ -10,6 +10,8 @@ import {
   Sparkles,
   HandMetal,
   Mic,
+  Monitor,
+  Smartphone,
   Smile,
   Users,
   Timer,
@@ -23,7 +25,7 @@ const TIPS: Array<{
 }> = [
   {
     icon: HandMetal,
-    text: "Hände entspannt unten — sonst überlappt sie mit dem Hintergrund-Content.",
+    text: "Hände entspannt unten lassen, sonst verdecken sie später den Inhalt dahinter.",
   },
   {
     icon: Mic,
@@ -39,7 +41,7 @@ const TIPS: Array<{
   },
   {
     icon: Timer,
-    text: "Kurz halten — 20–40 Sekunden reichen meist.",
+    text: "Kurz halten, 20 bis 40 Sekunden reichen meist.",
   },
   {
     icon: Wallpaper,
@@ -47,7 +49,29 @@ const TIPS: Array<{
   },
 ];
 
-export function TipsCard() {
+export function TipsCard({
+  orientation = null,
+}: {
+  orientation?: "landscape" | "portrait" | null;
+}) {
+  const tips =
+    orientation === "portrait"
+      ? [
+          {
+            icon: Smartphone,
+            text: "Handy senkrecht halten, Kamera auf Augenhöhe.",
+          },
+          ...TIPS,
+        ]
+      : orientation === "landscape"
+        ? [
+            {
+              icon: Monitor,
+              text: "Am Rechner aufnehmen oder das Handy quer halten.",
+            },
+            ...TIPS,
+          ]
+        : TIPS;
   return (
     <aside className="mx-auto max-w-sm rounded-squircle-md bg-surface-soft px-4 py-3.5 space-y-2">
       <div className="flex items-center gap-1.5">
@@ -57,7 +81,7 @@ export function TipsCard() {
         </h2>
       </div>
       <ul className="grid gap-1.5 sm:grid-cols-2">
-        {TIPS.map(({ icon: Icon, text }) => (
+        {tips.map(({ icon: Icon, text }) => (
           <li key={text} className="flex gap-2 text-xs leading-snug text-ink-muted">
             <Icon className="size-3.5 shrink-0 mt-0.5 text-brand-deep/70" />
             <span>{text}</span>

@@ -98,6 +98,10 @@ export default async function MediathekPage() {
       numericId: l.numericId,
       title: l.title,
       maxDurationSec: l.maxDurationSec,
+      orientation:
+        l.orientation === "portrait" || l.orientation === "landscape"
+          ? l.orientation
+          : null,
       expiresAt: l.expiresAt ? l.expiresAt.toISOString() : null,
       usedAt: l.usedAt ? l.usedAt.toISOString() : null,
       mediaItemId: l.mediaItemId,

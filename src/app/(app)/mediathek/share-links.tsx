@@ -48,6 +48,8 @@ export interface ShareLinkRow {
   numericId: number;
   title: string | null;
   maxDurationSec: number;
+  /** Format-Vorgabe für den Gast; null = Gast wählt selbst. */
+  orientation: "landscape" | "portrait" | null;
   expiresAt: string | null;
   usedAt: string | null;
   mediaItemId: string | null;
@@ -132,6 +134,7 @@ function CreateLinkDialog({
   const [open, setOpen] = React.useState(false);
   const [title, setTitle] = React.useState("");
   const [maxDuration, setMaxDuration] = React.useState(120);
+  const [orientation, setOrientation] = React.useState<"any" | "landscape" | "portrait">("any");
   const [expiresAt, setExpiresAt] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [createdLink, setCreatedLink] = React.useState<{
@@ -143,6 +146,7 @@ function CreateLinkDialog({
   function reset() {
     setTitle("");
     setMaxDuration(120);
+    setOrientation("any");
     setExpiresAt("");
     setCreatedLink(null);
     setSubmitting(false);
@@ -154,6 +158,7 @@ function CreateLinkDialog({
       const payload: Record<string, unknown> = {
         title: title.trim() || undefined,
         maxDurationSec: maxDuration,
+        orientation: orientation === "any" ? null : orientation,
       };
       if (expiresAt) {
         // <input type="datetime-local"> liefert lokale Zeit ohne TZ → zu ISO ergänzen.
@@ -239,7 +244,7 @@ function CreateLinkDialog({
                   maxLength={140}
                 />
                 <p className="text-xs text-ink-muted">
-                  Nur du siehst diese Notiz — sie hilft beim Wiederfinden.
+                  Nur du siehst diese Notiz. Sie hilft beim Wiederfinden.
                 </p>
               </div>
 
@@ -268,6 +273,41 @@ function CreateLinkDialog({
                 </div>
               </div>
 
+              <div className="space-y-1.5">
+                <Label>Format der Aufnahme</Label>
+                <div role="group" aria-label="Format" className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      ["any", "Gast wählt"],
+                      ["landscape", "Querformat"],
+                      ["portrait", "Hochformat"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setOrientation(value)}
+                      aria-pressed={orientation === value}
+                      className={cn(
+                        "rounded-squircle-sm border px-3 py-2 text-sm font-semibold transition-colors",
+                        orientation === value
+                          ? "border-ink bg-ink text-white"
+                          : "border-line bg-surface text-ink-muted hover:text-ink",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-ink-muted">
+                  {orientation === "portrait"
+                    ? "Der Gast sieht: Bitte im Hochformat aufnehmen (Handy senkrecht). Passt für Reels und Stories."
+                    : orientation === "landscape"
+                      ? "Der Gast sieht: Bitte im Querformat aufnehmen. Passt für Videos auf Webseiten."
+                      : "Der Gast kann zwischen Quer- und Hochformat wechseln. Auf dem Handy ist Hochformat vorausgewählt."}
+                </p>
+              </div>
+
               <div className="rounded-squircle-sm bg-surface-soft px-4 py-3">
                 <p className="text-xs text-ink-muted">
                   Der Empfänger sieht beim Öffnen:
@@ -277,6 +317,11 @@ function CreateLinkDialog({
                 </p>
                 {title && (
                   <p className="text-sm text-ink-muted">{title}</p>
+                )}
+                {orientation !== "any" && (
+                  <p className="text-xs text-ink-muted">
+                    Bitte im {orientation === "portrait" ? "Hochformat" : "Querformat"} aufnehmen
+                  </p>
                 )}
                 <p className="text-[11px] text-ink-muted mt-2">
                   URL-Muster: {appOrigin}/r/&lt;slug&gt;
@@ -363,7 +408,7 @@ function CreatedLinkPanel({
           <span className="font-mono text-ink">
             Gast-Aufnahme {formatLinkIdTag(numericId)}
           </span>
-          {" "}— so weißt du, welcher Link dazu gehört.
+          {" "}So weißt du, welcher Link dazu gehört.
         </DialogDescription>
       </DialogHeader>
 
@@ -507,7 +552,8 @@ function ShareLinksList({ initial }: { initial: ShareLinkRow[] }) {
             <p className="text-xs text-ink-muted truncate">
               Erstellt: {formatDateTime(l.createdAt)} ·
               {l.expiresAt ? ` läuft ab: ${formatDateTime(l.expiresAt)}` : " kein Ablauf"} ·
-              {" max. "}{l.maxDurationSec}s
+              {" max. "}{l.maxDurationSec}s ·
+              {" "}{l.orientation === "portrait" ? "Hochformat" : l.orientation === "landscape" ? "Querformat" : "Format frei"}
             </p>
             {l.status === "used" && (
               <p className="text-xs text-ink-muted">

@@ -21,6 +21,7 @@ import { notFound } from "next/navigation";
 import { getShareLinkBySlugPublic } from "@/lib/db/queries/webcam-share";
 import { GuestRecorder } from "./guest-recorder";
 import { TipsCard } from "./tips-card";
+import { RecordingHint } from "@/components/intro/recording-hint";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -53,18 +54,24 @@ export default async function GuestRecordingPage({
           </p>
         </header>
 
-        {/* Video oben — die Haupthandlung */}
+        {/* Wichtigster Hinweis zuerst: „Hi!“ und dann kurze Pause. In diese
+            Pause setzt die KI-Begrüßung später den Namen. */}
+        {info.status === "open" && (
+          <RecordingHint className="border-brand/30 bg-brand-soft/40" />
+        )}
+
+        {/* Video: die Haupthandlung */}
         <GuestRecorder
           slug={info.slug}
           ownerName={info.ownerName}
           title={info.title}
           maxDurationSec={info.maxDurationSec}
           initialStatus={info.status}
+          orientation={info.orientation}
         />
 
-        {/* Tips: klein + dezent — nur wenn der Link aktiv ist (sonst zeigt
-            der Recorder bereits einen Fehlerzustand und Tips sind irreführend). */}
-        {info.status === "open" && <TipsCard />}
+        {/* Tipps: klein und dezent, nur wenn der Link aktiv ist. */}
+        {info.status === "open" && <TipsCard orientation={info.orientation} />}
 
         <p className="text-center text-[11px] text-ink-muted leading-relaxed">
           Deine Aufnahme wird direkt und ausschließlich an {info.ownerName}

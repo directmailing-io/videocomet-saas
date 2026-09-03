@@ -44,6 +44,8 @@ const createSchema = z.object({
     .optional()
     .nullable()
     .transform((v) => (v ? new Date(v) : null)),
+  /** Format-Vorgabe für den Gast. Fehlt/null = Gast wählt selbst. */
+  orientation: z.enum(["landscape", "portrait"]).nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -71,6 +73,7 @@ export async function POST(req: NextRequest) {
     title: parsed.data.title ?? null,
     maxDurationSec: parsed.data.maxDurationSec ?? 120,
     expiresAt: parsed.data.expiresAt ?? null,
+    orientation: parsed.data.orientation ?? null,
   });
   if (!result.ok) {
     const status = result.code === "limit" ? 429 : 500;

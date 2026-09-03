@@ -51,10 +51,14 @@ export function generateShareSlug(length = 14): string {
   return out;
 }
 
+export type ShareLinkOrientation = "landscape" | "portrait";
+
 export interface CreateShareLinkInput {
   title: string | null;
   maxDurationSec: number;
   expiresAt: Date | null;
+  /** Format-Vorgabe für den Gast; null = Gast wählt selbst. */
+  orientation?: ShareLinkOrientation | null;
 }
 
 export interface CreateShareLinkOk {
@@ -109,6 +113,7 @@ export async function createShareLink(
           slug,
           title: input.title,
           maxDurationSec: input.maxDurationSec,
+          orientation: input.orientation ?? null,
           expiresAt: input.expiresAt,
           numericId: sql<number>`(
             SELECT COALESCE(MAX(numeric_id), 0) + 1
@@ -204,6 +209,7 @@ export interface PublicShareLinkInfo {
   numericId: number;
   title: string | null;
   maxDurationSec: number;
+  orientation: ShareLinkOrientation | null;
   status: PublicShareStatus;
   ownerName: string;
 }
@@ -217,6 +223,7 @@ export async function getShareLinkBySlugPublic(
       numericId: webcamShareLinks.numericId,
       title: webcamShareLinks.title,
       maxDurationSec: webcamShareLinks.maxDurationSec,
+      orientation: webcamShareLinks.orientation,
       expiresAt: webcamShareLinks.expiresAt,
       usedAt: webcamShareLinks.usedAt,
       revokedAt: webcamShareLinks.revokedAt,
@@ -251,6 +258,10 @@ export async function getShareLinkBySlugPublic(
     numericId: row.numericId,
     title: row.title,
     maxDurationSec: row.maxDurationSec,
+    orientation:
+      row.orientation === "portrait" || row.orientation === "landscape"
+        ? row.orientation
+        : null,
     status,
     ownerName,
   };

@@ -5,10 +5,24 @@
  *
  * Eigenes Component (kein Reuse von WebcamRecorder), weil:
  *  - Gast hat keinen Login, Endpoint ist anders
- *  - Owner sieht beim Empfang den Gast-Namen NICHT — wir geben dem Gast
- *    aber kein Eingabefeld; alles läuft anonym
+ *  - Owner sieht beim Empfang den Gast-Namen NICHT; wir geben dem Gast
+ *    aber kein Eingabefeld, alles läuft anonym
  *  - Upload-Limit ist 100 MB (Mediathek erlaubt 500 MB)
  *  - max-duration-sec Timer ist hier nicht optional, sondern Pflicht
+ *
+ * Format (seit 2026-09-03):
+ *  - Der Gast wählt Querformat oder Hochformat, oder der Link gibt das
+ *    Format vor (`orientation`-Preset des Share-Links). Auf dem Handy ist
+ *    Hochformat der Standard, am Rechner Querformat.
+ *  - Die Video-Bühne folgt IMMER den echten Pixelmaßen des Kamerabilds
+ *    bzw. der fertigen Aufnahme (loadedmetadata). Vorher war die Bühne fix
+ *    16:9, ein Handy-Hochkant-Video hing dann mit schwarzen Balken darin.
+ *  - Passt das Kamerabild nicht zum gewünschten Format (Handy quer gehalten,
+ *    Desktop-Webcam kann kein Hochformat), sagt die Seite das klar.
+ *
+ * KI-Begrüßung: Vor der Aufnahme gibt es einen 3-Sekunden-Countdown, in den
+ * ersten Sekunden der Aufnahme eine Einblendung „Hi!“, „kurz Pause“, „weiter“.
+ * Der ausführliche Hinweis steht auf der Seite über dem Recorder.
  *
  * Architektur-Entscheidungen (gleich wie components/ui/webcam-recorder.tsx,
  * weil die dortige Version battle-tested ist):
@@ -16,12 +30,9 @@
  *    bedingt versteckt. Sonst ist liveVideoRef.current beim ersten
  *    initCamera() null → srcObject-Assignment scheitert still → schwarzer
  *    Player. Sichtbarkeit wird per CSS umgeschaltet.
- *  - Der Stream wird per useEffect [hasStream] ans Video angehängt, nicht
- *    synchron im initCamera-Body. So ist garantiert, dass das Element
- *    nach dem Re-Render schon existiert.
+ *  - Der Stream wird per useEffect [hasStream] ans Video angehängt.
  *  - Review-Phase: explizit video.load() + Loading-Overlay bis canplay/
- *    loadeddata, plus Error-Fallback. Chrome+Firefox brauchen load() bei
- *    blob:-URLs damit der erste Frame erscheint.
+ *    loadeddata, plus Error-Fallback.
  *
  * iOS-Safari-Hinweise:
  *  - <video playsInline muted> + autoplay erforderlich, sonst kein Preview
@@ -37,15 +48,19 @@ import {
   AlertCircle,
   CheckCircle2,
   Mic,
+  Monitor,
+  Smartphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type Status = "open" | "used" | "expired" | "revoked";
+export type GuestOrientation = "landscape" | "portrait";
 
 type RecorderState =
   | "ready"
   | "permission_error"
+  | "countdown"
   | "recording"
   | "review"
   | "sending"
@@ -58,7 +73,17 @@ export interface GuestRecorderProps {
   title: string | null;
   maxDurationSec: number;
   initialStatus: Status;
+  /** Vom Link vorgegebenes Format. null = Gast darf wählen. */
+  orientation: GuestOrientation | null;
 }
+
+interface Dims {
+  width: number;
+  height: number;
+}
+
+const COUNTDOWN_SECONDS = 3;
+const CUE_SECONDS = 5;
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "video/webm";
@@ -98,11 +123,41 @@ function statusToHumanError(status: Status): string {
   }
 }
 
+function orientationLabel(o: GuestOrientation): string {
+  return o === "portrait" ? "Hochformat" : "Querformat";
+}
+
+function dimsToOrientation(d: Dims | null): GuestOrientation | null {
+  if (!d || d.width <= 0 || d.height <= 0) return null;
+  return d.height > d.width ? "portrait" : "landscape";
+}
+
+/** Handy/Tablet? Entscheidet über Standard-Format und Hinweistexte. */
+function isTouchDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    (navigator.maxTouchPoints ?? 0) > 0 &&
+    window.matchMedia("(pointer: coarse)").matches
+  );
+}
+
+/**
+ * Countdown-Text-Cue in den ersten Sekunden der Aufnahme. Erinnert an
+ * „Hi!“ plus kurze Pause, damit die KI später den Namen einsetzen kann.
+ */
+function recordingCue(elapsed: number): string | null {
+  if (elapsed < 1) return "Sag jetzt: „Hi!“ oder „Hallo!“";
+  if (elapsed < 2) return "Kurz Luft holen";
+  if (elapsed < CUE_SECONDS) return "Und jetzt einfach weitersprechen";
+  return null;
+}
+
 export function GuestRecorder({
   slug,
   ownerName,
   maxDurationSec,
   initialStatus,
+  orientation: presetOrientation,
 }: GuestRecorderProps) {
   // Wenn der Link nicht mehr offen ist → freundlicher Hinweis, kein Recorder.
   if (initialStatus !== "open") {
@@ -127,6 +182,7 @@ export function GuestRecorder({
   const mimeRef = React.useRef<string>("video/webm");
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const autoStopRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const audioLevelRef = React.useRef<number>(0);
   const audioRafRef = React.useRef<number | null>(null);
   const audioCtxRef = React.useRef<AudioContext | null>(null);
@@ -135,6 +191,7 @@ export function GuestRecorder({
   const [permError, setPermError] = React.useState<string | null>(null);
   const [recordError, setRecordError] = React.useState<string | null>(null);
   const [elapsed, setElapsed] = React.useState(0);
+  const [countdown, setCountdown] = React.useState(COUNTDOWN_SECONDS);
   const [audioLevel, setAudioLevel] = React.useState(0);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [previewLoadState, setPreviewLoadState] = React.useState<
@@ -145,6 +202,30 @@ export function GuestRecorder({
   const [hasStream, setHasStream] = React.useState(false);
   const [initializing, setInitializing] = React.useState(false);
 
+  // ── Format ────────────────────────────────────────────────────────────
+  const [touch, setTouch] = React.useState(false);
+  const [orientation, setOrientation] = React.useState<GuestOrientation>(
+    presetOrientation ?? "landscape",
+  );
+  const orientationRef = React.useRef<GuestOrientation>(orientation);
+  React.useEffect(() => {
+    orientationRef.current = orientation;
+  }, [orientation]);
+  React.useEffect(() => {
+    // Erst im Browser entscheidbar: Handy → Hochformat als Standard,
+    // sofern der Link nichts vorgibt.
+    const t = isTouchDevice();
+    setTouch(t);
+    if (!presetOrientation && t) {
+      setOrientation("portrait");
+      orientationRef.current = "portrait";
+    }
+  }, [presetOrientation]);
+
+  /** Echte Pixelmaße des Live-Bilds bzw. der fertigen Aufnahme. */
+  const [liveDims, setLiveDims] = React.useState<Dims | null>(null);
+  const [reviewDims, setReviewDims] = React.useState<Dims | null>(null);
+
   const remaining = Math.max(0, maxDurationSec - elapsed);
   const overTime = elapsed >= maxDurationSec;
 
@@ -152,6 +233,7 @@ export function GuestRecorder({
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setHasStream(false);
+    setLiveDims(null);
   }, []);
 
   const stopAudioMeter = React.useCallback(() => {
@@ -176,12 +258,15 @@ export function GuestRecorder({
       clearTimeout(autoStopRef.current);
       autoStopRef.current = null;
     }
+    if (countdownRef.current !== null) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
   }, []);
 
   /** Mikro-Pegel als 0–1 für VU-Meter. */
   const startAudioMeter = React.useCallback((stream: MediaStream) => {
     try {
-      // Some browsers gate AudioContext behind webkit prefix.
       const Ctx =
         (window.AudioContext as typeof AudioContext | undefined) ??
         ((window as unknown as { webkitAudioContext?: typeof AudioContext })
@@ -196,7 +281,6 @@ export function GuestRecorder({
       const buf = new Uint8Array(analyser.frequencyBinCount);
       const tick = () => {
         analyser.getByteTimeDomainData(buf);
-        // RMS-Annäherung
         let sum = 0;
         for (let i = 0; i < buf.length; i += 1) {
           const v = (buf[i] - 128) / 128;
@@ -214,33 +298,45 @@ export function GuestRecorder({
     }
   }, []);
 
-  const initCamera = React.useCallback(async () => {
+  const readLiveDims = React.useCallback(() => {
+    const el = liveVideoRef.current;
+    if (el && el.videoWidth > 0 && el.videoHeight > 0) {
+      setLiveDims({ width: el.videoWidth, height: el.videoHeight });
+      return;
+    }
+    const vt = streamRef.current?.getVideoTracks()[0];
+    const s = vt?.getSettings();
+    if (s?.width && s?.height) setLiveDims({ width: s.width, height: s.height });
+  }, []);
+
+  const initCamera = React.useCallback(async (mode?: GuestOrientation) => {
+    const effective = mode ?? orientationRef.current;
+    const portrait = effective === "portrait";
     setPermError(null);
     setRecordError(null);
     setInitializing(true);
     try {
+      // Bei Hochformat drehen wir width/height + aspectRatio. Handys
+      // liefern dann Hochkant. Desktop-Webcams ignorieren das meist und
+      // bleiben quer; das zeigen wir dem Gast unten als Hinweis an.
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 },
+          width: portrait ? { ideal: 720, max: 1080 } : { ideal: 1280, max: 1920 },
+          height: portrait ? { ideal: 1280, max: 1920 } : { ideal: 720, max: 1080 },
           frameRate: { ideal: 30, max: 60 },
-          aspectRatio: { ideal: 16 / 9 },
+          aspectRatio: { ideal: portrait ? 9 / 16 : 16 / 9 },
           facingMode: { ideal: "user" },
         },
         audio: true,
       });
       streamRef.current = stream;
-      // setHasStream triggert ein Re-Render — der useEffect unten hängt
-      // dann den Stream ans (jetzt sicher gemountete) <video> an.
-      // Wir versuchen es zusätzlich SYNCHRON: wenn das Element bereits im
-      // DOM ist (was bei unserem "immer-mounten"-Setup der Fall ist), ist
-      // das die schnellere Variante und der Preview erscheint sofort.
       const vt = stream.getVideoTracks()[0];
       if (vt) {
         const s = vt.getSettings();
         console.log(
-          `[guest-recorder] video track: ${s.width}x${s.height} @${s.frameRate}fps`,
+          `[guest-recorder] video track: ${s.width}x${s.height} @${s.frameRate}fps (wanted ${effective})`,
         );
+        if (s.width && s.height) setLiveDims({ width: s.width, height: s.height });
       }
       if (liveVideoRef.current) {
         liveVideoRef.current.srcObject = stream;
@@ -252,14 +348,14 @@ export function GuestRecorder({
       console.error("[guest-recorder] getUserMedia failed:", err);
       const name =
         err instanceof Error && "name" in err ? (err as Error).name : "Error";
-      let msg = "Kamera-/Mikrofon-Zugriff erforderlich.";
+      let msg = "Kamera und Mikrofon werden benötigt.";
       if (name === "NotAllowedError" || name === "SecurityError") {
         msg =
-          "Zugriff auf Kamera und Mikrofon wurde verweigert. Bitte erlaube den Zugriff in den Browser-Einstellungen und versuche es erneut.";
+          "Der Zugriff auf Kamera und Mikrofon wurde abgelehnt. Bitte erlaube ihn in den Browser-Einstellungen und versuche es noch einmal.";
       } else if (name === "NotFoundError" || name === "OverconstrainedError") {
         msg = "Keine Kamera oder kein Mikrofon gefunden.";
       } else if (name === "NotReadableError") {
-        msg = "Kamera/Mikrofon wird gerade von einer anderen App benutzt.";
+        msg = "Kamera oder Mikrofon werden gerade von einer anderen App benutzt.";
       }
       setPermError(msg);
       setState("permission_error");
@@ -268,9 +364,7 @@ export function GuestRecorder({
     }
   }, [startAudioMeter]);
 
-  // Stream-Anhängen als Belt-and-Suspenders: falls der synchrone Versuch
-  // in initCamera scheitert (z.B. weil das Element gerade erst gemountet
-  // wird), greift dieser Effekt nach dem Re-Render und setzt srcObject.
+  // Stream-Anhängen als Belt-and-Suspenders (siehe Kopfkommentar).
   React.useEffect(() => {
     if (!hasStream) return;
     const el = liveVideoRef.current;
@@ -279,7 +373,6 @@ export function GuestRecorder({
     if (el.srcObject !== stream) {
       el.srcObject = stream;
     }
-    // iOS Safari verlangt explizit play() nach srcObject-Wechsel.
     el.play().catch(() => {});
   }, [hasStream, state]);
 
@@ -300,14 +393,45 @@ export function GuestRecorder({
   }, []);
 
   async function handleStartFlow() {
-    // User-Gesture: jetzt Kamera anfragen. Auf iOS muss play() innerhalb
-    // einer User-Gesture passieren — daher hier (Button-Klick).
     if (!streamRef.current) {
       await initCamera();
-      // Initial-State bleibt "ready", User klickt dann erneut für REC.
       return;
     }
-    startRecording();
+    beginCountdown();
+  }
+
+  /** Format wechseln: nur vor der Aufnahme. Stream neu anfordern. */
+  async function switchOrientation(next: GuestOrientation) {
+    if (state !== "ready") return;
+    if (next === orientation) return;
+    setOrientation(next);
+    orientationRef.current = next;
+    if (streamRef.current) {
+      stopAudioMeter();
+      stopStream();
+      await initCamera(next);
+    }
+  }
+
+  /** 3-2-1, dann Aufnahme. Gibt Zeit, sich zu sammeln, und erinnert an „Hi!“. */
+  function beginCountdown() {
+    if (!streamRef.current) return;
+    setRecordError(null);
+    setCountdown(COUNTDOWN_SECONDS);
+    setState("countdown");
+    let n = COUNTDOWN_SECONDS;
+    countdownRef.current = setInterval(() => {
+      n -= 1;
+      if (n <= 0) {
+        if (countdownRef.current !== null) {
+          clearInterval(countdownRef.current);
+          countdownRef.current = null;
+        }
+        startRecording();
+        return;
+      }
+      setCountdown(n);
+    }, 1000);
   }
 
   function startRecording() {
@@ -324,9 +448,8 @@ export function GuestRecorder({
       rec = new MediaRecorder(streamRef.current, { mimeType });
     } catch (err) {
       console.error("[guest-recorder] MediaRecorder init failed:", err);
-      setRecordError(
-        "Aufnahme nicht möglich. Bitte aktualisiere den Browser.",
-      );
+      setRecordError("Aufnahme nicht möglich. Bitte aktualisiere deinen Browser.");
+      setState("ready");
       return;
     }
 
@@ -335,26 +458,26 @@ export function GuestRecorder({
     };
     rec.onerror = (e) => {
       console.error("[guest-recorder] recorder error:", e);
-      setRecordError("Aufnahmefehler. Bitte erneut versuchen.");
+      setRecordError("Aufnahmefehler. Bitte versuche es noch einmal.");
     };
     rec.onstop = () => {
       clearTimers();
-      // Vorschau lokal als blob: URL — wir laden vor dem Senden hoch.
       const blob = new Blob(chunksRef.current, { type: mimeRef.current });
       if (blob.size === 0) {
-        setRecordError("Aufnahme war leer. Bitte erneut versuchen.");
+        setRecordError("Die Aufnahme war leer. Bitte versuche es noch einmal.");
         setState("ready");
         return;
       }
-      // Letzten previewUrl freigeben damit kein Leak entsteht.
       if (previewUrl) {
         try { URL.revokeObjectURL(previewUrl); } catch { /* ignore */ }
       }
       const url = URL.createObjectURL(blob);
+      // Die Bühne behält bis zur Metadaten-Info die Live-Maße, damit sie
+      // nicht springt.
+      setReviewDims(liveDims);
       setPreviewUrl(url);
       setPreviewLoadState("loading");
       setState("review");
-      // Live-Stream abschalten — Privacy + Kamera-LED aus.
       stopStream();
       stopAudioMeter();
     };
@@ -363,7 +486,8 @@ export function GuestRecorder({
       rec.start(1000);
     } catch (err) {
       console.error("[guest-recorder] start failed:", err);
-      setRecordError("Aufnahme konnte nicht gestartet werden.");
+      setRecordError("Die Aufnahme konnte nicht gestartet werden.");
+      setState("ready");
       return;
     }
     recorderRef.current = rec;
@@ -373,7 +497,6 @@ export function GuestRecorder({
       setElapsed((e) => e + 1);
     }, 1000);
 
-    // Auto-Stop bei max-duration
     autoStopRef.current = setTimeout(() => {
       const r = recorderRef.current;
       if (r && r.state !== "inactive") {
@@ -393,12 +516,18 @@ export function GuestRecorder({
     }
   }
 
+  function cancelCountdown() {
+    clearTimers();
+    setState("ready");
+  }
+
   async function reRecord() {
     if (previewUrl) {
       try { URL.revokeObjectURL(previewUrl); } catch { /* ignore */ }
       setPreviewUrl(null);
     }
     setPreviewLoadState("loading");
+    setReviewDims(null);
     setElapsed(0);
     setRecordError(null);
     setState("ready");
@@ -407,9 +536,6 @@ export function GuestRecorder({
     }
   }
 
-  // Sobald previewUrl gesetzt UND das Review-<video> gemountet ist, explizit
-  // load() rufen. Chrome+Firefox brauchen das bei blob:-URLs damit der erste
-  // Frame zuverlässig erscheint (poster/preload="auto" greifen nicht).
   React.useEffect(() => {
     if (state !== "review" || !previewUrl) return;
     const el = reviewVideoRef.current;
@@ -467,7 +593,6 @@ export function GuestRecorder({
       }
 
       setUploadProgress(100);
-      // Stream + Audio-Meter freigeben (Privacy)
       stopStream();
       stopAudioMeter();
       setState("done");
@@ -478,7 +603,43 @@ export function GuestRecorder({
     }
   }
 
-  // ── UI-Render ────────────────────────────────────────────────────────────
+  // ── Abgeleitete Werte für die Anzeige ────────────────────────────────────
+
+  const showLiveStage =
+    state === "ready" || state === "countdown" || state === "recording";
+  const showReviewStage =
+    state === "review" || state === "sending" || state === "send_error";
+
+  // Bühne folgt den echten Maßen. Fallback: gewähltes Format.
+  const stageDims: Dims | null = showReviewStage ? (reviewDims ?? liveDims) : liveDims;
+  const stageAspect =
+    stageDims && stageDims.width > 0 && stageDims.height > 0
+      ? stageDims.width / stageDims.height
+      : orientation === "portrait"
+        ? 9 / 16
+        : 16 / 9;
+  const stageIsPortrait = stageAspect < 1;
+
+  // Stimmt das Kamerabild mit dem gewünschten Format überein?
+  const actualLive = dimsToOrientation(liveDims);
+  const wanted: GuestOrientation = presetOrientation ?? orientation;
+  const mismatch =
+    showLiveStage && hasStream && actualLive !== null && actualLive !== wanted;
+  const mismatchText = (() => {
+    if (!mismatch) return null;
+    if (wanted === "portrait") {
+      return touch
+        ? "Dein Bild ist gerade im Querformat. Dreh dein Handy senkrecht, dann passt es."
+        : "Diese Kamera nimmt nur im Querformat auf. Für Hochformat nimm bitte mit dem Handy auf.";
+    }
+    return touch
+      ? "Dein Bild ist gerade im Hochformat. Dreh dein Handy quer, dann passt es."
+      : "Deine Kamera liefert gerade Hochformat.";
+  })();
+
+  const resultOrientation = dimsToOrientation(reviewDims);
+
+  // ── Sonderzustände ─────────────────────────────────────────────────────────
 
   if (state === "done") {
     return (
@@ -488,6 +649,9 @@ export function GuestRecorder({
           Vielen Dank! Deine Aufnahme ist unterwegs zu {ownerName}.
         </p>
         <p className="text-sm text-ink-muted">
+          {resultOrientation
+            ? `Format: ${orientationLabel(resultOrientation)}. `
+            : ""}
           Du kannst dieses Fenster jetzt schließen.
         </p>
       </div>
@@ -499,7 +663,7 @@ export function GuestRecorder({
       <div className="rounded-squircle-xl border border-danger/30 bg-danger/5 p-8 text-center space-y-3">
         <AlertCircle className="size-10 text-danger mx-auto" />
         <p className="text-base font-semibold text-ink">
-          Mikrofon-/Kamera-Zugriff erforderlich
+          Kamera und Mikrofon werden benötigt
         </p>
         <p className="text-sm text-ink-muted max-w-md mx-auto">
           {permError}
@@ -512,153 +676,252 @@ export function GuestRecorder({
             void initCamera();
           }}
         >
-          Erneut versuchen
+          Noch einmal versuchen
         </Button>
       </div>
     );
   }
 
-  // ── Render-Helper ────────────────────────────────────────────────────────
-  // Sichtbarkeits-Logik: das Live-<video> ist IMMER gemountet (siehe oben:
-  // ref-null-Bug). Wir steuern Sichtbarkeit per CSS-Klassen.
-  const showLiveStage =
-    state === "ready" || state === "recording";
-  const showReviewStage =
-    state === "review" || state === "sending" || state === "send_error";
+  const cue = state === "recording" ? recordingCue(elapsed) : null;
 
   return (
     <div className="space-y-5">
-      {/* Video-Bühne: gleichzeitiges Mounting von Live + Review.
-          Sichtbarkeit per CSS, damit refs nie null sind, wenn wir sie
-          synchron in initCamera()/load() ansprechen. */}
-      <div className="relative aspect-video w-full overflow-hidden rounded-squircle-xl bg-ink shadow-lift">
-        {/* Live-Video: immer im DOM, per Klasse sichtbar/unsichtbar */}
-        <video
-          ref={liveVideoRef}
-          className={cn(
-            "h-full w-full object-cover",
-            showLiveStage ? "block" : "hidden",
-          )}
-          autoPlay
-          muted
-          playsInline
-        />
-
-        {/* Review-Video: wird gemountet sobald previewUrl da ist; bleibt
-            danach gemountet (auch im send_error-State), damit der User
-            das Video nochmal abspielen kann. */}
-        {previewUrl && (
-          <video
-            key={`${previewUrl}-${previewReloadKey}`}
-            ref={reviewVideoRef}
-            src={previewUrl}
-            controls
-            controlsList="nodownload"
-            preload="auto"
-            playsInline
-            muted
-            onLoadedData={() => setPreviewLoadState("ready")}
-            onCanPlay={() => setPreviewLoadState("ready")}
-            onError={() => setPreviewLoadState("error")}
-            className={cn(
-              "absolute inset-0 h-full w-full object-contain bg-ink",
-              showReviewStage ? "block" : "hidden",
-            )}
-          />
-        )}
-
-        {/* Placeholder vor Kamera-Aktivierung */}
-        {state === "ready" && !hasStream && !initializing && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/95 text-white text-center px-6">
-            <Mic className="size-10 text-white/70" />
-            <span className="text-sm font-medium">
-              Klicke unten auf <span className="font-semibold">„Kamera + Mikrofon aktivieren"</span>,
-              um zu starten.
-            </span>
-            <span className="text-xs text-white/60 max-w-xs">
-              Dein Browser fragt nach Erlaubnis — das ist normal.
-            </span>
-          </div>
-        )}
-
-        {state === "ready" && !hasStream && initializing && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/95 text-white">
-            <span className="inline-block size-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            <span className="text-sm font-medium">Kamera wird initialisiert …</span>
-          </div>
-        )}
-
-        {/* REC-Badge */}
-        {state === "recording" && (
-          <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
-            <span className="inline-block size-2 animate-pulse rounded-full bg-danger" />
-            REC
-            <span className="font-mono tabular-nums">{formatTime(elapsed)}</span>
-            <span className="text-white/60">/ {formatTime(maxDurationSec)}</span>
-          </div>
-        )}
-
-        {/* Composition-Kreis (dezent) — nur im Live-Modus, nicht im Review */}
-        {showLiveStage && hasStream && (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 aspect-square h-full rounded-full border border-white/35"
-            style={{
-              boxShadow:
-                "0 0 0 1px rgba(0,0,0,0.08), inset 0 0 0 1px rgba(0,0,0,0.06)",
-            }}
-          />
-        )}
-
-        {/* Review-Loading-Overlay */}
-        {showReviewStage && state === "review" && previewLoadState === "loading" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/85 text-white pointer-events-none">
-            <span className="inline-block size-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            <span className="text-xs font-medium">Vorschau wird vorbereitet …</span>
-          </div>
-        )}
-
-        {/* Review-Error-Fallback */}
-        {showReviewStage && state === "review" && previewLoadState === "error" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/90 p-4 text-center text-white">
-            <AlertCircle className="size-7 text-danger" />
-            <span className="text-sm font-semibold">
-              Vorschau konnte nicht geladen werden
-            </span>
-            <span className="text-xs text-white/70 max-w-xs">
-              Du kannst trotzdem absenden — oder eine neue Aufnahme machen.
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              variant="subtle"
-              onClick={() => {
-                setPreviewLoadState("loading");
-                setPreviewReloadKey((k) => k + 1);
-              }}
-              iconLeft={<RotateCcw className="size-3.5" />}
-            >
-              Erneut laden
-            </Button>
-          </div>
-        )}
-
-        {/* Sending-Overlay */}
-        {state === "sending" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/85 text-white">
-            <span className="inline-block size-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            <span className="text-sm font-semibold">
-              Wird gesendet … {uploadProgress}%
-            </span>
-            <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-brand transition-all"
-                style={{ width: `${uploadProgress}%` }}
-              />
+      {/* Format-Wahl (nur vor der Aufnahme). Bei Vorgabe durch den Link:
+          fester Hinweis statt Umschalter. */}
+      {state === "ready" && (
+        <div className="flex flex-col items-center gap-2">
+          {presetOrientation ? (
+            <div className="inline-flex items-center gap-2 rounded-full bg-brand-soft px-4 py-2 text-sm font-semibold text-brand-deep">
+              {presetOrientation === "portrait" ? (
+                <Smartphone className="size-4" />
+              ) : (
+                <Monitor className="size-4" />
+              )}
+              Bitte im {orientationLabel(presetOrientation)} aufnehmen
+              {presetOrientation === "portrait" && touch ? (
+                <span className="font-normal text-brand-deep/80">(Handy senkrecht halten)</span>
+              ) : null}
             </div>
-          </div>
-        )}
+          ) : (
+            <>
+              <div
+                role="group"
+                aria-label="Format der Aufnahme"
+                className="inline-flex items-center rounded-full border border-line bg-surface p-1"
+              >
+                <button
+                  type="button"
+                  onClick={() => void switchOrientation("landscape")}
+                  aria-pressed={orientation === "landscape"}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
+                    orientation === "landscape"
+                      ? "bg-ink text-white shadow-card"
+                      : "text-ink-muted hover:text-ink",
+                  )}
+                >
+                  <Monitor className="size-4" />
+                  Querformat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void switchOrientation("portrait")}
+                  aria-pressed={orientation === "portrait"}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
+                    orientation === "portrait"
+                      ? "bg-ink text-white shadow-card"
+                      : "text-ink-muted hover:text-ink",
+                  )}
+                >
+                  <Smartphone className="size-4" />
+                  Hochformat
+                </button>
+              </div>
+              <p className="text-xs text-ink-muted text-center">
+                {orientation === "portrait"
+                  ? "Hochformat passt für Handy-Videos, Reels und Stories."
+                  : "Querformat passt für Videos am Rechner und auf Webseiten."}
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Video-Bühne: folgt den echten Maßen des Bilds. Live + Review sind
+          gleichzeitig gemountet (refs nie null), Sichtbarkeit per CSS. */}
+      <div className="flex justify-center">
+        <div
+          className={cn(
+            "relative overflow-hidden rounded-squircle-xl bg-ink shadow-lift transition-[aspect-ratio] duration-300",
+            stageIsPortrait ? "w-full max-w-[360px]" : "w-full",
+          )}
+          style={{ aspectRatio: String(stageAspect), maxHeight: "70vh" }}
+        >
+          <video
+            ref={liveVideoRef}
+            className={cn(
+              "h-full w-full object-contain",
+              showLiveStage ? "block" : "hidden",
+            )}
+            autoPlay
+            muted
+            playsInline
+            onLoadedMetadata={readLiveDims}
+            onResize={readLiveDims}
+          />
+
+          {previewUrl && (
+            <video
+              key={`${previewUrl}-${previewReloadKey}`}
+              ref={reviewVideoRef}
+              src={previewUrl}
+              controls
+              controlsList="nodownload"
+              preload="auto"
+              playsInline
+              muted
+              onLoadedMetadata={(e) => {
+                const el = e.currentTarget;
+                if (el.videoWidth > 0 && el.videoHeight > 0) {
+                  setReviewDims({ width: el.videoWidth, height: el.videoHeight });
+                }
+              }}
+              onLoadedData={() => setPreviewLoadState("ready")}
+              onCanPlay={() => setPreviewLoadState("ready")}
+              onError={() => setPreviewLoadState("error")}
+              className={cn(
+                "absolute inset-0 h-full w-full object-contain bg-ink",
+                showReviewStage ? "block" : "hidden",
+              )}
+            />
+          )}
+
+          {/* Platzhalter vor Kamera-Start */}
+          {state === "ready" && !hasStream && !initializing && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/95 text-white text-center px-6">
+              <Mic className="size-10 text-white/70" />
+              <span className="text-sm font-medium">
+                Tippe unten auf <span className="font-semibold">„Kamera und Mikrofon aktivieren“</span>.
+              </span>
+              <span className="text-xs text-white/60 max-w-xs">
+                Dein Browser fragt einmal nach Erlaubnis. Das ist normal.
+              </span>
+            </div>
+          )}
+
+          {state === "ready" && !hasStream && initializing && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/95 text-white">
+              <span className="inline-block size-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              <span className="text-sm font-medium">Kamera wird gestartet …</span>
+            </div>
+          )}
+
+          {/* Countdown */}
+          {state === "countdown" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/50 text-white text-center px-6">
+              <span className="text-7xl font-bold tabular-nums drop-shadow">{countdown}</span>
+              <span className="text-sm font-semibold drop-shadow">
+                Gleich geht es los. Starte mit „Hi!“ und mach dann eine kurze Pause.
+              </span>
+            </div>
+          )}
+
+          {/* REC-Badge */}
+          {state === "recording" && (
+            <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-ink/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
+              <span className="inline-block size-2 animate-pulse rounded-full bg-danger" />
+              REC
+              <span className="font-mono tabular-nums">{formatTime(elapsed)}</span>
+              <span className="text-white/60">/ {formatTime(maxDurationSec)}</span>
+            </div>
+          )}
+
+          {/* Sprech-Cue in den ersten Sekunden */}
+          {cue && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4">
+              <span className="rounded-full bg-white/95 px-4 py-2 text-sm font-semibold text-ink shadow-lift">
+                {cue}
+              </span>
+            </div>
+          )}
+
+          {/* Kompositions-Kreis nur im Querformat (im Hochformat stört er) */}
+          {showLiveStage && hasStream && !stageIsPortrait && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 aspect-square h-full rounded-full border border-white/35"
+              style={{
+                boxShadow:
+                  "0 0 0 1px rgba(0,0,0,0.08), inset 0 0 0 1px rgba(0,0,0,0.06)",
+              }}
+            />
+          )}
+
+          {showReviewStage && state === "review" && previewLoadState === "loading" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/85 text-white pointer-events-none">
+              <span className="inline-block size-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              <span className="text-xs font-medium">Vorschau wird vorbereitet …</span>
+            </div>
+          )}
+
+          {showReviewStage && state === "review" && previewLoadState === "error" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/90 p-4 text-center text-white">
+              <AlertCircle className="size-7 text-danger" />
+              <span className="text-sm font-semibold">
+                Die Vorschau konnte nicht geladen werden
+              </span>
+              <span className="text-xs text-white/70 max-w-xs">
+                Du kannst trotzdem absenden oder eine neue Aufnahme machen.
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="subtle"
+                onClick={() => {
+                  setPreviewLoadState("loading");
+                  setPreviewReloadKey((k) => k + 1);
+                }}
+                iconLeft={<RotateCcw className="size-3.5" />}
+              >
+                Noch einmal laden
+              </Button>
+            </div>
+          )}
+
+          {state === "sending" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/85 text-white">
+              <span className="inline-block size-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              <span className="text-sm font-semibold">
+                Wird gesendet … {uploadProgress}%
+              </span>
+              <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-brand transition-all"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Format-Hinweis, wenn Kamerabild und Wunsch nicht zusammenpassen */}
+      {mismatchText && (
+        <div className="mx-auto max-w-md rounded-squircle-md border border-warn/30 bg-warn-soft px-4 py-3 text-sm text-ink text-center">
+          {mismatchText}
+        </div>
+      )}
+
+      {/* Status im Review: welches Format ist es geworden */}
+      {state === "review" && resultOrientation && (
+        <p className="text-center text-xs text-ink-muted">
+          Deine Aufnahme ist im {orientationLabel(resultOrientation)}
+          {presetOrientation && resultOrientation !== presetOrientation
+            ? `. Gewünscht war ${orientationLabel(presetOrientation)}. Du kannst sie trotzdem absenden oder neu aufnehmen.`
+            : "."}
+        </p>
+      )}
 
       {/* Aufnahme-Status-Leiste (nur live) */}
       {state === "recording" && (
@@ -705,7 +968,7 @@ export function GuestRecorder({
             loading={initializing}
             iconLeft={<Mic className="size-4" />}
           >
-            Kamera + Mikrofon aktivieren
+            Kamera und Mikrofon aktivieren
           </Button>
         )}
 
@@ -713,10 +976,21 @@ export function GuestRecorder({
           <Button
             type="button"
             size="lg"
-            onClick={startRecording}
+            onClick={beginCountdown}
             iconLeft={<Circle className="size-4 fill-current" />}
           >
             Aufnahme starten
+          </Button>
+        )}
+
+        {state === "countdown" && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="lg"
+            onClick={cancelCountdown}
+          >
+            Abbrechen
           </Button>
         )}
 
@@ -749,7 +1023,7 @@ export function GuestRecorder({
               onClick={reRecord}
               iconLeft={<RotateCcw className="size-4" />}
             >
-              Erneut aufnehmen
+              Neu aufnehmen
             </Button>
           </>
         )}
@@ -762,7 +1036,7 @@ export function GuestRecorder({
               onClick={submit}
               iconLeft={<Check className="size-4" />}
             >
-              Erneut absenden
+              Noch einmal absenden
             </Button>
             <Button
               type="button"
