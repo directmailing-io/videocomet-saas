@@ -212,6 +212,7 @@ export default async function CampaignDetailPage({
     lastViewedAt: l.lastViewedAt ? l.lastViewedAt.toISOString() : null,
     playCount: l.playCount,
     watchTimeSec: l.watchTimeSec,
+    watchPct: l.watchPct ?? 0,
     ctaClickCount: l.ctaClickCount,
     lastCtaAt: l.lastCtaAt ? l.lastCtaAt.toISOString() : null,
     createdAt: l.createdAt.toISOString(),
@@ -682,12 +683,14 @@ function AbVariantComparison({
     viewCount: number;
     playCount: number;
     watchTimeSec: number;
+    watchPct?: number;
     ctaClickCount: number;
   }>;
   leadsB: Array<{
     viewCount: number;
     playCount: number;
     watchTimeSec: number;
+    watchPct?: number;
     ctaClickCount: number;
   }>;
   testActive: boolean;
@@ -697,6 +700,7 @@ function AbVariantComparison({
       viewCount: number;
       playCount: number;
       watchTimeSec: number;
+      watchPct?: number;
       ctaClickCount: number;
     }>,
   ) {
@@ -706,7 +710,13 @@ function AbVariantComparison({
     const cta = rows.filter((l) => l.ctaClickCount > 0).length;
     const plays = rows.reduce((s, l) => s + l.playCount, 0);
     const watchTime = rows.reduce((s, l) => s + l.watchTimeSec, 0);
-    return { n, viewed, played, cta, plays, watchTime };
+    // Ø gesehener Anteil der Zeitleiste ueber alle Leads, die gestartet haben.
+    const watchedRows = rows.filter((l) => l.playCount > 0);
+    const avgWatchPct =
+      watchedRows.length > 0
+        ? Math.round(watchedRows.reduce((s, l) => s + (l.watchPct ?? 0), 0) / watchedRows.length)
+        : null;
+    return { n, viewed, played, cta, plays, watchTime, avgWatchPct };
   }
 
   const a = stats(leadsA);
@@ -742,9 +752,14 @@ function AbVariantComparison({
       b: fmtPercent(b.played, b.n),
     },
     {
-      label: "Ø Watch-Time pro Play",
-      a: a.plays > 0 ? fmtDuration(Math.round(a.watchTime / a.plays)) : "–",
-      b: b.plays > 0 ? fmtDuration(Math.round(b.watchTime / b.plays)) : "–",
+      label: "Ø gesehen (Anteil des Videos)",
+      a: a.avgWatchPct !== null ? `${a.avgWatchPct} %` : "–",
+      b: b.avgWatchPct !== null ? `${b.avgWatchPct} %` : "–",
+    },
+    {
+      label: "Ø gesehene Zeit pro Lead",
+      a: a.played > 0 ? fmtDuration(Math.round(a.watchTime / a.played)) : "–",
+      b: b.played > 0 ? fmtDuration(Math.round(b.watchTime / b.played)) : "–",
     },
     {
       label: "CTA-Rate",

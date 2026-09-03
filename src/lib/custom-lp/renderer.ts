@@ -376,6 +376,12 @@ function injectVideoSources(
       }
     }
 
+    // Tracking-Marker: die Bridge bindet `video[data-vc-track]` automatisch.
+    // Ohne den Marker wurde nur getrackt, wenn der Kunde im Element-Picker
+    // einen videoSelector gesetzt hatte (haeufig nicht → 0 Sekunden).
+    if (!/\bdata-vc-track\b/i.test(newAttrs)) {
+      newAttrs = ` data-vc-track="1"` + newAttrs;
+    }
     const rebuilt = `<video${newAttrs}>${newInner}</video>`;
     result += html.slice(lastIdx, blockStart) + rebuilt;
     lastIdx = blockStart + full.length;

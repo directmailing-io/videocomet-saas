@@ -217,61 +217,175 @@
    * EDGE transitions (muted→unmuted, unmuted→muted), not every volume
    * tick. Payload contains the video position at the time of the change.
    */
+  // ─── Abdeckung der Zeitleiste (ES5-Kopie von lib/analytics/watch-coverage.ts)
+  // Regel: 10 % schauen, vorspulen, 10 % schauen = 20 %. Wiederholtes
+  // Ansehen derselben Stelle zaehlt nicht doppelt.
+  var SEEK_GAP_SEC = 2.5;
+  var MAX_SEGMENTS = 40;
+
+  function mergeSegments(list) {
+    var clean = [];
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i];
+      if (s && s.length === 2 && isFinite(s[0]) && isFinite(s[1]) && s[1] > s[0] && s[0] >= 0) {
+        clean.push([s[0], s[1]]);
+      }
+    }
+    clean.sort(function (a, b) { return a[0] - b[0]; });
+    var out = [];
+    for (var j = 0; j < clean.length; j++) {
+      var c = clean[j];
+      var last = out[out.length - 1];
+      if (last && c[0] <= last[1] + 0.05) {
+        if (c[1] > last[1]) last[1] = c[1];
+      } else {
+        out.push([c[0], c[1]]);
+      }
+    }
+    while (out.length > MAX_SEGMENTS) {
+      var bestIdx = 0, bestGap = Infinity;
+      for (var k = 0; k < out.length - 1; k++) {
+        var gap = out[k + 1][0] - out[k][1];
+        if (gap < bestGap) { bestGap = gap; bestIdx = k; }
+      }
+      out[bestIdx] = [out[bestIdx][0], out[bestIdx + 1][1]];
+      out.splice(bestIdx + 1, 1);
+    }
+    return out;
+  }
+
+  function r1(n) { return Math.round(n * 10) / 10; }
+
+  function makeAccumulator() {
+    var segments = [];
+    var openStart = null;
+    var lastPos = null;
+    var maxSec = 0;
+    function close() {
+      if (openStart !== null && lastPos !== null && lastPos > openStart) {
+        segments.push([openStart, lastPos]);
+        if (segments.length > MAX_SEGMENTS * 2) segments = mergeSegments(segments);
+      }
+      openStart = null;
+      lastPos = null;
+    }
+    return {
+      tick: function (pos) {
+        if (!isFinite(pos) || pos < 0) return;
+        if (pos > maxSec) maxSec = pos;
+        if (lastPos === null || openStart === null) { openStart = pos; lastPos = pos; return; }
+        var delta = pos - lastPos;
+        if (delta < 0 || delta > SEEK_GAP_SEC) { close(); openStart = pos; }
+        lastPos = pos;
+      },
+      close: close,
+      ended: function (duration) {
+        if (isFinite(duration) && duration > 0) {
+          if (openStart !== null && lastPos !== null) lastPos = Math.max(lastPos, duration);
+          if (duration > maxSec) maxSec = duration;
+        }
+        close();
+      },
+      snapshot: function (duration, atSec) {
+        var dur = isFinite(duration) && duration > 0 ? r1(Math.min(duration, 7200)) : 0;
+        var all = segments.slice();
+        if (openStart !== null && lastPos !== null && lastPos > openStart) all.push([openStart, lastPos]);
+        var segs = mergeSegments(all);
+        var played = 0;
+        for (var i = 0; i < segs.length; i++) {
+          var end = dur > 0 ? Math.min(segs[i][1], dur) : segs[i][1];
+          if (end > segs[i][0]) played += end - segs[i][0];
+          segs[i] = [r1(segs[i][0]), r1(segs[i][1])];
+        }
+        played = r1(played);
+        return {
+          atSec: r1(isFinite(atSec) && atSec >= 0 ? atSec : (lastPos !== null ? lastPos : maxSec)),
+          playedSec: played,
+          durationSec: dur,
+          duration: dur || null,
+          coveragePct: dur > 0 ? Math.max(0, Math.min(100, Math.round((played / dur) * 100))) : null,
+          maxSec: r1(maxSec),
+          segments: segs
+        };
+      }
+    };
+  }
+
+  /**
+   * Attach play / progress / seek / ended trackers to one <video> element.
+   * Progress events are throttled to PROGRESS_INTERVAL_SEC (video time) and
+   * additionally flushed on pause, seek, ended and page-hide. Every progress
+   * carries the UNIQUE watched coverage (playedSec/coveragePct/segments).
+   */
   function bindVideo(el) {
     try {
       if (!el || el.__vcVideoBound) return;
       el.__vcVideoBound = true;
-      var lastProgressSec = 0;
+      var acc = makeAccumulator();
+      var lastProgressSec = -PROGRESS_INTERVAL_SEC;
       var playFired = false;
-      // Track muted-state edges so we don't spam events on volume slides.
-      var wasMuted = !!el.muted;
+      var lastKey = "";
 
-      el.addEventListener(
-        "play",
-        function () {
-          try {
-            if (playFired) return;
-            playFired = true;
-            sendEvent("video_play", { atSec: Math.floor(el.currentTime || 0) });
-          } catch (e) {}
-        },
-        { passive: true },
-      );
+      function progress(force) {
+        try {
+          var snap = acc.snapshot(el.duration || 0, el.currentTime || 0);
+          var key = snap.atSec + "|" + snap.playedSec + "|" + snap.durationSec;
+          if (!force && key === lastKey) return;
+          lastKey = key;
+          sendEvent("video_progress", snap);
+        } catch (e) {}
+      }
 
-      el.addEventListener(
-        "timeupdate",
-        function () {
-          try {
-            var t = Math.floor(el.currentTime || 0);
-            if (t - lastProgressSec >= PROGRESS_INTERVAL_SEC) {
-              lastProgressSec = t;
-              sendEvent("video_progress", {
-                atSec: t,
-                duration: Math.floor(el.duration || 0) || null,
-              });
-            }
-          } catch (e) {}
-        },
-        { passive: true },
-      );
+      el.addEventListener("play", function () {
+        try {
+          if (playFired) return;
+          playFired = true;
+          sendEvent("video_play", { atSec: r1(el.currentTime || 0) });
+        } catch (e) {}
+      }, { passive: true });
 
-      el.addEventListener(
-        "ended",
-        function () {
-          try {
-            sendEvent("video_ended", {
-              atSec: Math.floor(el.currentTime || 0),
-              duration: Math.floor(el.duration || 0) || null,
-            });
-          } catch (e) {}
-        },
-        { passive: true },
-      );
+      el.addEventListener("timeupdate", function () {
+        try {
+          if (el.seeking) return;
+          var t = el.currentTime || 0;
+          acc.tick(t);
+          if (t - lastProgressSec >= PROGRESS_INTERVAL_SEC) {
+            lastProgressSec = t;
+            progress(false);
+          }
+        } catch (e) {}
+      }, { passive: true });
 
-      // volumechange / video_mute / video_unmute bewusst deaktiviert —
-      // Operator-Entscheidung "nur relevante Events tracken".
-      // wasMuted-Variable bleibt zur Backward-Kompat im Closure-Scope.
-      void wasMuted;
+      el.addEventListener("seeking", function () { try { acc.close(); } catch (e) {} }, { passive: true });
+      el.addEventListener("seeked", function () {
+        try { acc.close(); lastProgressSec = el.currentTime || 0; progress(true); } catch (e) {}
+      }, { passive: true });
+      el.addEventListener("pause", function () {
+        try { acc.close(); progress(true); } catch (e) {}
+      }, { passive: true });
+
+      el.addEventListener("ended", function () {
+        try {
+          var dur = el.duration || 0;
+          acc.ended(dur);
+          var snap = acc.snapshot(dur, dur);
+          sendEvent("video_progress", snap);
+          sendEvent("video_ended", {
+            atSec: snap.durationSec,
+            playedSec: snap.playedSec,
+            durationSec: snap.durationSec,
+            duration: snap.duration,
+            coveragePct: snap.coveragePct
+          });
+        } catch (e) {}
+      }, { passive: true });
+
+      function flush() { try { acc.close(); progress(true); } catch (e) {} }
+      window.addEventListener("pagehide", flush, false);
+      window.addEventListener("beforeunload", flush, false);
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "hidden") flush();
+      }, false);
     } catch (e) {
       /* swallow */
     }

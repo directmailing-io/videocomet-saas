@@ -132,10 +132,14 @@ export async function insertLeadEvent(input: InsertLeadEventInput): Promise<void
  * `lead_events` history. Idempotent. Safe to call from a cron OR inline after
  * each insert.
  *
- * Watch-time strategy: for each (leadId, sessionId) group, take MAX(playedSec)
- * from video_progress + video_ended events. Sum those per-session maxima.
- * This handles the common case where the player sends progress every 5s — we
- * only count the highest progress per session.
+ * Watch-Strategie (seit 2026-09-03):
+ *  - `playedSec` = einmalig gesehene Sekunden (Client fuehrt Vereinigung der
+ *    gesehenen Intervalle). Alte Clients senden nur `atSec`/`duration`; dann
+ *    gilt die Position als Naeherung (COALESCE).
+ *  - `watch_time_sec` = beste Sitzung (MAX ueber Sitzungen des MAX je Sitzung).
+ *    Frueher wurden Sitzungen summiert → Re-Watches blaehten die Zahl auf.
+ *  - `watch_pct` = MAX(coveragePct) ueber alle Events; Fallback aus
+ *    playedSec/durationSec. Gedeckelt auf 100.
  */
 export async function aggregateLeadStats(leadId: string): Promise<void> {
   await db.execute(sql`
@@ -158,16 +162,43 @@ export async function aggregateLeadStats(leadId: string): Promise<void> {
         WHERE lead_id = ${leadId} AND kind = 'video_play'
       ), 0),
       watch_time_sec = COALESCE((
-        SELECT SUM(max_played)::int FROM (
-          SELECT MAX(
-            COALESCE(NULLIF(payload ->> 'playedSec', '')::float, 0)
-          ) AS max_played
+        SELECT MAX(max_played)::int FROM (
+          SELECT MAX(LEAST(7200, COALESCE(
+            CASE WHEN (payload ->> 'playedSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (payload ->> 'playedSec')::float END,
+            CASE WHEN (payload ->> 'atSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (payload ->> 'atSec')::float END,
+            0
+          ))) AS max_played
           FROM lead_events
           WHERE lead_id = ${leadId}
             AND kind IN ('video_progress', 'video_ended')
-            AND session_id IS NOT NULL
-          GROUP BY session_id
+          GROUP BY COALESCE(session_id, id::text)
         ) per_session
+      ), 0),
+      watch_pct = COALESCE((
+        SELECT LEAST(100, GREATEST(0, MAX(pct)))::int FROM (
+          SELECT COALESCE(
+            CASE WHEN (payload ->> 'coveragePct') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (payload ->> 'coveragePct')::float END,
+            CASE
+              WHEN COALESCE(
+                     CASE WHEN (payload ->> 'durationSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (payload ->> 'durationSec')::float END,
+                     CASE WHEN (payload ->> 'duration') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (payload ->> 'duration')::float END,
+                     0) > 0
+              THEN 100.0 * COALESCE(
+                     CASE WHEN (payload ->> 'playedSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (payload ->> 'playedSec')::float END,
+                     CASE WHEN (payload ->> 'atSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (payload ->> 'atSec')::float END,
+                     0)
+                   / COALESCE(
+                     CASE WHEN (payload ->> 'durationSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (payload ->> 'durationSec')::float END,
+                     CASE WHEN (payload ->> 'duration') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (payload ->> 'duration')::float END)
+              ELSE NULL
+            END
+          ) AS pct
+          FROM lead_events
+          WHERE lead_id = ${leadId}
+            AND kind IN ('video_progress', 'video_ended')
+            AND payload IS NOT NULL
+        ) per_event
+        WHERE pct IS NOT NULL
       ), 0),
       cta_click_count = COALESCE((
         SELECT COUNT(*)::int FROM lead_events

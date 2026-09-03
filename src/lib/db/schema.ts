@@ -727,6 +727,11 @@ export const leads = pgTable("leads", {
   lastViewedAt: timestamp("last_viewed_at", { withTimezone: true }),
   playCount: integer("play_count").notNull().default(0),
   watchTimeSec: integer("watch_time_sec").notNull().default(0),
+  /**
+   * Anteil der Zeitleiste, der einmalig gesehen wurde (0–100, Migration 0076).
+   * Beste Sitzung zaehlt. 10 % schauen + vorspulen + 10 % = 20 %.
+   */
+  watchPct: integer("watch_pct").notNull().default(0),
   ctaClickCount: integer("cta_click_count").notNull().default(0),
   lastCtaAt: timestamp("last_cta_at", { withTimezone: true }),
 

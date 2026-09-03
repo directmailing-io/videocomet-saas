@@ -78,8 +78,24 @@ export async function getRunAnalytics(
   const opened = stats?.opened ?? 0;
   const videoStarted = stats?.videoStarted ?? 0;
   const ctaClicks = stats?.ctaClicks ?? 0;
+
+  // Ø gesehener Anteil der Zeitleiste (leads.watch_pct, einmalige Abdeckung)
+  // ueber alle Leads mit mindestens einem Play. Fallback auf die alten
+  // Meilenstein-Events, falls noch keine Abdeckungsdaten vorliegen.
+  const [cov] = await db
+    .select({
+      avgPct: sql<number | null>`avg(${leads.watchPct}) filter (where ${leads.playCount} > 0)`,
+      withPlays: sql<number>`count(*) filter (where ${leads.playCount} > 0)::int`,
+    })
+    .from(leads)
+    .where(eq(leads.runId, runId));
   const avgProgressRaw = stats?.avgProgress ?? null;
-  const completedRate = avgProgressRaw == null ? 0 : Number(avgProgressRaw);
+  const completedRate =
+    cov?.avgPct != null && (cov.withPlays ?? 0) > 0
+      ? Number(cov.avgPct)
+      : avgProgressRaw == null
+        ? 0
+        : Number(avgProgressRaw);
 
   const openRate = totalLeads > 0 ? opened / totalLeads : 0;
   const videoStartRate = totalLeads > 0 ? videoStarted / totalLeads : 0;

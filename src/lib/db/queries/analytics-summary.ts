@@ -403,6 +403,7 @@ export async function getCampaignDeepDive(
       id: leads.id,
       data: leads.data,
       watchTimeSec: leads.watchTimeSec,
+      watchPct: leads.watchPct,
       viewCount: leads.viewCount,
       ctaClickCount: leads.ctaClickCount,
     })
@@ -554,6 +555,8 @@ export interface CampaignLeadRow {
   lastViewedAt: Date | null;
   playCount: number;
   watchTimeSec: number;
+  /** Einmalig gesehener Anteil der Zeitleiste, 0–100. */
+  watchPct: number;
   ctaClickCount: number;
   lastCtaAt: Date | null;
   errorMessage: string | null;
@@ -588,6 +591,7 @@ export async function listAllCampaignLeads(
       lastViewedAt: leads.lastViewedAt,
       playCount: leads.playCount,
       watchTimeSec: leads.watchTimeSec,
+      watchPct: leads.watchPct,
       ctaClickCount: leads.ctaClickCount,
       lastCtaAt: leads.lastCtaAt,
       errorMessage: leads.errorMessage,

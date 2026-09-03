@@ -179,13 +179,22 @@ async function readKindCounts(
       // Simpler: count distinct play-events × naive constant — instead reuse leads.watchTimeSec
       // outside the window when no window — but for window we approximate from progress events.
       // We pick the SUM of atSec floors per session-window — practical proxy.
-      watchProxy: sql<number>`COALESCE(SUM(CASE
-        WHEN ${leadEvents.kind} IN ('video_progress','video_ended')
-          AND (${leadEvents.payload} ? 'atSec')
-          AND (${leadEvents.payload} -> 'atSec')::text ~ '^-?[0-9]+(\\.[0-9]+)?$'
-        THEN GREATEST(0, LEAST(7200, (${leadEvents.payload} ->> 'atSec')::float))
-        ELSE 0
-      END), 0)::int`,
+      // Watch-Time = Summe ueber Leads der je Lead hoechsten einmalig gesehenen
+      // Sekunden (playedSec, Legacy: atSec) im Zeitraum. Vorher: SUM(atSec)
+      // ueber alle Ticks → ein 60-s-Video zaehlte ~390 s.
+      watchProxy: sql<number>`COALESCE((
+        SELECT SUM(m)::int FROM (
+          SELECT MAX(LEAST(7200, COALESCE(
+            CASE WHEN (le2.payload ->> 'playedSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (le2.payload ->> 'playedSec')::float END,
+            CASE WHEN (le2.payload ->> 'atSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (le2.payload ->> 'atSec')::float END,
+            0))) AS m
+          FROM lead_events le2
+          WHERE le2.lead_id = ANY(ARRAY_AGG(DISTINCT ${leads.id}))
+            AND le2.kind IN ('video_progress','video_ended')
+            AND le2.ts >= ${from} AND le2.ts < ${to}
+          GROUP BY le2.lead_id
+        ) per_lead
+      ), 0)::int`,
     })
     .from(leadEvents)
     .innerJoin(leads, eq(leads.id, leadEvents.leadId))
@@ -210,11 +219,20 @@ async function readKindCounts(
           ${leadEvents.kind} = 'cta_click'
           OR (
             ${leadEvents.kind} IN ('video_progress','video_ended')
-            AND (${leadEvents.payload} ? 'atSec')
-            AND (${leadEvents.payload} ? 'duration')
-            AND COALESCE(NULLIF(${leadEvents.payload} ->> 'duration', '')::float, 0) > 0
-            AND (COALESCE(NULLIF(${leadEvents.payload} ->> 'atSec', '')::float, 0)
-                 / NULLIF(NULLIF(${leadEvents.payload} ->> 'duration', '')::float, 0)) * 100 >= 75
+            AND (
+              (CASE WHEN (${leadEvents.payload} ->> 'coveragePct') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'coveragePct')::float END) >= 75
+              OR (
+                COALESCE(
+                  CASE WHEN (${leadEvents.payload} ->> 'durationSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'durationSec')::float END,
+                  CASE WHEN (${leadEvents.payload} ->> 'duration') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'duration')::float END, 0) > 0
+                AND 100.0 * COALESCE(
+                  CASE WHEN (${leadEvents.payload} ->> 'playedSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'playedSec')::float END,
+                  CASE WHEN (${leadEvents.payload} ->> 'atSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'atSec')::float END, 0)
+                  / COALESCE(
+                  CASE WHEN (${leadEvents.payload} ->> 'durationSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'durationSec')::float END,
+                  CASE WHEN (${leadEvents.payload} ->> 'duration') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'duration')::float END) >= 75
+              )
+            )
           )
         )`,
       ),
@@ -387,11 +405,20 @@ export async function getFunnelData(
       videoPlayLeads: sql<number>`COUNT(DISTINCT CASE WHEN ${leadEvents.kind} = 'video_play' THEN ${leads.id} END)::int`,
       video75Leads: sql<number>`COUNT(DISTINCT CASE WHEN
         ${leadEvents.kind} IN ('video_progress','video_ended')
-        AND (${leadEvents.payload} ? 'atSec')
-        AND (${leadEvents.payload} ? 'duration')
-        AND COALESCE(NULLIF(${leadEvents.payload} ->> 'duration', '')::float, 0) > 0
-        AND (COALESCE(NULLIF(${leadEvents.payload} ->> 'atSec', '')::float, 0)
-             / NULLIF(NULLIF(${leadEvents.payload} ->> 'duration', '')::float, 0)) * 100 >= 75
+            AND (
+              (CASE WHEN (${leadEvents.payload} ->> 'coveragePct') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'coveragePct')::float END) >= 75
+              OR (
+                COALESCE(
+                  CASE WHEN (${leadEvents.payload} ->> 'durationSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'durationSec')::float END,
+                  CASE WHEN (${leadEvents.payload} ->> 'duration') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'duration')::float END, 0) > 0
+                AND 100.0 * COALESCE(
+                  CASE WHEN (${leadEvents.payload} ->> 'playedSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'playedSec')::float END,
+                  CASE WHEN (${leadEvents.payload} ->> 'atSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'atSec')::float END, 0)
+                  / COALESCE(
+                  CASE WHEN (${leadEvents.payload} ->> 'durationSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'durationSec')::float END,
+                  CASE WHEN (${leadEvents.payload} ->> 'duration') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'duration')::float END) >= 75
+              )
+            )
         THEN ${leads.id} END)::int`,
       ctaLeads: sql<number>`COUNT(DISTINCT CASE WHEN ${leadEvents.kind} = 'cta_click' THEN ${leads.id} END)::int`,
       medianAbandon: sql<number | null>`PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY
@@ -538,13 +565,22 @@ export async function listCampaignPerformance(
       pageViews: sql<number>`COUNT(*) FILTER (WHERE ${leadEvents.kind} = 'page_view')::int`,
       videoPlays: sql<number>`COUNT(*) FILTER (WHERE ${leadEvents.kind} = 'video_play')::int`,
       ctaClicks: sql<number>`COUNT(*) FILTER (WHERE ${leadEvents.kind} = 'cta_click')::int`,
-      watchTimeSec: sql<number>`COALESCE(SUM(CASE
-        WHEN ${leadEvents.kind} IN ('video_progress','video_ended')
-          AND (${leadEvents.payload} ? 'atSec')
-          AND (${leadEvents.payload} -> 'atSec')::text ~ '^-?[0-9]+(\\.[0-9]+)?$'
-        THEN GREATEST(0, LEAST(7200, (${leadEvents.payload} ->> 'atSec')::float))
-        ELSE 0
-      END), 0)::int`,
+      // Watch-Time = Summe ueber Leads der je Lead hoechsten einmalig gesehenen
+      // Sekunden (playedSec, Legacy: atSec) im Zeitraum. Vorher: SUM(atSec)
+      // ueber alle Ticks → ein 60-s-Video zaehlte ~390 s.
+      watchTimeSec: sql<number>`COALESCE((
+        SELECT SUM(m)::int FROM (
+          SELECT MAX(LEAST(7200, COALESCE(
+            CASE WHEN (le2.payload ->> 'playedSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (le2.payload ->> 'playedSec')::float END,
+            CASE WHEN (le2.payload ->> 'atSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (le2.payload ->> 'atSec')::float END,
+            0))) AS m
+          FROM lead_events le2
+          WHERE le2.lead_id = ANY(ARRAY_AGG(DISTINCT ${leads.id}))
+            AND le2.kind IN ('video_progress','video_ended')
+            AND le2.ts >= ${range.from.toISOString()} AND le2.ts < ${range.to.toISOString()}
+          GROUP BY le2.lead_id
+        ) per_lead
+      ), 0)::int`,
     })
     .from(leadEvents)
     .innerJoin(leads, eq(leads.id, leadEvents.leadId))
@@ -569,11 +605,20 @@ export async function listCampaignPerformance(
       hasCta: sql<number>`MAX(CASE WHEN ${leadEvents.kind} = 'cta_click' THEN 1 ELSE 0 END)::int`,
       has75: sql<number>`MAX(CASE WHEN
         ${leadEvents.kind} IN ('video_progress','video_ended')
-        AND (${leadEvents.payload} ? 'atSec')
-        AND (${leadEvents.payload} ? 'duration')
-        AND COALESCE(NULLIF(${leadEvents.payload} ->> 'duration', '')::float, 0) > 0
-        AND (COALESCE(NULLIF(${leadEvents.payload} ->> 'atSec', '')::float, 0)
-             / NULLIF(NULLIF(${leadEvents.payload} ->> 'duration', '')::float, 0)) * 100 >= 75
+            AND (
+              (CASE WHEN (${leadEvents.payload} ->> 'coveragePct') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'coveragePct')::float END) >= 75
+              OR (
+                COALESCE(
+                  CASE WHEN (${leadEvents.payload} ->> 'durationSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'durationSec')::float END,
+                  CASE WHEN (${leadEvents.payload} ->> 'duration') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'duration')::float END, 0) > 0
+                AND 100.0 * COALESCE(
+                  CASE WHEN (${leadEvents.payload} ->> 'playedSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'playedSec')::float END,
+                  CASE WHEN (${leadEvents.payload} ->> 'atSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'atSec')::float END, 0)
+                  / COALESCE(
+                  CASE WHEN (${leadEvents.payload} ->> 'durationSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'durationSec')::float END,
+                  CASE WHEN (${leadEvents.payload} ->> 'duration') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${leadEvents.payload} ->> 'duration')::float END) >= 75
+              )
+            )
         THEN 1 ELSE 0 END)::int`,
       hasPlay: sql<number>`MAX(CASE WHEN ${leadEvents.kind} = 'video_play' THEN 1 ELSE 0 END)::int`,
       hasPv: sql<number>`MAX(CASE WHEN ${leadEvents.kind} = 'page_view' THEN 1 ELSE 0 END)::int`,
@@ -678,13 +723,22 @@ export async function getTopLeads(
       pageViews: sql<number>`COUNT(*) FILTER (WHERE ${leadEvents.kind} = 'page_view')::int`,
       videoPlays: sql<number>`COUNT(*) FILTER (WHERE ${leadEvents.kind} = 'video_play')::int`,
       ctaClicks: sql<number>`COUNT(*) FILTER (WHERE ${leadEvents.kind} = 'cta_click')::int`,
-      watchTimeSec: sql<number>`COALESCE(SUM(CASE
-        WHEN ${leadEvents.kind} IN ('video_progress','video_ended')
-          AND (${leadEvents.payload} ? 'atSec')
-          AND (${leadEvents.payload} -> 'atSec')::text ~ '^-?[0-9]+(\\.[0-9]+)?$'
-        THEN GREATEST(0, LEAST(7200, (${leadEvents.payload} ->> 'atSec')::float))
-        ELSE 0
-      END), 0)::int`,
+      // Watch-Time = Summe ueber Leads der je Lead hoechsten einmalig gesehenen
+      // Sekunden (playedSec, Legacy: atSec) im Zeitraum. Vorher: SUM(atSec)
+      // ueber alle Ticks → ein 60-s-Video zaehlte ~390 s.
+      watchTimeSec: sql<number>`COALESCE((
+        SELECT SUM(m)::int FROM (
+          SELECT MAX(LEAST(7200, COALESCE(
+            CASE WHEN (le2.payload ->> 'playedSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (le2.payload ->> 'playedSec')::float END,
+            CASE WHEN (le2.payload ->> 'atSec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (le2.payload ->> 'atSec')::float END,
+            0))) AS m
+          FROM lead_events le2
+          WHERE le2.lead_id = ANY(ARRAY_AGG(DISTINCT ${leads.id}))
+            AND le2.kind IN ('video_progress','video_ended')
+            AND le2.ts >= ${range.from.toISOString()} AND le2.ts < ${range.to.toISOString()}
+          GROUP BY le2.lead_id
+        ) per_lead
+      ), 0)::int`,
       lastEventTs: sql<Date>`MAX(${leadEvents.ts})`,
       lastKind: sql<string | null>`(
         SELECT le2.kind

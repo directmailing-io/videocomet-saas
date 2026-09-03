@@ -50,3 +50,4 @@ intro-poc/
 .recorder-e2e.mjs
 .cookie-test.mjs
 .shot-test.mjs
+.cookie-test2.mjs

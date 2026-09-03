@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { setTrackingSlug, track } from "@/lib/tracker";
+import { WatchAccumulator } from "@/lib/analytics/watch-coverage";
 
 /**
  * Public landing-page video player.
@@ -13,7 +14,9 @@ import { setTrackingSlug, track } from "@/lib/tracker";
  * Tracking (new unified pipeline → /api/track/event):
  *  - `video_play` on the first play event.
  *  - `video_progress` every 5 seconds while playing AND on pause/seek/end,
- *    carrying `atSec`, `playedSec` (monotonic max-watched), `durationSec`.
+ *    carrying `atSec`, `playedSec` (UNIQUE watched seconds = union of watched
+ *    intervals, see lib/analytics/watch-coverage.ts), `durationSec`,
+ *    `coveragePct`, `segments`. Bunny iframes are tracked via player.js.
  *  - `video_ended` once when the media reaches the end.
  *  - `pagehide`/`beforeunload` flushes a final `video_progress` via
  *    sendBeacon so we don't lose the last few seconds when the recipient
@@ -102,6 +105,39 @@ function legacyTrackEvent(
 
 const PROGRESS_MILESTONES = [25, 50, 75, 100] as const;
 const PROGRESS_TICK_MS = 5000;
+const PLAYERJS_SRC = "https://assets.mediadelivery.net/playerjs/playerjs-latest.min.js";
+
+/** Minimaler Typ fuer Bunnys player.js (postMessage-Bruecke in den iframe). */
+interface PlayerJsPlayer {
+  on(event: string, cb: (data?: unknown) => void): void;
+  getDuration(cb: (d: number) => void): void;
+  getCurrentTime(cb: (t: number) => void): void;
+}
+declare global {
+  interface Window {
+    playerjs?: { Player: new (el: HTMLIFrameElement | string) => PlayerJsPlayer };
+  }
+}
+
+let playerJsLoading: Promise<boolean> | null = null;
+function loadPlayerJs(): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  if (window.playerjs) return Promise.resolve(true);
+  if (playerJsLoading) return playerJsLoading;
+  playerJsLoading = new Promise<boolean>((resolve) => {
+    try {
+      const s = document.createElement("script");
+      s.src = PLAYERJS_SRC;
+      s.async = true;
+      s.onload = () => resolve(Boolean(window.playerjs));
+      s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    } catch {
+      resolve(false);
+    }
+  });
+  return playerJsLoading;
+}
 
 export function VideoPlayer({
   leadId,
@@ -113,30 +149,62 @@ export function VideoPlayer({
   videoOrientation,
 }: VideoPlayerProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
+  const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
   const startedRef = React.useRef(false);
   const reachedRef = React.useRef<Set<number>>(new Set());
-  // Monotonic high-water-mark: even if the user seeks backwards the value
-  // never decreases. Bumped on every timeupdate tick.
-  const maxPlayedSecRef = React.useRef(0);
   const intervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  // Gesehene Zeitleisten-Abschnitte (Vereinigung, kein Doppelzaehlen).
+  const accRef = React.useRef(new WatchAccumulator());
+  // Letzter bekannter Stand (fuer iframe: kommt aus player.js-Events).
+  const posRef = React.useRef({ atSec: 0, durationSec: 0, playing: false });
+  const lastSentRef = React.useRef<string>("");
 
-  // Ensure the tracker module knows the slug even on direct deep-links
-  // (TrackerInit also calls this, but it is cheap and idempotent).
   React.useEffect(() => {
     if (slug) setTrackingSlug(slug);
   }, [slug]);
 
-  const snapshotProgress = React.useCallback(() => {
+  const buildSnapshot = React.useCallback(() => {
     const video = videoRef.current;
-    if (!video) return null;
-    const dur = Number.isFinite(video.duration) ? video.duration : 0;
-    return {
-      atSec: Math.round(video.currentTime * 10) / 10,
-      playedSec:
-        Math.round(maxPlayedSecRef.current * 10) / 10,
-      durationSec: Math.round(dur * 10) / 10,
-    };
+    if (video) {
+      const dur = Number.isFinite(video.duration) ? video.duration : 0;
+      return accRef.current.snapshot(dur, video.currentTime);
+    }
+    return accRef.current.snapshot(posRef.current.durationSec, posRef.current.atSec);
   }, []);
+
+  /** video_progress senden; identische Snapshots hintereinander nicht doppelt. */
+  const sendProgress = React.useCallback(
+    (force = false) => {
+      const snap = buildSnapshot();
+      const key = `${snap.atSec}|${snap.playedSec}|${snap.durationSec}`;
+      if (!force && key === lastSentRef.current) return;
+      lastSentRef.current = key;
+      track("video_progress", {
+        atSec: snap.atSec,
+        playedSec: snap.playedSec,
+        durationSec: snap.durationSec,
+        coveragePct: snap.coveragePct,
+        maxSec: snap.maxSec,
+        segments: snap.segments,
+      });
+    },
+    [buildSnapshot],
+  );
+
+  /** Legacy-Meilensteine (25/50/75/100) nach erreichter Position. */
+  const fireMilestones = React.useCallback(
+    (atSec: number, durationSec: number) => {
+      if (!durationSec) return;
+      const pct = (atSec / durationSec) * 100;
+      for (const milestone of PROGRESS_MILESTONES) {
+        if (pct >= milestone && !reachedRef.current.has(milestone)) {
+          reachedRef.current.add(milestone);
+          legacyTrackEvent("/api/track/video-progress", { leadId, percent: milestone });
+        }
+      }
+    },
+    [leadId],
+  );
 
   const clearTick = React.useCallback(() => {
     if (intervalRef.current !== null) {
@@ -149,114 +217,167 @@ export function VideoPlayer({
     clearTick();
     intervalRef.current = setInterval(() => {
       const video = videoRef.current;
-      if (!video || video.paused || video.ended) return;
-      if (video.currentTime > maxPlayedSecRef.current) {
-        maxPlayedSecRef.current = video.currentTime;
-      }
-      const snap = snapshotProgress();
-      if (snap) track("video_progress", snap);
+      if (video ? video.paused || video.ended : !posRef.current.playing) return;
+      sendProgress();
     }, PROGRESS_TICK_MS);
-  }, [clearTick, snapshotProgress]);
+  }, [clearTick, sendProgress]);
 
+  const onPlayStart = React.useCallback(
+    (atSec: number) => {
+      track("video_play", { atSec: Math.round(atSec * 10) / 10 });
+      if (!startedRef.current) {
+        startedRef.current = true;
+        legacyTrackEvent("/api/track/video-start", { leadId });
+      }
+      startTick();
+    },
+    [leadId, startTick],
+  );
+
+  // ── Natives <video> ─────────────────────────────────────────────────────
   const onPlay = React.useCallback(() => {
     const video = videoRef.current;
-    const atSec = video ? Math.round(video.currentTime * 10) / 10 : 0;
-    track("video_play", { atSec });
-    if (!startedRef.current) {
-      startedRef.current = true;
-      legacyTrackEvent("/api/track/video-start", { leadId });
-    }
-    startTick();
-  }, [leadId, startTick]);
+    onPlayStart(video ? video.currentTime : 0);
+  }, [onPlayStart]);
 
   const onTimeUpdate = React.useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
-    if (video.currentTime > maxPlayedSecRef.current) {
-      maxPlayedSecRef.current = video.currentTime;
+    if (!video || video.seeking) return;
+    accRef.current.tick(video.currentTime);
+    if (video.duration && !Number.isNaN(video.duration)) {
+      fireMilestones(video.currentTime, video.duration);
     }
-    if (!video.duration || Number.isNaN(video.duration)) return;
-    const pct = (video.currentTime / video.duration) * 100;
-    for (const milestone of PROGRESS_MILESTONES) {
-      if (pct >= milestone && !reachedRef.current.has(milestone)) {
-        reachedRef.current.add(milestone);
-        legacyTrackEvent("/api/track/video-progress", {
-          leadId,
-          percent: milestone,
-        });
-      }
-    }
-  }, [leadId]);
+  }, [fireMilestones]);
 
   const onPause = React.useCallback(() => {
     clearTick();
-    const snap = snapshotProgress();
-    if (snap) track("video_progress", snap);
-  }, [clearTick, snapshotProgress]);
+    accRef.current.close();
+    sendProgress(true);
+  }, [clearTick, sendProgress]);
+
+  const onSeeking = React.useCallback(() => {
+    accRef.current.seek();
+  }, []);
 
   const onSeeked = React.useCallback(() => {
-    const snap = snapshotProgress();
-    if (snap) track("video_progress", snap);
-  }, [snapshotProgress]);
+    accRef.current.seek();
+    sendProgress(true);
+  }, [sendProgress]);
 
   const onEnded = React.useCallback(() => {
     clearTick();
     const video = videoRef.current;
-    const dur = video && Number.isFinite(video.duration) ? video.duration : 0;
-    if (dur > maxPlayedSecRef.current) maxPlayedSecRef.current = dur;
-    const snap = snapshotProgress() ?? {
-      atSec: dur,
-      playedSec: dur,
-      durationSec: dur,
-    };
-    track("video_progress", snap);
+    const dur = video && Number.isFinite(video.duration) ? video.duration : posRef.current.durationSec;
+    accRef.current.ended(dur);
+    const snap = accRef.current.snapshot(dur, dur);
+    track("video_progress", {
+      atSec: snap.atSec,
+      playedSec: snap.playedSec,
+      durationSec: snap.durationSec,
+      coveragePct: snap.coveragePct,
+      maxSec: snap.maxSec,
+      segments: snap.segments,
+    });
     track("video_ended", {
       atSec: snap.durationSec,
       playedSec: snap.playedSec,
       durationSec: snap.durationSec,
+      coveragePct: snap.coveragePct,
     });
     if (!reachedRef.current.has(100)) {
       reachedRef.current.add(100);
       legacyTrackEvent("/api/track/video-progress", { leadId, percent: 100 });
     }
-  }, [clearTick, leadId, snapshotProgress]);
+  }, [clearTick, leadId]);
 
-  // Flush a final progress beacon when the page is unloaded mid-play. We
-  // listen on both pagehide (modern Safari + back-forward cache) and
-  // beforeunload (other browsers) — both fire sendBeacon happily.
+  // Letzten Stand beim Verlassen der Seite sichern (sendBeacon).
   React.useEffect(() => {
     if (typeof window === "undefined") return undefined;
     const flush = () => {
-      const snap = snapshotProgress();
-      if (snap) track("video_progress", snap);
+      accRef.current.close();
+      sendProgress(true);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
     };
     window.addEventListener("pagehide", flush);
     window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("pagehide", flush);
       window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [snapshotProgress]);
+  }, [sendProgress]);
 
-  // Belt-and-braces: clear the interval on unmount so we never leak a
-  // recurring timer after the component leaves the tree.
   React.useEffect(() => {
     return () => clearTick();
   }, [clearTick]);
 
-  // iframe path: we cannot inspect play/progress from a cross-origin
-  // iframe without Bunny's player.js integration. The "video-start"
-  // is approximated by the first interaction with the iframe surface:
-  // we render a transparent overlay that captures pointer events once,
-  // then disappears (the click also activates the iframe controls).
+  // ── Bunny-iframe: Fortschritt ueber player.js ───────────────────────────
+  // Vorher wurde hier nur der erste Klick gezaehlt; deshalb stand in den
+  // Auswertungen fuer alle Bunny-Videos „0 Sekunden“. player.js liefert
+  // timeupdate {seconds, duration}, play, pause, seeked, ended.
   const [iframeArmed, setIframeArmed] = React.useState(true);
+  const playerJsReadyRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!bunnyEmbedUrl) return undefined;
+    let cancelled = false;
+    let player: PlayerJsPlayer | null = null;
+    void loadPlayerJs().then((ok) => {
+      if (cancelled || !ok || !iframeRef.current || !window.playerjs) return;
+      try {
+        player = new window.playerjs.Player(iframeRef.current);
+        player.on("ready", () => {
+          playerJsReadyRef.current = true;
+          player?.getDuration((d) => {
+            if (Number.isFinite(d) && d > 0) posRef.current.durationSec = d;
+          });
+        });
+        player.on("play", () => {
+          posRef.current.playing = true;
+          onPlayStart(posRef.current.atSec);
+          setIframeArmed(false);
+        });
+        player.on("pause", () => {
+          posRef.current.playing = false;
+          clearTick();
+          accRef.current.close();
+          sendProgress(true);
+        });
+        player.on("seeked", () => {
+          accRef.current.seek();
+          sendProgress(true);
+        });
+        player.on("timeupdate", (data) => {
+          const d = (data ?? {}) as { seconds?: number; duration?: number };
+          if (typeof d.duration === "number" && d.duration > 0) posRef.current.durationSec = d.duration;
+          if (typeof d.seconds === "number") {
+            posRef.current.atSec = d.seconds;
+            if (posRef.current.playing) accRef.current.tick(d.seconds);
+            fireMilestones(d.seconds, posRef.current.durationSec);
+          }
+        });
+        player.on("ended", () => {
+          posRef.current.playing = false;
+          onEnded();
+        });
+      } catch {
+        // player.js nicht verfuegbar → Fallback bleibt der Klick-Overlay
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bunnyEmbedUrl, clearTick, fireMilestones, onEnded, onPlayStart, sendProgress]);
+
+  // Fallback-Overlay (ohne player.js): erster Klick = video_play.
   const fireIframeStart = React.useCallback(() => {
-    track("video_play", { atSec: 0 });
-    if (startedRef.current) return;
-    startedRef.current = true;
-    legacyTrackEvent("/api/track/video-start", { leadId });
     setIframeArmed(false);
-  }, [leadId]);
+    if (playerJsReadyRef.current) return; // player.js meldet play selbst
+    onPlayStart(0);
+  }, [onPlayStart]);
 
   const containerClass = containerClassFor(videoOrientation);
   const videoFitClass = videoObjectFitClassFor(videoOrientation);
@@ -265,6 +386,7 @@ export function VideoPlayer({
     return (
       <div className={containerClass}>
         <iframe
+          ref={iframeRef}
           src={bunnyEmbedUrl}
           title={title ?? "Video"}
           loading="lazy"
@@ -298,6 +420,7 @@ export function VideoPlayer({
           onPlay={onPlay}
           onTimeUpdate={onTimeUpdate}
           onPause={onPause}
+          onSeeking={onSeeking}
           onSeeked={onSeeked}
           onEnded={onEnded}
         />

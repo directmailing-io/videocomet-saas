@@ -36,6 +36,7 @@ import {
 } from "@/lib/db/queries/lead-events";
 import { getClientIp } from "@/lib/tracking";
 import { getDomainByHostname } from "@/lib/db/queries/user-domains";
+import { sanitizeProgressPayload } from "@/lib/analytics/watch-coverage";
 
 const MAX_PAYLOAD_BYTES = 2048;
 const RATE_LIMIT_MAX = 60;
@@ -185,6 +186,12 @@ function parseBody(raw: unknown): ParsedBody | null {
       return null;
     }
     payload = obj.payload as Record<string, unknown>;
+    // Fortschritts-Payloads: nur bekannte Felder in plausiblen Bereichen
+    // (Segmente begrenzt), damit weder Muell noch riesige Arrays in der
+    // Tabelle landen und die Aggregation stabile Zahlen bekommt.
+    if (kind === "video_progress" || kind === "video_ended") {
+      payload = sanitizeProgressPayload(payload);
+    }
     // Payload size guard — sanity cap so a misbehaving client can't push
     // multi-MB blobs into the events table.
     try {

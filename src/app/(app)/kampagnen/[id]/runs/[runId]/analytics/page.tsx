@@ -96,7 +96,7 @@ export default async function RunAnalyticsPage({
           icon={<PlayCircle />}
         />
         <StatCard
-          label="Durchschn. Watch-Tiefe"
+          label="Ø gesehen (Anteil des Videos)"
           value={Math.round(watchDepth)}
           unit="%"
           icon={<Timer />}
