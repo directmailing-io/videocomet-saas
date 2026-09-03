@@ -191,7 +191,7 @@ async function readKindCounts(
           FROM lead_events le2
           WHERE le2.lead_id = ANY(ARRAY_AGG(DISTINCT ${leads.id}))
             AND le2.kind IN ('video_progress','video_ended')
-            AND le2.ts >= ${from} AND le2.ts < ${to}
+            AND le2.ts >= ${from.toISOString()} AND le2.ts < ${to.toISOString()}
           GROUP BY le2.lead_id
         ) per_lead
       ), 0)::int`,

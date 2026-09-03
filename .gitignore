@@ -51,3 +51,5 @@ intro-poc/
 .cookie-test.mjs
 .shot-test.mjs
 .cookie-test2.mjs
+.track-test.mjs
+.track-test2.mjs
