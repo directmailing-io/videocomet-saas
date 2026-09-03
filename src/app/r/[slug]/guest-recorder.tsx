@@ -149,13 +149,18 @@ function dimsToOrientation(d: Dims | null): GuestOrientation | null {
   return d.height > d.width ? "portrait" : "landscape";
 }
 
-/** Handy/Tablet? Entscheidet über Standard-Format und Hinweistexte. */
+/**
+ * Handy/Tablet? Entscheidet über Constraints, Standard-Format und Texte.
+ * iPad mit Maus/Tastatur meldet `pointer: fine`, ist aber trotzdem iOS
+ * (Frames folgen der Haltung) → explizit erkennen.
+ */
 function isTouchDevice(): boolean {
   if (typeof window === "undefined") return false;
-  return (
-    (navigator.maxTouchPoints ?? 0) > 0 &&
-    window.matchMedia("(pointer: coarse)").matches
-  );
+  const ua = navigator.userAgent ?? "";
+  const touchPoints = navigator.maxTouchPoints ?? 0;
+  if (/iP(hone|ad|od)/.test(ua)) return true;
+  if (/Mac/.test(navigator.platform ?? "") && touchPoints > 1) return true; // iPadOS im Desktop-Modus
+  return touchPoints > 0 && window.matchMedia("(pointer: coarse)").matches;
 }
 
 /**
@@ -169,28 +174,32 @@ function recordingCue(elapsed: number): string | null {
   return null;
 }
 
-export function GuestRecorder({
-  slug,
-  ownerName,
-  maxDurationSec,
-  initialStatus,
-  orientation: presetOrientation,
-}: GuestRecorderProps) {
+export function GuestRecorder(props: GuestRecorderProps) {
   // Wenn der Link nicht mehr offen ist → freundlicher Hinweis, kein Recorder.
-  if (initialStatus !== "open") {
+  // Wrapper ohne Hooks, damit die Hook-Reihenfolge der aktiven Komponente
+  // nie von `initialStatus` abhängt (Rules of Hooks).
+  if (props.initialStatus !== "open") {
     return (
       <div className="rounded-squircle-xl border border-line bg-surface p-8 text-center space-y-3">
         <AlertCircle className="size-10 text-ink-muted mx-auto" />
         <p className="text-base font-semibold text-ink">
-          {statusToHumanError(initialStatus)}
+          {statusToHumanError(props.initialStatus)}
         </p>
         <p className="text-sm text-ink-muted">
-          Bitte frage {ownerName} nach einem neuen Link.
+          Bitte frage {props.ownerName} nach einem neuen Link.
         </p>
       </div>
     );
   }
+  return <GuestRecorderActive {...props} />;
+}
 
+function GuestRecorderActive({
+  slug,
+  ownerName,
+  maxDurationSec,
+  orientation: presetOrientation,
+}: GuestRecorderProps) {
   const liveVideoRef = React.useRef<HTMLVideoElement | null>(null);
   const reviewVideoRef = React.useRef<HTMLVideoElement | null>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
@@ -203,14 +212,23 @@ export function GuestRecorder({
   const audioLevelRef = React.useRef<number>(0);
   const audioRafRef = React.useRef<number | null>(null);
   const audioCtxRef = React.useRef<AudioContext | null>(null);
+  const previewUrlRef = React.useRef<string | null>(null);
 
   const [state, setState] = React.useState<RecorderState>("ready");
+  const stateRef = React.useRef<RecorderState>("ready");
+  React.useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
   const [permError, setPermError] = React.useState<string | null>(null);
   const [recordError, setRecordError] = React.useState<string | null>(null);
   const [elapsed, setElapsed] = React.useState(0);
   const [countdown, setCountdown] = React.useState(COUNTDOWN_SECONDS);
   const [audioLevel, setAudioLevel] = React.useState(0);
-  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [previewUrl, setPreviewUrlState] = React.useState<string | null>(null);
+  const setPreviewUrl = React.useCallback((url: string | null) => {
+    previewUrlRef.current = url;
+    setPreviewUrlState(url);
+  }, []);
   const [previewLoadState, setPreviewLoadState] = React.useState<
     "loading" | "ready" | "error"
   >("loading");
@@ -228,9 +246,9 @@ export function GuestRecorder({
   React.useEffect(() => {
     orientationRef.current = orientation;
   }, [orientation]);
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     // Erst im Browser entscheidbar: Handy → Hochformat als Standard,
-    // sofern der Link nichts vorgibt.
+    // sofern der Link nichts vorgibt. useLayoutEffect: vor dem ersten Paint.
     const t = isTouchDevice();
     setTouch(t);
     if (!presetOrientation && t) {
@@ -250,25 +268,28 @@ export function GuestRecorder({
   /** Verfügbare Breite + Fensterhöhe für die Bühne (per JS gemessen). */
   const stageHostRef = React.useRef<HTMLDivElement | null>(null);
   const [stageBox, setStageBox] = React.useState<{ width: number; viewportH: number } | null>(null);
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const host = stageHostRef.current;
     if (!host) return;
     const measure = () => {
       const w = host.getBoundingClientRect().width;
-      const vh = window.visualViewport?.height ?? window.innerHeight;
-      if (w > 0 && vh > 0) setStageBox({ width: w, viewportH: vh });
+      // Layout-Viewport statt visualViewport/innerHeight: die aendern sich
+      // auf iOS beim Ein-/Ausklappen der Safari-Leiste und beim Scrollen →
+      // die Buehne wuerde unter dem Finger springen.
+      const vh = document.documentElement.clientHeight;
+      if (w > 0 && vh > 0) {
+        setStageBox((prev) =>
+          prev && Math.abs(prev.width - w) < 1 && Math.abs(prev.viewportH - vh) < 1 ? prev : { width: w, viewportH: vh },
+        );
+      }
     };
     measure();
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
     ro?.observe(host);
-    window.addEventListener("resize", measure);
     window.addEventListener("orientationchange", measure);
-    window.visualViewport?.addEventListener("resize", measure);
     return () => {
       ro?.disconnect();
-      window.removeEventListener("resize", measure);
       window.removeEventListener("orientationchange", measure);
-      window.visualViewport?.removeEventListener("resize", measure);
     };
   }, []);
 
@@ -320,6 +341,9 @@ export function GuestRecorder({
       if (!Ctx) return;
       const ctx = new Ctx();
       audioCtxRef.current = ctx;
+      // iOS: Kontext startet oft "suspended", wenn die Nutzergeste schon
+      // verbraucht ist → explizit fortsetzen (best effort).
+      void ctx.resume?.().catch(() => {});
       const src = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
@@ -334,8 +358,12 @@ export function GuestRecorder({
         }
         const rms = Math.sqrt(sum / buf.length);
         const next = Math.min(1, rms * 2.5);
-        audioLevelRef.current = next;
-        setAudioLevel(next);
+        // Nur waehrend der Aufnahme rendern (Pegel ist nur dort sichtbar)
+        // und nur bei spuerbarer Aenderung: sonst 60 Re-Renders/s.
+        if (stateRef.current === "recording" && Math.abs(next - audioLevelRef.current) > 0.03) {
+          audioLevelRef.current = next;
+          setAudioLevel(next);
+        }
         audioRafRef.current = requestAnimationFrame(tick);
       };
       tick();
@@ -385,15 +413,35 @@ export function GuestRecorder({
           };
       const stream = await navigator.mediaDevices.getUserMedia({ video, audio: true });
       streamRef.current = stream;
+      // Hat der Gast waehrend des Ladens schon wieder umgeschaltet (Desktop)?
+      // Dann diesen Stream verwerfen und mit dem aktuellen Wunsch neu laden.
+      if (!mobile && orientationRef.current !== effective) {
+        stream.getTracks().forEach((t) => t.stop());
+        setInitializing(false);
+        return initCamera(orientationRef.current);
+      }
       const vt = stream.getVideoTracks()[0];
       if (vt) {
         const s = vt.getSettings();
-        console.log(
-          `[guest-recorder] video track: ${s.width}x${s.height} @${s.frameRate}fps (wanted ${effective})`,
-        );
         // Nur Startwert. Auf iOS sind das Sensor-Masse (quer), die echten
         // Frame-Masse kommen gleich per loadedmetadata (readLiveDims).
         if (s.width && s.height && !mobile) setLiveDims({ width: s.width, height: s.height });
+        // iOS beendet Tracks beim App-Wechsel oder Rechteentzug: dann sauber
+        // zuruecksetzen statt schwarzer Buehne.
+        vt.addEventListener("ended", () => {
+          if (streamRef.current && streamRef.current.getVideoTracks()[0] !== vt) return; // alter Stream
+          const rec = recorderRef.current;
+          if (rec && rec.state !== "inactive") {
+            try { rec.requestData(); } catch { /* ignore */ }
+            try { rec.stop(); } catch { /* ignore */ }
+            return; // onstop uebernimmt (Review mit dem, was da ist)
+          }
+          clearTimers();
+          stopAudioMeter();
+          stopStream();
+          setState("ready");
+          setRecordError("Die Kamera wurde getrennt. Bitte noch einmal aktivieren.");
+        });
       }
       if (liveVideoRef.current) {
         liveVideoRef.current.srcObject = stream;
@@ -420,7 +468,21 @@ export function GuestRecorder({
     } finally {
       setInitializing(false);
     }
-  }, [startAudioMeter]);
+  }, [startAudioMeter, clearTimers, stopAudioMeter, stopStream]);
+
+  // Nach Drehen des Geraets liefert iOS getauschte Frame-Masse; das
+  // `resize`-Event am <video> ist dafuer nicht garantiert → zusaetzlich auf
+  // die Orientierung hoeren und kurz verzoegert nachlesen.
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(orientation: portrait)");
+    const onChange = () => {
+      window.setTimeout(readLiveDims, 300);
+      window.setTimeout(readLiveDims, 900);
+    };
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, [readLiveDims]);
 
   // Stream-Anhängen als Belt-and-Suspenders (siehe Kopfkommentar).
   React.useEffect(() => {
@@ -443,8 +505,8 @@ export function GuestRecorder({
         try { recorderRef.current.stop(); } catch { /* ignore */ }
       }
       recorderRef.current = null;
-      if (previewUrl) {
-        try { URL.revokeObjectURL(previewUrl); } catch { /* ignore */ }
+      if (previewUrlRef.current) {
+        try { URL.revokeObjectURL(previewUrlRef.current); } catch { /* ignore */ }
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -530,13 +592,18 @@ export function GuestRecorder({
         setState("ready");
         return;
       }
-      if (previewUrl) {
-        try { URL.revokeObjectURL(previewUrl); } catch { /* ignore */ }
+      if (previewUrlRef.current) {
+        try { URL.revokeObjectURL(previewUrlRef.current); } catch { /* ignore */ }
       }
       const url = URL.createObjectURL(blob);
       // Die Bühne behält bis zur Metadaten-Info die Live-Maße, damit sie
-      // nicht springt.
-      setReviewDims(liveDims);
+      // nicht springt. Direkt vom Element lesen (kein Closure-Stand).
+      const lv = liveVideoRef.current;
+      setReviewDims(
+        lv && lv.videoWidth > 0 && lv.videoHeight > 0
+          ? { width: lv.videoWidth, height: lv.videoHeight }
+          : null,
+      );
       setPreviewUrl(url);
       setPreviewLoadState("loading");
       setState("review");
@@ -687,11 +754,11 @@ export function GuestRecorder({
   // auf volle Breite mit 16:9 zurueck, damit nichts springt.
   const stageSize = (() => {
     if (!stageBox) return null;
-    const maxH = stageBox.viewportH * STAGE_MAX_VIEWPORT_SHARE;
+    const maxH = stageBox.viewportH * (touch ? 0.78 : STAGE_MAX_VIEWPORT_SHARE);
     let width = stageBox.width;
     if (stageIsPortrait) width = Math.min(width, STAGE_PORTRAIT_MAX_WIDTH);
     width = Math.min(width, maxH * stageAspect);
-    width = Math.max(120, Math.floor(width));
+    width = Math.max(Math.min(240, stageBox.width), Math.floor(width));
     return { width, height: Math.round(width / stageAspect) };
   })();
 
@@ -699,17 +766,19 @@ export function GuestRecorder({
   const actualLive = dimsToOrientation(liveDims);
   const wanted: GuestOrientation = presetOrientation ?? orientation;
   const mismatch =
-    showLiveStage && hasStream && actualLive !== null && actualLive !== wanted;
+    (state === "ready" || state === "countdown") &&
+    hasStream &&
+    actualLive !== null &&
+    actualLive !== wanted;
+  // Handy: grosse Einblendung im Bild ("Dreh dein Handy quer").
+  // Desktop: Textbox unter der Buehne (Webcam kann meist kein Hochformat).
+  const rotateOverlay = mismatch && touch && state === "ready";
   const mismatchText = (() => {
-    if (!mismatch) return null;
+    if (!mismatch || touch) return null;
     if (wanted === "portrait") {
-      return touch
-        ? "Dein Bild ist gerade im Querformat. Dreh dein Handy senkrecht, dann passt es."
-        : "Diese Kamera nimmt nur im Querformat auf. Für Hochformat nimm bitte mit dem Handy auf.";
+      return "Diese Kamera nimmt nur im Querformat auf. Für Hochformat nimm bitte mit dem Handy auf.";
     }
-    return touch
-      ? "Dein Bild ist gerade im Hochformat. Dreh dein Handy quer, dann passt es."
-      : "Deine Kamera liefert gerade Hochformat.";
+    return "Deine Kamera liefert gerade Hochformat.";
   })();
 
   const resultOrientation = dimsToOrientation(reviewDims);
@@ -773,7 +842,7 @@ export function GuestRecorder({
               setHintOpen(false);
             }}
             className="mt-2 mx-auto flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-ink-muted hover:text-ink hover:bg-surface-soft transition-colors"
-            aria-expanded
+            aria-expanded={true}
           >
             <ChevronUp className="size-3.5" />
             Hinweis zuklappen
@@ -824,6 +893,7 @@ export function GuestRecorder({
               >
                 <button
                   type="button"
+                  disabled={initializing}
                   onClick={() => void switchOrientation("landscape")}
                   aria-pressed={orientation === "landscape"}
                   className={cn(
@@ -838,6 +908,7 @@ export function GuestRecorder({
                 </button>
                 <button
                   type="button"
+                  disabled={initializing}
                   onClick={() => void switchOrientation("portrait")}
                   aria-pressed={orientation === "portrait"}
                   className={cn(
@@ -877,10 +948,13 @@ export function GuestRecorder({
               : { width: "100%", aspectRatio: "16 / 9" }
           }
         >
+          {/* Live-Vorschau gespiegelt wie in der Kamera-App (Selfie-Ansicht).
+              Die Aufnahme selbst wird NICHT gespiegelt, so wie bei jeder
+              Kamera-App auch. */}
           <video
             ref={liveVideoRef}
             className={cn(
-              "absolute inset-0 h-full w-full object-contain",
+              "absolute inset-0 h-full w-full object-contain -scale-x-100",
               showLiveStage ? "block" : "hidden",
             )}
             autoPlay
@@ -938,7 +1012,7 @@ export function GuestRecorder({
 
           {/* Countdown */}
           {state === "countdown" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/50 text-white text-center px-6">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/50 text-white text-center px-6" aria-live="assertive">
               <span className="text-7xl font-bold tabular-nums drop-shadow">{countdown}</span>
               <span className="text-sm font-semibold drop-shadow">
                 Gleich geht es los. Starte mit „Hi!“ und mach dann eine kurze Pause.
@@ -956,6 +1030,29 @@ export function GuestRecorder({
             </div>
           )}
 
+          {/* Dreh-Hinweis im Bild (Handy): Wunschformat passt nicht zur Haltung */}
+          {rotateOverlay && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink/70 px-6 text-center text-white backdrop-blur-[2px]">
+              <span className="relative flex size-20 items-center justify-center">
+                <Smartphone
+                  className={cn(
+                    "size-14 transition-transform duration-700",
+                    wanted === "landscape" ? "rotate-90" : "rotate-0",
+                  )}
+                />
+                <RotateCcw className="absolute -right-1 -top-1 size-6 text-brand animate-spin [animation-duration:3s]" />
+              </span>
+              <span className="text-lg font-bold leading-tight drop-shadow">
+                {wanted === "landscape" ? "Dreh dein Handy quer" : "Dreh dein Handy senkrecht"}
+              </span>
+              <span className="text-sm text-white/85">
+                {wanted === "landscape"
+                  ? "Du hast Querformat gewählt. Sobald du das Handy drehst, passt das Bild."
+                  : "Du hast Hochformat gewählt. Halte das Handy aufrecht, dann passt das Bild."}
+              </span>
+            </div>
+          )}
+
           {/* Sprech-Cue in den ersten Sekunden */}
           {cue && (
             <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4">
@@ -966,7 +1063,7 @@ export function GuestRecorder({
           )}
 
           {/* Kompositions-Kreis nur im Querformat (im Hochformat stört er) */}
-          {showLiveStage && hasStream && !stageIsPortrait && (
+          {showLiveStage && hasStream && !stageIsPortrait && !rotateOverlay && (
             <div
               aria-hidden
               className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 aspect-square h-full rounded-full border border-white/35"
@@ -1032,6 +1129,10 @@ export function GuestRecorder({
         </div>
       )}
 
+      {state === "recording" && touch && (
+        <p className="text-center text-xs text-ink-muted">Handy jetzt nicht drehen.</p>
+      )}
+
       {/* Status im Review: welches Format ist es geworden */}
       {state === "review" && resultOrientation && (
         <p className="text-center text-xs text-ink-muted">
@@ -1047,7 +1148,11 @@ export function GuestRecorder({
         <div className="space-y-3">
           <div
             className="h-1.5 w-full rounded-full bg-line overflow-hidden"
+            role="meter"
             aria-label="Mikrofon-Pegel"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(audioLevel * 100)}
           >
             <div
               className={cn(
