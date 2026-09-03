@@ -15,6 +15,11 @@ import { cn } from "@/lib/utils";
 import type { ActivityFeedRow, LeadDrawerData } from "../activity-center";
 import { TemperatureBadge } from "./temperature-badge";
 import { EventIcon, describeKind } from "./event-icon";
+import { collapseVideoEvents, collapsedVideoLabel, type CollapsedVideoEvent } from "@/lib/activity/video-progress-label";
+
+function isVideoSession(ev: { kind: string }): ev is CollapsedVideoEvent {
+  return ev.kind === "video_session";
+}
 
 /**
  * LeadDrawer — Right-Side-Slide-In, 480px breit. Wir bauen ihn als Radix
@@ -140,7 +145,17 @@ export function LeadDrawer({
           {/* Mini-Stats */}
           <div className="grid grid-cols-4 gap-2 px-5 py-4 border-b border-line-soft">
             <StatTile label="Aufrufe" value={stats?.pageViews ?? "–"} />
-            <StatTile label="Watch-Time" value={stats ? formatDuration(stats.watchTimeSec) : "–"} />
+            <StatTile
+              label="Video gesehen"
+              value={
+                stats
+                  ? typeof stats.watchPct === "number"
+                    ? `${stats.watchPct} %`
+                    : formatDuration(stats.watchTimeSec)
+                  : "–"
+              }
+              hint={stats && typeof stats.watchPct === "number" && stats.watchTimeSec > 0 ? formatDuration(stats.watchTimeSec) : undefined}
+            />
             <StatTile label="CTA-Klicks" value={stats?.ctaClicks ?? "–"} />
             <StatTile label="Sessions" value={stats?.sessions ?? "–"} />
           </div>
@@ -172,15 +187,24 @@ export function LeadDrawer({
             )}
             {events && events.length > 0 && (
               <ol className="flex flex-col gap-3" role="list">
-                {events.map((ev) => (
+                {/* Video-Ticks (alle 5 s) werden je Sitzung zu EINEM Eintrag
+                    mit Endstand verdichtet: „Video angesehen: 96 %“. */}
+                {collapseVideoEvents(events).map((ev) => (
                   <li key={ev.eventId} className="flex items-start gap-3">
-                    <EventIcon kind={ev.kind} size="sm" />
+                    <EventIcon
+                      kind={isVideoSession(ev) ? (ev.ended ? "video_ended" : "video_progress") : ev.kind}
+                      size="sm"
+                    />
                     <div className="flex flex-col min-w-0 flex-1">
                       <span className="text-sm text-ink">
-                        {describeKind(ev.kind, ev.payload)}
+                        {isVideoSession(ev)
+                          ? collapsedVideoLabel(ev)
+                          : describeKind(ev.kind, ev.payload ?? undefined)}
                       </span>
                       <span className="text-xs text-ink-muted tabular-nums">
-                        {formatFullTime(ev.ts)}
+                        {isVideoSession(ev) && ev.count > 1
+                          ? `${formatFullTime(ev.startedAt)} bis ${formatFullTime(ev.ts).slice(-8)}`
+                          : formatFullTime(ev.ts)}
                       </span>
                     </div>
                   </li>
@@ -236,9 +260,11 @@ export function LeadDrawer({
 function StatTile({
   label,
   value,
+  hint,
 }: {
   label: string;
   value: string | number;
+  hint?: string;
 }) {
   return (
     <div className="flex flex-col gap-0.5 rounded-squircle-sm bg-surface-soft px-2.5 py-2">
@@ -248,6 +274,7 @@ function StatTile({
       <span className="text-sm font-bold text-ink tabular-nums truncate">
         {value}
       </span>
+      {hint ? <span className="text-[10px] text-ink-muted tabular-nums truncate">{hint}</span> : null}
     </div>
   );
 }

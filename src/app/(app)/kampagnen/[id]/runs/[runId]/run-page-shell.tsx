@@ -9,7 +9,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, BarChart3, Send } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -56,6 +56,12 @@ export function RunPageShell({
               iconLeft={<ArrowLeft className="size-4" />}
             >
               <Link href={`/kampagnen/${campaignId}`}>Zur Kampagne</Link>
+            </Button>
+            <Button asChild variant="ghost">
+              <Link href={`/kampagnen/${campaignId}/runs/${versand.runId}/analytics`}>
+                <BarChart3 className="size-4" />
+                Auswertung
+              </Link>
             </Button>
             {primaryLabel && tab !== "versand" && (
               <Button

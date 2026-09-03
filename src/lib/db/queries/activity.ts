@@ -558,3 +558,57 @@ export type {
 // future refactor removes the inline use — Drizzle's typed-list helpers
 // still want it on the public surface.
 void inArray;
+
+
+// ── Lead-Drawer-Kennzahlen ──────────────────────────────────────────────────
+
+export interface LeadDrawerStats {
+  pageViews: number;
+  watchTimeSec: number;
+  /** Einmalig gesehener Anteil der Zeitleiste, 0–100. */
+  watchPct: number;
+  ctaClicks: number;
+  sessions: number;
+}
+
+/**
+ * Kennzahlen fuer den Lead-Drawer im Aktivitaets-Center, tenant-sicher.
+ * Vorher berechnete der Client einen Ersatzwert aus `time_on_page`-Events
+ * (Seitenzeit, nicht Videozeit) → „Watch-Time 0 s“. Jetzt kommen die
+ * Aggregatspalten des Leads plus die Zahl der Sitzungen.
+ */
+export async function getLeadDrawerStats(
+  userId: string,
+  leadId: string,
+): Promise<{ stats: LeadDrawerStats; email: string | null } | null> {
+  const [row] = await db
+    .select({
+      viewCount: leads.viewCount,
+      watchTimeSec: leads.watchTimeSec,
+      watchPct: leads.watchPct,
+      ctaClickCount: leads.ctaClickCount,
+      data: leads.data,
+      sessions: sql<number>`(
+        SELECT COUNT(DISTINCT session_id)::int FROM lead_events le
+        WHERE le.lead_id = ${leads.id} AND le.session_id IS NOT NULL
+      )`,
+    })
+    .from(leads)
+    .innerJoin(runs, eq(runs.id, leads.runId))
+    .innerJoin(campaigns, eq(campaigns.id, runs.campaignId))
+    .where(and(eq(leads.id, leadId), eq(campaigns.userId, userId)))
+    .limit(1);
+  if (!row) return null;
+  const data = (row.data ?? {}) as Record<string, unknown>;
+  const emailRaw = Object.entries(data).find(([k, v]) => /mail/i.test(k) && typeof v === "string" && (v as string).includes("@"))?.[1];
+  return {
+    stats: {
+      pageViews: row.viewCount ?? 0,
+      watchTimeSec: row.watchTimeSec ?? 0,
+      watchPct: row.watchPct ?? 0,
+      ctaClicks: row.ctaClickCount ?? 0,
+      sessions: row.sessions ?? 0,
+    },
+    email: typeof emailRaw === "string" ? emailRaw : null,
+  };
+}

@@ -31,6 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toaster";
 import { toastError } from "@/lib/toast-error";
+import { progressLabel } from "@/lib/activity/video-progress-label";
 
 interface ContactDetailEvent {
   id: string;
@@ -960,7 +961,7 @@ function eventLabel(
     case "video_play":
       return "Video gestartet";
     case "video_progress":
-      return "Video-Fortschritt";
+      return progressLabel(payload);
     case "video_ended":
       return "Video zu Ende gesehen";
     case "cta_click":

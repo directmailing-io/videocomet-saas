@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  BarChart3,
   LayoutTemplate,
   Library,
   Megaphone,
@@ -35,7 +36,8 @@ import {
 import { cn, getInitials } from "@/lib/utils";
 
 export type AppNavKey =
-  | "dashboard"
+  
+  | "analytics"| "dashboard"
   | "campaigns"
   | "contacts"
   | "media"
@@ -77,7 +79,15 @@ const NAV_GROUPS: Array<{ label: string | null; items: NavItem[] }> = [
         label: "Dashboard",
         href: "/dashboard",
         icon: LayoutDashboard,
-        matchPrefixes: ["/aktivitaet", "/analytics"],
+      },
+      {
+        // Auswertung war bis 2026-09-03 nur ueber Umwege erreichbar
+        // (Dashboard → Aktivität → Tab „Übersicht“). Jetzt ein eigener Punkt.
+        key: "analytics",
+        label: "Analytics",
+        href: "/analytics",
+        icon: BarChart3,
+        matchPrefixes: ["/aktivitaet"],
       },
       {
         key: "campaigns",

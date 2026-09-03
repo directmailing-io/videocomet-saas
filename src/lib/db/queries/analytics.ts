@@ -75,9 +75,22 @@ export async function getRunAnalytics(
     .where(eq(leads.runId, runId));
 
   const totalLeads = leadCount ?? runRow.totalLeads ?? 0;
-  const opened = stats?.opened ?? 0;
-  const videoStarted = stats?.videoStarted ?? 0;
-  const ctaClicks = stats?.ctaClicks ?? 0;
+
+  // Einheitliche Definitionen (seit 2026-09-03) aus den Lead-Aggregaten,
+  // nicht mehr aus der Legacy-Tabelle analytics_events (die fuellte nur der
+  // React-Player): geoeffnet = Leads mit Aufruf, gestartet = Leads mit Play,
+  // CTA = Leads mit Klick.
+  const [agg] = await db
+    .select({
+      opened: sql<number>`count(*) filter (where ${leads.viewCount} > 0)::int`,
+      videoStarted: sql<number>`count(*) filter (where ${leads.playCount} > 0)::int`,
+      ctaLeads: sql<number>`count(*) filter (where ${leads.ctaClickCount} > 0)::int`,
+    })
+    .from(leads)
+    .where(eq(leads.runId, runId));
+  const opened = Math.max(agg?.opened ?? 0, stats?.opened ?? 0);
+  const videoStarted = Math.max(agg?.videoStarted ?? 0, stats?.videoStarted ?? 0);
+  const ctaClicks = agg?.ctaLeads ?? stats?.ctaClicks ?? 0;
 
   // Ø gesehener Anteil der Zeitleiste (leads.watch_pct, einmalige Abdeckung)
   // ueber alle Leads mit mindestens einem Play. Fallback auf die alten

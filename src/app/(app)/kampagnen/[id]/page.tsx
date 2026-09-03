@@ -1,7 +1,7 @@
 import type * as React from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Mail, Plus, Send } from "lucide-react";
+import { Mail, Plus, Send, BarChart3 } from "lucide-react";
 import { eq } from "drizzle-orm";
 import { requireUser } from "@/lib/auth-guard";
 import { getCampaign } from "@/lib/db/queries/campaigns";
@@ -196,6 +196,15 @@ export default async function CampaignDetailPage({
   const leadsCount = summary.leadsCount;
   const uniqueViewedCount = allLeads.filter((l) => l.viewCount > 0).length;
   const uniqueCtaCount = allLeads.filter((l) => l.ctaClickCount > 0).length;
+  const uniquePlayedCount = allLeads.filter((l) => l.playCount > 0).length;
+  // Ø gesehen: einmalig gesehener Anteil der Zeitleiste ueber Leads mit Play.
+  const avgWatchPct =
+    uniquePlayedCount > 0
+      ? Math.round(
+          allLeads.filter((l) => l.playCount > 0).reduce((acc, l) => acc + (l.watchPct ?? 0), 0) /
+            uniquePlayedCount,
+        )
+      : null;
 
   const initialLeadRows: CampaignLeadRowSerialized[] = allLeads.map((l) => ({
     id: l.id,
@@ -264,9 +273,25 @@ export default async function CampaignDetailPage({
             value={fmtPercent(uniqueViewedCount, leadsCount)}
           />
           <QuickStat
+            label="Video gestartet"
+            value={fmtPercent(uniquePlayedCount, leadsCount)}
+          />
+          <QuickStat
+            label="Ø gesehen"
+            value={avgWatchPct !== null ? `${avgWatchPct} %` : "–"}
+          />
+          <QuickStat
             label="CTA-Rate"
             value={fmtPercent(uniqueCtaCount, leadsCount)}
           />
+          <div className="ml-auto">
+            <Button asChild variant="ghost" size="sm">
+              <Link href={`/analytics/kampagnen/${campaign.id}`}>
+                <BarChart3 className="size-4" />
+                Auswertung öffnen
+              </Link>
+            </Button>
+          </div>
         </div>
       </div>
 

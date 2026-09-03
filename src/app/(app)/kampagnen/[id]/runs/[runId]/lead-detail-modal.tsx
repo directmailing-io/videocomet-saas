@@ -53,6 +53,7 @@ interface AnalyticsSummary {
   lastViewedAt: string | null;
   playCount: number;
   watchTimeSec: number;
+  watchPct?: number;
   ctaClickCount: number;
   lastCtaAt: string | null;
 }
@@ -307,8 +308,12 @@ function SummaryGrid({ summary }: { summary: AnalyticsSummary }) {
         <SummaryTile label="Aufrufe" value={summary.viewCount} />
         <SummaryTile label="Plays" value={summary.playCount} />
         <SummaryTile
-          label="Watch-Time"
-          value={formatWatchTime(summary.watchTimeSec)}
+          label="Video gesehen"
+          value={
+            typeof summary.watchPct === "number" && (summary.playCount > 0 || summary.watchPct > 0)
+              ? `${summary.watchPct} %`
+              : formatWatchTime(summary.watchTimeSec)
+          }
         />
         <SummaryTile label="Klicks" value={summary.ctaClickCount} />
       </div>

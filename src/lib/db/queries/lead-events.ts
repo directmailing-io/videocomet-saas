@@ -218,6 +218,8 @@ export interface LeadAnalyticsSummary {
   lastViewedAt: Date | null;
   playCount: number;
   watchTimeSec: number;
+  /** Einmalig gesehener Anteil der Zeitleiste, 0–100. */
+  watchPct: number;
   ctaClickCount: number;
   lastCtaAt: Date | null;
 }
@@ -296,6 +298,7 @@ export async function getLeadAnalytics(
       lastViewedAt: leads.lastViewedAt,
       playCount: leads.playCount,
       watchTimeSec: leads.watchTimeSec,
+      watchPct: leads.watchPct,
       ctaClickCount: leads.ctaClickCount,
       lastCtaAt: leads.lastCtaAt,
     })
@@ -375,6 +378,7 @@ export async function getLeadAnalytics(
       lastViewedAt: leadRow.lastViewedAt,
       playCount: leadRow.playCount ?? 0,
       watchTimeSec: leadRow.watchTimeSec ?? 0,
+      watchPct: leadRow.watchPct ?? 0,
       ctaClickCount: leadRow.ctaClickCount ?? 0,
       lastCtaAt: leadRow.lastCtaAt,
     },

@@ -20,6 +20,7 @@ import {
   CircleDot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { progressLabel } from "@/lib/activity/video-progress-label";
 
 /**
  * Aktivitäts-Event-Typen — als String-Literal-Union, weil die Source-of-Truth
@@ -122,26 +123,9 @@ export function describeKind(kind: ActivityKind, payload?: Record<string, unknow
       return "Seite aufgerufen";
     case "video_play":
       return "Video gestartet";
-    case "video_progress": {
-      // Bridge schickt `{ atSec, duration }` — Prozent berechnen wir hier
-      // serverseitig nicht, sondern aus den beiden Feldern.
-      const atSec =
-        payload && typeof payload.atSec === "number"
-          ? (payload.atSec as number)
-          : null;
-      const duration =
-        payload && typeof payload.duration === "number"
-          ? (payload.duration as number)
-          : null;
-      if (atSec !== null && duration && duration > 0) {
-        const pct = Math.min(100, Math.round((atSec / duration) * 100));
-        return `Video gesehen ${pct} %`;
-      }
-      if (atSec !== null) {
-        return `Video bei ${atSec}s`;
-      }
-      return "Video fortgeschritten";
-    }
+    case "video_progress":
+      // Einheitlich ueber lib/activity: coveragePct (neu) bzw. atSec/duration (alt).
+      return progressLabel(payload as Record<string, unknown> | null | undefined);
     case "video_ended":
       return "Video komplett gesehen";
     case "video_mute":

@@ -18,6 +18,7 @@ import {
 } from "@/lib/db/schema";
 import { getUserDomain } from "@/lib/db/queries/user-domains";
 import { buildLeadPublicUrl } from "@/lib/lead-public-url";
+import { progressLabel } from "@/lib/activity/video-progress-label";
 
 /**
  * POST /api/contacts/v2/export
@@ -514,15 +515,8 @@ function describeEventDe(
       return "Seite aufgerufen";
     case "video_play":
       return "Video gestartet";
-    case "video_progress": {
-      const atSec = typeof p.atSec === "number" ? p.atSec : null;
-      const duration = typeof p.duration === "number" ? p.duration : null;
-      if (atSec !== null && duration && duration > 0) {
-        const pct = Math.min(100, Math.round((atSec / duration) * 100));
-        return `Video gesehen ${pct} %`;
-      }
-      return "Video fortgeschritten";
-    }
+    case "video_progress":
+      return progressLabel(p);
     case "video_ended":
       return "Video komplett gesehen";
     case "video_mute":

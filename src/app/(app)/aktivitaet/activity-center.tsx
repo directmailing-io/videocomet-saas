@@ -73,6 +73,8 @@ export interface LeadDrawerData {
   stats: {
     pageViews: number;
     watchTimeSec: number;
+    /** Einmalig gesehener Anteil der Zeitleiste, 0–100 (fehlt beim Ersatzwert). */
+    watchPct?: number;
     ctaClicks: number;
     sessions: number;
   };
