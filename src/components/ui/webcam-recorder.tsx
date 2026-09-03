@@ -41,6 +41,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { RecordingHint } from "@/components/intro/recording-hint";
 import { cn } from "@/lib/utils";
+import { aspectClassFor, orientationFromDims } from "@/lib/media/orientation";
 
 /**
  * Orientation für die Aufnahme. Wir geben das nur als Hint an getUserMedia
@@ -677,12 +678,15 @@ export function WebcamRecorder({
           <div
             className={cn(
               "relative w-full overflow-hidden rounded-squircle-md bg-ink mx-auto",
-              // Im Preview/Recording: Container-Aspect spiegelt den gewählten
-              // Orientation-Hint wieder. In Upload/Verify/Review behalten wir
-              // landscape, damit Spinner-Status & Review-Video nicht „zappeln".
+              // Preview/Recording: Container folgt dem gewählten Format.
+              // Review: Container folgt den ECHTEN Maßen der Aufnahme
+              // (ffprobe im Upload-Response), damit Hochkant nicht in einer
+              // 16:9-Box mit Balken landet. Upload/Verify bleiben 16:9.
               (state === "preview" || state === "recording") && orientation === "portrait"
                 ? "aspect-[9/16] max-w-[280px] max-h-[60vh]"
-                : "aspect-video",
+                : state === "review" && reviewMedia
+                  ? aspectClassFor(orientationFromDims(reviewMedia.width, reviewMedia.height))
+                  : "aspect-video",
             )}
           >
             {state === "review" && reviewMedia ? (

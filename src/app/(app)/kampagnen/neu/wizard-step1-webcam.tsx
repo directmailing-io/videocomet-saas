@@ -689,7 +689,9 @@ function WebcamThumb({
               muted
               playsInline
               className={cn(
-                "w-full h-full object-cover transition-opacity",
+                // object-contain: Hochkant-Aufnahmen werden vollständig
+                // gezeigt statt auf 16:9 beschnitten (Badge zeigt das Format).
+                "w-full h-full object-contain transition-opacity",
                 loadState === "ready" ? "opacity-100" : "opacity-0",
               )}
               onLoadedData={() => setLoadState("ready")}

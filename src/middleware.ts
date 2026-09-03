@@ -212,6 +212,15 @@ function withLegacyCookieCleanup(res: NextResponse, req: NextRequest, hasCookie:
   if (!hasCookie) return res;
   if (process.env.NODE_ENV !== "production") return res;
   if (req.nextUrl.pathname.startsWith("/api/auth/")) return res;
+  // Konservativ (seit 2026-09-03): NUR aufraeumen, wenn der Browser
+  // tatsaechlich zwei Cookies gleichen Namens schickt (altes domainweites +
+  // neues host-only, z.B. nach einem Re-Login). Ein Browser mit nur dem
+  // alten Cookie bleibt eingeloggt, bis er sich das naechste Mal anmeldet.
+  // Vorher wurde bei jeder Seite geloescht → Nutzer mit altem Cookie flogen
+  // beim naechsten Klick zum Login (Daniel, iPhone, 09-03).
+  const raw = req.headers.get("cookie") ?? "";
+  const occurrences = raw.split(";").filter((c) => c.trim().startsWith(`${SESSION_COOKIE}=`)).length;
+  if (occurrences < 2) return res;
   res.headers.append("Set-Cookie", LEGACY_COOKIE_DELETE);
   return res;
 }

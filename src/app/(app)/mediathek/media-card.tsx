@@ -40,6 +40,7 @@ import {
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { pickBunnyMp4Fallback } from "@/lib/bunny/mp4-fallback";
+import { orientationFromDims, orientationLabel } from "@/lib/media/orientation";
 
 export interface MediaCardItem {
   id: string;
@@ -48,6 +49,9 @@ export interface MediaCardItem {
   publicUrl: string;
   durationSec: number | null;
   bytes: number | null;
+  /** Pixelmaße (ffprobe beim Upload). null bei Legacy-Items. */
+  width?: number | null;
+  height?: number | null;
   createdAt: string;
 }
 
@@ -230,6 +234,9 @@ export function MediaCard({ item }: { item: MediaCardItem }) {
   return (
     <Card hover className={cn(deleting && "opacity-50 pointer-events-none")}>
       <CardContent className="p-3">
+        {/* Videos: Kachel bleibt quadratisch (ruhiges Raster), das Video wird
+            NIE beschnitten (object-contain). Hochkant steht mittig mit
+            dunklen Rändern, dazu ein Format-Badge. */}
         <div className="relative aspect-square rounded-squircle-sm bg-surface-muted mb-3 flex items-center justify-center overflow-hidden">
           {item.type === "image" || item.type === "logo" ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -254,7 +261,7 @@ export function MediaCard({ item }: { item: MediaCardItem }) {
                   controls
                   preload="metadata"
                   playsInline
-                  className="w-full h-full object-cover bg-black"
+                  className="w-full h-full object-contain bg-black"
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-black">
@@ -264,6 +271,11 @@ export function MediaCard({ item }: { item: MediaCardItem }) {
               {formatDuration(item.durationSec) && (
                 <span className="pointer-events-none absolute top-2 right-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white tabular-nums">
                   {formatDuration(item.durationSec)}
+                </span>
+              )}
+              {orientationLabel(orientationFromDims(item.width, item.height)) && (
+                <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white">
+                  {orientationLabel(orientationFromDims(item.width, item.height))}
                 </span>
               )}
             </>

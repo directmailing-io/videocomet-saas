@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { calibrationErrorHint } from "@/lib/intro-calibration-hints";
 import { cn } from "@/lib/utils";
+import { aspectClassFor, orientationFromDims, type VideoOrientation } from "@/lib/media/orientation";
 
 export interface IntroPreviewInfo {
   enabled: boolean;
@@ -108,6 +109,8 @@ const TOTAL_EST_SEC = 170;
 
 function useRenderElapsed(storageKey: string): number {
   const [elapsed, setElapsed] = React.useState(0);
+  /** Format je Vorschau-Video, aus den echten Videomaßen (Hochkant-Webcam → Hochkant-Vorschau). */
+  const [previewOrientation, setPreviewOrientation] = React.useState<Record<string, VideoOrientation>>({});
   React.useEffect(() => {
     let startedAt = Number(window.sessionStorage.getItem(storageKey));
     if (!startedAt || Number.isNaN(startedAt)) {
@@ -329,7 +332,12 @@ export function IntroPreviewSection({
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {intro.previews.slice(0, expected).map((p) => (
             <div key={p.leadId} className="min-w-0">
-              <div className="overflow-hidden rounded-squircle-sm bg-ink aspect-video">
+              <div
+                className={cn(
+                  "overflow-hidden rounded-squircle-sm bg-ink",
+                  aspectClassFor(previewOrientation[p.leadId] ?? null, { portraitMaxWidth: "max-w-[240px]" }),
+                )}
+              >
                 {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                 <video
                   src={p.videoUrl}
@@ -338,6 +346,10 @@ export function IntroPreviewSection({
                   preload="metadata"
                   playsInline
                   className="h-full w-full object-contain"
+                  onLoadedMetadata={(e) => {
+                    const o = orientationFromDims(e.currentTarget.videoWidth, e.currentTarget.videoHeight);
+                    if (o) setPreviewOrientation((m) => (m[p.leadId] === o ? m : { ...m, [p.leadId]: o }));
+                  }}
                 />
               </div>
               <p className="mt-2 text-sm font-semibold text-ink truncate">

@@ -21,6 +21,8 @@ function toCardItem(m: MediaItem): MediaCardItem {
     publicUrl: m.publicUrl,
     durationSec: m.durationSec,
     bytes: m.bytes,
+    width: m.width ?? null,
+    height: m.height ?? null,
     createdAt: m.createdAt.toISOString(),
   };
 }

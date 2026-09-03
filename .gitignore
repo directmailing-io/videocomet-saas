@@ -48,3 +48,4 @@ drizzle/meta/
 # PoC-Testmaterial personalisierte Begrüßung (Stimm-/Videoaufnahmen, nicht committen)
 intro-poc/
 .recorder-e2e.mjs
+.cookie-test.mjs
