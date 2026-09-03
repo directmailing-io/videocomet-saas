@@ -871,18 +871,22 @@ function GuestRecorderActive({
       {state === "ready" && (
         <div className="flex flex-col items-center gap-2">
           {presetOrientation ? (
-            <div className="inline-flex items-center gap-2 rounded-full bg-brand-soft px-4 py-2 text-sm font-semibold text-brand-deep">
+            <div className="inline-flex items-center gap-2.5 rounded-squircle-md bg-brand-soft px-4 py-2.5 text-brand-deep">
               {presetOrientation === "portrait" ? (
-                <Smartphone className="size-4" />
+                <Smartphone className="size-5 shrink-0" />
               ) : (
-                <Monitor className="size-4" />
+                <Monitor className="size-5 shrink-0" />
               )}
-              Bitte im {orientationLabel(presetOrientation)} aufnehmen
-              {touch ? (
-                <span className="font-normal text-brand-deep/80">
-                  {presetOrientation === "portrait" ? "(Handy senkrecht halten)" : "(Handy quer halten)"}
+              <span className="flex flex-col leading-tight">
+                <span className="text-sm font-semibold">
+                  Bitte im {orientationLabel(presetOrientation)} aufnehmen
                 </span>
-              ) : null}
+                {touch ? (
+                  <span className="text-xs text-brand-deep/80">
+                    {presetOrientation === "portrait" ? "Handy senkrecht halten" : "Handy quer halten"}
+                  </span>
+                ) : null}
+              </span>
             </div>
           ) : (
             <>
