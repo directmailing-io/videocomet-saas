@@ -756,7 +756,13 @@ export function GuestRecorder({
             "relative overflow-hidden rounded-squircle-xl bg-ink shadow-lift transition-[aspect-ratio] duration-300",
             stageIsPortrait ? "w-full max-w-[360px]" : "w-full",
           )}
-          style={{ aspectRatio: String(stageAspect), maxHeight: "70vh" }}
+          // Breite so begrenzen, dass die Höhe nie über 70 % des Bildschirms
+          // geht. So bleibt das Seitenverhältnis exakt und es gibt keine
+          // Ränder (maxHeight allein würde die Breite stehen lassen).
+          style={{
+            aspectRatio: String(stageAspect),
+            maxWidth: `min(100%, calc(70vh * ${stageAspect.toFixed(4)}))`,
+          }}
         >
           <video
             ref={liveVideoRef}
